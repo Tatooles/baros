@@ -23,4 +23,13 @@ enum MeasurementUnit: String, CaseIterable, Codable, Identifiable {
             return "KG"
         }
     }
+
+    var fieldPlaceholder: String {
+        switch self {
+        case .pounds:
+            return "lbs"
+        case .kilograms:
+            return "kg"
+        }
+    }
 }

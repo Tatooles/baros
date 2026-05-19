@@ -8,6 +8,8 @@ struct SetRowView: View {
     let index: Int
     @Bindable var engine: ActiveWorkoutEngine
     var focusedField: FocusState<WorkoutField?>.Binding
+    let weightUnit: MeasurementUnit
+    @State private var rpeInputText = WorkoutNumberInputText()
 
     var body: some View {
         HStack(spacing: 10) {
@@ -17,7 +19,7 @@ struct SetRowView: View {
                 .frame(width: 18)
 
             numericField(
-                placeholder: "lbs",
+                placeholder: weightUnit.fieldPlaceholder,
                 text: weightBinding,
                 keyboard: .numberPad,
                 focusTarget: .setWeight(set.id),
@@ -59,6 +61,11 @@ struct SetRowView: View {
                     .foregroundStyle(AppTheme.textTertiary)
             }
             .buttonStyle(.plain)
+        }
+        .onChange(of: focusedField.wrappedValue) { previousField, newField in
+            if previousField == .setRPE(set.id), newField != .setRPE(set.id) {
+                rpeInputText.endEditing()
+            }
         }
     }
 
@@ -106,10 +113,27 @@ struct SetRowView: View {
 
     private var rpeBinding: Binding<String> {
         Binding(
-            get: { set.rpe.map(WorkoutFormatters.number) ?? "" },
+            get: { rpeInputText.displayText(for: set.rpe) },
             set: { value in
+                rpeInputText.updateDraft(value)
                 try? engine.updateSet(set, weight: set.weight, reps: set.reps, rpe: Double(value), context: modelContext)
             }
         )
+    }
+}
+
+struct WorkoutNumberInputText {
+    private var draft: String?
+
+    mutating func updateDraft(_ value: String) {
+        draft = value
+    }
+
+    mutating func endEditing() {
+        draft = nil
+    }
+
+    func displayText(for value: Double?) -> String {
+        draft ?? value.map(WorkoutFormatters.number) ?? ""
     }
 }

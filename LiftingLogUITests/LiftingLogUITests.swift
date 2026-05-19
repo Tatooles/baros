@@ -9,7 +9,7 @@ final class LiftingLogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3))
         app.buttons["StartBlankWorkoutButton"].tap()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["WorkoutTab"].exists)
+        XCTAssertTrue(app.buttons["Current"].exists)
     }
 
     @MainActor

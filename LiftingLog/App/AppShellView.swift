@@ -18,6 +18,7 @@ struct AppShellView: View {
             }
             .tabItem {
                 Label(AppTab.history.title(isWorkoutActive: activeSession != nil), systemImage: AppTab.history.symbolName(isWorkoutActive: activeSession != nil))
+                    .accessibilityIdentifier(AppTab.history.accessibilityIdentifier)
             }
             .tag(AppTab.history)
 
@@ -30,6 +31,7 @@ struct AppShellView: View {
             }
             .tabItem {
                 Label(AppTab.workout.title(isWorkoutActive: activeSession != nil), systemImage: AppTab.workout.symbolName(isWorkoutActive: activeSession != nil))
+                    .accessibilityIdentifier(AppTab.workout.accessibilityIdentifier)
             }
             .tag(AppTab.workout)
 
@@ -38,6 +40,7 @@ struct AppShellView: View {
             }
             .tabItem {
                 Label(AppTab.profile.title(isWorkoutActive: activeSession != nil), systemImage: AppTab.profile.symbolName(isWorkoutActive: activeSession != nil))
+                    .accessibilityIdentifier(AppTab.profile.accessibilityIdentifier)
             }
             .tag(AppTab.profile)
         }

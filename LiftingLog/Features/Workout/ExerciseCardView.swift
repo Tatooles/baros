@@ -8,6 +8,11 @@ struct ExerciseCardView: View {
     @Bindable var engine: ActiveWorkoutEngine
     var focusedField: FocusState<WorkoutField?>.Binding
     @State private var isCollapsed = false
+    @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
+
+    private var weightUnit: MeasurementUnit {
+        settingsRecords.first?.weightUnit ?? .pounds
+    }
 
     var body: some View {
         SurfaceCard(padding: 0) {
@@ -56,7 +61,7 @@ struct ExerciseCardView: View {
                     VStack(spacing: 14) {
                         HStack(spacing: 10) {
                             Color.clear.frame(width: 18)
-                            columnHeader("LBS")
+                            columnHeader(weightUnit.fieldLabel)
                             columnHeader("REPS")
                             columnHeader("RPE")
                             Color.clear.frame(width: 54)
@@ -77,7 +82,8 @@ struct ExerciseCardView: View {
                                     exerciseIndex: exerciseIndex,
                                     index: index,
                                     engine: engine,
-                                    focusedField: focusedField
+                                    focusedField: focusedField,
+                                    weightUnit: weightUnit
                                 )
                                     .padding(.horizontal, 16)
                             }

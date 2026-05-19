@@ -15,4 +15,26 @@ final class FormattingTests: XCTestCase {
         let date = Calendar.current.date(from: DateComponents(year: 2026, month: 4, day: 21)) ?? .now
         XCTAssertTrue(AppTheme.formatDate(date).contains("April"))
     }
+
+    func testMeasurementUnitProvidesWorkoutFieldPlaceholder() {
+        XCTAssertEqual(MeasurementUnit.pounds.fieldPlaceholder, "lbs")
+        XCTAssertEqual(MeasurementUnit.kilograms.fieldPlaceholder, "kg")
+    }
+
+    func testDecimalWorkoutInputPreservesTrailingSeparatorWhileEditing() {
+        var input = WorkoutNumberInputText()
+
+        input.updateDraft("8.")
+
+        XCTAssertEqual(input.displayText(for: 8), "8.")
+    }
+
+    func testDecimalWorkoutInputUsesFormattedModelValueAfterEditingEnds() {
+        var input = WorkoutNumberInputText()
+
+        input.updateDraft("8.")
+        input.endEditing()
+
+        XCTAssertEqual(input.displayText(for: 8), "8")
+    }
 }

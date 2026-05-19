@@ -29,6 +29,17 @@ enum AppTab: String, CaseIterable, Identifiable {
             return "person"
         }
     }
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .history:
+            return "HistoryTab"
+        case .workout:
+            return "WorkoutTab"
+        case .profile:
+            return "ProfileTab"
+        }
+    }
 }
 
 enum HistoryMode: String, CaseIterable, Identifiable {
