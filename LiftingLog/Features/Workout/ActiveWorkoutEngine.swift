@@ -138,7 +138,11 @@ final class ActiveWorkoutEngine {
 
     func removeSet(_ set: LoggedSet, context: ModelContext) throws {
         let loggedExercise = set.loggedExercise
+        loggedExercise?.sets.removeAll { $0.id == set.id }
         context.delete(set)
+        if let loggedExercise {
+            reindexSets(for: loggedExercise)
+        }
         loggedExercise?.touch()
         try context.save()
     }
@@ -210,5 +214,12 @@ final class ActiveWorkoutEngine {
         }
 
         return activeSessions.first
+    }
+
+    private func reindexSets(for loggedExercise: LoggedExercise) {
+        for (index, set) in loggedExercise.sortedSets.enumerated() where set.orderIndex != index {
+            set.orderIndex = index
+            set.touch()
+        }
     }
 }

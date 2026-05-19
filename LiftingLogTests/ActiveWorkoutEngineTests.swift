@@ -91,6 +91,24 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertFalse(newSet.isCompleted)
     }
 
+    func testRemovingSetReindexesRemainingSets() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let secondSet = try engine.addSet(to: loggedExercise, context: context)
+        _ = try engine.addSet(to: loggedExercise, context: context)
+
+        try engine.removeSet(secondSet, context: context)
+
+        XCTAssertEqual(loggedExercise.sortedSets.map(\.orderIndex), [0, 1])
+        let newSet = try engine.addSet(to: loggedExercise, context: context)
+        XCTAssertEqual(newSet.orderIndex, 2)
+    }
+
     func testCompletingSetUpdatesMetrics() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

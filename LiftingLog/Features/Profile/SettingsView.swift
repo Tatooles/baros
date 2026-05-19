@@ -32,8 +32,7 @@ struct SettingsView: View {
         Binding(
             get: { settings.weightUnit },
             set: { unit in
-                settings.weightUnit = unit
-                try? modelContext.save()
+                try? settings.updateWeightUnit(unit, context: modelContext)
             }
         )
     }

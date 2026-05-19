@@ -34,6 +34,21 @@ final class UserSettings: Identifiable {
         }
     }
 
+    func updateWeightUnit(_ newUnit: MeasurementUnit, context: ModelContext) throws {
+        let previousUnit = weightUnit
+        guard previousUnit != newUnit else { return }
+
+        let sets = try context.fetch(FetchDescriptor<LoggedSet>())
+        for set in sets {
+            guard let weight = set.weight else { continue }
+            set.weight = previousUnit.convert(weight, to: newUnit)
+            set.touch()
+        }
+
+        weightUnit = newUnit
+        try context.save()
+    }
+
     func touch(now: Date = .now) {
         updatedAt = now
     }
