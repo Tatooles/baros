@@ -9,6 +9,7 @@ struct SetRowView: View {
     @Bindable var engine: ActiveWorkoutEngine
     var focusedField: FocusState<WorkoutField?>.Binding
     let weightUnit: MeasurementUnit
+    @State private var weightInputText = WorkoutNumberInputText()
     @State private var rpeInputText = WorkoutNumberInputText()
 
     var body: some View {
@@ -21,7 +22,7 @@ struct SetRowView: View {
             numericField(
                 placeholder: weightUnit.fieldPlaceholder,
                 text: weightBinding,
-                keyboard: .numberPad,
+                keyboard: .decimalPad,
                 focusTarget: .setWeight(set.id),
                 accessibilityIdentifier: "SetWeightField-\(exerciseIndex)-\(index)"
             )
@@ -63,6 +64,9 @@ struct SetRowView: View {
             .buttonStyle(.plain)
         }
         .onChange(of: focusedField.wrappedValue) { previousField, newField in
+            if previousField == .setWeight(set.id), newField != .setWeight(set.id) {
+                weightInputText.endEditing()
+            }
             if previousField == .setRPE(set.id), newField != .setRPE(set.id) {
                 rpeInputText.endEditing()
             }
@@ -95,8 +99,9 @@ struct SetRowView: View {
 
     private var weightBinding: Binding<String> {
         Binding(
-            get: { set.weight.map(WorkoutFormatters.number) ?? "" },
+            get: { weightInputText.displayText(for: set.weight) },
             set: { value in
+                weightInputText.updateDraft(value)
                 try? engine.updateSet(set, weight: Double(value), reps: set.reps, rpe: set.rpe, context: modelContext)
             }
         )
