@@ -7,6 +7,7 @@ struct FinishWorkoutSheet: View {
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
     @State private var showsDiscardConfirmation = false
+    @State private var saveErrorMessage: String?
 
     private var metrics: WorkoutMetrics {
         WorkoutMetrics(session: session)
@@ -35,8 +36,13 @@ struct FinishWorkoutSheet: View {
             }
 
             Button {
-                try? engine.finishWorkout(session, context: modelContext)
-                dismiss()
+                do {
+                    try engine.finishWorkout(session, context: modelContext)
+                    saveErrorMessage = nil
+                    dismiss()
+                } catch {
+                    saveErrorMessage = error.localizedDescription
+                }
             } label: {
                 Text("Save Workout")
                     .font(.system(size: 17, weight: .bold))
@@ -77,6 +83,21 @@ struct FinishWorkoutSheet: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will hide the active workout from history.")
+        }
+        .alert(
+            "Couldn't Save Workout",
+            isPresented: Binding(
+                get: { saveErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        saveErrorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveErrorMessage ?? "Try saving again.")
         }
     }
 
