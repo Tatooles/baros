@@ -102,7 +102,7 @@ struct SetRowView: View {
             get: { weightInputText.displayText(for: set.weight) },
             set: { value in
                 weightInputText.updateDraft(value)
-                try? engine.updateSet(set, weight: Double(value), reps: set.reps, rpe: set.rpe, context: modelContext)
+                try? engine.updateSet(set, weight: WorkoutFormatters.parseNumber(value), reps: set.reps, rpe: set.rpe, context: modelContext)
             }
         )
     }
@@ -121,7 +121,7 @@ struct SetRowView: View {
             get: { rpeInputText.displayText(for: set.rpe) },
             set: { value in
                 rpeInputText.updateDraft(value)
-                try? engine.updateSet(set, weight: set.weight, reps: set.reps, rpe: Double(value), context: modelContext)
+                try? engine.updateSet(set, weight: set.weight, reps: set.reps, rpe: WorkoutFormatters.parseNumber(value), context: modelContext)
             }
         )
     }

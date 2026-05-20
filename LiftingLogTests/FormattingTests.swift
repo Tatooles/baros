@@ -37,4 +37,10 @@ final class FormattingTests: XCTestCase {
 
         XCTAssertEqual(input.displayText(for: 8), "8")
     }
+
+    func testNumberParserAcceptsLocaleDecimalSeparator() {
+        let locale = Locale(identifier: "fr_FR")
+
+        XCTAssertEqual(WorkoutFormatters.parseNumber("8,5", locale: locale), 8.5)
+    }
 }

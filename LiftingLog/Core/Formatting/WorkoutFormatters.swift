@@ -28,4 +28,19 @@ enum WorkoutFormatters {
 
         return value.formatted(.number.precision(.fractionLength(1)))
     }
+
+    static func parseNumber(_ value: String, locale: Locale = .current) -> Double? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let formatter = NumberFormatter()
+        formatter.locale = locale
+        formatter.numberStyle = .decimal
+
+        if let number = formatter.number(from: trimmed) {
+            return number.doubleValue
+        }
+
+        return Double(trimmed.replacingOccurrences(of: ",", with: "."))
+    }
 }
