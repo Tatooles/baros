@@ -140,22 +140,27 @@ struct WorkoutSessionView: View {
             }
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
+                    let previousField = previousFocusedField
+                    let nextField = nextFocusedField
+
                     Button {
-                        focusedField = previousFocusedField
+                        focusedField = previousField
                     } label: {
                         Image(systemName: "chevron.up")
                             .font(.system(size: 16, weight: .semibold))
                     }
-                    .disabled(previousFocusedField == nil)
+                    .disabled(previousField == nil)
+                    .accessibilityLabel("Previous field")
                     .accessibilityIdentifier("PreviousWorkoutFieldButton")
 
                     Button {
-                        focusedField = nextFocusedField
+                        focusedField = nextField
                     } label: {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 16, weight: .semibold))
                     }
-                    .disabled(nextFocusedField == nil)
+                    .disabled(nextField == nil)
+                    .accessibilityLabel("Next field")
                     .accessibilityIdentifier("NextWorkoutFieldButton")
 
                     Spacer()
