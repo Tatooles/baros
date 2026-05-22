@@ -10,6 +10,7 @@ enum WorkoutFocusNavigator {
                 fields.append(.setReps(set.id))
                 fields.append(.setRPE(set.id))
             }
+            fields.append(.exerciseNotes(loggedExercise.id))
         }
 
         fields.append(.workoutNotes)

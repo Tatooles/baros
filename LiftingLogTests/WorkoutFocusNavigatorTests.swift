@@ -25,13 +25,47 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
             .setWeight(secondSet.id),
             .setReps(secondSet.id),
             .setRPE(secondSet.id),
+            .exerciseNotes(firstExercise.id),
             .setWeight(thirdSet.id),
             .setReps(thirdSet.id),
             .setRPE(thirdSet.id),
+            .exerciseNotes(secondExercise.id),
             .workoutNotes
         ]
 
         XCTAssertEqual(order, expectedOrder)
+    }
+
+    func testAdjacentFocusTraversesExerciseNotesBetweenExercises() {
+        let firstExerciseID = UUID()
+        let firstSetID = UUID()
+        let secondSetID = UUID()
+        let order: [WorkoutField] = [
+            .workoutTitle,
+            .setWeight(firstSetID),
+            .setReps(firstSetID),
+            .setRPE(firstSetID),
+            .exerciseNotes(firstExerciseID),
+            .setWeight(secondSetID),
+            .workoutNotes
+        ]
+
+        XCTAssertEqual(
+            WorkoutFocusNavigator.adjacentField(from: .setRPE(firstSetID), in: order, offset: 1),
+            .exerciseNotes(firstExerciseID)
+        )
+        XCTAssertEqual(
+            WorkoutFocusNavigator.adjacentField(from: .exerciseNotes(firstExerciseID), in: order, offset: -1),
+            .setRPE(firstSetID)
+        )
+        XCTAssertEqual(
+            WorkoutFocusNavigator.adjacentField(from: .exerciseNotes(firstExerciseID), in: order, offset: 1),
+            .setWeight(secondSetID)
+        )
+        XCTAssertEqual(
+            WorkoutFocusNavigator.adjacentField(from: .setWeight(secondSetID), in: order, offset: -1),
+            .exerciseNotes(firstExerciseID)
+        )
     }
 
     func testAdjacentFocusReturnsPreviousAndNextTargets() {
