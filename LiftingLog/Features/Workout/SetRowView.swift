@@ -53,6 +53,7 @@ struct SetRowView: View {
                     .foregroundStyle(set.isCompleted ? AppTheme.accentBright : AppTheme.borderStrong)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(set.isCompleted ? "Mark set incomplete" : "Mark set complete")
 
             Button(role: .destructive) {
                 try? engine.removeSet(set, context: modelContext)
@@ -62,6 +63,7 @@ struct SetRowView: View {
                     .foregroundStyle(AppTheme.textTertiary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Remove set")
         }
         .onChange(of: focusedField.wrappedValue) { previousField, newField in
             if previousField == .setWeight(set.id), newField != .setWeight(set.id) {
