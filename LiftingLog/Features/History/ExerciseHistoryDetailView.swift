@@ -52,7 +52,7 @@ struct ExerciseHistoryDetailView: View {
 
                     Spacer()
 
-                    Text("\(group.completedSetCount) sets")
+                    Text(setCountLabel(for: group.completedSetCount))
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(AppTheme.textSecondary)
                         .padding(.horizontal, 10)
@@ -85,5 +85,9 @@ struct ExerciseHistoryDetailView: View {
         }
 
         return "\(weight) x \(reps)"
+    }
+
+    private func setCountLabel(for count: Int) -> String {
+        count == 1 ? "1 set" : "\(count) sets"
     }
 }
