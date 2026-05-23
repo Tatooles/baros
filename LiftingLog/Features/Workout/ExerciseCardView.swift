@@ -6,8 +6,8 @@ struct ExerciseCardView: View {
     let loggedExercise: LoggedExercise
     let exerciseIndex: Int
     @Bindable var engine: ActiveWorkoutEngine
+    @Binding var isCollapsed: Bool
     var focusedField: FocusState<WorkoutField?>.Binding
-    @State private var isCollapsed = false
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
     private var weightUnit: MeasurementUnit {

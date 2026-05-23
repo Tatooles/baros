@@ -19,6 +19,7 @@ struct WorkoutSessionView: View {
     @State private var pendingFocusedField: WorkoutField?
     @State private var pendingScrollTarget: UUID?
     @State private var recentlyAddedExerciseID: UUID?
+    @State private var collapsedExerciseIDs: Set<UUID> = []
     @FocusState private var focusedField: WorkoutField?
     private let contentBottomPadding: CGFloat = 360
 
@@ -43,6 +44,7 @@ struct WorkoutSessionView: View {
                                 loggedExercise: loggedExercise,
                                 exerciseIndex: exerciseIndex,
                                 engine: engine,
+                                isCollapsed: isCollapsedBinding(for: loggedExercise),
                                 focusedField: $focusedField
                             )
                             .id(loggedExercise.id)
@@ -216,7 +218,7 @@ struct WorkoutSessionView: View {
     }
 
     private var focusOrder: [WorkoutField] {
-        WorkoutFocusNavigator.focusOrder(for: session)
+        WorkoutFocusNavigator.focusOrder(for: session, collapsedExerciseIDs: collapsedExerciseIDs)
     }
 
     private var previousFocusedField: WorkoutField? {
@@ -225,6 +227,19 @@ struct WorkoutSessionView: View {
 
     private var nextFocusedField: WorkoutField? {
         WorkoutFocusNavigator.adjacentField(from: focusedField, in: focusOrder, offset: 1)
+    }
+
+    private func isCollapsedBinding(for loggedExercise: LoggedExercise) -> Binding<Bool> {
+        Binding(
+            get: { collapsedExerciseIDs.contains(loggedExercise.id) },
+            set: { isCollapsed in
+                if isCollapsed {
+                    collapsedExerciseIDs.insert(loggedExercise.id)
+                } else {
+                    collapsedExerciseIDs.remove(loggedExercise.id)
+                }
+            }
+        )
     }
 
     private static func isSetField(_ field: WorkoutField?) -> Bool {

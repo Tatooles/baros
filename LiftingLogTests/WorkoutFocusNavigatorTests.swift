@@ -68,6 +68,33 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         )
     }
 
+    func testFocusOrderSkipsFieldsForCollapsedExercises() {
+        let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
+        let firstExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
+        let secondExercise = LoggedExercise(orderIndex: 1, exerciseSnapshotName: "Row")
+        let firstSet = LoggedSet(orderIndex: 0)
+        let secondSet = LoggedSet(orderIndex: 0)
+        firstExercise.sets = [firstSet]
+        secondExercise.sets = [secondSet]
+        session.loggedExercises = [firstExercise, secondExercise]
+
+        let order = WorkoutFocusNavigator.focusOrder(
+            for: session,
+            collapsedExerciseIDs: [firstExercise.id]
+        )
+
+        let expectedOrder: [WorkoutField] = [
+            .workoutTitle,
+            .setWeight(secondSet.id),
+            .setReps(secondSet.id),
+            .setRPE(secondSet.id),
+            .exerciseNotes(secondExercise.id),
+            .workoutNotes
+        ]
+
+        XCTAssertEqual(order, expectedOrder)
+    }
+
     func testAdjacentFocusReturnsPreviousAndNextTargets() {
         let firstSetID = UUID()
         let secondSetID = UUID()

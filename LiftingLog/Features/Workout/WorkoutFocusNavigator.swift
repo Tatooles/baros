@@ -1,10 +1,15 @@
 import Foundation
 
 enum WorkoutFocusNavigator {
-    static func focusOrder(for session: WorkoutSession) -> [WorkoutField] {
+    static func focusOrder(
+        for session: WorkoutSession,
+        collapsedExerciseIDs: Set<UUID> = []
+    ) -> [WorkoutField] {
         var fields: [WorkoutField] = [.workoutTitle]
 
         for loggedExercise in session.sortedLoggedExercises {
+            guard !collapsedExerciseIDs.contains(loggedExercise.id) else { continue }
+
             for set in loggedExercise.sortedSets {
                 fields.append(.setWeight(set.id))
                 fields.append(.setReps(set.id))
