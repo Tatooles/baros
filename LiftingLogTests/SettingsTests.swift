@@ -42,6 +42,23 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(set.completedVolume, 510.291, accuracy: 0.001)
     }
 
+    func testUpdatingWeightUnitConvertsPlaceholderWeights() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        try SeedDataService.seedIfNeeded(context: context)
+        let settings = try XCTUnwrap(context.fetch(FetchDescriptor<UserSettings>()).first)
+        let set = LoggedSet(orderIndex: 0, placeholderWeight: 225, placeholderReps: 5)
+        context.insert(set)
+        try context.save()
+
+        try settings.updateWeightUnit(.kilograms, context: context)
+        try ActiveWorkoutEngine().toggleSetCompletion(set, context: context)
+
+        XCTAssertEqual(set.weight ?? 0, 102.058, accuracy: 0.001)
+        XCTAssertEqual(set.placeholderWeight ?? 0, 102.058, accuracy: 0.001)
+        XCTAssertEqual(set.placeholderReps, 5)
+    }
+
     func testSeedDoesNotOverwriteUserEditedSettings() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
