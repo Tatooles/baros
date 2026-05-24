@@ -44,7 +44,7 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(WorkoutFormatters.parseNumber("8,5", locale: locale), 8.5)
     }
 
-    func testNumberFormatterPreservesConvertedWeightPrecision() {
-        XCTAssertEqual(WorkoutFormatters.number(102.058), "102.058")
+    func testNumberFormatterRoundsConvertedWeightForDisplay() {
+        XCTAssertEqual(WorkoutFormatters.number(102.058), "102.06")
     }
 }
