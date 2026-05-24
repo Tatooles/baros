@@ -137,6 +137,10 @@ struct ExerciseCardView: View {
 
                         if let referenceNotes {
                             VStack(alignment: .leading, spacing: 6) {
+                                Divider()
+                                    .overlay(AppTheme.border)
+                                    .padding(.bottom, 4)
+
                                 Text("LAST TIME")
                                     .font(.system(size: 10, weight: .bold))
                                     .tracking(1.4)
