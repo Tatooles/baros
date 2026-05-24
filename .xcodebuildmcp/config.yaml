@@ -1,0 +1,20 @@
+schemaVersion: 1
+enabledWorkflows:
+  - coverage
+  - debugging
+  - device
+  - doctor
+  - project-discovery
+  - simulator
+  - simulator-management
+  - ui-automation
+  - utilities
+debug: true
+sentryDisabled: true
+setupPreferences:
+  platforms:
+    - iOS
+sessionDefaults:
+  projectPath: LiftingLog.xcodeproj
+  scheme: LiftingLog
+  simulatorName: iPhone 17
