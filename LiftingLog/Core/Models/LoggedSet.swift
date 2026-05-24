@@ -10,6 +10,7 @@ final class LoggedSet: Identifiable {
     var rpe: Double?
     var placeholderWeight: Double?
     var placeholderReps: Int?
+    var placeholderRPE: Double?
     var kindRaw: String
     var isCompleted: Bool
     var completedAt: Date?
@@ -27,6 +28,7 @@ final class LoggedSet: Identifiable {
         rpe: Double? = nil,
         placeholderWeight: Double? = nil,
         placeholderReps: Int? = nil,
+        placeholderRPE: Double? = nil,
         kind: SetKind = .working,
         isCompleted: Bool = false,
         completedAt: Date? = nil,
@@ -42,6 +44,7 @@ final class LoggedSet: Identifiable {
         self.rpe = rpe
         self.placeholderWeight = placeholderWeight
         self.placeholderReps = placeholderReps
+        self.placeholderRPE = placeholderRPE
         self.kindRaw = kind.rawValue
         self.isCompleted = isCompleted
         self.completedAt = completedAt

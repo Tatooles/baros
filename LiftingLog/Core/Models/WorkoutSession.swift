@@ -9,6 +9,7 @@ final class WorkoutSession: Identifiable {
     var endedAt: Date?
     var durationSeconds: Int
     var notes: String
+    var referenceNotes: String?
     var statusRaw: String
     var sourceRaw: String
     var sourceSessionID: UUID?
@@ -27,6 +28,7 @@ final class WorkoutSession: Identifiable {
         status: WorkoutSessionStatus,
         source: WorkoutSource,
         sourceSessionID: UUID? = nil,
+        referenceNotes: String? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         healthLinkID: UUID? = nil,
@@ -38,6 +40,7 @@ final class WorkoutSession: Identifiable {
         self.endedAt = endedAt
         self.durationSeconds = durationSeconds
         self.notes = notes
+        self.referenceNotes = referenceNotes
         self.statusRaw = status.rawValue
         self.sourceRaw = source.rawValue
         self.sourceSessionID = sourceSessionID

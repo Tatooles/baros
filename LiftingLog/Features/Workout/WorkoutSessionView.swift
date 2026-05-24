@@ -83,6 +83,21 @@ struct WorkoutSessionView: View {
                                 .foregroundStyle(AppTheme.textPrimary)
                                 .lineLimit(4...6)
                                 .focused($focusedField, equals: .workoutNotes)
+
+                                if let referenceNotes {
+                                    Divider()
+                                        .overlay(AppTheme.border)
+                                        .padding(.vertical, 4)
+
+                                    Text("LAST TIME")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .tracking(1.4)
+                                        .foregroundStyle(AppTheme.textTertiary)
+                                    Text(referenceNotes)
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(AppTheme.textSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                         }
                     }
@@ -215,6 +230,11 @@ struct WorkoutSessionView: View {
                 try? engine.updateWorkoutNotes(newValue, session: session, context: modelContext)
             }
         )
+    }
+
+    private var referenceNotes: String? {
+        let trimmed = session.referenceNotes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private var focusOrder: [WorkoutField] {

@@ -7,6 +7,7 @@ final class LoggedExercise: Identifiable {
     var orderIndex: Int
     var exerciseSnapshotName: String
     var notes: String
+    var referenceNotes: String?
     var createdAt: Date
     var updatedAt: Date
     var exercise: Exercise?
@@ -19,6 +20,7 @@ final class LoggedExercise: Identifiable {
         exercise: Exercise? = nil,
         exerciseSnapshotName: String? = nil,
         notes: String = "",
+        referenceNotes: String? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         sets: [LoggedSet] = []
@@ -28,6 +30,7 @@ final class LoggedExercise: Identifiable {
         self.exercise = exercise
         self.exerciseSnapshotName = exerciseSnapshotName ?? exercise?.name ?? "Exercise"
         self.notes = notes
+        self.referenceNotes = referenceNotes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.sets = sets

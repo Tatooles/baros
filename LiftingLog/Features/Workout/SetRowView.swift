@@ -36,7 +36,7 @@ struct SetRowView: View {
             )
 
             numericField(
-                placeholder: "RPE",
+                placeholder: rpePlaceholder,
                 text: rpeBinding,
                 keyboard: .decimalPad,
                 focusTarget: .setRPE(set.id),
@@ -134,6 +134,10 @@ struct SetRowView: View {
                 try? engine.updateSet(set, weight: set.weight, reps: set.reps, rpe: WorkoutFormatters.parseNumber(value), context: modelContext)
             }
         )
+    }
+
+    private var rpePlaceholder: String {
+        return set.placeholderRPE.map(WorkoutFormatters.number) ?? "RPE"
     }
 }
 

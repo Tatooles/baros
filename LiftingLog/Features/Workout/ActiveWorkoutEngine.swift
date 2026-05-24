@@ -50,6 +50,7 @@ final class ActiveWorkoutEngine {
             status: .active,
             source: .pastWorkout,
             sourceSessionID: pastSession.id,
+            referenceNotes: pastSession.notes,
             createdAt: now,
             updatedAt: now
         )
@@ -60,6 +61,7 @@ final class ActiveWorkoutEngine {
                 orderIndex: pastLoggedExercise.orderIndex,
                 exercise: pastLoggedExercise.exercise,
                 exerciseSnapshotName: pastLoggedExercise.exerciseSnapshotName,
+                referenceNotes: pastLoggedExercise.notes,
                 createdAt: now,
                 updatedAt: now
             )
@@ -71,6 +73,7 @@ final class ActiveWorkoutEngine {
                     orderIndex: pastSet.orderIndex,
                     placeholderWeight: pastSet.weight,
                     placeholderReps: pastSet.reps,
+                    placeholderRPE: pastSet.rpe,
                     kind: pastSet.kind,
                     isCompleted: false,
                     createdAt: now,
@@ -248,6 +251,10 @@ final class ActiveWorkoutEngine {
 
         if set.reps == nil, let placeholderReps = set.placeholderReps {
             set.reps = placeholderReps
+        }
+
+        if set.rpe == nil, let placeholderRPE = set.placeholderRPE {
+            set.rpe = placeholderRPE
         }
     }
 
