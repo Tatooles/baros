@@ -20,7 +20,7 @@ struct SetRowView: View {
                 .frame(width: 18)
 
             numericField(
-                placeholder: weightUnit.fieldPlaceholder,
+                placeholder: weightPlaceholder,
                 text: weightBinding,
                 keyboard: .decimalPad,
                 focusTarget: .setWeight(set.id),
@@ -28,7 +28,7 @@ struct SetRowView: View {
             )
 
             numericField(
-                placeholder: "reps",
+                placeholder: repsPlaceholder,
                 text: repsBinding,
                 keyboard: .numberPad,
                 focusTarget: .setReps(set.id),
@@ -107,6 +107,10 @@ struct SetRowView: View {
         )
     }
 
+    private var weightPlaceholder: String {
+        return set.placeholderWeight.map(WorkoutFormatters.number) ?? weightUnit.fieldPlaceholder
+    }
+
     private var repsBinding: Binding<String> {
         Binding(
             get: { set.reps.map(String.init) ?? "" },
@@ -114,6 +118,10 @@ struct SetRowView: View {
                 try? engine.updateSet(set, weight: set.weight, reps: Int(value), rpe: set.rpe, context: modelContext)
             }
         )
+    }
+
+    private var repsPlaceholder: String {
+        return set.placeholderReps.map(String.init) ?? "reps"
     }
 
     private var rpeBinding: Binding<String> {
