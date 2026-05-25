@@ -12,6 +12,7 @@ struct SurfaceCard<Content: View>: View {
     var body: some View {
         content
             .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(AppTheme.surface)
             .overlay(
                 RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius)

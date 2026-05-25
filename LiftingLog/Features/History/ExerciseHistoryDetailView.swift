@@ -25,6 +25,8 @@ struct ExerciseHistoryDetailView: View {
                             .foregroundStyle(AppTheme.textSecondary)
                     }
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("ExerciseHistoryCompletedSetsCard")
 
                 ForEach(sessionGroups) { group in
                     sessionGroupCard(group)

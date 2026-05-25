@@ -24,8 +24,6 @@ struct WorkoutHistoryDetailView: View {
                     metricCard(title: "Sets", value: "\(metrics.completedSetCount)")
                 }
 
-                metricCard(title: "Volume", value: WorkoutFormatters.number(metrics.completedVolume))
-
                 if !session.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     SurfaceCard {
                         VStack(alignment: .leading, spacing: 8) {
@@ -36,6 +34,8 @@ struct WorkoutHistoryDetailView: View {
                                 .foregroundStyle(AppTheme.textSecondary)
                         }
                     }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("WorkoutHistoryNotesCard")
                 }
 
                 ForEach(session.sortedLoggedExercises) { loggedExercise in
