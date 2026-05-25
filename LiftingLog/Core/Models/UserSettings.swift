@@ -40,9 +40,18 @@ final class UserSettings: Identifiable {
 
         let sets = try context.fetch(FetchDescriptor<LoggedSet>())
         for set in sets {
-            guard let weight = set.weight else { continue }
-            set.weight = previousUnit.convert(weight, to: newUnit)
-            set.touch()
+            var didConvertSet = false
+            if let weight = set.weight {
+                set.weight = previousUnit.convert(weight, to: newUnit)
+                didConvertSet = true
+            }
+            if let placeholderWeight = set.placeholderWeight {
+                set.placeholderWeight = previousUnit.convert(placeholderWeight, to: newUnit)
+                didConvertSet = true
+            }
+            if didConvertSet {
+                set.touch()
+            }
         }
 
         weightUnit = newUnit

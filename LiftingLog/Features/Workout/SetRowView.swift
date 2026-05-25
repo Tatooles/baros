@@ -20,7 +20,7 @@ struct SetRowView: View {
                 .frame(width: 18)
 
             numericField(
-                placeholder: weightUnit.fieldPlaceholder,
+                placeholder: weightPlaceholder,
                 text: weightBinding,
                 keyboard: .decimalPad,
                 focusTarget: .setWeight(set.id),
@@ -28,7 +28,7 @@ struct SetRowView: View {
             )
 
             numericField(
-                placeholder: "REPS",
+                placeholder: repsPlaceholder,
                 text: repsBinding,
                 keyboard: .numberPad,
                 focusTarget: .setReps(set.id),
@@ -36,7 +36,7 @@ struct SetRowView: View {
             )
 
             numericField(
-                placeholder: "RPE",
+                placeholder: rpePlaceholder,
                 text: rpeBinding,
                 keyboard: .decimalPad,
                 focusTarget: .setRPE(set.id),
@@ -109,6 +109,10 @@ struct SetRowView: View {
         )
     }
 
+    private var weightPlaceholder: String {
+        return set.placeholderWeight.map(WorkoutFormatters.number) ?? weightUnit.fieldPlaceholder
+    }
+
     private var repsBinding: Binding<String> {
         Binding(
             get: { set.reps.map(String.init) ?? "" },
@@ -116,6 +120,10 @@ struct SetRowView: View {
                 try? engine.updateSet(set, weight: set.weight, reps: Int(value), rpe: set.rpe, context: modelContext)
             }
         )
+    }
+
+    private var repsPlaceholder: String {
+        return set.placeholderReps.map(String.init) ?? "REPS"
     }
 
     private var rpeBinding: Binding<String> {
@@ -126,6 +134,10 @@ struct SetRowView: View {
                 try? engine.updateSet(set, weight: set.weight, reps: set.reps, rpe: WorkoutFormatters.parseNumber(value), context: modelContext)
             }
         )
+    }
+
+    private var rpePlaceholder: String {
+        return set.placeholderRPE.map(WorkoutFormatters.number) ?? "RPE"
     }
 }
 
