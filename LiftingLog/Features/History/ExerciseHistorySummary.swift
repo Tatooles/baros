@@ -55,4 +55,14 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
             return $0.lastPerformedAt > $1.lastPerformedAt
         }
     }
+
+    static func find(in summaries: [ExerciseHistorySummary], matching route: ExerciseHistoryRoute) -> ExerciseHistorySummary? {
+        summaries.first { summary in
+            if let exerciseID = route.exerciseID {
+                return summary.exerciseID == exerciseID
+            }
+
+            return summary.exerciseID == nil && summary.name.caseInsensitiveCompare(route.name) == .orderedSame
+        }
+    }
 }

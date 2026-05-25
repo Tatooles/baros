@@ -31,8 +31,14 @@ struct ExerciseHistorySessionGroup: Identifiable {
     var title: String { session.title }
     var startedAt: Date { session.startedAt }
     var completedSetCount: Int { setEntries.count }
-    var exerciseNotes: String {
-        setEntries.first?.loggedExercise.notes ?? ""
+    var exerciseNotes: String? {
+        let notes = setEntries
+            .map(\.loggedExercise)
+            .first?
+            .notes
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        return notes.isEmpty ? nil : notes
     }
 
     static func makeGroups(
@@ -59,6 +65,14 @@ struct ExerciseHistorySessionGroup: Identifiable {
                 }
                 return lhs.startedAt > rhs.startedAt
             }
+    }
+
+    static func recentGroups(
+        from sessions: [WorkoutSession],
+        matching summary: ExerciseHistorySummary,
+        limit: Int = 3
+    ) -> [ExerciseHistorySessionGroup] {
+        Array(makeGroups(from: sessions, matching: summary).prefix(limit))
     }
 
     private static func matches(_ loggedExercise: LoggedExercise, summary: ExerciseHistorySummary) -> Bool {
