@@ -181,6 +181,46 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(groups.map(\.title), ["A Session", "B Session"])
     }
 
+    func testExerciseHistoryGroupCarriesExerciseNotes() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let session = WorkoutSession(
+            title: "Push Notes",
+            startedAt: Date(timeIntervalSince1970: 500),
+            status: .completed,
+            source: .blank
+        )
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: exercise,
+            exerciseSnapshotName: exercise.name,
+            notes: "Elbow felt better with a closer grip."
+        )
+        loggedExercise.sets = [
+            LoggedSet(orderIndex: 0, weight: 185, reps: 5, rpe: 8, isCompleted: true)
+        ]
+        session.loggedExercises = [loggedExercise]
+        context.insert(exercise)
+        context.insert(session)
+        try context.save()
+
+        let summary = try XCTUnwrap(ExerciseHistorySummary.makeSummaries(from: [session]).first)
+        let groups = ExerciseHistorySessionGroup.makeGroups(from: [session], matching: summary)
+
+        XCTAssertEqual(groups.first?.exerciseNotes, "Elbow felt better with a closer grip.")
+    }
+
+    func testExerciseHistoryNoteBlockTreatsWhitespaceOnlyNotesAsAbsent() {
+        XCTAssertNil(ExerciseHistoryNoteBlock.displayNote(from: " \n\t "))
+    }
+
+    func testExerciseHistoryNoteBlockPreservesMultilineDisplayText() {
+        let note = "Line one\nLine two\n\nLine four"
+
+        XCTAssertEqual(ExerciseHistoryNoteBlock.displayNote(from: note), note)
+    }
+
     private func completedSessions(in context: ModelContext) throws -> [WorkoutSession] {
         try context.fetch(FetchDescriptor<WorkoutSession>()).filter { $0.status == .completed }
     }
