@@ -130,6 +130,31 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertFalse(newSet.isCompleted)
     }
 
+    func testAddingSetFromIncompleteClonedSetCarriesPlaceholderDefaultsForward() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let previousSet = loggedExercise.sets[0]
+        previousSet.placeholderWeight = 185
+        previousSet.placeholderReps = 5
+        previousSet.placeholderRPE = 8
+
+        let newSet = try engine.addSet(to: loggedExercise, context: context)
+
+        XCTAssertEqual(newSet.orderIndex, 1)
+        XCTAssertNil(newSet.weight)
+        XCTAssertNil(newSet.reps)
+        XCTAssertNil(newSet.rpe)
+        XCTAssertEqual(newSet.placeholderWeight, 185)
+        XCTAssertEqual(newSet.placeholderReps, 5)
+        XCTAssertEqual(newSet.placeholderRPE, 8)
+        XCTAssertFalse(newSet.isCompleted)
+    }
+
     func testRemovingSetReindexesRemainingSets() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

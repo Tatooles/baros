@@ -125,6 +125,9 @@ final class ActiveWorkoutEngine {
             weight: previous?.weight,
             reps: previous?.reps,
             rpe: previous?.rpe,
+            placeholderWeight: previous?.weight == nil ? previous?.placeholderWeight : nil,
+            placeholderReps: previous?.reps == nil ? previous?.placeholderReps : nil,
+            placeholderRPE: previous?.rpe == nil ? previous?.placeholderRPE : nil,
             kind: previous?.kind ?? .working,
             isCompleted: false
         )
