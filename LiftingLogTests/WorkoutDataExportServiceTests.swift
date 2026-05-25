@@ -213,6 +213,63 @@ final class WorkoutDataExportServiceTests: XCTestCase {
         XCTAssertEqual(rows[5][1], "Tie B")
     }
 
+    func testCSVUsesUUIDTieBreakersWhenSortKeysMatch() throws {
+        let sessionAID = uuid("00000000-0000-0000-0000-000000000001")
+        let sessionBID = uuid("00000000-0000-0000-0000-000000000002")
+        let exerciseAID = uuid("00000000-0000-0000-0000-000000000101")
+        let exerciseBID = uuid("00000000-0000-0000-0000-000000000102")
+        let setAID = uuid("00000000-0000-0000-0000-000000000201")
+        let setBID = uuid("00000000-0000-0000-0000-000000000202")
+        let sessionBSetID = uuid("00000000-0000-0000-0000-000000000203")
+        let setCID = uuid("00000000-0000-0000-0000-000000000204")
+
+        let startedAt = Date(timeIntervalSince1970: 200)
+        let sessionB = completedSession(
+            id: sessionBID,
+            title: "Same Title",
+            startedAt: startedAt,
+            exerciseID: uuid("00000000-0000-0000-0000-000000000103"),
+            setID: sessionBSetID
+        )
+        let sessionA = WorkoutSession(
+            id: sessionAID,
+            title: "Same Title",
+            startedAt: startedAt,
+            status: .completed,
+            source: .blank
+        )
+        let exerciseB = LoggedExercise(
+            id: exerciseBID,
+            orderIndex: 0,
+            exerciseSnapshotName: "Exercise B"
+        )
+        exerciseB.sets = [
+            LoggedSet(id: setCID, orderIndex: 0, weight: 30, reps: 3)
+        ]
+        let exerciseA = LoggedExercise(
+            id: exerciseAID,
+            orderIndex: 0,
+            exerciseSnapshotName: "Exercise A"
+        )
+        exerciseA.sets = [
+            LoggedSet(id: setBID, orderIndex: 0, weight: 20, reps: 2),
+            LoggedSet(id: setAID, orderIndex: 0, weight: 10, reps: 1)
+        ]
+        sessionA.loggedExercises = [exerciseB, exerciseA]
+
+        let rows = try parseCSV(WorkoutDataExportService().csv(for: [sessionB, sessionA], unit: .pounds))
+
+        XCTAssertEqual(rows[1][15], sessionAID.uuidString)
+        XCTAssertEqual(rows[1][16], exerciseAID.uuidString)
+        XCTAssertEqual(rows[1][17], setAID.uuidString)
+        XCTAssertEqual(rows[2][15], sessionAID.uuidString)
+        XCTAssertEqual(rows[2][16], exerciseAID.uuidString)
+        XCTAssertEqual(rows[2][17], setBID.uuidString)
+        XCTAssertEqual(rows[3][15], sessionAID.uuidString)
+        XCTAssertEqual(rows[3][16], exerciseBID.uuidString)
+        XCTAssertEqual(rows[4][15], sessionBID.uuidString)
+    }
+
     private func completedSession(
         id: UUID,
         title: String,

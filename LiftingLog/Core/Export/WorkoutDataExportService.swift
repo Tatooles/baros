@@ -18,8 +18,8 @@ struct WorkoutDataExportService {
         var rows: [[String]] = [Self.header]
 
         for session in sortedCompletedSessions(from: sessions) {
-            for loggedExercise in session.sortedLoggedExercises {
-                for set in loggedExercise.sortedSets {
+            for loggedExercise in sortedLoggedExercises(from: session) {
+                for set in sortedSets(from: loggedExercise) {
                     rows.append(row(for: set, loggedExercise: loggedExercise, session: session, unit: unit))
                 }
             }
@@ -59,7 +59,34 @@ struct WorkoutDataExportService {
                     return lhs.startedAt < rhs.startedAt
                 }
 
-                return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+                let titleOrder = lhs.title.localizedStandardCompare(rhs.title)
+                if titleOrder != .orderedSame {
+                    return titleOrder == .orderedAscending
+                }
+
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+    }
+
+    private func sortedLoggedExercises(from session: WorkoutSession) -> [LoggedExercise] {
+        session.loggedExercises
+            .sorted { lhs, rhs in
+                if lhs.orderIndex != rhs.orderIndex {
+                    return lhs.orderIndex < rhs.orderIndex
+                }
+
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+    }
+
+    private func sortedSets(from loggedExercise: LoggedExercise) -> [LoggedSet] {
+        loggedExercise.sets
+            .sorted { lhs, rhs in
+                if lhs.orderIndex != rhs.orderIndex {
+                    return lhs.orderIndex < rhs.orderIndex
+                }
+
+                return lhs.id.uuidString < rhs.id.uuidString
             }
     }
 
