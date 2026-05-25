@@ -39,6 +39,20 @@ struct HistoryView: View {
         }
         .background(AppTheme.subtleBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(for: HistoryRoute.self) { route in
+            switch route {
+            case .exercise(let exerciseRoute):
+                if let summary = ExerciseHistorySummary.find(in: exerciseSummaries, matching: exerciseRoute) {
+                    ExerciseHistoryDetailView(summary: summary)
+                } else {
+                    EmptyStateView(
+                        title: "No Exercise History",
+                        message: "Completed sets for this exercise will appear here."
+                    )
+                    .background(AppTheme.subtleBackground.ignoresSafeArea())
+                }
+            }
+        }
     }
 
     @ViewBuilder

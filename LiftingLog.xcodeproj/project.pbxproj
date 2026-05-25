@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		01C774F6B0F341EA5BE873E4 /* HealthDataLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E93751C706B7DADA2679123D /* HealthDataLink.swift */; };
+		04B7F25E9A4C4E63A884A118 /* AppNavigationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D7A814E28B04D4B84294C9F /* AppNavigationStateTests.swift */; };
 		0A16BCEA0918ECF4F2E63705 /* MeasurementUnit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AE73DED854FC564CB038119 /* MeasurementUnit.swift */; };
 		0A987D0FF2EE82CC20EBF47A /* UserSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC20AF64287C9C9AE3ED361 /* UserSettings.swift */; };
 		0E9D2FFCD204871A65B6F442 /* SetKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = E36708D5B6F831FF8F358CD1 /* SetKind.swift */; };
@@ -99,6 +100,7 @@
 		1E72D1E37AD9AEE42873FC6F /* LiftingLogSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiftingLogSchema.swift; sourceTree = "<group>"; };
 		24467C299A662C88D7F09CA1 /* HistoryPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPersistenceTests.swift; sourceTree = "<group>"; };
 		2941B8AE0D934766808444B2 /* ActiveWorkoutEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveWorkoutEngineTests.swift; sourceTree = "<group>"; };
+		2D7A814E28B04D4B84294C9F /* AppNavigationStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationStateTests.swift; sourceTree = "<group>"; };
 		2BB4B36B59590D85209A45DA /* LiftingLog.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LiftingLog.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		30E1ED3B5916BAE378A8DC03 /* AddExerciseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddExerciseSheet.swift; sourceTree = "<group>"; };
 		358C22D3418EBFADE814392B /* ExerciseHistoryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryDetailView.swift; sourceTree = "<group>"; };
@@ -222,6 +224,7 @@
 			isa = PBXGroup;
 			children = (
 				2941B8AE0D934766808444B2 /* ActiveWorkoutEngineTests.swift */,
+				2D7A814E28B04D4B84294C9F /* AppNavigationStateTests.swift */,
 				97D4F05FB241C4EE29FC43EE /* FormattingTests.swift */,
 				24467C299A662C88D7F09CA1 /* HistoryPersistenceTests.swift */,
 				75BB41D2CBBEDDF4F4CFF55F /* ModelPersistenceTests.swift */,
@@ -474,6 +477,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1841BF9CE2E3EFA2B9E0246 /* ActiveWorkoutEngineTests.swift in Sources */,
+				04B7F25E9A4C4E63A884A118 /* AppNavigationStateTests.swift in Sources */,
 				B01C71A13BBCC55178AEFB27 /* FormattingTests.swift in Sources */,
 				ECF98486D68CA178B42C7FE4 /* HistoryPersistenceTests.swift in Sources */,
 				80E536A5ABEF8E3E3B3A35D8 /* ModelPersistenceTests.swift in Sources */,

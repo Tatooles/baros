@@ -13,7 +13,7 @@ struct AppShellView: View {
 
     var body: some View {
         TabView(selection: $navigationState.selectedTab) {
-            NavigationStack {
+            NavigationStack(path: $navigationState.historyPath) {
                 HistoryView(navigationState: navigationState)
             }
             .tabItem {

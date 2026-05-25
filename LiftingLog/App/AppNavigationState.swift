@@ -58,13 +58,29 @@ enum HistoryMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum HistoryRoute: Hashable {
+    case exercise(ExerciseHistoryRoute)
+}
+
 @Observable
 final class AppNavigationState {
     var selectedTab: AppTab
     var historyMode: HistoryMode
+    var historyPath: [HistoryRoute]
 
-    init(selectedTab: AppTab = .workout, historyMode: HistoryMode = .workouts) {
+    init(
+        selectedTab: AppTab = .workout,
+        historyMode: HistoryMode = .workouts,
+        historyPath: [HistoryRoute] = []
+    ) {
         self.selectedTab = selectedTab
         self.historyMode = historyMode
+        self.historyPath = historyPath
+    }
+
+    func openExerciseHistory(_ route: ExerciseHistoryRoute) {
+        selectedTab = .history
+        historyMode = .exercises
+        historyPath = [.exercise(route)]
     }
 }
