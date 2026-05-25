@@ -3,8 +3,11 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
+
     let settings: UserSettings
-    @State private var saveErrorMessage: String?
+    @State private var alert: SettingsAlert?
+    @State private var exportFile: ExportFile?
 
     var body: some View {
         Form {
@@ -22,25 +25,78 @@ struct SettingsView: View {
                     Text("\(settings.defaultRestTimerSeconds) seconds")
                 }
             }
+
+            Section("Data") {
+                Button(action: exportWorkoutHistory) {
+                    Label("Export Workout History", systemImage: "square.and.arrow.up")
+                }
+                .accessibilityIdentifier("ExportWorkoutHistoryButton")
+            }
         }
         .scrollContentBackground(.hidden)
         .background(AppTheme.subtleBackground.ignoresSafeArea())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .alert(
-            "Couldn't Save Settings",
-            isPresented: Binding(
-                get: { saveErrorMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        saveErrorMessage = nil
-                    }
-                }
+        .alert(item: $alert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .cancel(Text("OK"))
             )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(saveErrorMessage ?? "Try changing the setting again.")
+        }
+        .sheet(item: $exportFile) { exportFile in
+            ActivityView(activityItems: [exportFile.url])
+        }
+    }
+
+    private func exportWorkoutHistory() {
+        let completedSessions = sessions.filter { $0.status == .completed }
+
+        guard !completedSessions.isEmpty else {
+            alert = .noWorkoutHistory
+            return
+        }
+
+        do {
+            let csv = WorkoutDataExportService().csv(for: completedSessions, unit: settings.weightUnit)
+            let url = try WorkoutExportFileWriter().write(csv: csv)
+            exportFile = ExportFile(url: url)
+        } catch {
+            alert = .exportFailure(error.localizedDescription)
+        }
+    }
+
+    private func showSaveFailure(_ error: Error) {
+        alert = .saveFailure(error.localizedDescription)
+    }
+
+    private struct ExportFile: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
+
+    private struct SettingsAlert: Identifiable {
+        let id = UUID()
+        let title: String
+        let message: String
+
+        static let noWorkoutHistory = SettingsAlert(
+            title: "No Workout History",
+            message: "Complete a workout before exporting your history."
+        )
+
+        static func exportFailure(_ message: String) -> SettingsAlert {
+            SettingsAlert(
+                title: "Couldn't Export Workouts",
+                message: message
+            )
+        }
+
+        static func saveFailure(_ message: String) -> SettingsAlert {
+            SettingsAlert(
+                title: "Couldn't Save Settings",
+                message: message
+            )
         }
     }
 
@@ -50,10 +106,10 @@ struct SettingsView: View {
             set: { unit in
                 do {
                     try settings.updateWeightUnit(unit, context: modelContext)
-                    saveErrorMessage = nil
+                    alert = nil
                 } catch {
                     modelContext.rollback()
-                    saveErrorMessage = error.localizedDescription
+                    showSaveFailure(error)
                 }
             }
         )
@@ -67,10 +123,10 @@ struct SettingsView: View {
                 settings.touch()
                 do {
                     try modelContext.save()
-                    saveErrorMessage = nil
+                    alert = nil
                 } catch {
                     modelContext.rollback()
-                    saveErrorMessage = error.localizedDescription
+                    showSaveFailure(error)
                 }
             }
         )
