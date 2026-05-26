@@ -270,6 +270,35 @@ final class WorkoutDataExportServiceTests: XCTestCase {
         XCTAssertEqual(rows[4][15], sessionBID.uuidString)
     }
 
+    func testCSVUsesLocaleIndependentTitleOrderingWhenStartDatesMatch() throws {
+        let uppercaseSessionID = uuid("00000000-0000-0000-0000-000000000001")
+        let lowercaseSessionID = uuid("00000000-0000-0000-0000-000000000002")
+        let startedAt = Date(timeIntervalSince1970: 300)
+        let lowercaseSession = completedSession(
+            id: lowercaseSessionID,
+            title: "a",
+            startedAt: startedAt,
+            exerciseID: uuid("00000000-0000-0000-0000-000000000101"),
+            setID: uuid("00000000-0000-0000-0000-000000000201")
+        )
+        let uppercaseSession = completedSession(
+            id: uppercaseSessionID,
+            title: "B",
+            startedAt: startedAt,
+            exerciseID: uuid("00000000-0000-0000-0000-000000000102"),
+            setID: uuid("00000000-0000-0000-0000-000000000202")
+        )
+
+        let rows = try parseCSV(
+            WorkoutDataExportService().csv(for: [lowercaseSession, uppercaseSession], unit: .pounds)
+        )
+
+        XCTAssertEqual(rows[1][1], "B")
+        XCTAssertEqual(rows[1][15], uppercaseSessionID.uuidString)
+        XCTAssertEqual(rows[2][1], "a")
+        XCTAssertEqual(rows[2][15], lowercaseSessionID.uuidString)
+    }
+
     func testCSVNeutralizesFormulaLikeUserTextFields() throws {
         let session = WorkoutSession(
             id: uuid("00000000-0000-0000-0000-000000000001"),
@@ -307,6 +336,44 @@ final class WorkoutDataExportServiceTests: XCTestCase {
         XCTAssertEqual(rows[1][5], "'@metadata")
         XCTAssertEqual(rows[1][9], "-25")
         XCTAssertEqual(rows[1][13], "'=cmd")
+    }
+
+    func testCSVNeutralizesFormulaLikeUserTextAfterLeadingControlCharacters() throws {
+        let session = WorkoutSession(
+            id: uuid("00000000-0000-0000-0000-000000000001"),
+            title: "\t=IMPORTDATA(\"https://example.com\")",
+            startedAt: Date(timeIntervalSince1970: 0),
+            notes: "\n+SUM(1,1)",
+            status: .completed,
+            source: .blank
+        )
+        let loggedExercise = LoggedExercise(
+            id: uuid("00000000-0000-0000-0000-000000000101"),
+            orderIndex: 0,
+            exerciseSnapshotName: "\r-HYPERLINK(\"https://example.com\")",
+            notes: "\u{001F}@metadata"
+        )
+        let loggedSet = LoggedSet(
+            id: uuid("00000000-0000-0000-0000-000000000201"),
+            orderIndex: 0,
+            weight: 25,
+            reps: 5,
+            rpe: 8,
+            kind: .working,
+            isCompleted: true,
+            completedAt: Date(timeIntervalSince1970: 60),
+            notes: "\t=cmd"
+        )
+        loggedExercise.sets = [loggedSet]
+        session.loggedExercises = [loggedExercise]
+
+        let rows = try parseCSV(WorkoutDataExportService().csv(for: [session], unit: .pounds))
+
+        XCTAssertEqual(rows[1][1], "'\t=IMPORTDATA(\"https://example.com\")")
+        XCTAssertEqual(rows[1][2], "'\n+SUM(1,1)")
+        XCTAssertEqual(rows[1][4], "'\r-HYPERLINK(\"https://example.com\")")
+        XCTAssertEqual(rows[1][5], "'\u{001F}@metadata")
+        XCTAssertEqual(rows[1][13], "'\t=cmd")
     }
 
     private func completedSession(

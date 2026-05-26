@@ -59,9 +59,8 @@ struct WorkoutDataExportService {
                     return lhs.startedAt < rhs.startedAt
                 }
 
-                let titleOrder = lhs.title.localizedStandardCompare(rhs.title)
-                if titleOrder != .orderedSame {
-                    return titleOrder == .orderedAscending
+                if lhs.title != rhs.title {
+                    return lhs.title < rhs.title
                 }
 
                 return lhs.id.uuidString < rhs.id.uuidString
@@ -146,12 +145,18 @@ struct WorkoutDataExportService {
     }
 
     private static func neutralizedText(_ value: String) -> String {
-        guard let firstCharacter = value.first,
-              ["=", "+", "-", "@"].contains(firstCharacter)
+        let formulaCharacterIndex = value.firstIndex { character in
+            !character.unicodeScalars.allSatisfy { CharacterSet.controlCharacters.contains($0) }
+        }
+
+        guard let formulaCharacterIndex,
+              Self.formulaPrefixCharacters.contains(value[formulaCharacterIndex])
         else {
             return value
         }
 
         return "'\(value)"
     }
+
+    private static let formulaPrefixCharacters: Set<Character> = ["=", "+", "-", "@"]
 }
