@@ -29,6 +29,27 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(try activeSessions(in: context).count, 1)
     }
 
+    func testStartingBlankIgnoresTombstonedActiveSession() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let deletedActive = WorkoutSession(
+            title: "Deleted Active",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .active,
+            source: .blank
+        )
+        deletedActive.markDeleted(now: Date(timeIntervalSince1970: 200))
+        context.insert(deletedActive)
+        try context.save()
+
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 300))
+
+        XCTAssertNotEqual(session.id, deletedActive.id)
+        XCTAssertEqual(engine.activeSessionID, session.id)
+        XCTAssertEqual(try activeSessions(in: context).map(\.id), [session.id])
+    }
+
     func testStartingFromPastCopiesStructureWithPlaceholderValuesAndBlankActualSetValues() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -423,11 +444,11 @@ final class ActiveWorkoutEngineTests: XCTestCase {
     }
 
     private func activeSessions(in context: ModelContext) throws -> [WorkoutSession] {
-        try context.fetch(FetchDescriptor<WorkoutSession>()).filter { $0.status == .active }
+        WorkoutSession.visibleActiveSessions(from: try context.fetch(FetchDescriptor<WorkoutSession>()))
     }
 
     private func completedSessions(in context: ModelContext) throws -> [WorkoutSession] {
-        try context.fetch(FetchDescriptor<WorkoutSession>()).filter { $0.status == .completed }
+        WorkoutSession.visibleCompletedSessions(from: try context.fetch(FetchDescriptor<WorkoutSession>()))
     }
 
     private func allLoggedExercises(in context: ModelContext) throws -> [LoggedExercise] {

@@ -12,7 +12,7 @@ struct ExerciseCardView: View {
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
     private var weightUnit: MeasurementUnit {
-        settingsRecords.first?.weightUnit ?? .pounds
+        UserSettings.visibleSettingsRecords(from: settingsRecords).first?.weightUnit ?? .pounds
     }
 
     var body: some View {

@@ -33,6 +33,10 @@ final class UserSettings: Identifiable {
         deletedAt != nil
     }
 
+    static func visibleSettingsRecords(from settingsRecords: [UserSettings]) -> [UserSettings] {
+        settingsRecords.filter { !$0.isDeleted }
+    }
+
     var weightUnit: MeasurementUnit {
         get { MeasurementUnit(rawValue: weightUnitRaw) ?? .pounds }
         set {
@@ -46,7 +50,7 @@ final class UserSettings: Identifiable {
         guard previousUnit != newUnit else { return }
 
         let sets = try context.fetch(FetchDescriptor<LoggedSet>())
-        for set in sets {
+        for set in sets where !set.isDeleted {
             var didConvertSet = false
             if let weight = set.weight {
                 set.weight = previousUnit.convert(weight, to: newUnit)

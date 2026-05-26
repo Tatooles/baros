@@ -48,6 +48,10 @@ final class Exercise: Identifiable {
         deletedAt != nil
     }
 
+    static func visibleActiveExercises(from exercises: [Exercise]) -> [Exercise] {
+        exercises.filter { !$0.isArchived && !$0.isDeleted }
+    }
+
     var category: ExerciseCategory {
         get { ExerciseCategory(rawValue: categoryRaw) ?? .other }
         set {

@@ -231,8 +231,7 @@ final class ActiveWorkoutEngine {
     }
 
     private func currentActiveSession(context: ModelContext) throws -> WorkoutSession? {
-        let activeSessions = try context.fetch(FetchDescriptor<WorkoutSession>())
-            .filter { $0.status == .active }
+        let activeSessions = WorkoutSession.visibleActiveSessions(from: try context.fetch(FetchDescriptor<WorkoutSession>()))
             .sorted { $0.startedAt > $1.startedAt }
 
         if activeSessions.count > 1 {

@@ -87,6 +87,10 @@ final class WorkoutSession: Identifiable {
         sessions.filter { $0.status == .completed && !$0.isDeleted }
     }
 
+    static func visibleActiveSessions(from sessions: [WorkoutSession]) -> [WorkoutSession] {
+        sessions.filter { $0.status == .active && !$0.isDeleted }
+    }
+
     func effectiveDurationSeconds(now: Date = .now) -> Int {
         if status == .active {
             return max(0, Int(now.timeIntervalSince(startedAt)))

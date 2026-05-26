@@ -77,6 +77,7 @@ struct ExerciseEditorView: View {
         let duplicate = exercises.contains { existing in
             existing.id != exercise?.id
                 && !existing.isArchived
+                && !existing.isDeleted
                 && existing.name.caseInsensitiveCompare(trimmedName) == .orderedSame
         }
         guard !duplicate else {

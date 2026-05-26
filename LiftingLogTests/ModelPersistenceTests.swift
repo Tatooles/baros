@@ -337,6 +337,27 @@ final class ModelPersistenceTests: XCTestCase {
         XCTAssertEqual(templates.map(\.name), ["Future Template"])
     }
 
+    func testVisibleActiveExercisesExcludeArchivedAndTombstonedRecords() throws {
+        let visible = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let archived = Exercise(name: "Archived Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads", isArchived: true)
+        let deleted = Exercise(name: "Deleted Deadlift", category: .strength, equipment: .barbell, primaryMuscle: "Back")
+        deleted.markDeleted(now: Date(timeIntervalSince1970: 100))
+
+        let exercises = Exercise.visibleActiveExercises(from: [deleted, archived, visible])
+
+        XCTAssertEqual(exercises.map(\.id), [visible.id])
+    }
+
+    func testVisibleSettingsRecordsExcludeTombstonedRecords() throws {
+        let deletedSettings = UserSettings(createdAt: Date(timeIntervalSince1970: 100))
+        deletedSettings.markDeleted(now: Date(timeIntervalSince1970: 200))
+        let visibleSettings = UserSettings(weightUnit: .kilograms, createdAt: Date(timeIntervalSince1970: 300))
+
+        let settings = UserSettings.visibleSettingsRecords(from: [deletedSettings, visibleSettings])
+
+        XCTAssertEqual(settings.map(\.id), [visibleSettings.id])
+    }
+
     func testCustomExerciseCanBeCreatedEditedAndArchived() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

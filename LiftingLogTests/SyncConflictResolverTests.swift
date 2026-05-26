@@ -13,6 +13,11 @@ final class SyncConflictResolverTests: XCTestCase {
         )
     }
 
+    func testWorkoutTemplateRemainsExcludedFromV1SyncScope() {
+        XCTAssertFalse(SyncEntityKind.v1Synced.contains(.workoutTemplate))
+        XCTAssertTrue(SyncEntityKind.v1Excluded.contains(.workoutTemplate))
+    }
+
     func testLatestIncomingUpdateAppliesWhenNewerThanLocal() {
         let decision = SyncConflictResolver.decision(
             localUpdatedAt: Date(timeIntervalSince1970: 100),
