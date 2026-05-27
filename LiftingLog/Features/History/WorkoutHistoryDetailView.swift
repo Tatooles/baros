@@ -20,7 +20,7 @@ struct WorkoutHistoryDetailView: View {
 
                 HStack(spacing: 10) {
                     metricCard(title: "Duration", value: AppTheme.formatDuration(metrics.durationSeconds))
-                    metricCard(title: "Exercises", value: "\(session.loggedExercises.count)")
+                    metricCard(title: "Exercises", value: "\(session.sortedLoggedExercises.count)")
                     metricCard(title: "Sets", value: "\(metrics.completedSetCount)")
                 }
 
@@ -64,7 +64,7 @@ struct WorkoutHistoryDetailView: View {
                 }
 
                 Button(role: .destructive) {
-                    modelContext.delete(session)
+                    session.markDeletedCascade()
                     do {
                         try modelContext.save()
                         deleteErrorMessage = nil

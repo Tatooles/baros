@@ -59,6 +59,33 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(set.placeholderReps, 5)
     }
 
+    func testUpdatingWeightUnitDoesNotConvertTombstonedSets() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        try SeedDataService.seedIfNeeded(context: context)
+        let settings = try XCTUnwrap(context.fetch(FetchDescriptor<UserSettings>()).first)
+        let set = LoggedSet(
+            orderIndex: 0,
+            weight: 225,
+            reps: 5,
+            placeholderWeight: 225,
+            placeholderReps: 5,
+            isCompleted: true,
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let deletedAt = Date(timeIntervalSince1970: 200)
+        set.markDeleted(now: deletedAt)
+        context.insert(set)
+        try context.save()
+
+        try settings.updateWeightUnit(.kilograms, context: context)
+
+        XCTAssertEqual(set.weight, 225)
+        XCTAssertEqual(set.placeholderWeight, 225)
+        XCTAssertEqual(set.updatedAt, deletedAt)
+        XCTAssertEqual(set.deletedAt, deletedAt)
+    }
+
     func testSeedDoesNotOverwriteUserEditedSettings() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

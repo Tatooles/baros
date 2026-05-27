@@ -9,8 +9,7 @@ struct ExerciseLibraryView: View {
     @State private var removalErrorMessage: String?
 
     private var filteredExercises: [Exercise] {
-        exercises
-            .filter { !$0.isArchived }
+        Exercise.visibleActiveExercises(from: exercises)
             .filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 

@@ -52,8 +52,7 @@ struct WorkoutDataExportService {
     ]
 
     private func sortedCompletedSessions(from sessions: [WorkoutSession]) -> [WorkoutSession] {
-        sessions
-            .filter { $0.status == .completed }
+        WorkoutSession.visibleCompletedSessions(from: sessions)
             .sorted { lhs, rhs in
                 if lhs.startedAt != rhs.startedAt {
                     return lhs.startedAt < rhs.startedAt
@@ -69,6 +68,7 @@ struct WorkoutDataExportService {
 
     private func sortedLoggedExercises(from session: WorkoutSession) -> [LoggedExercise] {
         session.loggedExercises
+            .filter { !$0.isDeleted }
             .sorted { lhs, rhs in
                 if lhs.orderIndex != rhs.orderIndex {
                     return lhs.orderIndex < rhs.orderIndex
@@ -80,6 +80,7 @@ struct WorkoutDataExportService {
 
     private func sortedSets(from loggedExercise: LoggedExercise) -> [LoggedSet] {
         loggedExercise.sets
+            .filter { !$0.isDeleted }
             .sorted { lhs, rhs in
                 if lhs.orderIndex != rhs.orderIndex {
                     return lhs.orderIndex < rhs.orderIndex

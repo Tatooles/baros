@@ -8,15 +8,15 @@ struct ProfileView: View {
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
 
     private var settings: UserSettings? {
-        settingsRecords.first
+        UserSettings.visibleSettingsRecords(from: settingsRecords).first
     }
 
     private var completedWorkoutCount: Int {
-        sessions.filter { $0.status == .completed }.count
+        WorkoutSession.visibleCompletedSessions(from: sessions).count
     }
 
     private var activeExerciseCount: Int {
-        exercises.filter { !$0.isArchived }.count
+        Exercise.visibleActiveExercises(from: exercises).count
     }
 
     var body: some View {
@@ -73,7 +73,7 @@ struct ProfileView: View {
         .background(AppTheme.subtleBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task {
-            if settingsRecords.isEmpty {
+            if UserSettings.visibleSettingsRecords(from: settingsRecords).isEmpty {
                 try? SeedDataService.seedIfNeeded(context: modelContext)
             }
         }

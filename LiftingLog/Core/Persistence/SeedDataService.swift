@@ -14,7 +14,7 @@ enum SeedDataService {
 
     private static func ensureSettings(context: ModelContext) throws {
         let settings = try context.fetch(FetchDescriptor<UserSettings>())
-        if settings.isEmpty {
+        if UserSettings.visibleSettingsRecords(from: settings).isEmpty {
             context.insert(UserSettings())
         }
     }

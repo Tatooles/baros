@@ -94,7 +94,7 @@ final class ActiveWorkoutEngine {
 
     @discardableResult
     func addExercise(_ exercise: Exercise, to session: WorkoutSession, context: ModelContext) throws -> LoggedExercise {
-        let nextIndex = (session.loggedExercises.map(\.orderIndex).max() ?? -1) + 1
+        let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
         let loggedExercise = LoggedExercise(orderIndex: nextIndex, exercise: exercise, exerciseSnapshotName: exercise.name)
         loggedExercise.session = session
         context.insert(loggedExercise)
@@ -109,10 +109,16 @@ final class ActiveWorkoutEngine {
         return loggedExercise
     }
 
-    func removeLoggedExercise(_ loggedExercise: LoggedExercise, context: ModelContext) throws {
+    func removeLoggedExercise(_ loggedExercise: LoggedExercise, context: ModelContext, now: Date = .now) throws {
         let session = loggedExercise.session
-        context.delete(loggedExercise)
-        session?.touch()
+        loggedExercise.markDeleted(now: now)
+        for set in loggedExercise.sets {
+            set.markDeleted(now: now)
+        }
+        if let session {
+            reindexLoggedExercises(for: session, now: now)
+            session.touch(now: now)
+        }
         try context.save()
     }
 
@@ -139,14 +145,13 @@ final class ActiveWorkoutEngine {
         return set
     }
 
-    func removeSet(_ set: LoggedSet, context: ModelContext) throws {
+    func removeSet(_ set: LoggedSet, context: ModelContext, now: Date = .now) throws {
         let loggedExercise = set.loggedExercise
-        loggedExercise?.sets.removeAll { $0.id == set.id }
-        context.delete(set)
+        set.markDeleted(now: now)
         if let loggedExercise {
-            reindexSets(for: loggedExercise)
+            reindexSets(for: loggedExercise, now: now)
+            loggedExercise.touch(now: now)
         }
-        loggedExercise?.touch()
         try context.save()
     }
 
@@ -226,8 +231,7 @@ final class ActiveWorkoutEngine {
     }
 
     private func currentActiveSession(context: ModelContext) throws -> WorkoutSession? {
-        let activeSessions = try context.fetch(FetchDescriptor<WorkoutSession>())
-            .filter { $0.status == .active }
+        let activeSessions = WorkoutSession.visibleActiveSessions(from: try context.fetch(FetchDescriptor<WorkoutSession>()))
             .sorted { $0.startedAt > $1.startedAt }
 
         if activeSessions.count > 1 {
@@ -240,10 +244,17 @@ final class ActiveWorkoutEngine {
         return activeSessions.first
     }
 
-    private func reindexSets(for loggedExercise: LoggedExercise) {
+    private func reindexLoggedExercises(for session: WorkoutSession, now: Date) {
+        for (index, loggedExercise) in session.sortedLoggedExercises.enumerated() where loggedExercise.orderIndex != index {
+            loggedExercise.orderIndex = index
+            loggedExercise.touch(now: now)
+        }
+    }
+
+    private func reindexSets(for loggedExercise: LoggedExercise, now: Date = .now) {
         for (index, set) in loggedExercise.sortedSets.enumerated() where set.orderIndex != index {
             set.orderIndex = index
-            set.touch()
+            set.touch(now: now)
         }
     }
 

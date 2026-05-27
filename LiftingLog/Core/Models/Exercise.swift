@@ -14,6 +14,7 @@ final class Exercise: Identifiable {
     var isSeeded: Bool
     var createdAt: Date
     var updatedAt: Date
+    var deletedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -26,7 +27,8 @@ final class Exercise: Identifiable {
         isArchived: Bool = false,
         isSeeded: Bool = false,
         createdAt: Date = .now,
-        updatedAt: Date = .now
+        updatedAt: Date = .now,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.seedIdentifier = seedIdentifier
@@ -39,6 +41,15 @@ final class Exercise: Identifiable {
         self.isSeeded = isSeeded
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+    }
+
+    var isDeleted: Bool {
+        deletedAt != nil
+    }
+
+    static func visibleActiveExercises(from exercises: [Exercise]) -> [Exercise] {
+        exercises.filter { !$0.isArchived && !$0.isDeleted }
     }
 
     var category: ExerciseCategory {
@@ -93,11 +104,21 @@ final class Exercise: Identifiable {
         if isSeeded || hasLoggedHistory {
             archive()
         } else {
-            context.delete(self)
+            markDeleted()
         }
     }
 
     func touch(now: Date = .now) {
+        updatedAt = now
+    }
+
+    func markDeleted(now: Date = .now) {
+        deletedAt = now
+        updatedAt = now
+    }
+
+    func restoreFromDeletion(now: Date = .now) {
+        deletedAt = nil
         updatedAt = now
     }
 }

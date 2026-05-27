@@ -6,7 +6,7 @@ struct HistoryView: View {
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     private var completedSessions: [WorkoutSession] {
-        sessions.filter { $0.status == .completed }
+        WorkoutSession.visibleCompletedSessions(from: sessions)
     }
 
     private var exerciseSummaries: [ExerciseHistorySummary] {

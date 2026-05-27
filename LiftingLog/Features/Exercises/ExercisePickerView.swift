@@ -9,8 +9,7 @@ struct ExercisePickerView: View {
     @State private var isCreatingExercise = false
 
     private var filteredExercises: [Exercise] {
-        exercises
-            .filter { !$0.isArchived }
+        Exercise.visibleActiveExercises(from: exercises)
             .filter { exercise in
                 searchText.isEmpty || exercise.name.localizedCaseInsensitiveContains(searchText)
             }

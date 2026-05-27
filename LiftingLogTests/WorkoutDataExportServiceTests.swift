@@ -270,6 +270,71 @@ final class WorkoutDataExportServiceTests: XCTestCase {
         XCTAssertEqual(rows[4][15], sessionBID.uuidString)
     }
 
+    func testCSVExcludesTombstonedWorkoutGraphRecords() throws {
+        let visibleSession = WorkoutSession(
+            id: uuid("00000000-0000-0000-0000-000000000001"),
+            title: "Visible",
+            startedAt: Date(timeIntervalSince1970: 0),
+            status: .completed,
+            source: .blank
+        )
+        let visibleExercise = LoggedExercise(
+            id: uuid("00000000-0000-0000-0000-000000000101"),
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press"
+        )
+        visibleExercise.sets = [
+            LoggedSet(
+                id: uuid("00000000-0000-0000-0000-000000000201"),
+                orderIndex: 0,
+                weight: 185,
+                reps: 5,
+                isCompleted: true
+            ),
+            LoggedSet(
+                id: uuid("00000000-0000-0000-0000-000000000202"),
+                orderIndex: 1,
+                weight: 225,
+                reps: 1,
+                isCompleted: true,
+                deletedAt: Date(timeIntervalSince1970: 50)
+            )
+        ]
+        let deletedExercise = LoggedExercise(
+            id: uuid("00000000-0000-0000-0000-000000000102"),
+            orderIndex: 1,
+            exerciseSnapshotName: "Deleted Curl",
+            deletedAt: Date(timeIntervalSince1970: 60),
+            sets: [
+                LoggedSet(
+                    id: uuid("00000000-0000-0000-0000-000000000203"),
+                    orderIndex: 0,
+                    weight: 30,
+                    reps: 12,
+                    isCompleted: true
+                )
+            ]
+        )
+        visibleSession.loggedExercises = [visibleExercise, deletedExercise]
+        let deletedSession = completedSession(
+            id: uuid("00000000-0000-0000-0000-000000000002"),
+            title: "Deleted Session",
+            startedAt: Date(timeIntervalSince1970: 100),
+            exerciseID: uuid("00000000-0000-0000-0000-000000000103"),
+            setID: uuid("00000000-0000-0000-0000-000000000204")
+        )
+        deletedSession.markDeletedCascade(now: Date(timeIntervalSince1970: 200))
+
+        let rows = try parseCSV(
+            WorkoutDataExportService().csv(for: [visibleSession, deletedSession], unit: .pounds)
+        )
+
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows[1][1], "Visible")
+        XCTAssertEqual(rows[1][4], "Bench Press")
+        XCTAssertEqual(rows[1][17], "00000000-0000-0000-0000-000000000201")
+    }
+
     func testCSVUsesLocaleIndependentTitleOrderingWhenStartDatesMatch() throws {
         let uppercaseSessionID = uuid("00000000-0000-0000-0000-000000000001")
         let lowercaseSessionID = uuid("00000000-0000-0000-0000-000000000002")

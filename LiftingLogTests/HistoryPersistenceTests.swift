@@ -15,17 +15,109 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(try completedSessions(in: context).map(\.id), [session.id])
     }
 
-    func testDeletedCompletedWorkoutNoLongerAppears() throws {
+    func testTombstonedCompletedWorkoutNoLongerAppears() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
         try engine.finishWorkout(session, context: context)
 
-        context.delete(session)
+        session.markDeletedCascade(now: Date(timeIntervalSince1970: 200))
         try context.save()
 
         XCTAssertTrue(try completedSessions(in: context).isEmpty)
+    }
+
+    func testVisibleCompletedSessionsExcludeTombstonedSessions() {
+        let activeSession = WorkoutSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000301")!,
+            title: "Active",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .active,
+            source: .blank
+        )
+        let deletedCompletedSession = WorkoutSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000302")!,
+            title: "Deleted",
+            startedAt: Date(timeIntervalSince1970: 200),
+            status: .completed,
+            source: .blank
+        )
+        deletedCompletedSession.markDeletedCascade(now: Date(timeIntervalSince1970: 300))
+        let visibleCompletedSession = WorkoutSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000303")!,
+            title: "Visible",
+            startedAt: Date(timeIntervalSince1970: 400),
+            status: .completed,
+            source: .blank
+        )
+
+        let sessions = WorkoutSession.visibleCompletedSessions(from: [
+            activeSession,
+            deletedCompletedSession,
+            visibleCompletedSession
+        ])
+
+        XCTAssertEqual(sessions.map(\.id), [visibleCompletedSession.id])
+    }
+
+    func testWorkoutHistoryRowExerciseCountIgnoresTombstonedLoggedExercises() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let visibleExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
+        let deletedExercise = LoggedExercise(orderIndex: 1, exerciseSnapshotName: "Back Squat")
+        let session = WorkoutSession(
+            title: "Push",
+            startedAt: .now,
+            status: .completed,
+            source: .blank,
+            loggedExercises: [visibleExercise, deletedExercise]
+        )
+        context.insert(session)
+        try context.save()
+        let relationshipDeletedExercise = try XCTUnwrap(session.loggedExercises.first { $0.exerciseSnapshotName == "Back Squat" })
+        relationshipDeletedExercise.markDeleted(now: Date(timeIntervalSince1970: 700))
+        try context.save()
+
+        XCTAssertTrue(relationshipDeletedExercise.isDeleted)
+        XCTAssertEqual(WorkoutHistoryRow.exerciseCount(for: session), 1)
+    }
+
+    func testDeletingCompletedWorkoutTombstonesSessionLoggedExercisesAndSets() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let session = WorkoutSession(title: "Push", startedAt: .now, status: .completed, source: .blank)
+        let firstLoggedExercise = LoggedExercise(orderIndex: 0, exercise: exercise, exerciseSnapshotName: exercise.name)
+        firstLoggedExercise.sets = [
+            LoggedSet(orderIndex: 0, weight: 185, reps: 5, rpe: 8, isCompleted: true),
+            LoggedSet(orderIndex: 1, weight: 195, reps: 3, rpe: 9, isCompleted: true)
+        ]
+        let secondLoggedExercise = LoggedExercise(orderIndex: 1, exercise: exercise, exerciseSnapshotName: exercise.name)
+        secondLoggedExercise.sets = [
+            LoggedSet(orderIndex: 0, weight: 205, reps: 2, rpe: 9, isCompleted: true)
+        ]
+        session.loggedExercises = [firstLoggedExercise, secondLoggedExercise]
+        context.insert(exercise)
+        context.insert(session)
+        try context.save()
+        let deletedAt = Date(timeIntervalSince1970: 300)
+
+        session.markDeletedCascade(now: deletedAt)
+        try context.save()
+
+        let persistedSessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let persistedLoggedExercises = try context.fetch(FetchDescriptor<LoggedExercise>())
+        let persistedSets = try context.fetch(FetchDescriptor<LoggedSet>())
+        XCTAssertEqual(persistedSessions.map(\.id), [session.id])
+        XCTAssertEqual(persistedLoggedExercises.count, 2)
+        XCTAssertEqual(persistedSets.count, 3)
+        XCTAssertEqual(session.deletedAt, deletedAt)
+        XCTAssertEqual(session.updatedAt, deletedAt)
+        XCTAssertTrue(session.loggedExercises.allSatisfy { $0.deletedAt == deletedAt })
+        XCTAssertTrue(session.loggedExercises.allSatisfy { $0.updatedAt == deletedAt })
+        XCTAssertTrue(session.loggedExercises.flatMap(\.sets).allSatisfy { $0.deletedAt == deletedAt })
+        XCTAssertTrue(session.loggedExercises.flatMap(\.sets).allSatisfy { $0.updatedAt == deletedAt })
     }
 
     func testExerciseHistoryCountsCompletedSetsOnly() throws {
@@ -46,6 +138,36 @@ final class HistoryPersistenceTests: XCTestCase {
         let summaries = ExerciseHistorySummary.makeSummaries(from: [session])
 
         XCTAssertEqual(summaries.first?.completedSetCount, 1)
+    }
+
+    func testExerciseHistorySummaryIgnoresTombstonedWorkoutGraphRecords() throws {
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let visibleSession = WorkoutSession(title: "Visible Push", startedAt: Date(timeIntervalSince1970: 100), status: .completed, source: .blank)
+        let visibleLoggedExercise = LoggedExercise(orderIndex: 0, exercise: exercise, exerciseSnapshotName: exercise.name)
+        visibleLoggedExercise.sets = [
+            LoggedSet(orderIndex: 0, weight: 185, reps: 5, rpe: 8, isCompleted: true),
+            LoggedSet(orderIndex: 1, weight: 195, reps: 3, rpe: 9, isCompleted: true)
+        ]
+        visibleLoggedExercise.sets[1].markDeleted(now: Date(timeIntervalSince1970: 200))
+        let deletedLoggedExercise = LoggedExercise(orderIndex: 1, exercise: exercise, exerciseSnapshotName: exercise.name)
+        deletedLoggedExercise.sets = [
+            LoggedSet(orderIndex: 0, weight: 205, reps: 2, rpe: 9, isCompleted: true)
+        ]
+        deletedLoggedExercise.markDeleted(now: Date(timeIntervalSince1970: 200))
+        visibleSession.loggedExercises = [visibleLoggedExercise, deletedLoggedExercise]
+        let deletedSession = WorkoutSession(title: "Deleted Push", startedAt: Date(timeIntervalSince1970: 300), status: .completed, source: .blank)
+        let deletedSessionExercise = LoggedExercise(orderIndex: 0, exercise: exercise, exerciseSnapshotName: exercise.name)
+        deletedSessionExercise.sets = [
+            LoggedSet(orderIndex: 0, weight: 225, reps: 1, rpe: 10, isCompleted: true)
+        ]
+        deletedSession.loggedExercises = [deletedSessionExercise]
+        deletedSession.markDeletedCascade(now: Date(timeIntervalSince1970: 400))
+
+        let summary = try XCTUnwrap(ExerciseHistorySummary.makeSummaries(from: [visibleSession, deletedSession]).first)
+
+        XCTAssertEqual(summary.name, "Bench Press")
+        XCTAssertEqual(summary.lastPerformedAt, visibleSession.startedAt)
+        XCTAssertEqual(summary.completedSetCount, 1)
     }
 
     func testExerciseHistorySummaryUsesSnapshotNameAfterExerciseRename() throws {
@@ -337,6 +459,6 @@ final class HistoryPersistenceTests: XCTestCase {
     }
 
     private func completedSessions(in context: ModelContext) throws -> [WorkoutSession] {
-        try context.fetch(FetchDescriptor<WorkoutSession>()).filter { $0.status == .completed }
+        try context.fetch(FetchDescriptor<WorkoutSession>()).filter { $0.status == .completed && !$0.isDeleted }
     }
 }

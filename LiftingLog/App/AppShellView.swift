@@ -8,7 +8,7 @@ struct AppShellView: View {
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     private var activeSession: WorkoutSession? {
-        sessions.first { $0.status == .active }
+        WorkoutSession.visibleActiveSessions(from: sessions).first
     }
 
     var body: some View {

@@ -51,7 +51,7 @@ struct SettingsView: View {
     }
 
     private func exportWorkoutHistory() {
-        let completedSessions = sessions.filter { $0.status == .completed }
+        let completedSessions = WorkoutSession.visibleCompletedSessions(from: sessions)
 
         guard !completedSessions.isEmpty else {
             alert = .noWorkoutHistory

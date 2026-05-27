@@ -12,7 +12,7 @@ struct ExerciseCardView: View {
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
     private var weightUnit: MeasurementUnit {
-        settingsRecords.first?.weightUnit ?? .pounds
+        UserSettings.visibleSettingsRecords(from: settingsRecords).first?.weightUnit ?? .pounds
     }
 
     var body: some View {
@@ -36,10 +36,10 @@ struct ExerciseCardView: View {
 
                             Spacer()
 
-                            let completedSetCount = loggedExercise.sets.filter(\.isCompleted).count
-                            Text("\(completedSetCount)/\(loggedExercise.sets.count)")
+                            let progress = Self.setProgress(for: loggedExercise)
+                            Text("\(progress.completed)/\(progress.total)")
                                 .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(loggedExercise.sets.allSatisfy(\.isCompleted) && !loggedExercise.sets.isEmpty ? AppTheme.accentBright : AppTheme.textSecondary)
+                                .foregroundStyle(progress.isComplete ? AppTheme.accentBright : AppTheme.textSecondary)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
                                 .background(AppTheme.surfaceMuted)
@@ -174,6 +174,12 @@ struct ExerciseCardView: View {
     private var referenceNotes: String? {
         let trimmed = loggedExercise.referenceNotes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    static func setProgress(for loggedExercise: LoggedExercise) -> (completed: Int, total: Int, isComplete: Bool) {
+        let visibleSets = loggedExercise.sortedSets
+        let completed = visibleSets.filter(\.isCompleted).count
+        return (completed, visibleSets.count, completed == visibleSets.count && !visibleSets.isEmpty)
     }
 
     private func columnHeader(_ title: String) -> some View {

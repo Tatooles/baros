@@ -14,9 +14,9 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
     static func makeSummaries(from sessions: [WorkoutSession]) -> [ExerciseHistorySummary] {
         var grouped: [String: ExerciseHistorySummary] = [:]
 
-        for session in sessions where session.status == .completed {
+        for session in WorkoutSession.visibleCompletedSessions(from: sessions) {
             for loggedExercise in session.sortedLoggedExercises {
-                let completedSetCount = loggedExercise.sets.filter(\.isCompleted).count
+                let completedSetCount = loggedExercise.sortedSets.filter(\.isCompleted).count
                 guard completedSetCount > 0 else { continue }
 
                 let key: String

@@ -17,6 +17,7 @@ final class LoggedSet: Identifiable {
     var notes: String
     var createdAt: Date
     var updatedAt: Date
+    var deletedAt: Date?
     var healthLinkID: UUID?
     var loggedExercise: LoggedExercise?
 
@@ -35,6 +36,7 @@ final class LoggedSet: Identifiable {
         notes: String = "",
         createdAt: Date = .now,
         updatedAt: Date = .now,
+        deletedAt: Date? = nil,
         healthLinkID: UUID? = nil
     ) {
         self.id = id
@@ -51,6 +53,7 @@ final class LoggedSet: Identifiable {
         self.notes = notes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
         self.healthLinkID = healthLinkID
     }
 
@@ -67,8 +70,22 @@ final class LoggedSet: Identifiable {
         return weight * Double(reps)
     }
 
+    var isDeleted: Bool {
+        deletedAt != nil
+    }
+
     func touch(now: Date = .now) {
         updatedAt = now
         loggedExercise?.touch(now: now)
+    }
+
+    func markDeleted(now: Date = .now) {
+        deletedAt = now
+        updatedAt = now
+    }
+
+    func restoreFromDeletion(now: Date = .now) {
+        deletedAt = nil
+        updatedAt = now
     }
 }

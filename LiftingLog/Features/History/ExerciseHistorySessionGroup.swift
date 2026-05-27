@@ -45,8 +45,7 @@ struct ExerciseHistorySessionGroup: Identifiable {
         from sessions: [WorkoutSession],
         matching summary: ExerciseHistorySummary
     ) -> [ExerciseHistorySessionGroup] {
-        sessions
-            .filter { $0.status == .completed }
+        WorkoutSession.visibleCompletedSessions(from: sessions)
             .compactMap { session in
                 let entries = session.sortedLoggedExercises.flatMap { loggedExercise in
                     guard matches(loggedExercise, summary: summary) else { return [ExerciseHistorySetEntry]() }

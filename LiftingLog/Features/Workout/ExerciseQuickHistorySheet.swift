@@ -13,7 +13,7 @@ struct ExerciseQuickHistorySheet: View {
     }
 
     private var completedSessions: [WorkoutSession] {
-        sessions.filter { $0.status == .completed }
+        WorkoutSession.visibleCompletedSessions(from: sessions)
     }
 
     private var summary: ExerciseHistorySummary? {

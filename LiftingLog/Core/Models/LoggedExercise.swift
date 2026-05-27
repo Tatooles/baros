@@ -10,6 +10,7 @@ final class LoggedExercise: Identifiable {
     var referenceNotes: String?
     var createdAt: Date
     var updatedAt: Date
+    var deletedAt: Date?
     var exercise: Exercise?
     var session: WorkoutSession?
     @Relationship(deleteRule: .cascade, inverse: \LoggedSet.loggedExercise) var sets: [LoggedSet]
@@ -23,6 +24,7 @@ final class LoggedExercise: Identifiable {
         referenceNotes: String? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
+        deletedAt: Date? = nil,
         sets: [LoggedSet] = []
     ) {
         self.id = id
@@ -33,6 +35,7 @@ final class LoggedExercise: Identifiable {
         self.referenceNotes = referenceNotes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
         self.sets = sets
 
         for set in sets {
@@ -41,11 +44,27 @@ final class LoggedExercise: Identifiable {
     }
 
     var sortedSets: [LoggedSet] {
-        sets.sorted { $0.orderIndex < $1.orderIndex }
+        sets
+            .filter { !$0.isDeleted }
+            .sorted { $0.orderIndex < $1.orderIndex }
+    }
+
+    var isDeleted: Bool {
+        deletedAt != nil
     }
 
     func touch(now: Date = .now) {
         updatedAt = now
         session?.touch(now: now)
+    }
+
+    func markDeleted(now: Date = .now) {
+        deletedAt = now
+        updatedAt = now
+    }
+
+    func restoreFromDeletion(now: Date = .now) {
+        deletedAt = nil
+        updatedAt = now
     }
 }
