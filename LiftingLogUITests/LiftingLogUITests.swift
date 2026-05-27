@@ -82,6 +82,52 @@ final class LiftingLogUITests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutNotesScrollsAboveKeyboardToolbarWhenFocused() {
+        let app = makeApp()
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+
+        let notesField = app.textFields["How did this session feel? Any notes for next time..."]
+        for _ in 0..<6 where !notesField.exists || !notesField.isHittable {
+            app.swipeUp()
+        }
+
+        XCTAssertTrue(notesField.waitForExistence(timeout: 3))
+        notesField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+
+        let doneButton = app.buttons["DismissKeyboardButton"]
+        XCTAssertTrue(doneButton.waitForExistence(timeout: 3))
+        XCTAssertLessThan(notesField.frame.maxY, doneButton.frame.minY - 8)
+    }
+
+    @MainActor
+    func testExerciseNotesScrollsAboveKeyboardToolbarWhenFocused() {
+        let app = makeApp()
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        addBenchPress(in: app)
+        dismissKeyboardIfNeeded(in: app)
+
+        let notesField = app.textFields["ExerciseNotesField-0"]
+        for _ in 0..<6 where !notesField.exists || !notesField.isHittable {
+            app.swipeUp()
+        }
+
+        XCTAssertTrue(notesField.waitForExistence(timeout: 3))
+        notesField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+
+        let doneButton = app.buttons["DismissKeyboardButton"]
+        XCTAssertTrue(doneButton.waitForExistence(timeout: 3))
+        XCTAssertLessThan(notesField.frame.maxY, doneButton.frame.minY - 8)
+    }
+
+    @MainActor
     func testCompletedWorkoutCanBeOpenedFromWorkoutAndExerciseHistory() {
         let app = makeApp()
         app.launch()

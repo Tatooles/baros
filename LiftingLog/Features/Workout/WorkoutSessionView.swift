@@ -36,6 +36,7 @@ struct WorkoutSessionView: View {
                                 .foregroundStyle(AppTheme.textPrimary)
                                 .focused($focusedField, equals: .workoutTitle)
                                 .accessibilityIdentifier("WorkoutTitle")
+                                .id(WorkoutField.workoutTitle)
                             Text(AppTheme.formatDate(session.startedAt))
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundStyle(AppTheme.textSecondary)
@@ -86,6 +87,7 @@ struct WorkoutSessionView: View {
                                 .foregroundStyle(AppTheme.textPrimary)
                                 .lineLimit(4...6)
                                 .focused($focusedField, equals: .workoutNotes)
+                                .id(WorkoutField.workoutNotes)
 
                                 if let referenceNotes {
                                     Divider()
@@ -144,18 +146,21 @@ struct WorkoutSessionView: View {
                     try? engine.finalizeWorkoutTitle(session, context: modelContext)
                 }
 
-                guard
-                    newField == nil,
-                    Self.isSetField(previousField),
-                    let recentlyAddedExerciseID
-                else { return }
-
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(300))
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-                        scrollProxy.scrollTo(recentlyAddedExerciseID, anchor: .top)
+                if let newField {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(250))
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                            scrollProxy.scrollTo(newField, anchor: Self.focusRevealAnchor)
+                        }
                     }
-                    self.recentlyAddedExerciseID = nil
+                } else if Self.isSetField(previousField), let recentlyAddedExerciseID {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(300))
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
+                            scrollProxy.scrollTo(recentlyAddedExerciseID, anchor: .top)
+                        }
+                        self.recentlyAddedExerciseID = nil
+                    }
                 }
             }
             .toolbar {
@@ -279,4 +284,6 @@ struct WorkoutSessionView: View {
             return false
         }
     }
+
+    private static let focusRevealAnchor = UnitPoint(x: 0.5, y: 0.72)
 }

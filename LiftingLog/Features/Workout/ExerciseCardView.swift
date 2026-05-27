@@ -145,6 +145,8 @@ struct ExerciseCardView: View {
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                         .padding(.horizontal, 16)
+                        .accessibilityIdentifier("ExerciseNotesField-\(exerciseIndex)")
+                        .id(WorkoutField.exerciseNotes(loggedExercise.id))
 
                         if let referenceNotes {
                             VStack(alignment: .leading, spacing: 6) {

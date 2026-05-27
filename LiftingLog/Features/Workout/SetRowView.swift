@@ -98,6 +98,7 @@ struct SetRowView: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .accessibilityIdentifier(accessibilityIdentifier)
+            .id(focusTarget)
     }
 
     private var weightBinding: Binding<String> {
