@@ -82,6 +82,59 @@ final class LiftingLogUITests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutOptionsDisablesReorderWithOneExercise() {
+        let app = makeApp()
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        addBenchPress(in: app)
+        dismissKeyboardIfNeeded(in: app)
+
+        openWorkoutOptions(in: app)
+        let reorderButton = app.buttons["Reorder Exercises"]
+        XCTAssertTrue(reorderButton.waitForExistence(timeout: 3))
+        XCTAssertFalse(reorderButton.isEnabled)
+    }
+
+    @MainActor
+    func testReorderingActiveWorkoutExercisesChangesCardOrder() {
+        let app = makeApp()
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+
+        addExercise("Back Squat, Strength • Barbell • Quads", in: app)
+        dismissKeyboardIfNeeded(in: app)
+        addExercise("Bench Press, Strength • Barbell • Chest", in: app)
+        dismissKeyboardIfNeeded(in: app)
+        addExercise("Conventional Deadlift, Strength • Barbell • Posterior Chain", in: app)
+        dismissKeyboardIfNeeded(in: app)
+        addExercise("Overhead Press, Strength • Barbell • Shoulders", in: app)
+        dismissKeyboardIfNeeded(in: app)
+
+        assertActiveWorkoutExerciseOrder(
+            ["Back Squat", "Bench Press", "Conventional Deadlift", "Overhead Press"],
+            in: app
+        )
+
+        openWorkoutOptions(in: app)
+        let reorderButton = app.buttons["Reorder Exercises"]
+        XCTAssertTrue(reorderButton.waitForExistence(timeout: 3))
+        reorderButton.tap()
+
+        XCTAssertTrue(app.collectionViews["ReorderExercisesList"].waitForExistence(timeout: 3))
+        moveReorderExercise(named: "Overhead Press", before: "Back Squat", in: app)
+        app.buttons["DoneReorderExercisesButton"].tap()
+
+        assertActiveWorkoutExerciseOrder(
+            ["Overhead Press", "Back Squat", "Bench Press", "Conventional Deadlift"],
+            in: app
+        )
+    }
+
+    @MainActor
     func testWorkoutNotesScrollsAboveKeyboardToolbarWhenFocused() {
         let app = makeApp()
         app.launch()
@@ -421,7 +474,17 @@ final class LiftingLogUITests: XCTestCase {
             if addButton.exists && addButton.isHittable {
                 addButton.tap()
                 if app.navigationBars["Add Exercise"].waitForExistence(timeout: 1) {
-                    app.buttons[exerciseButtonLabel].tap()
+                    for _ in 0..<8 {
+                        let exerciseButton = app.buttons[exerciseButtonLabel]
+                        if exerciseButton.exists && exerciseButton.isHittable {
+                            exerciseButton.tap()
+                            return
+                        }
+
+                        app.swipeUp()
+                    }
+
+                    XCTFail("Could not find exercise button \(exerciseButtonLabel)")
                     return
                 }
             }
@@ -430,6 +493,40 @@ final class LiftingLogUITests: XCTestCase {
         }
 
         XCTFail("Could not present Add Exercise sheet")
+    }
+
+    @MainActor
+    private func assertActiveWorkoutExerciseOrder(_ expectedNames: [String], in app: XCUIApplication) {
+        for (index, expectedName) in expectedNames.enumerated() {
+            let header = app.buttons["ExerciseHeader-\(index)"]
+            XCTAssertTrue(header.waitForExistence(timeout: 3))
+            XCTAssertTrue(
+                header.label.contains(expectedName),
+                "Expected ExerciseHeader-\(index) to contain \(expectedName), got \(header.label)"
+            )
+        }
+    }
+
+    @MainActor
+    private func moveReorderExercise(named sourceName: String, before destinationName: String, in app: XCUIApplication) {
+        let sourceRow = reorderExerciseRow(named: sourceName, in: app)
+        let destinationRow = reorderExerciseRow(named: destinationName, in: app)
+
+        XCTAssertTrue(sourceRow.waitForExistence(timeout: 3))
+        XCTAssertTrue(destinationRow.waitForExistence(timeout: 3))
+
+        let appOrigin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+        let handleX = app.frame.maxX - 36
+        let sourceCoordinate = appOrigin.withOffset(CGVector(dx: handleX, dy: sourceRow.frame.midY))
+        let destinationCoordinate = appOrigin.withOffset(CGVector(dx: handleX, dy: destinationRow.frame.minY))
+        sourceCoordinate.press(forDuration: 1.0, thenDragTo: destinationCoordinate)
+    }
+
+    @MainActor
+    private func reorderExerciseRow(named name: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", name))
+            .firstMatch
     }
 
     @MainActor
