@@ -526,11 +526,14 @@ final class LiftingLogUITests: XCTestCase {
                 return
             }
 
-            let appOrigin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
-            let handleX = app.frame.maxX - 36
-            let sourceCoordinate = appOrigin.withOffset(CGVector(dx: handleX, dy: sourceRow.frame.midY))
             let destinationY = max(destinationRow.frame.minY - 12, list.frame.minY + 1)
-            let destinationCoordinate = appOrigin.withOffset(CGVector(dx: handleX, dy: destinationY))
+            let sourceCoordinate = sourceRow.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
+            let destinationCoordinate = sourceRow.coordinate(
+                withNormalizedOffset: CGVector(
+                    dx: 0.92,
+                    dy: (destinationY - sourceRow.frame.minY) / sourceRow.frame.height
+                )
+            )
             sourceCoordinate.press(forDuration: 1.0, thenDragTo: destinationCoordinate)
         }
 
@@ -573,7 +576,8 @@ final class LiftingLogUITests: XCTestCase {
 
     @MainActor
     private func reorderExerciseRow(named name: String, in app: XCUIApplication) -> XCUIElement {
-        app.descendants(matching: .any)
+        reorderExercisesList(in: app)
+            .descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@", name))
             .firstMatch
     }
