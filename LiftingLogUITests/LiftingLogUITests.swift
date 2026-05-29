@@ -124,12 +124,14 @@ final class LiftingLogUITests: XCTestCase {
         XCTAssertTrue(reorderButton.waitForExistence(timeout: 3))
         reorderButton.tap()
 
-        XCTAssertTrue(app.collectionViews["ReorderExercisesList"].waitForExistence(timeout: 3))
-        moveReorderExercise(named: "Overhead Press", before: "Back Squat", in: app)
-        app.buttons["DoneReorderExercisesButton"].tap()
+        XCTAssertTrue(waitForReorderExercisesList(in: app, timeout: 3))
+        moveReorderExercise(named: "Overhead Press", before: "Bench Press", in: app)
+        let doneButton = app.buttons["DoneReorderExercisesButton"]
+        XCTAssertTrue(doneButton.waitForExistence(timeout: 3))
+        doneButton.tap()
 
         assertActiveWorkoutExerciseOrder(
-            ["Overhead Press", "Back Squat", "Bench Press", "Conventional Deadlift"],
+            ["Back Squat", "Overhead Press", "Bench Press", "Conventional Deadlift"],
             in: app
         )
     }
@@ -345,6 +347,7 @@ final class LiftingLogUITests: XCTestCase {
     private func makeApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-in-memory-store"]
+        app.terminate()
         return app
     }
 
@@ -509,17 +512,63 @@ final class LiftingLogUITests: XCTestCase {
 
     @MainActor
     private func moveReorderExercise(named sourceName: String, before destinationName: String, in app: XCUIApplication) {
+        let list = reorderExercisesList(in: app)
+        XCTAssertTrue(list.exists)
+
+        for _ in 0..<2 {
+            let sourceRow = reorderExerciseRow(named: sourceName, in: app)
+            let destinationRow = reorderExerciseRow(named: destinationName, in: app)
+
+            XCTAssertTrue(sourceRow.waitForExistence(timeout: 3))
+            XCTAssertTrue(destinationRow.waitForExistence(timeout: 3))
+
+            if sourceRow.frame.minY < destinationRow.frame.minY {
+                return
+            }
+
+            let appOrigin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+            let handleX = app.frame.maxX - 36
+            let sourceCoordinate = appOrigin.withOffset(CGVector(dx: handleX, dy: sourceRow.frame.midY))
+            let destinationY = max(destinationRow.frame.minY - 12, list.frame.minY + 1)
+            let destinationCoordinate = appOrigin.withOffset(CGVector(dx: handleX, dy: destinationY))
+            sourceCoordinate.press(forDuration: 1.0, thenDragTo: destinationCoordinate)
+        }
+
         let sourceRow = reorderExerciseRow(named: sourceName, in: app)
         let destinationRow = reorderExerciseRow(named: destinationName, in: app)
+        XCTAssertLessThan(sourceRow.frame.minY, destinationRow.frame.minY)
+    }
 
-        XCTAssertTrue(sourceRow.waitForExistence(timeout: 3))
-        XCTAssertTrue(destinationRow.waitForExistence(timeout: 3))
+    @MainActor
+    private func waitForReorderExercisesList(in app: XCUIApplication, timeout: TimeInterval) -> Bool {
+        let collectionView = app.collectionViews["ReorderExercisesList"]
+        let table = app.tables["ReorderExercisesList"]
 
-        let appOrigin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
-        let handleX = app.frame.maxX - 36
-        let sourceCoordinate = appOrigin.withOffset(CGVector(dx: handleX, dy: sourceRow.frame.midY))
-        let destinationCoordinate = appOrigin.withOffset(CGVector(dx: handleX, dy: destinationRow.frame.minY))
-        sourceCoordinate.press(forDuration: 1.0, thenDragTo: destinationCoordinate)
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if collectionView.exists || table.exists {
+                return true
+            }
+
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+
+        if collectionView.exists || table.exists {
+            return true
+        }
+
+        XCTFail("ReorderExercisesList did not appear as a collection view or table")
+        return false
+    }
+
+    @MainActor
+    private func reorderExercisesList(in app: XCUIApplication) -> XCUIElement {
+        let collectionView = app.collectionViews["ReorderExercisesList"]
+        if collectionView.exists {
+            return collectionView
+        }
+
+        return app.tables["ReorderExercisesList"]
     }
 
     @MainActor
