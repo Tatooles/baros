@@ -125,13 +125,13 @@ final class LiftingLogUITests: XCTestCase {
         reorderButton.tap()
 
         XCTAssertTrue(waitForReorderExercisesList(in: app, timeout: 3))
-        moveReorderExercise(named: "Overhead Press", before: "Bench Press", in: app)
+        moveReorderExercise(named: "Overhead Press", before: "Back Squat", in: app)
         let doneButton = app.buttons["DoneReorderExercisesButton"]
         XCTAssertTrue(doneButton.waitForExistence(timeout: 3))
         doneButton.tap()
 
         assertActiveWorkoutExerciseOrder(
-            ["Back Squat", "Overhead Press", "Bench Press", "Conventional Deadlift"],
+            ["Overhead Press", "Back Squat", "Bench Press", "Conventional Deadlift"],
             in: app
         )
     }
