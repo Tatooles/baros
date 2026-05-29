@@ -20,7 +20,7 @@ final class LiftingLogUITests: XCTestCase {
         app.buttons["StartBlankWorkoutButton"].tap()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
 
-        app.buttons["Finish"].tap()
+        openFinishWorkoutSheet(in: app)
         XCTAssertTrue(app.buttons["KeepGoingButton"].waitForExistence(timeout: 3))
         app.buttons["KeepGoingButton"].tap()
 
@@ -207,7 +207,7 @@ final class LiftingLogUITests: XCTestCase {
         let firstSetCompletionButton = app.buttons["SetCompletionButton-0-0"]
         XCTAssertTrue(firstSetCompletionButton.waitForExistence(timeout: 3))
         firstSetCompletionButton.tap()
-        app.buttons["FinishWorkoutButton"].tap()
+        openFinishWorkoutSheet(in: app)
         XCTAssertTrue(app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3))
         app.buttons["SaveWorkoutButton"].tap()
 
@@ -308,6 +308,21 @@ final class LiftingLogUITests: XCTestCase {
     }
 
     @MainActor
+    private func openWorkoutOptions(in app: XCUIApplication) {
+        let optionsButton = app.buttons["WorkoutOptionsButton"]
+        XCTAssertTrue(optionsButton.waitForExistence(timeout: 3))
+        optionsButton.tap()
+    }
+
+    @MainActor
+    private func openFinishWorkoutSheet(in app: XCUIApplication) {
+        openWorkoutOptions(in: app)
+        let finishButton = app.buttons["Finish Workout"]
+        XCTAssertTrue(finishButton.waitForExistence(timeout: 3))
+        finishButton.tap()
+    }
+
+    @MainActor
     private func createCompletedBenchWorkout(in app: XCUIApplication, title: String) {
         app.buttons["StartBlankWorkoutButton"].tap()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
@@ -316,7 +331,7 @@ final class LiftingLogUITests: XCTestCase {
         fillFirstBenchSet(in: app)
         app.buttons["SetCompletionButton-0-0"].tap()
         dismissKeyboardIfNeeded(in: app)
-        app.buttons["FinishWorkoutButton"].tap()
+        openFinishWorkoutSheet(in: app)
         XCTAssertTrue(app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3))
         for _ in 0..<2 {
             app.buttons["SaveWorkoutButton"].tap()
@@ -344,7 +359,7 @@ final class LiftingLogUITests: XCTestCase {
         app.buttons["SetCompletionButton-0-0"].tap()
         dismissKeyboardIfNeeded(in: app)
 
-        app.buttons["FinishWorkoutButton"].tap()
+        openFinishWorkoutSheet(in: app)
         XCTAssertTrue(app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3))
         app.buttons["SaveWorkoutButton"].tap()
 
@@ -370,7 +385,7 @@ final class LiftingLogUITests: XCTestCase {
         replaceText(in: app.textFields[fieldIdentifier], with: "")
         dismissKeyboardIfNeeded(in: app)
 
-        app.buttons["FinishWorkoutButton"].tap()
+        openFinishWorkoutSheet(in: app)
         XCTAssertTrue(app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3))
         app.buttons["SaveWorkoutButton"].tap()
 
