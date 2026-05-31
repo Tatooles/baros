@@ -4,7 +4,9 @@ struct WorkoutHeaderView: View {
     let elapsedSeconds: Int
     let completedSets: Int
     let totalSets: Int
+    let canReorderExercises: Bool
     let onFinish: () -> Void
+    let onReorderExercises: () -> Void
 
     private var progressValue: Double {
         guard totalSets > 0 else { return 0 }
@@ -43,21 +45,35 @@ struct WorkoutHeaderView: View {
                     .scaleEffect(x: 1, y: 1.05, anchor: .center)
             }
 
-            Button(action: onFinish) {
-                Text("Finish")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .frame(minHeight: 44)
-                    .background(
-                        Capsule()
-                            .fill(AppTheme.accentGradient)
-                            .shadow(color: AppTheme.accentGlow, radius: 14, y: 6)
+            Menu {
+                Button {
+                    onFinish()
+                } label: {
+                    Label("Finish Workout", systemImage: "checkmark.circle")
+                }
+
+                Button {
+                    onReorderExercises()
+                } label: {
+                    Label("Reorder Exercises", systemImage: "arrow.up.arrow.down")
+                }
+                .disabled(!canReorderExercises)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .frame(width: 44, height: 44)
+                    .background(AppTheme.surfaceMuted)
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(AppTheme.borderStrong)
                     )
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("FinishWorkoutButton")
+            .accessibilityLabel("Workout options")
+            .accessibilityIdentifier("WorkoutOptionsButton")
         }
         .padding(.horizontal, AppTheme.shellPadding)
         .padding(.top, 6)

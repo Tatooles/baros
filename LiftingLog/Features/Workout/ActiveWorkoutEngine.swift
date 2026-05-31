@@ -2,6 +2,17 @@ import Foundation
 import Observation
 import SwiftData
 
+enum ActiveWorkoutEngineError: LocalizedError, Equatable {
+    case invalidExerciseReorder
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidExerciseReorder:
+            return "Workout exercises changed. Review the current order and try again."
+        }
+    }
+}
+
 @Observable
 final class ActiveWorkoutEngine {
     var activeSessionID: UUID?
@@ -122,18 +133,47 @@ final class ActiveWorkoutEngine {
         try context.save()
     }
 
+    func reorderLoggedExercises(
+        in session: WorkoutSession,
+        orderedIDs: [UUID],
+        context: ModelContext,
+        now: Date = .now
+    ) throws {
+        let visibleExercises = session.sortedLoggedExercises
+        let visibleIDs = visibleExercises.map(\.id)
+        guard orderedIDs.count == visibleIDs.count, Set(orderedIDs) == Set(visibleIDs) else {
+            throw ActiveWorkoutEngineError.invalidExerciseReorder
+        }
+
+        let exercisesByID = Dictionary(uniqueKeysWithValues: visibleExercises.map { ($0.id, $0) })
+        var didChangeOrder = false
+
+        for (index, id) in orderedIDs.enumerated() {
+            guard let loggedExercise = exercisesByID[id] else {
+                throw ActiveWorkoutEngineError.invalidExerciseReorder
+            }
+
+            if loggedExercise.orderIndex != index {
+                loggedExercise.orderIndex = index
+                loggedExercise.touch(now: now)
+                didChangeOrder = true
+            }
+        }
+
+        guard didChangeOrder else { return }
+        session.touch(now: now)
+        try context.save()
+    }
+
     @discardableResult
     func addSet(to loggedExercise: LoggedExercise, context: ModelContext) throws -> LoggedSet {
         let sortedSets = loggedExercise.sortedSets
         let previous = sortedSets.last
         let set = LoggedSet(
             orderIndex: (sortedSets.map(\.orderIndex).max() ?? -1) + 1,
-            weight: previous?.weight,
-            reps: previous?.reps,
-            rpe: previous?.rpe,
-            placeholderWeight: previous?.weight == nil ? previous?.placeholderWeight : nil,
-            placeholderReps: previous?.reps == nil ? previous?.placeholderReps : nil,
-            placeholderRPE: previous?.rpe == nil ? previous?.placeholderRPE : nil,
+            placeholderWeight: previous?.weight ?? previous?.placeholderWeight,
+            placeholderReps: previous?.reps ?? previous?.placeholderReps,
+            placeholderRPE: previous?.rpe ?? previous?.placeholderRPE,
             kind: previous?.kind ?? .working,
             isCompleted: false
         )

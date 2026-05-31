@@ -16,6 +16,7 @@ struct WorkoutSessionView: View {
     @Bindable var engine: ActiveWorkoutEngine
     @Bindable var navigationState: AppNavigationState
     @State private var isFinishSheetPresented = false
+    @State private var isReorderExercisesPresented = false
     @State private var isAddExercisePresented = false
     @State private var selectedHistoryExercise: LoggedExercise?
     @State private var pendingFocusedField: WorkoutField?
@@ -23,7 +24,7 @@ struct WorkoutSessionView: View {
     @State private var recentlyAddedExerciseID: UUID?
     @State private var collapsedExerciseIDs: Set<UUID> = []
     @FocusState private var focusedField: WorkoutField?
-    private let contentBottomPadding: CGFloat = 360
+    private let contentBottomPadding: CGFloat = 180
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -36,6 +37,7 @@ struct WorkoutSessionView: View {
                                 .foregroundStyle(AppTheme.textPrimary)
                                 .focused($focusedField, equals: .workoutTitle)
                                 .accessibilityIdentifier("WorkoutTitle")
+                                .id(WorkoutField.workoutTitle)
                             Text(AppTheme.formatDate(session.startedAt))
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundStyle(AppTheme.textSecondary)
@@ -86,6 +88,7 @@ struct WorkoutSessionView: View {
                                 .foregroundStyle(AppTheme.textPrimary)
                                 .lineLimit(4...6)
                                 .focused($focusedField, equals: .workoutNotes)
+                                .id(WorkoutField.workoutNotes)
 
                                 if let referenceNotes {
                                     Divider()
@@ -113,10 +116,15 @@ struct WorkoutSessionView: View {
                     WorkoutHeaderView(
                         elapsedSeconds: metrics.durationSeconds,
                         completedSets: metrics.completedSetCount,
-                        totalSets: metrics.totalSetCount
-                    ) {
-                        isFinishSheetPresented = true
-                    }
+                        totalSets: metrics.totalSetCount,
+                        canReorderExercises: session.sortedLoggedExercises.count >= 2,
+                        onFinish: {
+                            isFinishSheetPresented = true
+                        },
+                        onReorderExercises: {
+                            isReorderExercisesPresented = true
+                        }
+                    )
                 }
             }
             .onChange(of: isAddExercisePresented) { _, isPresented in
@@ -144,18 +152,21 @@ struct WorkoutSessionView: View {
                     try? engine.finalizeWorkoutTitle(session, context: modelContext)
                 }
 
-                guard
-                    newField == nil,
-                    Self.isSetField(previousField),
-                    let recentlyAddedExerciseID
-                else { return }
-
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(300))
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-                        scrollProxy.scrollTo(recentlyAddedExerciseID, anchor: .top)
+                if let newField {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(250))
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                            scrollProxy.scrollTo(newField, anchor: Self.focusRevealAnchor)
+                        }
                     }
-                    self.recentlyAddedExerciseID = nil
+                } else if Self.isSetField(previousField), let recentlyAddedExerciseID {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(300))
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
+                            scrollProxy.scrollTo(recentlyAddedExerciseID, anchor: .top)
+                        }
+                        self.recentlyAddedExerciseID = nil
+                    }
                 }
             }
             .toolbar {
@@ -208,6 +219,9 @@ struct WorkoutSessionView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $isFinishSheetPresented) {
             FinishWorkoutSheet(session: session, engine: engine)
+        }
+        .sheet(isPresented: $isReorderExercisesPresented) {
+            ReorderExercisesSheet(session: session, engine: engine)
         }
         .sheet(isPresented: $isAddExercisePresented) {
             AddExerciseSheet(session: session, engine: engine) { loggedExercise in
@@ -279,4 +293,6 @@ struct WorkoutSessionView: View {
             return false
         }
     }
+
+    private static let focusRevealAnchor = UnitPoint(x: 0.5, y: 0.72)
 }

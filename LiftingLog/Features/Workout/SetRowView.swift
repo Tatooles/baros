@@ -11,6 +11,7 @@ struct SetRowView: View {
     let weightUnit: MeasurementUnit
     @State private var weightInputText = WorkoutNumberInputText()
     @State private var rpeInputText = WorkoutNumberInputText()
+    @State private var suppressedCompletionClearField: WorkoutField?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -44,6 +45,8 @@ struct SetRowView: View {
             )
 
             Button {
+                suppressNextCompletionClearIfNeeded()
+                clearFocusedFieldForThisSet()
                 withAnimation(.easeInOut(duration: 0.2)) {
                     try? engine.toggleSetCompletion(set, context: modelContext)
                 }
@@ -98,12 +101,18 @@ struct SetRowView: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .accessibilityIdentifier(accessibilityIdentifier)
+            .id(focusTarget)
     }
 
     private var weightBinding: Binding<String> {
         Binding(
             get: { weightInputText.displayText(for: set.weight) },
             set: { value in
+                if shouldSuppressDecimalClear(value, field: .setWeight(set.id)) {
+                    weightInputText.endEditing()
+                    return
+                }
+
                 weightInputText.updateDraft(value)
                 try? engine.updateSet(set, weight: WorkoutFormatters.parseNumber(value), reps: set.reps, rpe: set.rpe, context: modelContext)
             }
@@ -131,6 +140,11 @@ struct SetRowView: View {
         Binding(
             get: { rpeInputText.displayText(for: set.rpe) },
             set: { value in
+                if shouldSuppressDecimalClear(value, field: .setRPE(set.id)) {
+                    rpeInputText.endEditing()
+                    return
+                }
+
                 rpeInputText.updateDraft(value)
                 try? engine.updateSet(set, weight: set.weight, reps: set.reps, rpe: WorkoutFormatters.parseNumber(value), context: modelContext)
             }
@@ -139,6 +153,40 @@ struct SetRowView: View {
 
     private var rpePlaceholder: String {
         return set.placeholderRPE.map(WorkoutFormatters.number) ?? "RPE"
+    }
+
+    private func clearFocusedFieldForThisSet() {
+        if focusedField.wrappedValue == .setWeight(set.id)
+            || focusedField.wrappedValue == .setReps(set.id)
+            || focusedField.wrappedValue == .setRPE(set.id) {
+            focusedField.wrappedValue = nil
+        }
+    }
+
+    private func suppressNextCompletionClearIfNeeded() {
+        let fieldToSuppress: WorkoutField?
+        if focusedField.wrappedValue == .setWeight(set.id), !set.isCompleted, set.weight == nil, set.placeholderWeight != nil {
+            fieldToSuppress = .setWeight(set.id)
+        } else if focusedField.wrappedValue == .setRPE(set.id), !set.isCompleted, set.rpe == nil, set.placeholderRPE != nil {
+            fieldToSuppress = .setRPE(set.id)
+        } else {
+            fieldToSuppress = nil
+        }
+
+        guard let fieldToSuppress else { return }
+        suppressedCompletionClearField = fieldToSuppress
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            if suppressedCompletionClearField == fieldToSuppress {
+                suppressedCompletionClearField = nil
+            }
+        }
+    }
+
+    private func shouldSuppressDecimalClear(_ value: String, field: WorkoutField) -> Bool {
+        guard value.isEmpty, suppressedCompletionClearField == field else { return false }
+        suppressedCompletionClearField = nil
+        return true
     }
 }
 

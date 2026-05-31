@@ -132,7 +132,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(added.sets.count, 1)
     }
 
-    func testAddingSetCopiesPreviousValuesAndStartsIncomplete() throws {
+    func testAddingSetCarriesPreviousValuesAsPlaceholdersAndStartsIncomplete() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
@@ -145,9 +145,12 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let newSet = try engine.addSet(to: loggedExercise, context: context)
 
         XCTAssertEqual(newSet.orderIndex, 1)
-        XCTAssertEqual(newSet.weight, 185)
-        XCTAssertEqual(newSet.reps, 5)
-        XCTAssertEqual(newSet.rpe, 8)
+        XCTAssertNil(newSet.weight)
+        XCTAssertNil(newSet.reps)
+        XCTAssertNil(newSet.rpe)
+        XCTAssertEqual(newSet.placeholderWeight, 185)
+        XCTAssertEqual(newSet.placeholderReps, 5)
+        XCTAssertEqual(newSet.placeholderRPE, 8)
         XCTAssertFalse(newSet.isCompleted)
     }
 
@@ -441,6 +444,135 @@ final class ActiveWorkoutEngineTests: XCTestCase {
 
         XCTAssertEqual(try activeSessions(in: context).count, 0)
         XCTAssertEqual(try completedSessions(in: context).count, 0)
+    }
+
+    func testReorderingLoggedExercisesUpdatesVisibleOrderIndexes() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let deadlift = Exercise(name: "Conventional Deadlift", category: .strength, equipment: .barbell, primaryMuscle: "Posterior Chain")
+        context.insert(squat)
+        context.insert(bench)
+        context.insert(deadlift)
+        let first = try engine.addExercise(squat, to: session, context: context)
+        let second = try engine.addExercise(bench, to: session, context: context)
+        let third = try engine.addExercise(deadlift, to: session, context: context)
+
+        try engine.reorderLoggedExercises(
+            in: session,
+            orderedIDs: [third.id, first.id, second.id],
+            context: context,
+            now: Date(timeIntervalSince1970: 200)
+        )
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [third.id, first.id, second.id])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2])
+        XCTAssertEqual(third.updatedAt, Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(first.updatedAt, Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(second.updatedAt, Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(session.updatedAt, Date(timeIntervalSince1970: 200))
+    }
+
+    func testReorderingLoggedExercisesPreservesExerciseData() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        context.insert(squat)
+        context.insert(bench)
+        let first = try engine.addExercise(squat, to: session, context: context)
+        let second = try engine.addExercise(bench, to: session, context: context)
+        first.notes = "Keep torso upright"
+        first.referenceNotes = "Use belt"
+        let firstSet = first.sortedSets[0]
+        firstSet.weight = 315
+        firstSet.reps = 5
+        firstSet.rpe = 8
+        firstSet.placeholderWeight = 305
+        firstSet.placeholderReps = 5
+        firstSet.placeholderRPE = 7.5
+        firstSet.isCompleted = true
+
+        try engine.reorderLoggedExercises(in: session, orderedIDs: [second.id, first.id], context: context)
+
+        let movedFirst = try XCTUnwrap(session.sortedLoggedExercises.last)
+        XCTAssertEqual(movedFirst.id, first.id)
+        XCTAssertEqual(movedFirst.notes, "Keep torso upright")
+        XCTAssertEqual(movedFirst.referenceNotes, "Use belt")
+        XCTAssertEqual(movedFirst.sortedSets.map(\.id), [firstSet.id])
+        XCTAssertEqual(movedFirst.sortedSets[0].weight, 315)
+        XCTAssertEqual(movedFirst.sortedSets[0].reps, 5)
+        XCTAssertEqual(movedFirst.sortedSets[0].rpe, 8)
+        XCTAssertEqual(movedFirst.sortedSets[0].placeholderWeight, 305)
+        XCTAssertEqual(movedFirst.sortedSets[0].placeholderReps, 5)
+        XCTAssertEqual(movedFirst.sortedSets[0].placeholderRPE, 7.5)
+        XCTAssertTrue(movedFirst.sortedSets[0].isCompleted)
+    }
+
+    func testReorderingLoggedExercisesRejectsInvalidIDsWithoutMutation() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        context.insert(squat)
+        context.insert(bench)
+        let first = try engine.addExercise(squat, to: session, context: context)
+        let second = try engine.addExercise(bench, to: session, context: context)
+        let originalIDs = session.sortedLoggedExercises.map(\.id)
+        let originalIndexes = session.sortedLoggedExercises.map(\.orderIndex)
+
+        XCTAssertThrowsError(
+            try engine.reorderLoggedExercises(
+                in: session,
+                orderedIDs: [second.id, UUID()],
+                context: context,
+                now: Date(timeIntervalSince1970: 300)
+            )
+        ) { error in
+            XCTAssertEqual(error as? ActiveWorkoutEngineError, .invalidExerciseReorder)
+        }
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), originalIDs)
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), originalIndexes)
+        XCTAssertEqual(first.orderIndex, 0)
+        XCTAssertEqual(second.orderIndex, 1)
+    }
+
+    func testReorderingLoggedExercisesExcludesTombstonedExercises() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let deadlift = Exercise(name: "Conventional Deadlift", category: .strength, equipment: .barbell, primaryMuscle: "Posterior Chain")
+        context.insert(squat)
+        context.insert(bench)
+        context.insert(deadlift)
+        let first = try engine.addExercise(squat, to: session, context: context)
+        let removed = try engine.addExercise(bench, to: session, context: context)
+        let third = try engine.addExercise(deadlift, to: session, context: context)
+        removed.markDeleted(now: Date(timeIntervalSince1970: 150))
+
+        try engine.reorderLoggedExercises(
+            in: session,
+            orderedIDs: [third.id, first.id],
+            context: context,
+            now: Date(timeIntervalSince1970: 400)
+        )
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [third.id, first.id])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1])
+        XCTAssertEqual(removed.orderIndex, 1)
+        XCTAssertEqual(removed.deletedAt, Date(timeIntervalSince1970: 150))
+        XCTAssertEqual(try allLoggedExercises(in: context).count, 3)
     }
 
     private func activeSessions(in context: ModelContext) throws -> [WorkoutSession] {

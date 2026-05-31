@@ -5,19 +5,33 @@ settings:
   base:
     SWIFT_VERSION: 6.0
     IPHONEOS_DEPLOYMENT_TARGET: 17.0
+packages:
+  Clerk:
+    url: https://github.com/clerk/clerk-ios
+    from: 1.1.3
 targets:
   LiftingLog:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
+    attributes:
+      DevelopmentTeam: RJGJJ38RV9
+      ProvisioningStyle: Automatic
     sources:
       - path: LiftingLog
+    dependencies:
+      - package: Clerk
+        product: ClerkKit
+      - package: Clerk
+        product: ClerkKitUI
     settings:
       base:
         PRODUCT_NAME: LiftingLog
         PRODUCT_BUNDLE_IDENTIFIER: com.kevintatooles.LiftingLog
-        DEVELOPMENT_TEAM: J32TMVT75M
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: RJGJJ38RV9
         GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Lifting Log
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
