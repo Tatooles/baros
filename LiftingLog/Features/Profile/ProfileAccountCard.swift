@@ -28,8 +28,6 @@ struct ProfileAccountCard: View {
     var body: some View {
         SurfaceCard {
             HStack(alignment: .center, spacing: 14) {
-                accountIcon
-
                 VStack(alignment: .leading, spacing: 4) {
                     Text(displayState.title)
                         .font(.system(size: 20, weight: .bold))
@@ -39,9 +37,12 @@ struct ProfileAccountCard: View {
                     Text(displayState.subtitle)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(displayState.isSignedIn ? 1 : 2)
+                        .truncationMode(.middle)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("ProfileAccountSubtitle")
                 }
+                .layoutPriority(1)
 
                 Spacer(minLength: 10)
 
@@ -55,6 +56,8 @@ struct ProfileAccountCard: View {
                     } label: {
                         Text(displayState.actionTitle)
                             .font(.system(size: 14, weight: .bold))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 9)
                             .background(AppTheme.accentGradient)
@@ -71,16 +74,6 @@ struct ProfileAccountCard: View {
             AuthView()
                 .presentationDragIndicator(.visible)
         }
-    }
-
-    private var accountIcon: some View {
-        Image(systemName: displayState.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle.badge.plus")
-            .font(.system(size: 28, weight: .semibold))
-            .foregroundStyle(displayState.isSignedIn ? AppTheme.accentBright : AppTheme.textSecondary)
-            .frame(width: 42, height: 42)
-            .background(AppTheme.surfaceMuted)
-            .clipShape(Circle())
-            .accessibilityHidden(true)
     }
 
     private static func fullName(firstName: String?, lastName: String?) -> String? {
