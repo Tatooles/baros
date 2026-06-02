@@ -300,6 +300,31 @@ final class LiftingLogUITests: XCTestCase {
     }
 
     @MainActor
+    func testSettingsShowsAccountShellAndDeleteAccountPlaceholder() {
+        let app = makeApp()
+        app.launchArguments.append("--uitest-force-signed-out-auth")
+        app.launch()
+
+        app.buttons["ProfileTab"].tap()
+        XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
+        app.buttons["ProfileSettingsLink"].tap()
+
+        XCTAssertTrue(app.staticTexts["Account"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Sync Status"].exists)
+        XCTAssertTrue(app.staticTexts["Local only"].exists)
+        XCTAssertTrue(app.staticTexts["Cloud sync is not configured yet."].exists)
+        XCTAssertTrue(app.buttons["SettingsDeleteAccountRow"].exists)
+
+        app.buttons["SettingsDeleteAccountRow"].tap()
+
+        XCTAssertTrue(app.staticTexts["SettingsDeleteAccountPlaceholder"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Account deletion is not available yet."].exists)
+        let placeholderMessage = "This release still stores your workouts locally. Account deletion will be available before release after cloud data deletion is connected."
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", placeholderMessage)).firstMatch.exists)
+        XCTAssertFalse(app.buttons["Delete"].exists)
+    }
+
+    @MainActor
     func testSignedOutProfileShowsOptionalAuthAndWorkoutStillWorks() {
         let app = makeApp()
         app.launchArguments.append("--uitest-force-signed-out-auth")

@@ -27,6 +27,8 @@ struct SettingsView: View {
                 }
             }
 
+            SettingsAccountSection()
+
             Section("Data") {
                 Button(action: exportWorkoutHistory) {
                     Label("Export Workout History", systemImage: "square.and.arrow.up")
