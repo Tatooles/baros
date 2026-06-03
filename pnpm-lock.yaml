@@ -11,6 +11,10 @@ importers:
       convex:
         specifier: ^1.40.0
         version: 1.40.0
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
 packages:
 
@@ -199,6 +203,11 @@ packages:
     engines: {node: '>=14'}
     hasBin: true
 
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   ws@8.20.1:
     resolution: {integrity: sha512-It4dO0K5v//JtTXuPkfEOaI3uUN87iYPnqo/ZzqCoG3g8uhA66QUMs/SrM0YK7/NAu+r4LMh/9dq2A7k+rHs+w==}
     engines: {node: '>=10.0.0'}
@@ -330,5 +339,7 @@ snapshots:
       '@esbuild/win32-x64': 0.27.0
 
   prettier@3.8.3: {}
+
+  typescript@6.0.3: {}
 
   ws@8.20.1: {}

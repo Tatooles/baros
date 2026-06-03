@@ -12,5 +12,8 @@
   "packageManager": "pnpm@10.26.1",
   "dependencies": {
     "convex": "^1.40.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
   }
 }
