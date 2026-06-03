@@ -553,6 +553,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				883DF58C80F88BFEDDA8BEC1 /* XCRemoteSwiftPackageReference "clerk-ios" */,
+				74954A352FCFD0BB00D6CF76 /* XCRemoteSwiftPackageReference "convex-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F2A90E3B54435D0B0449A2DB /* Products */;
@@ -972,6 +973,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		74954A352FCFD0BB00D6CF76 /* XCRemoteSwiftPackageReference "convex-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/get-convex/convex-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.8.1;
+			};
+		};
 		883DF58C80F88BFEDDA8BEC1 /* XCRemoteSwiftPackageReference "clerk-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/clerk/clerk-ios";
