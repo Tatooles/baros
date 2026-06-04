@@ -9,6 +9,12 @@ packages:
   Clerk:
     url: https://github.com/clerk/clerk-ios
     from: 1.1.3
+  ClerkConvex:
+    url: https://github.com/clerk/clerk-convex-swift
+    from: 0.1.0
+  ConvexMobile:
+    url: https://github.com/get-convex/convex-swift
+    from: 0.8.1
 targets:
   LiftingLog:
     type: application
@@ -24,6 +30,10 @@ targets:
         product: ClerkKit
       - package: Clerk
         product: ClerkKitUI
+      - package: ClerkConvex
+        product: ClerkConvex
+      - package: ConvexMobile
+        product: ConvexMobile
     settings:
       base:
         PRODUCT_NAME: LiftingLog
@@ -39,6 +49,9 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SUPPORTS_MACCATALYST: NO
         TARGETED_DEVICE_FAMILY: 1
+      configs:
+        Release:
+          EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     scheme:
       testTargets:
         - LiftingLogTests

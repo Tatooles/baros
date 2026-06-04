@@ -1,0 +1,24 @@
+{
+  "name": "codex-ios-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "convex:test": "vitest run convex",
+    "convex:typecheck": "convex typecheck",
+    "test": "pnpm run convex:test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.26.1",
+  "dependencies": {
+    "convex": "^1.40.0"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
+    "convex-test": "^0.0.53",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

@@ -1,7 +1,3 @@
-# AGENTS.md
-
-- If using XcodeBuildMCP, use the installed XcodeBuildMCP skill before calling XcodeBuildMCP tools.
-
 <!-- convex-ai-start -->
 
 This project uses [Convex](https://convex.dev) as its backend.
