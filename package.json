@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "convex:test": "vitest run convex",
+    "convex:typecheck": "convex typecheck",
+    "test": "pnpm run convex:test"
   },
   "keywords": [],
   "author": "",
@@ -14,6 +16,9 @@
     "convex": "^1.40.0"
   },
   "devDependencies": {
-    "typescript": "^6.0.3"
+    "@edge-runtime/vm": "^5.0.0",
+    "convex-test": "^0.0.53",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   }
 }

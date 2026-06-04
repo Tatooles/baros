@@ -8,13 +8,23 @@
  * @module
  */
 
+import type * as authSmoke from "../authSmoke.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as sync from "../sync.js";
+import type * as sync_validators from "../sync/validators.js";
+
 import type {
   ApiFromModules,
   FilterApi,
   FunctionReference,
 } from "convex/server";
 
-declare const fullApi: ApiFromModules<{}>;
+declare const fullApi: ApiFromModules<{
+  authSmoke: typeof authSmoke;
+  "lib/auth": typeof lib_auth;
+  sync: typeof sync;
+  "sync/validators": typeof sync_validators;
+}>;
 
 /**
  * A utility for referencing Convex functions in your app's public API.

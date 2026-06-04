@@ -5,6 +5,25 @@ struct SettingsAccountSection: View {
         Section {
             syncStatusRow
 
+            #if DEBUG
+            NavigationLink {
+                DeveloperDiagnosticsView()
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Developer Diagnostics")
+                        Text("Convex auth smoke checks.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "stethoscope")
+                        .foregroundStyle(AppTheme.accentBright)
+                }
+            }
+            .accessibilityIdentifier("SettingsDeveloperDiagnosticsRow")
+            #endif
+
             NavigationLink {
                 DeleteAccountPlaceholderView()
             } label: {
