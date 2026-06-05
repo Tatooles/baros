@@ -71,6 +71,27 @@ function userSettingsRecord(
   };
 }
 
+function loggedExerciseRecord(
+  overrides: Partial<LoggedExerciseRecord> = {},
+): LoggedExerciseRecord {
+  return {
+    clientId: "logged-exercise-1",
+    sessionClientId: "session-1",
+    exerciseClientId: "exercise-1",
+    orderIndex: 0,
+    exerciseSnapshotName: "Bench Press",
+    exerciseSnapshotEquipmentRaw: "barbell",
+    exerciseSnapshotPrimaryMuscleGroupRaw: "chest",
+    hasSnapshotMetadata: true,
+    notes: "",
+    referenceNotes: null,
+    createdAt: 1,
+    updatedAt: 2,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
 type ExerciseRecord = {
   clientId: string;
   seedIdentifier: string | null;
@@ -92,6 +113,22 @@ type UserSettingsRecord = {
   weightUnitRaw: "pounds" | "kilograms";
   defaultRestTimerSeconds: number;
   hasCompletedOnboarding: boolean;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+};
+
+type LoggedExerciseRecord = {
+  clientId: string;
+  sessionClientId: string;
+  exerciseClientId: string | null;
+  orderIndex: number;
+  exerciseSnapshotName: string;
+  exerciseSnapshotEquipmentRaw: string;
+  exerciseSnapshotPrimaryMuscleGroupRaw: string;
+  hasSnapshotMetadata: boolean;
+  notes: string;
+  referenceNotes: string | null;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
@@ -273,6 +310,31 @@ describe("sync conflict behavior", () => {
       equipmentRaw: "gravity-boots",
       primaryMuscleRaw: "Future Chest",
       primaryMuscleGroupRaw: "future-upper-body",
+    });
+  });
+
+  test("logged exercise snapshot metadata round-trips through sync", async () => {
+    const t = testDb().withIdentity(userA);
+
+    await t.mutation(api.sync.upsertLoggedExercise, {
+      record: loggedExerciseRecord({
+        exerciseSnapshotEquipmentRaw: "smithMachine",
+        exerciseSnapshotPrimaryMuscleGroupRaw: "glutes",
+        hasSnapshotMetadata: true,
+      }),
+    });
+
+    const changes = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(changes.loggedExercises).toHaveLength(1);
+    expect(changes.loggedExercises[0]).toMatchObject({
+      clientId: "logged-exercise-1",
+      exerciseSnapshotName: "Bench Press",
+      exerciseSnapshotEquipmentRaw: "smithMachine",
+      exerciseSnapshotPrimaryMuscleGroupRaw: "glutes",
+      hasSnapshotMetadata: true,
     });
   });
 

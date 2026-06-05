@@ -83,6 +83,9 @@ export default defineSchema({
     exerciseClientId: nullableString,
     orderIndex: v.number(),
     exerciseSnapshotName: v.string(),
+    exerciseSnapshotEquipmentRaw: v.string(),
+    exerciseSnapshotPrimaryMuscleGroupRaw: v.string(),
+    hasSnapshotMetadata: v.boolean(),
     notes: v.string(),
     referenceNotes: nullableString,
   })
