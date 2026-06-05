@@ -239,6 +239,7 @@ final class ActiveWorkoutEngine {
         try context.save()
     }
 
+    @MainActor
     func finishWorkout(_ session: WorkoutSession, context: ModelContext, now: Date = .now) throws {
         applyFinalWorkoutTitle(to: session)
         session.status = .completed
@@ -246,6 +247,32 @@ final class ActiveWorkoutEngine {
         session.durationSeconds = max(0, Int(now.timeIntervalSince(session.startedAt)))
         session.touch(now: now)
         do {
+            let recorder = SyncOutboxRecorder()
+            try recorder.recordCreate(
+                entityKind: .workoutSession,
+                entityID: session.id,
+                ownerTokenIdentifier: nil,
+                context: context,
+                now: now
+            )
+            for loggedExercise in session.loggedExercises {
+                try recorder.recordCreate(
+                    entityKind: .loggedExercise,
+                    entityID: loggedExercise.id,
+                    ownerTokenIdentifier: nil,
+                    context: context,
+                    now: now
+                )
+                for set in loggedExercise.sets {
+                    try recorder.recordCreate(
+                        entityKind: .loggedSet,
+                        entityID: set.id,
+                        ownerTokenIdentifier: nil,
+                        context: context,
+                        now: now
+                    )
+                }
+            }
             try context.save()
         } catch {
             context.rollback()

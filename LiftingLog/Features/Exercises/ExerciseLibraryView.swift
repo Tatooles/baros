@@ -31,8 +31,7 @@ struct ExerciseLibraryView: View {
                 .swipeActions {
                     Button(role: .destructive) {
                         do {
-                            try exercise.archiveOrDelete(context: modelContext)
-                            try modelContext.save()
+                            try ExerciseMutationService().removeExercise(exercise, context: modelContext)
                             removalErrorMessage = nil
                         } catch {
                             modelContext.rollback()

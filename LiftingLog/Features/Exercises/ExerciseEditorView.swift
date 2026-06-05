@@ -86,29 +86,29 @@ struct ExerciseEditorView: View {
         }
 
         let savedExercise: Exercise
-        if let exercise {
-            exercise.update(
-                name: trimmedName,
-                category: category,
-                equipment: equipment,
-                primaryMuscle: primaryMuscle,
-                notes: notes
-            )
-            savedExercise = exercise
-        } else {
-            let exercise = Exercise(
-                name: trimmedName,
-                category: category,
-                equipment: equipment,
-                primaryMuscle: primaryMuscle,
-                notes: notes
-            )
-            modelContext.insert(exercise)
-            savedExercise = exercise
-        }
-
         do {
-            try modelContext.save()
+            let service = ExerciseMutationService()
+            if let exercise {
+                try service.updateExercise(
+                    exercise,
+                    name: trimmedName,
+                    category: category,
+                    equipment: equipment,
+                    primaryMuscle: primaryMuscle,
+                    notes: notes,
+                    context: modelContext
+                )
+                savedExercise = exercise
+            } else {
+                savedExercise = try service.createExercise(
+                    name: trimmedName,
+                    category: category,
+                    equipment: equipment,
+                    primaryMuscle: primaryMuscle,
+                    notes: notes,
+                    context: modelContext
+                )
+            }
             validationMessage = nil
             onSave?(savedExercise)
             dismiss()

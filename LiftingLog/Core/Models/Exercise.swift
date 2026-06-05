@@ -1,6 +1,11 @@
 import Foundation
 import SwiftData
 
+enum ExerciseRemovalOutcome {
+    case archived
+    case deleted
+}
+
 @Model
 final class Exercise: Identifiable {
     @Attribute(.unique) var id: UUID
@@ -91,20 +96,23 @@ final class Exercise: Identifiable {
         touch()
     }
 
-    func archive() {
+    func archive(now: Date = .now) {
         isArchived = true
-        touch()
+        touch(now: now)
     }
 
-    func archiveOrDelete(context: ModelContext) throws {
+    @discardableResult
+    func archiveOrDelete(context: ModelContext, now: Date = .now) throws -> ExerciseRemovalOutcome {
         let exerciseID = id
         let hasLoggedHistory = try context.fetch(FetchDescriptor<LoggedExercise>())
             .contains { $0.exercise?.id == exerciseID }
 
         if isSeeded || hasLoggedHistory {
-            archive()
+            archive(now: now)
+            return .archived
         } else {
-            markDeleted()
+            markDeleted(now: now)
+            return .deleted
         }
     }
 

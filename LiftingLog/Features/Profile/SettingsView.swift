@@ -108,7 +108,7 @@ struct SettingsView: View {
             get: { settings.weightUnit },
             set: { unit in
                 do {
-                    try settings.updateWeightUnit(unit, context: modelContext)
+                    try SettingsMutationService().updateWeightUnit(unit, settings: settings, context: modelContext)
                     alert = nil
                 } catch {
                     modelContext.rollback()
@@ -122,10 +122,12 @@ struct SettingsView: View {
         Binding(
             get: { settings.defaultRestTimerSeconds },
             set: { seconds in
-                settings.defaultRestTimerSeconds = seconds
-                settings.touch()
                 do {
-                    try modelContext.save()
+                    try SettingsMutationService().updateDefaultRestTimerSeconds(
+                        seconds,
+                        settings: settings,
+                        context: modelContext
+                    )
                     alert = nil
                 } catch {
                     modelContext.rollback()
