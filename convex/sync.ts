@@ -19,6 +19,9 @@ type LoggedSetPayload = Infer<typeof loggedSetPayloadValidator>;
 type NormalizedExercisePayload = ExercisePayload & {
   primaryMuscleGroupRaw: string;
 };
+type NormalizedExerciseRecord = Doc<"exercises"> & {
+  primaryMuscleGroupRaw: string;
+};
 
 type UpsertResult =
   | { status: "inserted"; serverUpdatedAt: number }
@@ -108,6 +111,14 @@ function withServerFields<TRecord extends { clientId: string }>(
 }
 
 function normalizeExercisePayload(record: ExercisePayload): NormalizedExercisePayload {
+  return {
+    ...record,
+    primaryMuscleGroupRaw:
+      record.primaryMuscleGroupRaw ?? defaultPrimaryMuscleGroupRaw,
+  };
+}
+
+function normalizeExerciseRecord(record: Doc<"exercises">): NormalizedExerciseRecord {
   return {
     ...record,
     primaryMuscleGroupRaw:
@@ -768,7 +779,7 @@ export const fetchChanges = query({
       limit,
     );
     const userSettings = userSettingsPage.records;
-    const exercises = exercisePage.records;
+    const exercises = exercisePage.records.map(normalizeExerciseRecord);
     const workoutSessions = workoutSessionPage.records;
     const loggedExercises = loggedExercisePage.records;
     const loggedSets = loggedSetPage.records;

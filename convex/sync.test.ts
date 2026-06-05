@@ -167,6 +167,40 @@ describe("sync access control", () => {
 });
 
 describe("sync conflict behavior", () => {
+  test("legacy stored exercise docs without muscle group are normalized in changes", async () => {
+    const t = testDb();
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("exercises", {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        clientId: "legacy-exercise",
+        seedIdentifier: null,
+        name: "Legacy Bench Press",
+        categoryRaw: "strength",
+        equipmentRaw: "barbell",
+        primaryMuscleRaw: "Chest",
+        notes: "",
+        isArchived: false,
+        isSeeded: false,
+        createdAt: 1,
+        updatedAt: 2,
+        deletedAt: null,
+        serverUpdatedAt: 3,
+      });
+    });
+
+    const changes = await t
+      .withIdentity(userA)
+      .query(api.sync.fetchChanges, { cursors: zeroCursors });
+
+    expect(changes.exercises).toHaveLength(1);
+    expect(changes.exercises[0]).toMatchObject({
+      clientId: "legacy-exercise",
+      primaryMuscleRaw: "Chest",
+      primaryMuscleGroupRaw: "other",
+    });
+  });
+
   test("legacy exercise payloads without muscle group are accepted and normalized", async () => {
     const t = testDb().withIdentity(userA);
     const { primaryMuscleGroupRaw: _primaryMuscleGroupRaw, ...legacyRecord } =
