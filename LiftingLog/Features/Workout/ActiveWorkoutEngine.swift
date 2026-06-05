@@ -255,7 +255,7 @@ final class ActiveWorkoutEngine {
                 context: context,
                 now: now
             )
-            for loggedExercise in session.loggedExercises {
+            for loggedExercise in session.sortedLoggedExercises {
                 try recorder.recordCreate(
                     entityKind: .loggedExercise,
                     entityID: loggedExercise.id,
@@ -263,7 +263,7 @@ final class ActiveWorkoutEngine {
                     context: context,
                     now: now
                 )
-                for set in loggedExercise.sets {
+                for set in loggedExercise.sortedSets {
                     try recorder.recordCreate(
                         entityKind: .loggedSet,
                         entityID: set.id,

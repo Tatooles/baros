@@ -183,6 +183,47 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         assertEntry(entries, kind: .loggedSet, id: secondSet.id, operation: .create)
     }
 
+    func testFinishingWorkoutSkipsDeletedDraftChildrenWhenRecordingCreateIntent() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest"
+        )
+        let squat = Exercise(
+            name: "Back Squat",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Quads"
+        )
+        context.insert(bench)
+        context.insert(squat)
+
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let visibleLoggedExercise = try engine.addExercise(bench, to: session, context: context)
+        let deletedSet = try XCTUnwrap(visibleLoggedExercise.sets.first)
+        let visibleSet = try engine.addSet(to: visibleLoggedExercise, context: context)
+        let deletedLoggedExercise = try engine.addExercise(squat, to: session, context: context)
+        let deletedLoggedExerciseSet = try XCTUnwrap(deletedLoggedExercise.sets.first)
+
+        try engine.removeSet(deletedSet, context: context, now: Date(timeIntervalSince1970: 200))
+        try engine.removeLoggedExercise(deletedLoggedExercise, context: context, now: Date(timeIntervalSince1970: 300))
+
+        try engine.finishWorkout(session, context: context, now: Date(timeIntervalSince1970: 400))
+
+        let entries = try fetchEntries(context)
+        XCTAssertEqual(entries.count, 3)
+        assertEntry(entries, kind: .workoutSession, id: session.id, operation: .create)
+        assertEntry(entries, kind: .loggedExercise, id: visibleLoggedExercise.id, operation: .create)
+        assertEntry(entries, kind: .loggedSet, id: visibleSet.id, operation: .create)
+        XCTAssertFalse(entries.contains { $0.entityID == deletedSet.id })
+        XCTAssertFalse(entries.contains { $0.entityID == deletedLoggedExercise.id })
+        XCTAssertFalse(entries.contains { $0.entityID == deletedLoggedExerciseSet.id })
+    }
+
     func testActiveWorkoutDraftEditsProduceNoOutboxEntriesBeforeFinish() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
