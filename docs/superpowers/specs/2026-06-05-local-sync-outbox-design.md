@@ -148,6 +148,14 @@ Add focused unit tests for:
 - Bootstrap avoiding duplicate entries.
 - Bootstrap skipping active workout sessions and their child graph.
 
+Add targeted integration-style tests around existing app flows where practical:
+
+- Creating, editing, and deleting an exercise records the expected outbox intent.
+- Changing settings records update intent.
+- Finishing a workout records sync intent for the completed workout graph.
+- Deleting workout history records delete intent for the session and child graph.
+- Active workout draft edits do not become bootstrap-eligible v1 sync work.
+
 No Convex network tests are needed for this issue.
 
 ## Acceptance Criteria
@@ -157,4 +165,4 @@ No Convex network tests are needed for this issue.
 - Retry/failure state survives app relaunch.
 - Existing local data can be bootstrapped into pending outbox entries on demand.
 - Active workout drafts are not bootstrapped for v1 sync.
-- Tests cover the local state machine and bootstrap behavior.
+- Tests cover the local state machine, bootstrap behavior, and practical recorder integration points in existing app flows.
