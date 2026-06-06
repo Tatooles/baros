@@ -22,12 +22,12 @@ struct ExerciseLibraryView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(exercise.name)
                             .font(.system(size: 17, weight: .semibold))
-                        Text("\(exercise.category.displayName) • \(exercise.equipment.displayName)")
+                        Text(exercise.metadataDisplayText)
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
                 }
-                .accessibilityIdentifier("ExerciseLibraryRow-\(exercise.name)")
+                .accessibilityIdentifier("ExerciseLibraryRow-\(exercise.name)-\(exercise.equipment.displayName)")
                 .swipeActions {
                     Button(role: .destructive) {
                         do {

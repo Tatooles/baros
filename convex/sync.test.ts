@@ -45,6 +45,7 @@ function exerciseRecord(overrides: Partial<ExerciseRecord> = {}): ExerciseRecord
     categoryRaw: "strength",
     equipmentRaw: "barbell",
     primaryMuscleRaw: "Chest",
+    primaryMuscleGroupRaw: "chest",
     notes: "",
     isArchived: false,
     isSeeded: false,
@@ -70,20 +71,35 @@ function userSettingsRecord(
   };
 }
 
+function loggedExerciseRecord(
+  overrides: Partial<LoggedExerciseRecord> = {},
+): LoggedExerciseRecord {
+  return {
+    clientId: "logged-exercise-1",
+    sessionClientId: "session-1",
+    exerciseClientId: "exercise-1",
+    orderIndex: 0,
+    exerciseSnapshotName: "Bench Press",
+    exerciseSnapshotEquipmentRaw: "barbell",
+    exerciseSnapshotPrimaryMuscleGroupRaw: "chest",
+    hasSnapshotMetadata: true,
+    notes: "",
+    referenceNotes: null,
+    createdAt: 1,
+    updatedAt: 2,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
 type ExerciseRecord = {
   clientId: string;
   seedIdentifier: string | null;
   name: string;
-  categoryRaw: "strength" | "cardio" | "mobility" | "other";
-  equipmentRaw:
-    | "barbell"
-    | "dumbbell"
-    | "machine"
-    | "cable"
-    | "bodyweight"
-    | "kettlebell"
-    | "other";
+  categoryRaw: string;
+  equipmentRaw: string;
   primaryMuscleRaw: string;
+  primaryMuscleGroupRaw?: string;
   notes: string;
   isArchived: boolean;
   isSeeded: boolean;
@@ -97,6 +113,22 @@ type UserSettingsRecord = {
   weightUnitRaw: "pounds" | "kilograms";
   defaultRestTimerSeconds: number;
   hasCompletedOnboarding: boolean;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+};
+
+type LoggedExerciseRecord = {
+  clientId: string;
+  sessionClientId: string;
+  exerciseClientId: string | null;
+  orderIndex: number;
+  exerciseSnapshotName: string;
+  exerciseSnapshotEquipmentRaw: string;
+  exerciseSnapshotPrimaryMuscleGroupRaw: string;
+  hasSnapshotMetadata: boolean;
+  notes: string;
+  referenceNotes: string | null;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
@@ -172,6 +204,236 @@ describe("sync access control", () => {
 });
 
 describe("sync conflict behavior", () => {
+  test("legacy stored exercise docs without muscle group are normalized in changes", async () => {
+    const t = testDb();
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("exercises", {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        clientId: "legacy-exercise",
+        seedIdentifier: null,
+        name: "Legacy Bench Press",
+        categoryRaw: "strength",
+        equipmentRaw: "barbell",
+        primaryMuscleRaw: "Chest",
+        notes: "",
+        isArchived: false,
+        isSeeded: false,
+        createdAt: 1,
+        updatedAt: 2,
+        deletedAt: null,
+        serverUpdatedAt: 3,
+      });
+    });
+
+    const changes = await t
+      .withIdentity(userA)
+      .query(api.sync.fetchChanges, { cursors: zeroCursors });
+
+    expect(changes.exercises).toHaveLength(1);
+    expect(changes.exercises[0]).toMatchObject({
+      clientId: "legacy-exercise",
+      primaryMuscleRaw: "Chest",
+      primaryMuscleGroupRaw: "other",
+    });
+  });
+
+  test("legacy exercise payloads without muscle group are accepted and normalized", async () => {
+    const t = testDb().withIdentity(userA);
+    const { primaryMuscleGroupRaw: _primaryMuscleGroupRaw, ...legacyRecord } =
+      exerciseRecord({
+        primaryMuscleRaw: "Legacy Free Text",
+      });
+
+    await t.mutation(api.sync.upsertExercise, { record: legacyRecord });
+
+    const changes = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(changes.exercises).toHaveLength(1);
+    expect(changes.exercises[0]).toMatchObject({
+      primaryMuscleRaw: "Legacy Free Text",
+      primaryMuscleGroupRaw: "other",
+    });
+  });
+
+  test("legacy exercise update payloads preserve existing muscle group", async () => {
+    const t = testDb().withIdentity(userA);
+
+    await t.mutation(api.sync.upsertExercise, {
+      record: exerciseRecord({
+        primaryMuscleRaw: "Glutes",
+        primaryMuscleGroupRaw: "glutes",
+      }),
+    });
+
+    const { primaryMuscleGroupRaw: _primaryMuscleGroupRaw, ...legacyUpdate } =
+      exerciseRecord({
+        name: "Updated Bench Press",
+        primaryMuscleRaw: "Legacy Free Text",
+        updatedAt: 3,
+      });
+
+    await t.mutation(api.sync.upsertExercise, { record: legacyUpdate });
+
+    const changes = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(changes.exercises).toHaveLength(1);
+    expect(changes.exercises[0]).toMatchObject({
+      name: "Updated Bench Press",
+      primaryMuscleRaw: "Legacy Free Text",
+      primaryMuscleGroupRaw: "glutes",
+    });
+  });
+
+  test("future exercise taxonomy strings round-trip through sync", async () => {
+    const t = testDb().withIdentity(userA);
+    const record = exerciseRecord({
+      categoryRaw: "plyometrics",
+      equipmentRaw: "gravity-boots",
+      primaryMuscleRaw: "Future Chest",
+      primaryMuscleGroupRaw: "future-upper-body",
+    });
+
+    await t.mutation(api.sync.upsertExercise, { record });
+
+    const changes = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(changes.exercises).toHaveLength(1);
+    expect(changes.exercises[0]).toMatchObject({
+      categoryRaw: "plyometrics",
+      equipmentRaw: "gravity-boots",
+      primaryMuscleRaw: "Future Chest",
+      primaryMuscleGroupRaw: "future-upper-body",
+    });
+  });
+
+  test("logged exercise snapshot metadata round-trips through sync", async () => {
+    const t = testDb().withIdentity(userA);
+
+    await t.mutation(api.sync.upsertLoggedExercise, {
+      record: loggedExerciseRecord({
+        exerciseSnapshotEquipmentRaw: "smithMachine",
+        exerciseSnapshotPrimaryMuscleGroupRaw: "glutes",
+        hasSnapshotMetadata: true,
+      }),
+    });
+
+    const changes = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(changes.loggedExercises).toHaveLength(1);
+    expect(changes.loggedExercises[0]).toMatchObject({
+      clientId: "logged-exercise-1",
+      exerciseSnapshotName: "Bench Press",
+      exerciseSnapshotEquipmentRaw: "smithMachine",
+      exerciseSnapshotPrimaryMuscleGroupRaw: "glutes",
+      hasSnapshotMetadata: true,
+    });
+  });
+
+  test("legacy logged exercise payloads without snapshot metadata are accepted and normalized", async () => {
+    const t = testDb().withIdentity(userA);
+    const {
+      exerciseSnapshotEquipmentRaw: _exerciseSnapshotEquipmentRaw,
+      exerciseSnapshotPrimaryMuscleGroupRaw:
+        _exerciseSnapshotPrimaryMuscleGroupRaw,
+      hasSnapshotMetadata: _hasSnapshotMetadata,
+      ...legacyRecord
+    } = loggedExerciseRecord();
+
+    await t.mutation(api.sync.upsertLoggedExercise, { record: legacyRecord });
+
+    const changes = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(changes.loggedExercises).toHaveLength(1);
+    expect(changes.loggedExercises[0]).toMatchObject({
+      clientId: "logged-exercise-1",
+      exerciseSnapshotEquipmentRaw: "other",
+      exerciseSnapshotPrimaryMuscleGroupRaw: "other",
+      hasSnapshotMetadata: false,
+    });
+  });
+
+  test("legacy stored logged exercise docs without snapshot metadata are normalized in changes", async () => {
+    const t = testDb();
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("loggedExercises", {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        clientId: "legacy-logged-exercise",
+        sessionClientId: "session-1",
+        exerciseClientId: "exercise-1",
+        orderIndex: 0,
+        exerciseSnapshotName: "Bench Press",
+        notes: "",
+        referenceNotes: null,
+        createdAt: 1,
+        updatedAt: 2,
+        deletedAt: null,
+        serverUpdatedAt: 3,
+      });
+    });
+
+    const changes = await t
+      .withIdentity(userA)
+      .query(api.sync.fetchChanges, { cursors: zeroCursors });
+
+    expect(changes.loggedExercises).toHaveLength(1);
+    expect(changes.loggedExercises[0]).toMatchObject({
+      clientId: "legacy-logged-exercise",
+      exerciseSnapshotName: "Bench Press",
+      exerciseSnapshotEquipmentRaw: "other",
+      exerciseSnapshotPrimaryMuscleGroupRaw: "other",
+      hasSnapshotMetadata: false,
+    });
+  });
+
+  test("legacy logged exercise update payloads preserve existing snapshot metadata", async () => {
+    const t = testDb().withIdentity(userA);
+
+    await t.mutation(api.sync.upsertLoggedExercise, {
+      record: loggedExerciseRecord({
+        exerciseSnapshotEquipmentRaw: "smithMachine",
+        exerciseSnapshotPrimaryMuscleGroupRaw: "glutes",
+        hasSnapshotMetadata: true,
+      }),
+    });
+
+    const {
+      exerciseSnapshotEquipmentRaw: _exerciseSnapshotEquipmentRaw,
+      exerciseSnapshotPrimaryMuscleGroupRaw:
+        _exerciseSnapshotPrimaryMuscleGroupRaw,
+      hasSnapshotMetadata: _hasSnapshotMetadata,
+      ...legacyUpdate
+    } = loggedExerciseRecord({
+      notes: "Updated from old client",
+      updatedAt: 3,
+    });
+
+    await t.mutation(api.sync.upsertLoggedExercise, { record: legacyUpdate });
+
+    const changes = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(changes.loggedExercises).toHaveLength(1);
+    expect(changes.loggedExercises[0]).toMatchObject({
+      notes: "Updated from old client",
+      exerciseSnapshotEquipmentRaw: "smithMachine",
+      exerciseSnapshotPrimaryMuscleGroupRaw: "glutes",
+      hasSnapshotMetadata: true,
+    });
+  });
+
   test("non-finite numbers are rejected before records are written", async () => {
     const t = testDb().withIdentity(userA);
 

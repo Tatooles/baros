@@ -20,6 +20,12 @@ struct ExerciseHistoryRow: View {
                     Text(summary.name)
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(AppTheme.textPrimary)
+                    if let metadataDisplayText = summary.metadataDisplayText {
+                        Text(metadataDisplayText)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .lineLimit(1)
+                    }
                     Text("Last: \(summary.lastPerformedLabel)")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)

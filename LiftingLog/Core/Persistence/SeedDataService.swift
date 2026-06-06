@@ -8,6 +8,7 @@ enum SeedDataService {
     static func seedIfNeeded(context: ModelContext) throws {
         try ensureSettings(context: context)
         try ensureExercises(context: context)
+        try migrateLegacyPrimaryMuscleGroups(context: context)
         try ensureSeedMetadata(context: context)
         try context.save()
     }
@@ -30,11 +31,24 @@ enum SeedDataService {
                     name: seed.name,
                     category: seed.category,
                     equipment: seed.equipment,
-                    primaryMuscle: seed.primaryMuscle,
+                    primaryMuscleGroup: seed.primaryMuscleGroup,
                     notes: seed.notes,
                     isSeeded: true
                 )
             )
+        }
+    }
+
+    private static func migrateLegacyPrimaryMuscleGroups(context: ModelContext) throws {
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+
+        for exercise in exercises where exercise.primaryMuscleGroupRaw == ExerciseMuscleGroup.other.rawValue {
+            let migrated = ExerciseMuscleGroup.legacyGroup(for: exercise.primaryMuscleRaw)
+            if migrated != .other {
+                exercise.primaryMuscleGroupRaw = migrated.rawValue
+                exercise.primaryMuscleRaw = migrated.displayName
+                exercise.touch()
+            }
         }
     }
 
@@ -49,26 +63,26 @@ enum SeedDataService {
     }
 
     static let exerciseSeeds: [ExerciseSeed] = [
-        ExerciseSeed("back-squat", "Back Squat", .strength, .barbell, "Quads"),
-        ExerciseSeed("front-squat", "Front Squat", .strength, .barbell, "Quads"),
-        ExerciseSeed("romanian-deadlift", "Romanian Deadlift", .strength, .barbell, "Hamstrings"),
-        ExerciseSeed("conventional-deadlift", "Conventional Deadlift", .strength, .barbell, "Posterior Chain"),
-        ExerciseSeed("leg-press", "Leg Press", .strength, .machine, "Quads"),
-        ExerciseSeed("leg-extension", "Leg Extension", .strength, .machine, "Quads"),
-        ExerciseSeed("leg-curl", "Leg Curl", .strength, .machine, "Hamstrings"),
-        ExerciseSeed("bench-press", "Bench Press", .strength, .barbell, "Chest"),
-        ExerciseSeed("incline-dumbbell-press", "Incline Dumbbell Press", .strength, .dumbbell, "Chest"),
-        ExerciseSeed("overhead-press", "Overhead Press", .strength, .barbell, "Shoulders"),
-        ExerciseSeed("pull-up", "Pull-Up", .strength, .bodyweight, "Back"),
-        ExerciseSeed("lat-pulldown", "Lat Pulldown", .strength, .cable, "Back"),
-        ExerciseSeed("barbell-row", "Barbell Row", .strength, .barbell, "Back"),
-        ExerciseSeed("seated-cable-row", "Seated Cable Row", .strength, .cable, "Back"),
-        ExerciseSeed("dumbbell-row", "Dumbbell Row", .strength, .dumbbell, "Back"),
-        ExerciseSeed("face-pull", "Face Pull", .strength, .cable, "Rear Delts"),
-        ExerciseSeed("biceps-curl", "Biceps Curl", .strength, .dumbbell, "Biceps"),
-        ExerciseSeed("triceps-pushdown", "Triceps Pushdown", .strength, .cable, "Triceps"),
-        ExerciseSeed("calf-raise", "Calf Raise", .strength, .machine, "Calves"),
-        ExerciseSeed("plank", "Plank", .strength, .bodyweight, "Core")
+        ExerciseSeed("back-squat", "Back Squat", .strength, .barbell, .quads),
+        ExerciseSeed("front-squat", "Front Squat", .strength, .barbell, .quads),
+        ExerciseSeed("romanian-deadlift", "Romanian Deadlift", .strength, .barbell, .hamstrings),
+        ExerciseSeed("conventional-deadlift", "Conventional Deadlift", .strength, .barbell, .glutes),
+        ExerciseSeed("leg-press", "Leg Press", .strength, .machine, .quads),
+        ExerciseSeed("leg-extension", "Leg Extension", .strength, .machine, .quads),
+        ExerciseSeed("leg-curl", "Leg Curl", .strength, .machine, .hamstrings),
+        ExerciseSeed("bench-press", "Bench Press", .strength, .barbell, .chest),
+        ExerciseSeed("incline-dumbbell-press", "Incline Dumbbell Press", .strength, .dumbbell, .chest),
+        ExerciseSeed("overhead-press", "Overhead Press", .strength, .barbell, .shoulders),
+        ExerciseSeed("pull-up", "Pull-Up", .strength, .bodyweight, .lats),
+        ExerciseSeed("lat-pulldown", "Lat Pulldown", .strength, .cable, .lats),
+        ExerciseSeed("barbell-row", "Barbell Row", .strength, .barbell, .upperBack),
+        ExerciseSeed("seated-cable-row", "Seated Cable Row", .strength, .cable, .upperBack),
+        ExerciseSeed("dumbbell-row", "Dumbbell Row", .strength, .dumbbell, .upperBack),
+        ExerciseSeed("face-pull", "Face Pull", .strength, .cable, .shoulders),
+        ExerciseSeed("biceps-curl", "Biceps Curl", .strength, .dumbbell, .biceps),
+        ExerciseSeed("triceps-pushdown", "Triceps Pushdown", .strength, .cable, .triceps),
+        ExerciseSeed("calf-raise", "Calf Raise", .strength, .machine, .calves),
+        ExerciseSeed("plank", "Plank", .strength, .bodyweight, .core)
     ]
 }
 
@@ -77,7 +91,7 @@ struct ExerciseSeed {
     var name: String
     var category: ExerciseCategory
     var equipment: ExerciseEquipment
-    var primaryMuscle: String
+    var primaryMuscleGroup: ExerciseMuscleGroup
     var notes: String
 
     init(
@@ -85,14 +99,14 @@ struct ExerciseSeed {
         _ name: String,
         _ category: ExerciseCategory,
         _ equipment: ExerciseEquipment,
-        _ primaryMuscle: String,
+        _ primaryMuscleGroup: ExerciseMuscleGroup,
         notes: String = ""
     ) {
         self.seedIdentifier = seedIdentifier
         self.name = name
         self.category = category
         self.equipment = equipment
-        self.primaryMuscle = primaryMuscle
+        self.primaryMuscleGroup = primaryMuscleGroup
         self.notes = notes
     }
 }

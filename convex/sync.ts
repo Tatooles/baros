@@ -16,6 +16,22 @@ type ExercisePayload = Infer<typeof exercisePayloadValidator>;
 type WorkoutSessionPayload = Infer<typeof workoutSessionPayloadValidator>;
 type LoggedExercisePayload = Infer<typeof loggedExercisePayloadValidator>;
 type LoggedSetPayload = Infer<typeof loggedSetPayloadValidator>;
+type NormalizedExercisePayload = ExercisePayload & {
+  primaryMuscleGroupRaw: string;
+};
+type NormalizedExerciseRecord = Doc<"exercises"> & {
+  primaryMuscleGroupRaw: string;
+};
+type NormalizedLoggedExerciseRecord = Doc<"loggedExercises"> & {
+  exerciseSnapshotEquipmentRaw: string;
+  exerciseSnapshotPrimaryMuscleGroupRaw: string;
+  hasSnapshotMetadata: boolean;
+};
+type NormalizedLoggedExercisePayload = LoggedExercisePayload & {
+  exerciseSnapshotEquipmentRaw: string;
+  exerciseSnapshotPrimaryMuscleGroupRaw: string;
+  hasSnapshotMetadata: boolean;
+};
 
 type UpsertResult =
   | { status: "inserted"; serverUpdatedAt: number }
@@ -34,6 +50,10 @@ type ChangePage<TRecord extends { serverUpdatedAt: number }> = {
 
 const defaultFetchLimit = 100;
 const maxFetchLimit = 500;
+const defaultPrimaryMuscleGroupRaw = "other";
+const defaultExerciseSnapshotEquipmentRaw = "other";
+const defaultExerciseSnapshotPrimaryMuscleGroupRaw = "other";
+const defaultHasSnapshotMetadata = false;
 
 function assertFiniteNumber(value: number, fieldName: string): void {
   if (!Number.isFinite(value)) {
@@ -100,6 +120,73 @@ function withServerFields<TRecord extends { clientId: string }>(
     ...record,
     ownerTokenIdentifier,
     serverUpdatedAt,
+  };
+}
+
+function normalizeExercisePayload(record: ExercisePayload): NormalizedExercisePayload {
+  return {
+    ...record,
+    primaryMuscleGroupRaw:
+      record.primaryMuscleGroupRaw ?? defaultPrimaryMuscleGroupRaw,
+  };
+}
+
+function normalizeExerciseRecord(record: Doc<"exercises">): NormalizedExerciseRecord {
+  return {
+    ...record,
+    primaryMuscleGroupRaw:
+      record.primaryMuscleGroupRaw ?? defaultPrimaryMuscleGroupRaw,
+  };
+}
+
+function normalizeLoggedExercisePayload(
+  record: LoggedExercisePayload,
+): NormalizedLoggedExercisePayload {
+  return {
+    ...record,
+    exerciseSnapshotEquipmentRaw:
+      record.exerciseSnapshotEquipmentRaw ?? defaultExerciseSnapshotEquipmentRaw,
+    exerciseSnapshotPrimaryMuscleGroupRaw:
+      record.exerciseSnapshotPrimaryMuscleGroupRaw ??
+      defaultExerciseSnapshotPrimaryMuscleGroupRaw,
+    hasSnapshotMetadata:
+      record.hasSnapshotMetadata ?? defaultHasSnapshotMetadata,
+  };
+}
+
+function normalizeLoggedExerciseRecord(
+  record: Doc<"loggedExercises">,
+): NormalizedLoggedExerciseRecord {
+  return {
+    ...record,
+    exerciseSnapshotEquipmentRaw:
+      record.exerciseSnapshotEquipmentRaw ?? defaultExerciseSnapshotEquipmentRaw,
+    exerciseSnapshotPrimaryMuscleGroupRaw:
+      record.exerciseSnapshotPrimaryMuscleGroupRaw ??
+      defaultExerciseSnapshotPrimaryMuscleGroupRaw,
+    hasSnapshotMetadata:
+      record.hasSnapshotMetadata ?? defaultHasSnapshotMetadata,
+  };
+}
+
+function normalizeLoggedExerciseUpdatePayload(
+  record: LoggedExercisePayload,
+  existing: Doc<"loggedExercises">,
+): NormalizedLoggedExercisePayload {
+  return {
+    ...record,
+    exerciseSnapshotEquipmentRaw:
+      record.exerciseSnapshotEquipmentRaw ??
+      existing.exerciseSnapshotEquipmentRaw ??
+      defaultExerciseSnapshotEquipmentRaw,
+    exerciseSnapshotPrimaryMuscleGroupRaw:
+      record.exerciseSnapshotPrimaryMuscleGroupRaw ??
+      existing.exerciseSnapshotPrimaryMuscleGroupRaw ??
+      defaultExerciseSnapshotPrimaryMuscleGroupRaw,
+    hasSnapshotMetadata:
+      record.hasSnapshotMetadata ??
+      existing.hasSnapshotMetadata ??
+      defaultHasSnapshotMetadata,
   };
 }
 
@@ -245,7 +332,21 @@ async function upsertExerciseByClientId(
   }
 
   const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
-  const nextRecord = withServerFields(record, ownerTokenIdentifier, serverUpdatedAt);
+  const normalizedRecord =
+    existing === null
+      ? normalizeExercisePayload(record)
+      : {
+          ...record,
+          primaryMuscleGroupRaw:
+            record.primaryMuscleGroupRaw ??
+            existing.primaryMuscleGroupRaw ??
+            defaultPrimaryMuscleGroupRaw,
+        };
+  const nextRecord = withServerFields(
+    normalizedRecord,
+    ownerTokenIdentifier,
+    serverUpdatedAt,
+  );
 
   if (existing === null) {
     await ctx.db.insert("exercises", nextRecord);
@@ -307,7 +408,15 @@ async function upsertLoggedExerciseByClientId(
   }
 
   const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
-  const nextRecord = withServerFields(record, ownerTokenIdentifier, serverUpdatedAt);
+  const normalizedRecord =
+    existing === null
+      ? normalizeLoggedExercisePayload(record)
+      : normalizeLoggedExerciseUpdatePayload(record, existing);
+  const nextRecord = withServerFields(
+    normalizedRecord,
+    ownerTokenIdentifier,
+    serverUpdatedAt,
+  );
 
   if (existing === null) {
     await ctx.db.insert("loggedExercises", nextRecord);
@@ -751,9 +860,11 @@ export const fetchChanges = query({
       limit,
     );
     const userSettings = userSettingsPage.records;
-    const exercises = exercisePage.records;
+    const exercises = exercisePage.records.map(normalizeExerciseRecord);
     const workoutSessions = workoutSessionPage.records;
-    const loggedExercises = loggedExercisePage.records;
+    const loggedExercises = loggedExercisePage.records.map(
+      normalizeLoggedExerciseRecord,
+    );
     const loggedSets = loggedSetPage.records;
 
     return {

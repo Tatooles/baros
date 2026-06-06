@@ -53,9 +53,16 @@ final class ActiveWorkoutEngineTests: XCTestCase {
     func testStartingFromPastCopiesStructureWithPlaceholderValuesAndBlankActualSetValues() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
-        let exercise = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
+        let exercise = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
         let past = WorkoutSession(title: "Leg Day", startedAt: .now, status: .completed, source: .blank)
-        let loggedExercise = LoggedExercise(orderIndex: 0, exercise: exercise, exerciseSnapshotName: exercise.name, notes: "Use belt")
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: exercise,
+            exerciseSnapshotName: exercise.name,
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.smithMachine.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.glutes.rawValue,
+            notes: "Use belt"
+        )
         loggedExercise.sets = [
             LoggedSet(orderIndex: 0, weight: 315, reps: 5, rpe: 8, kind: .warmup, isCompleted: true),
             LoggedSet(orderIndex: 1, weight: 335, reps: 3, rpe: 9, kind: .working, isCompleted: true)
@@ -75,6 +82,8 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let copiedExercise = try XCTUnwrap(newSession.loggedExercises.first)
         XCTAssertEqual(copiedExercise.orderIndex, 0)
         XCTAssertEqual(copiedExercise.exerciseSnapshotName, "Back Squat")
+        XCTAssertEqual(copiedExercise.exerciseSnapshotEquipmentRaw, "smithMachine")
+        XCTAssertEqual(copiedExercise.exerciseSnapshotPrimaryMuscleGroupRaw, "glutes")
         XCTAssertEqual(copiedExercise.notes, "")
 
         let copiedSets = copiedExercise.sortedSets
@@ -91,7 +100,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
     func testStartingFromPastCopiesTitleAndShowsPreviousNotesAsReferenceOnly() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
-        let exercise = Exercise(name: "Overhead Press", category: .strength, equipment: .barbell, primaryMuscle: "Shoulders")
+        let exercise = Exercise(name: "Overhead Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .shoulders)
         let loggedExercise = LoggedExercise(orderIndex: 0, exercise: exercise, exerciseSnapshotName: exercise.name, notes: "Used wrist wraps")
         let past = WorkoutSession(
             title: "Push Day",
@@ -120,8 +129,8 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
-        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(squat)
         context.insert(bench)
 
@@ -137,7 +146,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         try engine.updateSet(loggedExercise.sets[0], weight: 185, reps: 5, rpe: 8, context: context)
@@ -159,7 +168,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let previousSet = loggedExercise.sets[0]
@@ -184,7 +193,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let secondSet = try engine.addSet(to: loggedExercise, context: context)
@@ -202,7 +211,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
-        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         _ = try engine.addSet(to: loggedExercise, context: context)
@@ -226,9 +235,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let firstExercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
-        let secondExercise = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
-        let thirdExercise = Exercise(name: "Deadlift", category: .strength, equipment: .barbell, primaryMuscle: "Back")
+        let firstExercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let secondExercise = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let thirdExercise = Exercise(name: "Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
         context.insert(firstExercise)
         context.insert(secondExercise)
         context.insert(thirdExercise)
@@ -252,9 +261,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let firstExercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
-        let removedExercise = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
-        let replacementExercise = Exercise(name: "Deadlift", category: .strength, equipment: .barbell, primaryMuscle: "Back")
+        let firstExercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let removedExercise = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let replacementExercise = Exercise(name: "Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
         context.insert(firstExercise)
         context.insert(removedExercise)
         context.insert(replacementExercise)
@@ -274,7 +283,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let firstSet = loggedExercise.sets[0]
@@ -316,7 +325,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = loggedExercise.sets[0]
@@ -334,7 +343,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = loggedExercise.sets[0]
@@ -355,7 +364,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = loggedExercise.sets[0]
@@ -377,7 +386,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = loggedExercise.sets[0]
@@ -451,9 +460,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
-        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
-        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
-        let deadlift = Exercise(name: "Conventional Deadlift", category: .strength, equipment: .barbell, primaryMuscle: "Posterior Chain")
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let deadlift = Exercise(name: "Conventional Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .glutes)
         context.insert(squat)
         context.insert(bench)
         context.insert(deadlift)
@@ -481,8 +490,8 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
-        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(squat)
         context.insert(bench)
         let first = try engine.addExercise(squat, to: session, context: context)
@@ -519,8 +528,8 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
-        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(squat)
         context.insert(bench)
         let first = try engine.addExercise(squat, to: session, context: context)
@@ -550,9 +559,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads")
-        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
-        let deadlift = Exercise(name: "Conventional Deadlift", category: .strength, equipment: .barbell, primaryMuscle: "Posterior Chain")
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let deadlift = Exercise(name: "Conventional Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .glutes)
         context.insert(squat)
         context.insert(bench)
         context.insert(deadlift)

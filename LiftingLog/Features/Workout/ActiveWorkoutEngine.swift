@@ -68,14 +68,20 @@ final class ActiveWorkoutEngine {
         context.insert(session)
 
         for pastLoggedExercise in pastSession.sortedLoggedExercises {
+            let resolvedEquipmentRaw = pastLoggedExercise.resolvedSnapshotEquipmentRaw
+            let resolvedPrimaryMuscleGroupRaw = pastLoggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw
             let loggedExercise = LoggedExercise(
                 orderIndex: pastLoggedExercise.orderIndex,
                 exercise: pastLoggedExercise.exercise,
                 exerciseSnapshotName: pastLoggedExercise.exerciseSnapshotName,
+                exerciseSnapshotEquipmentRaw: resolvedEquipmentRaw,
+                exerciseSnapshotPrimaryMuscleGroupRaw: resolvedPrimaryMuscleGroupRaw,
                 referenceNotes: pastLoggedExercise.notes,
                 createdAt: now,
                 updatedAt: now
             )
+            loggedExercise.hasSnapshotMetadata =
+                resolvedEquipmentRaw != nil && resolvedPrimaryMuscleGroupRaw != nil
             loggedExercise.session = session
             context.insert(loggedExercise)
 
@@ -106,7 +112,7 @@ final class ActiveWorkoutEngine {
     @discardableResult
     func addExercise(_ exercise: Exercise, to session: WorkoutSession, context: ModelContext) throws -> LoggedExercise {
         let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
-        let loggedExercise = LoggedExercise(orderIndex: nextIndex, exercise: exercise, exerciseSnapshotName: exercise.name)
+        let loggedExercise = LoggedExercise(orderIndex: nextIndex, exercise: exercise)
         loggedExercise.session = session
         context.insert(loggedExercise)
 

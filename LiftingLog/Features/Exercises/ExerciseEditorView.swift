@@ -11,7 +11,7 @@ struct ExerciseEditorView: View {
     @State private var name: String
     @State private var category: ExerciseCategory
     @State private var equipment: ExerciseEquipment
-    @State private var primaryMuscle: String
+    @State private var primaryMuscleGroup: ExerciseMuscleGroup
     @State private var notes: String
     @State private var validationMessage: String?
 
@@ -21,7 +21,7 @@ struct ExerciseEditorView: View {
         _name = State(initialValue: exercise?.name ?? "")
         _category = State(initialValue: exercise?.category ?? .strength)
         _equipment = State(initialValue: exercise?.equipment ?? .barbell)
-        _primaryMuscle = State(initialValue: exercise?.primaryMuscle ?? "")
+        _primaryMuscleGroup = State(initialValue: exercise?.primaryMuscleGroup ?? .chest)
         _notes = State(initialValue: exercise?.notes ?? "")
     }
 
@@ -35,13 +35,19 @@ struct ExerciseEditorView: View {
                         Text(category.displayName).tag(category)
                     }
                 }
+                .accessibilityIdentifier("ExerciseCategoryPicker")
                 Picker("Equipment", selection: $equipment) {
                     ForEach(ExerciseEquipment.allCases) { equipment in
                         Text(equipment.displayName).tag(equipment)
                     }
                 }
-                TextField("Primary muscle", text: $primaryMuscle)
-                    .accessibilityIdentifier("ExercisePrimaryMuscleField")
+                .accessibilityIdentifier("ExerciseEquipmentPicker")
+                Picker("Primary Muscle", selection: $primaryMuscleGroup) {
+                    ForEach(ExerciseMuscleGroup.allCases) { muscleGroup in
+                        Text(muscleGroup.displayName).tag(muscleGroup)
+                    }
+                }
+                .accessibilityIdentifier("ExercisePrimaryMuscleGroupPicker")
                 TextField("Notes", text: $notes, axis: .vertical)
                     .accessibilityIdentifier("ExerciseNotesField")
             }
@@ -76,12 +82,10 @@ struct ExerciseEditorView: View {
 
         let duplicate = exercises.contains { existing in
             existing.id != exercise?.id
-                && !existing.isArchived
-                && !existing.isDeleted
-                && existing.name.caseInsensitiveCompare(trimmedName) == .orderedSame
+                && existing.hasSameActiveIdentity(name: trimmedName, equipment: equipment)
         }
         guard !duplicate else {
-            validationMessage = "An active exercise with that name already exists."
+            validationMessage = "An active exercise with that name and equipment already exists."
             return
         }
 
@@ -94,7 +98,7 @@ struct ExerciseEditorView: View {
                     name: trimmedName,
                     category: category,
                     equipment: equipment,
-                    primaryMuscle: primaryMuscle,
+                    primaryMuscle: primaryMuscleGroup.displayName,
                     notes: notes,
                     context: modelContext
                 )
@@ -104,7 +108,7 @@ struct ExerciseEditorView: View {
                     name: trimmedName,
                     category: category,
                     equipment: equipment,
-                    primaryMuscle: primaryMuscle,
+                    primaryMuscle: primaryMuscleGroup.displayName,
                     notes: notes,
                     context: modelContext
                 )

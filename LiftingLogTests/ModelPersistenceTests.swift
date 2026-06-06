@@ -11,7 +11,7 @@ final class ModelPersistenceTests: XCTestCase {
             name: "Safety Bar Squat",
             category: .strength,
             equipment: .barbell,
-            primaryMuscle: "Quads"
+            primaryMuscleGroup: .quads
         )
 
         context.insert(exercise)
@@ -24,10 +24,172 @@ final class ModelPersistenceTests: XCTestCase {
         XCTAssertEqual(fetched.first?.category, .strength)
     }
 
+    func testExerciseMuscleGroupDisplayNamesAndFallback() throws {
+        XCTAssertEqual(ExerciseMuscleGroup.chest.displayName, "Chest")
+        XCTAssertEqual(ExerciseMuscleGroup.upperBack.displayName, "Upper Back")
+        XCTAssertEqual(ExerciseMuscleGroup.lowerBack.displayName, "Lower Back")
+        XCTAssertEqual(ExerciseMuscleGroup.fullBody.displayName, "Full Body")
+        XCTAssertEqual(ExerciseMuscleGroup(rawValue: "futureValue") ?? .other, .other)
+    }
+
+    func testExerciseMuscleGroupMapsLegacyValues() throws {
+        XCTAssertEqual(ExerciseMuscleGroup.legacyGroup(for: "Quads"), .quads)
+        XCTAssertEqual(ExerciseMuscleGroup.legacyGroup(for: "Glutes"), .glutes)
+        XCTAssertEqual(ExerciseMuscleGroup.legacyGroup(for: "Rear Delts"), .shoulders)
+        XCTAssertEqual(ExerciseMuscleGroup.legacyGroup(for: "Abdominals"), .core)
+        XCTAssertEqual(ExerciseMuscleGroup.legacyGroup(for: "Lower Back"), .lowerBack)
+        XCTAssertEqual(ExerciseMuscleGroup.legacyGroup(for: "Unknown Muscle"), .other)
+    }
+
+    func testExercisePersistsPrimaryMuscleGroupAndMetadataDisplay() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscleGroup: .chest
+        )
+
+        context.insert(exercise)
+        try context.save()
+
+        let id = exercise.id
+        let fetched = try XCTUnwrap(
+            context.fetch(FetchDescriptor<Exercise>(predicate: #Predicate { $0.id == id })).first
+        )
+        XCTAssertEqual(fetched.primaryMuscleGroup, .chest)
+        XCTAssertEqual(fetched.primaryMuscleGroupRaw, "chest")
+        XCTAssertEqual(fetched.metadataDisplayText, "Barbell • Chest")
+    }
+
+    func testExerciseUnknownPrimaryMuscleGroupFallsBackToOther() throws {
+        let exercise = Exercise(
+            name: "Mystery Lift",
+            category: .strength,
+            equipment: .other,
+            primaryMuscleGroup: .other
+        )
+        exercise.primaryMuscleGroupRaw = "futureGroup"
+
+        XCTAssertEqual(exercise.primaryMuscleGroup, .other)
+        XCTAssertEqual(exercise.primaryMuscleGroupRaw, "futureGroup")
+        XCTAssertEqual(exercise.metadataDisplayText, "Other • Other")
+    }
+
+    func testExercisePrimaryMuscleGroupFallsBackToLegacyRawWhenDefaulted() throws {
+        let exercise = Exercise(name: "Legacy Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .other)
+        exercise.primaryMuscleRaw = "Chest"
+        exercise.primaryMuscleGroupRaw = ExerciseMuscleGroup.other.rawValue
+
+        XCTAssertEqual(exercise.primaryMuscleGroup, .chest)
+        XCTAssertEqual(exercise.metadataDisplayText, "Barbell • Chest")
+    }
+
+    func testExerciseActiveIdentityTrimsCandidateName() throws {
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+
+        XCTAssertTrue(exercise.hasSameActiveIdentity(name: "  Bench Press  ", equipment: .barbell))
+    }
+
+    func testLoggedExerciseSnapshotsExerciseMetadata() throws {
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscleGroup: .chest
+        )
+        let loggedExercise = LoggedExercise(orderIndex: 0, exercise: exercise)
+
+        XCTAssertEqual(loggedExercise.exerciseSnapshotName, "Bench Press")
+        XCTAssertEqual(loggedExercise.exerciseSnapshotEquipmentRaw, "barbell")
+        XCTAssertEqual(loggedExercise.exerciseSnapshotPrimaryMuscleGroupRaw, "chest")
+        XCTAssertEqual(loggedExercise.metadataDisplayText, "Barbell • Chest")
+    }
+
+    func testLoggedExerciseSnapshotsResolvedLegacyPrimaryMuscleGroup() throws {
+        let exercise = Exercise(name: "Legacy Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .other)
+        exercise.primaryMuscleRaw = "Chest"
+        exercise.primaryMuscleGroupRaw = ExerciseMuscleGroup.other.rawValue
+
+        let loggedExercise = LoggedExercise(orderIndex: 0, exercise: exercise)
+
+        XCTAssertEqual(loggedExercise.exerciseSnapshotPrimaryMuscleGroupRaw, "chest")
+        XCTAssertEqual(loggedExercise.metadataDisplayText, "Barbell • Chest")
+    }
+
+    func testLoggedExerciseFallsBackToLinkedExerciseMetadataForDefaultedSnapshots() throws {
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscleGroup: .chest
+        )
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: exercise,
+            exerciseSnapshotName: "Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.other.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.other.rawValue
+        )
+        loggedExercise.hasSnapshotMetadata = false
+
+        XCTAssertEqual(loggedExercise.metadataDisplayText, "Barbell • Chest")
+        XCTAssertEqual(loggedExercise.effectiveSnapshotEquipmentRaw, "barbell")
+        XCTAssertEqual(loggedExercise.effectiveSnapshotPrimaryMuscleGroupRaw, "chest")
+    }
+
+    func testLoggedExerciseSuppressesUnknownDefaultedSnapshotMetadata() throws {
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: nil,
+            exerciseSnapshotName: "Legacy Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.other.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.other.rawValue
+        )
+        loggedExercise.hasSnapshotMetadata = false
+
+        XCTAssertNil(loggedExercise.metadataDisplayText)
+        XCTAssertNil(loggedExercise.resolvedSnapshotEquipmentRaw)
+        XCTAssertNil(loggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw)
+        XCTAssertEqual(loggedExercise.effectiveSnapshotEquipmentRaw, "other")
+        XCTAssertEqual(loggedExercise.effectiveSnapshotPrimaryMuscleGroupRaw, "other")
+    }
+
+    func testLoggedExercisePreservesExplicitOtherSnapshotMetadata() throws {
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscleGroup: .chest
+        )
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: exercise,
+            exerciseSnapshotName: "Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.other.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.other.rawValue
+        )
+
+        exercise.equipment = .dumbbell
+        exercise.primaryMuscleGroup = .shoulders
+
+        XCTAssertTrue(loggedExercise.hasSnapshotMetadata)
+        XCTAssertEqual(loggedExercise.metadataDisplayText, "Other • Other")
+        XCTAssertEqual(loggedExercise.effectiveSnapshotEquipmentRaw, "other")
+        XCTAssertEqual(loggedExercise.effectiveSnapshotPrimaryMuscleGroupRaw, "other")
+    }
+
+    func testExpandedExerciseEquipmentDisplayNames() throws {
+        XCTAssertEqual(ExerciseEquipment.smithMachine.displayName, "Smith Machine")
+        XCTAssertEqual(ExerciseEquipment.resistanceBand.displayName, "Resistance Band")
+        XCTAssertEqual(ExerciseEquipment.medicineBall.displayName, "Medicine Ball")
+    }
+
     func testWorkoutSessionPersistsLoggedExerciseAndSetRelationships() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
-        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         let session = WorkoutSession(title: "Push", startedAt: .now, status: .active, source: .blank)
         let loggedExercise = LoggedExercise(orderIndex: 0, exercise: exercise, exerciseSnapshotName: exercise.name)
         let set = LoggedSet(orderIndex: 0, weight: 185, reps: 5, rpe: 8, isCompleted: true)
@@ -68,7 +230,7 @@ final class ModelPersistenceTests: XCTestCase {
             name: "Front Squat",
             category: .strength,
             equipment: .barbell,
-            primaryMuscle: "Quads",
+            primaryMuscleGroup: .quads,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -140,7 +302,7 @@ final class ModelPersistenceTests: XCTestCase {
             name: "Incline Press",
             category: .strength,
             equipment: .barbell,
-            primaryMuscle: "Chest",
+            primaryMuscleGroup: .chest,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -222,7 +384,7 @@ final class ModelPersistenceTests: XCTestCase {
             name: "Romanian Deadlift",
             category: .strength,
             equipment: .barbell,
-            primaryMuscle: "Hamstrings",
+            primaryMuscleGroup: .hamstrings,
             createdAt: createdAt,
             updatedAt: deletedAt,
             deletedAt: deletedAt
@@ -338,9 +500,9 @@ final class ModelPersistenceTests: XCTestCase {
     }
 
     func testVisibleActiveExercisesExcludeArchivedAndTombstonedRecords() throws {
-        let visible = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
-        let archived = Exercise(name: "Archived Squat", category: .strength, equipment: .barbell, primaryMuscle: "Quads", isArchived: true)
-        let deleted = Exercise(name: "Deleted Deadlift", category: .strength, equipment: .barbell, primaryMuscle: "Back")
+        let visible = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let archived = Exercise(name: "Archived Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads, isArchived: true)
+        let deleted = Exercise(name: "Deleted Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
         deleted.markDeleted(now: Date(timeIntervalSince1970: 100))
 
         let exercises = Exercise.visibleActiveExercises(from: [deleted, archived, visible])
@@ -361,7 +523,7 @@ final class ModelPersistenceTests: XCTestCase {
     func testCustomExerciseCanBeCreatedEditedAndArchived() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
-        let exercise = Exercise(name: "Seal Row", category: .strength, equipment: .dumbbell, primaryMuscle: "Back")
+        let exercise = Exercise(name: "Seal Row", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .upperBack)
 
         context.insert(exercise)
         try context.save()
@@ -377,7 +539,7 @@ final class ModelPersistenceTests: XCTestCase {
     func testCustomExerciseWithoutHistoryTombstonesInsteadOfHardDeleting() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
-        let exercise = Exercise(name: "Seal Row", category: .strength, equipment: .dumbbell, primaryMuscle: "Back")
+        let exercise = Exercise(name: "Seal Row", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .upperBack)
 
         context.insert(exercise)
         try context.save()
@@ -401,7 +563,7 @@ final class ModelPersistenceTests: XCTestCase {
             name: "Bench Press",
             category: .strength,
             equipment: .barbell,
-            primaryMuscle: "Chest",
+            primaryMuscleGroup: .chest,
             isSeeded: true
         )
         let session = WorkoutSession(title: "Push", startedAt: .now, status: .completed, source: .blank)

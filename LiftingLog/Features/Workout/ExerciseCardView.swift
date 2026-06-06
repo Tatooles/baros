@@ -30,9 +30,18 @@ struct ExerciseCardView: View {
                                 .foregroundStyle(AppTheme.textSecondary)
                                 .rotationEffect(.degrees(isCollapsed ? -90 : 0))
 
-                            Text(loggedExercise.exerciseSnapshotName)
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundStyle(AppTheme.textPrimary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(loggedExercise.exerciseSnapshotName)
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundStyle(AppTheme.textPrimary)
+                                    .lineLimit(1)
+                                if let metadataDisplayText = loggedExercise.metadataDisplayText {
+                                    Text(metadataDisplayText)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(AppTheme.textSecondary)
+                                        .lineLimit(1)
+                                }
+                            }
 
                             Spacer()
 
