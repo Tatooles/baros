@@ -184,7 +184,7 @@ struct SetRowView: View {
     }
 
     private func shouldSuppressDecimalClear(_ value: String, field: WorkoutField) -> Bool {
-        guard !set.isCompleted, value.isEmpty, suppressedCompletionClearField == field else { return false }
+        guard value.isEmpty, suppressedCompletionClearField == field else { return false }
         suppressedCompletionClearField = nil
         return true
     }
