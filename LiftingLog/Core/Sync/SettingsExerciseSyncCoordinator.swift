@@ -62,7 +62,7 @@ final class SettingsExerciseSyncCoordinator {
             }
 
         for entry in entries {
-            let logicalUpdatedAt = entry.updatedAt
+            let logicalUpdatedAt = logicalFallbackTimestamp(for: entry)
             recorder.markInFlight(entry, now: .now)
             try context.save()
 
@@ -83,6 +83,10 @@ final class SettingsExerciseSyncCoordinator {
                 break
             }
         }
+    }
+
+    private func logicalFallbackTimestamp(for entry: SyncOutboxEntry) -> Date {
+        entry.hasBeenAttempted ? entry.createdAt : entry.updatedAt
     }
 
     private func push(

@@ -234,6 +234,34 @@ final class SettingsExerciseSyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
     }
 
+    func testRunRetriesMissingExerciseTombstoneWithOriginalTimestamp() async throws {
+        struct PushError: LocalizedError { var errorDescription: String? { "offline" } }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exerciseID = UUID(uuidString: "00000000-0000-0000-0000-000000003010")!
+        try SyncOutboxRecorder().recordUpdate(entityKind: .exercise, entityID: exerciseID, ownerTokenIdentifier: "issuer|owner_a", context: context, now: Date(timeIntervalSince1970: 100))
+        try context.save()
+
+        let firstClient = FakeSettingsExerciseSyncClient()
+        firstClient.error = PushError()
+        let coordinator = SettingsExerciseSyncCoordinator(client: firstClient)
+        try await coordinator.run(ownerTokenIdentifier: "issuer|owner_a", context: context)
+
+        let failedEntry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
+        XCTAssertEqual(failedEntry.status, .failed)
+        XCTAssertEqual(failedEntry.createdAt, Date(timeIntervalSince1970: 100))
+        XCTAssertNotEqual(failedEntry.updatedAt, Date(timeIntervalSince1970: 100))
+
+        let retryClient = FakeSettingsExerciseSyncClient()
+        try await SettingsExerciseSyncCoordinator(client: retryClient).run(ownerTokenIdentifier: "issuer|owner_a", context: context)
+
+        XCTAssertEqual(retryClient.tombstones.count, 1)
+        XCTAssertEqual(retryClient.tombstones.first?.0, .exercise)
+        XCTAssertEqual(retryClient.tombstones.first?.1, exerciseID)
+        XCTAssertEqual(retryClient.tombstones.first?.2, Date(timeIntervalSince1970: 100))
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
     func testRunDoesNotTombstoneModelOwnedByDifferentOwner() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
