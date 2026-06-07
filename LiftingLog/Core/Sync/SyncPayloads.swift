@@ -57,3 +57,59 @@ enum SyncPayloadMapper {
         )
     }
 }
+
+struct SyncChangeCursors: Codable, Equatable {
+    var userSettings: Double
+    var exercises: Double
+    var workoutSessions: Double = 0
+    var loggedExercises: Double = 0
+    var loggedSets: Double = 0
+}
+
+struct SyncHasMore: Codable, Equatable {
+    var userSettings: Bool
+    var exercises: Bool
+    var workoutSessions: Bool = false
+    var loggedExercises: Bool = false
+    var loggedSets: Bool = false
+}
+
+struct UserSettingsSyncRecord: Codable, Equatable {
+    let clientId: String
+    let createdAt: Double
+    let updatedAt: Double
+    let deletedAt: Double?
+    let serverUpdatedAt: Double
+    let weightUnitRaw: String
+    let defaultRestTimerSeconds: Int
+    let hasCompletedOnboarding: Bool
+}
+
+struct ExerciseSyncRecord: Codable, Equatable {
+    let clientId: String
+    let createdAt: Double
+    let updatedAt: Double
+    let deletedAt: Double?
+    let serverUpdatedAt: Double
+    let seedIdentifier: String?
+    let name: String
+    let categoryRaw: String
+    let equipmentRaw: String
+    let primaryMuscleRaw: String
+    let primaryMuscleGroupRaw: String
+    let notes: String
+    let isArchived: Bool
+    let isSeeded: Bool
+}
+
+struct SyncFetchChangesResponse: Codable, Equatable {
+    let userSettings: [UserSettingsSyncRecord]
+    let exercises: [ExerciseSyncRecord]
+    let cursors: SyncChangeCursors
+    let hasMore: SyncHasMore
+}
+
+struct SyncMutationResult: Codable, Equatable {
+    let status: String
+    let serverUpdatedAt: Double?
+}
