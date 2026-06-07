@@ -74,6 +74,35 @@ final class SettingsExerciseSyncCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(entry.status, .pending)
     }
+
+    func testPrepareDoesNotClaimNilOwnerOutboxEntryForRecordOwnedByDifferentOwner() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000002004")!,
+            name: "Squat",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Quads"
+        )
+        exercise.syncOwnerTokenIdentifier = "issuer|owner_a"
+        context.insert(exercise)
+        let entry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            operation: .update,
+            ownerTokenIdentifier: nil,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        context.insert(entry)
+        try context.save()
+
+        let coordinator = SettingsExerciseSyncCoordinator(client: FakeSettingsExerciseSyncClient())
+        try coordinator.prepareForSync(ownerTokenIdentifier: "issuer|owner_b", context: context)
+
+        XCTAssertEqual(exercise.syncOwnerTokenIdentifier, "issuer|owner_a")
+        XCTAssertNil(entry.ownerTokenIdentifier)
+    }
 }
 
 final class FakeSettingsExerciseSyncClient: SettingsExerciseSyncClient {

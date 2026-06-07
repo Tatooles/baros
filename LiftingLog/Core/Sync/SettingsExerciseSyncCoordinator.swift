@@ -29,7 +29,11 @@ final class SettingsExerciseSyncCoordinator {
                 continue
             }
 
-            if entry.ownerTokenIdentifier == nil {
+            if entry.ownerTokenIdentifier == nil, try canClaim(
+                entry: entry,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            ) {
                 entry.ownerTokenIdentifier = ownerTokenIdentifier
             }
             if entry.ownerTokenIdentifier == ownerTokenIdentifier, entry.status == .inFlight {
@@ -38,5 +42,38 @@ final class SettingsExerciseSyncCoordinator {
         }
 
         try context.save()
+    }
+
+    private func findUserSettings(id: UUID, context: ModelContext) throws -> UserSettings? {
+        try context.fetch(FetchDescriptor<UserSettings>())
+            .first { $0.id == id }
+    }
+
+    private func findExercise(id: UUID, context: ModelContext) throws -> Exercise? {
+        try context.fetch(FetchDescriptor<Exercise>())
+            .first { $0.id == id }
+    }
+
+    private func canClaim(
+        entry: SyncOutboxEntry,
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws -> Bool {
+        switch entry.entityKind {
+        case .userSettings:
+            guard let settings = try findUserSettings(id: entry.entityID, context: context) else {
+                return false
+            }
+            return settings.syncOwnerTokenIdentifier == nil
+                || settings.syncOwnerTokenIdentifier == ownerTokenIdentifier
+        case .exercise:
+            guard let exercise = try findExercise(id: entry.entityID, context: context) else {
+                return false
+            }
+            return exercise.syncOwnerTokenIdentifier == nil
+                || exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier
+        default:
+            return false
+        }
     }
 }
