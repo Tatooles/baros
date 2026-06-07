@@ -103,6 +103,58 @@ final class SettingsExerciseSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(exercise.syncOwnerTokenIdentifier, "issuer|owner_a")
         XCTAssertNil(entry.ownerTokenIdentifier)
     }
+
+    func testRunPushesSettingsAndExerciseEntriesThenRemovesOutbox() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let settings = UserSettings(id: UUID(uuidString: "00000000-0000-0000-0000-000000003001")!)
+        let exercise = Exercise(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000003002")!,
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest"
+        )
+        context.insert(settings)
+        context.insert(exercise)
+        let recorder = SyncOutboxRecorder()
+        try recorder.recordUpdate(entityKind: .userSettings, entityID: settings.id, ownerTokenIdentifier: "issuer|owner_a", context: context, now: Date(timeIntervalSince1970: 100))
+        try recorder.recordCreate(entityKind: .exercise, entityID: exercise.id, ownerTokenIdentifier: "issuer|owner_a", context: context, now: Date(timeIntervalSince1970: 100))
+        try context.save()
+
+        let client = FakeSettingsExerciseSyncClient()
+        let coordinator = SettingsExerciseSyncCoordinator(client: client)
+        try await coordinator.run(ownerTokenIdentifier: "issuer|owner_a", context: context)
+
+        XCTAssertEqual(client.upsertedSettings.count, 1)
+        XCTAssertEqual(client.upsertedExercises.count, 1)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
+    func testRunMarksFailedEntryAndStopsOnPushError() async throws {
+        struct PushError: LocalizedError { var errorDescription: String? { "offline" } }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000003003")!,
+            name: "Squat",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Quads"
+        )
+        context.insert(exercise)
+        try SyncOutboxRecorder().recordUpdate(entityKind: .exercise, entityID: exercise.id, ownerTokenIdentifier: "issuer|owner_a", context: context, now: Date(timeIntervalSince1970: 100))
+        try context.save()
+
+        let client = FakeSettingsExerciseSyncClient()
+        client.error = PushError()
+        let coordinator = SettingsExerciseSyncCoordinator(client: client)
+        try await coordinator.run(ownerTokenIdentifier: "issuer|owner_a", context: context)
+
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
+        XCTAssertEqual(entry.status, .failed)
+        XCTAssertEqual(entry.lastErrorMessage, "offline")
+    }
 }
 
 final class FakeSettingsExerciseSyncClient: SettingsExerciseSyncClient {
