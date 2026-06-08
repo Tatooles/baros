@@ -401,7 +401,7 @@ final class SettingsExerciseSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(exercise.name, "Local Name")
     }
 
-    func testRunAppliesNewerRemoteExerciseRestore() async throws {
+    func testRunKeepsLocalExerciseTombstoneWhenRemoteIsActive() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let exercise = Exercise(
@@ -446,12 +446,55 @@ final class SettingsExerciseSyncCoordinatorTests: XCTestCase {
 
         try await SettingsExerciseSyncCoordinator(client: client).run(ownerTokenIdentifier: "issuer|owner_a", context: context)
 
-        XCTAssertEqual(exercise.name, "Restored Remote")
-        XCTAssertEqual(exercise.categoryRaw, "future-strength")
-        XCTAssertEqual(exercise.equipmentRaw, "future-bar")
-        XCTAssertEqual(exercise.primaryMuscleRaw, "Future Chest")
-        XCTAssertEqual(exercise.primaryMuscleGroupRaw, "future-chest")
-        XCTAssertNil(exercise.deletedAt)
+        XCTAssertEqual(exercise.name, "Deleted Local")
+        XCTAssertEqual(exercise.categoryRaw, "strength")
+        XCTAssertEqual(exercise.equipmentRaw, "barbell")
+        XCTAssertEqual(exercise.primaryMuscleRaw, "Chest")
+        XCTAssertNotNil(exercise.deletedAt)
+    }
+
+    func testRunKeepsLocalSettingsTombstoneWhenRemoteIsActive() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let settings = UserSettings(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000004006")!,
+            weightUnit: .pounds,
+            defaultRestTimerSeconds: 90,
+            hasCompletedOnboarding: false,
+            syncOwnerTokenIdentifier: "issuer|owner_a",
+            updatedAt: Date(timeIntervalSince1970: 20),
+            deletedAt: Date(timeIntervalSince1970: 20)
+        )
+        context.insert(settings)
+        try context.save()
+
+        let client = FakeSettingsExerciseSyncClient()
+        client.fetchResponses = [
+            SyncFetchChangesResponse(
+                userSettings: [
+                    UserSettingsSyncRecord(
+                        clientId: settings.id.uuidString.lowercased(),
+                        createdAt: 10,
+                        updatedAt: 40,
+                        deletedAt: nil,
+                        serverUpdatedAt: 45,
+                        weightUnitRaw: "kilograms",
+                        defaultRestTimerSeconds: 120,
+                        hasCompletedOnboarding: true
+                    )
+                ],
+                exercises: [],
+                cursors: SyncChangeCursors(userSettings: 45, exercises: 0),
+                hasMore: SyncHasMore(userSettings: false, exercises: false)
+            )
+        ]
+
+        try await SettingsExerciseSyncCoordinator(client: client).run(ownerTokenIdentifier: "issuer|owner_a", context: context)
+
+        XCTAssertEqual(settings.weightUnitRaw, "pounds")
+        XCTAssertEqual(settings.defaultRestTimerSeconds, 90)
+        XCTAssertFalse(settings.hasCompletedOnboarding)
+        XCTAssertNotNil(settings.deletedAt)
     }
 
     func testRunAppliesRemoteSettingsWithoutOutboxCascade() async throws {
