@@ -331,6 +331,31 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(client.fetchRequests.first?.cursors, SyncChangeCursors(userSettings: 0, exercises: 0))
     }
 
+    func testSchedulerQueuesRequestDuringActiveSync() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let client = FakeSettingsExerciseSyncClient()
+        let coordinator = SettingsExerciseSyncCoordinator(client: client)
+        let scheduler = SyncScheduler(coordinator: coordinator, modelContext: context)
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+        let fetchCompleted = expectation(description: "scheduler runs queued sync fetch")
+        fetchCompleted.expectedFulfillmentCount = 2
+        client.onFetchChanges = {
+            if client.fetchRequests.count == 1 {
+                scheduler.requestSync()
+            }
+            fetchCompleted.fulfill()
+        }
+
+        scheduler.requestSync()
+        await fulfillment(of: [fetchCompleted], timeout: 1.0)
+
+        XCTAssertEqual(scheduler.requestCount, 2)
+        XCTAssertEqual(client.fetchRequests.count, 2)
+        XCTAssertEqual(client.fetchRequests.first?.cursors, SyncChangeCursors(userSettings: 0, exercises: 0))
+        XCTAssertEqual(client.fetchRequests.last?.cursors, SyncChangeCursors(userSettings: 0, exercises: 0))
+    }
+
     func testExerciseUpdateWithoutChangesDoesNotRecordOrRequestSync() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
