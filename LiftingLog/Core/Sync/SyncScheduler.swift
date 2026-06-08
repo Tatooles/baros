@@ -8,6 +8,8 @@ final class SyncScheduler {
     private(set) var requestCount = 0
     private var coordinator: SettingsExerciseSyncCoordinator?
     private var modelContext: ModelContext?
+    private var syncTask: Task<Void, Never>?
+    private var needsSync = false
 
     init(coordinator: SettingsExerciseSyncCoordinator? = nil, modelContext: ModelContext? = nil) {
         self.coordinator = coordinator
@@ -22,9 +24,18 @@ final class SyncScheduler {
     func requestSync() {
         requestCount += 1
         guard let coordinator, let modelContext else { return }
-        let ownerTokenIdentifier = currentOwnerTokenIdentifier
-        Task { @MainActor in
-            try? await coordinator.run(ownerTokenIdentifier: ownerTokenIdentifier, context: modelContext)
+        guard syncTask == nil else {
+            needsSync = true
+            return
+        }
+
+        syncTask = Task { @MainActor in
+            while true {
+                needsSync = false
+                try? await coordinator.run(ownerTokenIdentifier: currentOwnerTokenIdentifier, context: modelContext)
+                guard needsSync else { break }
+            }
+            syncTask = nil
         }
     }
 }

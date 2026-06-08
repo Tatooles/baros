@@ -57,6 +57,14 @@ struct ExerciseMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws {
+        guard exercise.name != name
+            || exercise.category != category
+            || exercise.equipment != equipment
+            || exercise.primaryMuscle != primaryMuscle
+            || exercise.notes != notes else {
+            return
+        }
+
         let effectiveOwner = ownerTokenIdentifier ?? syncScheduler?.currentOwnerTokenIdentifier
         exercise.syncOwnerTokenIdentifier = effectiveOwner ?? exercise.syncOwnerTokenIdentifier
         exercise.update(

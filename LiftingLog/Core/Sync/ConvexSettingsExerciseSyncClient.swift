@@ -2,7 +2,7 @@ import Combine
 import ConvexMobile
 import Foundation
 
-struct ConvexSettingsExerciseSyncClient: SettingsExerciseSyncClient {
+struct ConvexSettingsExerciseSyncClient: SettingsExerciseSyncClient, @unchecked Sendable {
     private let client: ConvexClientWithAuth<String>
 
     init(client: ConvexClientWithAuth<String>) {

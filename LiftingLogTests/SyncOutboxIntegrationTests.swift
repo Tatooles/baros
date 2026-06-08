@@ -245,6 +245,52 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(scheduler.requestCount, 1)
     }
 
+    func testConfiguredSchedulerRunsRequestedSync() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let client = FakeSettingsExerciseSyncClient()
+        let coordinator = SettingsExerciseSyncCoordinator(client: client)
+        let scheduler = SyncScheduler(coordinator: coordinator, modelContext: context)
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+
+        scheduler.requestSync()
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(scheduler.requestCount, 1)
+        XCTAssertEqual(client.fetchRequests.count, 1)
+        XCTAssertEqual(client.fetchRequests.first?.cursors, SyncChangeCursors(userSettings: 0, exercises: 0))
+    }
+
+    func testExerciseUpdateWithoutChangesDoesNotRecordOrRequestSync() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let scheduler = SyncScheduler()
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            notes: "Pause"
+        )
+        context.insert(exercise)
+        try context.save()
+
+        try ExerciseMutationService(syncScheduler: scheduler).updateExercise(
+            exercise,
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            notes: "Pause",
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+
+        XCTAssertTrue(try fetchEntries(context).isEmpty)
+        XCTAssertEqual(scheduler.requestCount, 0)
+    }
+
     func testFinishingWorkoutRecordsCompletedGraphCreateIntent() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
