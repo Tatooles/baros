@@ -54,6 +54,13 @@ const defaultPrimaryMuscleGroupRaw = "other";
 const defaultExerciseSnapshotEquipmentRaw = "other";
 const defaultExerciseSnapshotPrimaryMuscleGroupRaw = "other";
 const defaultHasSnapshotMetadata = false;
+const syncCursorValidator = v.object({
+  userSettings: v.number(),
+  exercises: v.number(),
+  workoutSessions: v.number(),
+  loggedExercises: v.number(),
+  loggedSets: v.number(),
+});
 
 function assertFiniteNumber(value: number, fieldName: string): void {
   if (!Number.isFinite(value)) {
@@ -815,13 +822,7 @@ export const tombstone = mutation({
 
 export const fetchChanges = query({
   args: {
-    cursors: v.object({
-      userSettings: v.number(),
-      exercises: v.number(),
-      workoutSessions: v.number(),
-      loggedExercises: v.number(),
-      loggedSets: v.number(),
-    }),
+    cursors: syncCursorValidator,
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -895,6 +896,61 @@ export const fetchChanges = query({
         workoutSessions: workoutSessionPage.hasMore,
         loggedExercises: loggedExercisePage.hasMore,
         loggedSets: loggedSetPage.hasMore,
+      },
+    };
+  },
+});
+
+export const fetchSettingsExerciseChanges = query({
+  args: {
+    cursors: syncCursorValidator,
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    assertFiniteCursors(args.cursors);
+    const ownerTokenIdentifier = await requireOwnerTokenIdentifier(ctx);
+    const limit = normalizeFetchLimit(args.limit);
+
+    const userSettingsPage = await fetchUserSettingsChanges(
+      ctx,
+      ownerTokenIdentifier,
+      args.cursors.userSettings,
+      limit,
+    );
+    const exercisePage = await fetchExerciseChanges(
+      ctx,
+      ownerTokenIdentifier,
+      args.cursors.exercises,
+      limit,
+    );
+    const userSettings = userSettingsPage.records;
+    const exercises = exercisePage.records.map(normalizeExerciseRecord);
+
+    // This endpoint intentionally narrows the Phase 5 settings/exercises sync.
+    // Full workout sync can move the iOS client back to fetchChanges when those
+    // tables have a local coordinator that consumes and persists their cursors.
+    return {
+      userSettings,
+      exercises,
+      workoutSessions: [],
+      loggedExercises: [],
+      loggedSets: [],
+      cursors: {
+        userSettings: nextCursorFromRecords(
+          userSettings,
+          args.cursors.userSettings,
+        ),
+        exercises: nextCursorFromRecords(exercises, args.cursors.exercises),
+        workoutSessions: args.cursors.workoutSessions,
+        loggedExercises: args.cursors.loggedExercises,
+        loggedSets: args.cursors.loggedSets,
+      },
+      hasMore: {
+        userSettings: userSettingsPage.hasMore,
+        exercises: exercisePage.hasMore,
+        workoutSessions: false,
+        loggedExercises: false,
+        loggedSets: false,
       },
     };
   },

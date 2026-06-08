@@ -548,6 +548,56 @@ describe("sync conflict behavior", () => {
 });
 
 describe("sync change cursors", () => {
+  test("settings exercise changes do not return workout history pages", async () => {
+    const t = testDb().withIdentity(userA);
+
+    await t.mutation(api.sync.upsertUserSettings, {
+      record: userSettingsRecord({ updatedAt: 2 }),
+    });
+    await t.mutation(api.sync.upsertExercise, {
+      record: exerciseRecord({ updatedAt: 3 }),
+    });
+    await t.mutation(api.sync.upsertWorkoutSession, {
+      record: {
+        clientId: "session-1",
+        title: "Push Day",
+        startedAt: 1,
+        endedAt: 2,
+        durationSeconds: 60,
+        notes: "",
+        referenceNotes: null,
+        statusRaw: "completed",
+        sourceRaw: "blank",
+        sourceSessionID: null,
+        healthLinkID: null,
+        createdAt: 1,
+        updatedAt: 4,
+        deletedAt: null,
+      },
+    });
+    await t.mutation(api.sync.upsertLoggedExercise, {
+      record: loggedExerciseRecord({ updatedAt: 5 }),
+    });
+
+    const changes = await t.query(api.sync.fetchSettingsExerciseChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(changes.userSettings).toHaveLength(1);
+    expect(changes.exercises).toHaveLength(1);
+    expect(changes.workoutSessions).toHaveLength(0);
+    expect(changes.loggedExercises).toHaveLength(0);
+    expect(changes.loggedSets).toHaveLength(0);
+    expect(changes.cursors.userSettings).toBeGreaterThan(0);
+    expect(changes.cursors.exercises).toBeGreaterThan(0);
+    expect(changes.cursors.workoutSessions).toBe(0);
+    expect(changes.cursors.loggedExercises).toBe(0);
+    expect(changes.cursors.loggedSets).toBe(0);
+    expect(changes.hasMore.workoutSessions).toBe(false);
+    expect(changes.hasMore.loggedExercises).toBe(false);
+    expect(changes.hasMore.loggedSets).toBe(false);
+  });
+
   test("per-table cursors do not skip remaining rows when another table has a higher cursor", async () => {
     const t = testDb().withIdentity(userA);
 

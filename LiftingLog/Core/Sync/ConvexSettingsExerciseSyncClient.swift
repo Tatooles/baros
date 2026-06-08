@@ -38,7 +38,7 @@ struct ConvexSettingsExerciseSyncClient: SettingsExerciseSyncClient, @unchecked 
 
     func fetchChanges(cursors: SyncChangeCursors, limit: Int) async throws -> SyncFetchChangesResponse {
         let publisher = client.subscribe(
-            to: "sync:fetchChanges",
+            to: "sync:fetchSettingsExerciseChanges",
             with: ConvexSyncArgumentMapper.fetchChangesArgs(cursors: cursors, limit: limit),
             yielding: SyncFetchChangesResponse.self
         )
