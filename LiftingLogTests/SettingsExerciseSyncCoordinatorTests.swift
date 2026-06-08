@@ -133,6 +133,71 @@ final class SettingsExerciseSyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
     }
 
+    func testFirstRunBootstrapsExistingSettingsAndExercisesOnce() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let settings = UserSettings(id: UUID(uuidString: "00000000-0000-0000-0000-000000003101")!)
+        let bench = Exercise(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000003102")!,
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest"
+        )
+        let squat = Exercise(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000003103")!,
+            name: "Squat",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Quads"
+        )
+        context.insert(settings)
+        context.insert(bench)
+        context.insert(squat)
+        try context.save()
+
+        let firstClient = FakeSettingsExerciseSyncClient()
+        try await SettingsExerciseSyncCoordinator(client: firstClient).run(ownerTokenIdentifier: "issuer|owner_a", context: context)
+
+        let state = try XCTUnwrap(context.fetch(FetchDescriptor<SyncCursorState>()).first)
+        XCTAssertTrue(state.hasBootstrappedSettingsExercises)
+        XCTAssertEqual(firstClient.upsertedSettings.map(\.clientId), [settings.id.uuidString.lowercased()])
+        XCTAssertEqual(
+            Set(firstClient.upsertedExercises.map(\.clientId)),
+            Set([bench.id.uuidString.lowercased(), squat.id.uuidString.lowercased()])
+        )
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+
+        let secondClient = FakeSettingsExerciseSyncClient()
+        try await SettingsExerciseSyncCoordinator(client: secondClient).run(ownerTokenIdentifier: "issuer|owner_a", context: context)
+
+        XCTAssertTrue(secondClient.upsertedSettings.isEmpty)
+        XCTAssertTrue(secondClient.upsertedExercises.isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
+    func testFirstRunDoesNotBootstrapRowsOwnedByDifferentOwner() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000003104")!,
+            name: "Other Owner Squat",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Quads",
+            syncOwnerTokenIdentifier: "issuer|owner_b"
+        )
+        context.insert(exercise)
+        try context.save()
+
+        let client = FakeSettingsExerciseSyncClient()
+        try await SettingsExerciseSyncCoordinator(client: client).run(ownerTokenIdentifier: "issuer|owner_a", context: context)
+
+        XCTAssertTrue(client.upsertedExercises.isEmpty)
+        XCTAssertEqual(exercise.syncOwnerTokenIdentifier, "issuer|owner_b")
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
     func testRunMarksFailedEntryAndStopsOnPushError() async throws {
         struct PushError: LocalizedError { var errorDescription: String? { "offline" } }
         let container = try SwiftDataTestSupport.makeInMemoryContainer()

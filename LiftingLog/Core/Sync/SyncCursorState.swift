@@ -8,17 +8,20 @@ final class SyncCursorState: Identifiable {
     var ownerTokenIdentifier: String
     var userSettingsCursor: Double
     var exercisesCursor: Double
+    var hasBootstrappedSettingsExercises: Bool = false
 
     init(
         id: UUID = UUID(),
         ownerTokenIdentifier: String,
         userSettingsCursor: Double = 0,
-        exercisesCursor: Double = 0
+        exercisesCursor: Double = 0,
+        hasBootstrappedSettingsExercises: Bool = false
     ) {
         self.id = id
         self.ownerTokenIdentifier = ownerTokenIdentifier
         self.userSettingsCursor = userSettingsCursor
         self.exercisesCursor = exercisesCursor
+        self.hasBootstrappedSettingsExercises = hasBootstrappedSettingsExercises
     }
 
     static func state(for ownerTokenIdentifier: String, context: ModelContext) throws -> SyncCursorState {

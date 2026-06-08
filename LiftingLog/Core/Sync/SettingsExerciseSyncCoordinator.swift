@@ -24,6 +24,8 @@ final class SettingsExerciseSyncCoordinator {
     }
 
     func prepareForSync(ownerTokenIdentifier: String, context: ModelContext) throws {
+        let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
+
         for settings in try context.fetch(FetchDescriptor<UserSettings>()) {
             if settings.syncOwnerTokenIdentifier == nil {
                 settings.syncOwnerTokenIdentifier = ownerTokenIdentifier
@@ -53,7 +55,67 @@ final class SettingsExerciseSyncCoordinator {
             }
         }
 
+        if !state.hasBootstrappedSettingsExercises {
+            try bootstrapSettingsExercisesForSync(ownerTokenIdentifier: ownerTokenIdentifier, context: context, now: .now)
+            state.hasBootstrappedSettingsExercises = true
+        }
+
         try context.save()
+    }
+
+    private func bootstrapSettingsExercisesForSync(
+        ownerTokenIdentifier: String,
+        context: ModelContext,
+        now: Date
+    ) throws {
+        for settings in try context.fetch(FetchDescriptor<UserSettings>()) where settings.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+            try recordBootstrapEntry(
+                entityKind: .userSettings,
+                entityID: settings.id,
+                isDeleted: settings.isDeleted,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+        }
+
+        for exercise in try context.fetch(FetchDescriptor<Exercise>()) where exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+            try recordBootstrapEntry(
+                entityKind: .exercise,
+                entityID: exercise.id,
+                isDeleted: exercise.isDeleted,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+        }
+    }
+
+    private func recordBootstrapEntry(
+        entityKind: SyncEntityKind,
+        entityID: UUID,
+        isDeleted: Bool,
+        ownerTokenIdentifier: String,
+        context: ModelContext,
+        now: Date
+    ) throws {
+        if isDeleted {
+            try recorder.recordDelete(
+                entityKind: entityKind,
+                entityID: entityID,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+        } else {
+            try recorder.recordCreate(
+                entityKind: entityKind,
+                entityID: entityID,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+        }
     }
 
     private func pushPendingEntries(ownerTokenIdentifier: String, context: ModelContext) async throws -> Bool {

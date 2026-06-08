@@ -74,6 +74,7 @@
 		9E7E2E04A42C2616A03BEF1E /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 907D701D12B60C22962A18E0 /* HistoryView.swift */; };
 		9F1ACF18D163FF02449FCFFC /* SyncOutboxEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 556B8CEDBF71BD51E38F3B96 /* SyncOutboxEntry.swift */; };
 		A14AFF70B2B12D584578C7C7 /* WorkoutSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15A81769B47CC89E5AD1E1E /* WorkoutSource.swift */; };
+		A1D628C4A3D9E41121206525 /* ConvexSyncArgumentMapperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04B4112D21A0F00E2B36B057 /* ConvexSyncArgumentMapperTests.swift */; };
 		A593FE853D37B47DB15B0BDE /* SettingsAccountSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E38895847F5DA6ABF0B4512E /* SettingsAccountSection.swift */; };
 		A8477CBCB15422EDA15B2055 /* ReorderExercisesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A4C97B8DD77B49241EA51 /* ReorderExercisesSheet.swift */; };
 		AB4F2E874EF076CD6CD30A77 /* SyncOutboxIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F732960ACFFD3709931AFB /* SyncOutboxIntegrationTests.swift */; };
@@ -133,6 +134,7 @@
 
 /* Begin PBXFileReference section */
 		006C4ECFE2CEF0CE360E0CF9 /* SyncOutboxRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxRecorderTests.swift; sourceTree = "<group>"; };
+		04B4112D21A0F00E2B36B057 /* ConvexSyncArgumentMapperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexSyncArgumentMapperTests.swift; sourceTree = "<group>"; };
 		0513C6B055C5A221FF8C0E7C /* LiftingLogTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LiftingLogTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		055B0168D310AB732E99946A /* SyncCursorStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCursorStateTests.swift; sourceTree = "<group>"; };
 		0667C6CBD3D1A197FB8C2842 /* LoggedSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggedSet.swift; sourceTree = "<group>"; };
@@ -335,6 +337,7 @@
 				77096CDECA32467D94D767DF /* AppNavigationStateTests.swift */,
 				C52A1C061D09E267CE5764DA /* ClerkConfigurationTests.swift */,
 				C7799AD56E3DCE202F8E61D3 /* ConvexConfigurationTests.swift */,
+				04B4112D21A0F00E2B36B057 /* ConvexSyncArgumentMapperTests.swift */,
 				97D4F05FB241C4EE29FC43EE /* FormattingTests.swift */,
 				24467C299A662C88D7F09CA1 /* HistoryPersistenceTests.swift */,
 				75BB41D2CBBEDDF4F4CFF55F /* ModelPersistenceTests.swift */,
@@ -656,6 +659,7 @@
 				0096CA4318A3370CE3BA938F /* AppNavigationStateTests.swift in Sources */,
 				1F89A4E55A6263247C37239B /* ClerkConfigurationTests.swift in Sources */,
 				61C935DAE91FCF94BB4A8D1A /* ConvexConfigurationTests.swift in Sources */,
+				A1D628C4A3D9E41121206525 /* ConvexSyncArgumentMapperTests.swift in Sources */,
 				B01C71A13BBCC55178AEFB27 /* FormattingTests.swift in Sources */,
 				ECF98486D68CA178B42C7FE4 /* HistoryPersistenceTests.swift in Sources */,
 				80E536A5ABEF8E3E3B3A35D8 /* ModelPersistenceTests.swift in Sources */,
