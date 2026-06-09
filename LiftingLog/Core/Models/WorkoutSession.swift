@@ -17,6 +17,7 @@ final class WorkoutSession: Identifiable {
     var updatedAt: Date
     var deletedAt: Date?
     var healthLinkID: UUID?
+    var syncOwnerTokenIdentifier: String? = nil
     @Relationship(deleteRule: .cascade, inverse: \LoggedExercise.session) var loggedExercises: [LoggedExercise]
 
     init(
@@ -34,6 +35,7 @@ final class WorkoutSession: Identifiable {
         updatedAt: Date = .now,
         deletedAt: Date? = nil,
         healthLinkID: UUID? = nil,
+        syncOwnerTokenIdentifier: String? = nil,
         loggedExercises: [LoggedExercise] = []
     ) {
         self.id = id
@@ -50,6 +52,7 @@ final class WorkoutSession: Identifiable {
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
         self.healthLinkID = healthLinkID
+        self.syncOwnerTokenIdentifier = syncOwnerTokenIdentifier
         self.loggedExercises = loggedExercises
 
         for loggedExercise in loggedExercises {
@@ -83,8 +86,15 @@ final class WorkoutSession: Identifiable {
             .sorted { $0.orderIndex < $1.orderIndex }
     }
 
-    static func visibleCompletedSessions(from sessions: [WorkoutSession]) -> [WorkoutSession] {
-        sessions.filter { $0.status == .completed && !$0.isDeleted }
+    static func visibleCompletedSessions(
+        from sessions: [WorkoutSession],
+        ownerTokenIdentifier: String? = nil
+    ) -> [WorkoutSession] {
+        sessions.filter { session in
+            session.status == .completed
+                && !session.isDeleted
+                && session.syncOwnerTokenIdentifier == ownerTokenIdentifier
+        }
     }
 
     static func visibleActiveSessions(from sessions: [WorkoutSession]) -> [WorkoutSession] {

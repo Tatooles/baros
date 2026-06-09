@@ -3,10 +3,15 @@ import SwiftUI
 
 struct ExerciseHistoryDetailView: View {
     let summary: ExerciseHistorySummary
+    @Environment(SyncScheduler.self) private var syncScheduler
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     private var sessionGroups: [ExerciseHistorySessionGroup] {
-        ExerciseHistorySessionGroup.makeGroups(from: sessions, matching: summary)
+        ExerciseHistorySessionGroup.makeGroups(
+            from: sessions,
+            matching: summary,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        )
     }
 
     var body: some View {

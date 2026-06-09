@@ -246,8 +246,14 @@ final class ActiveWorkoutEngine {
     }
 
     @MainActor
-    func finishWorkout(_ session: WorkoutSession, context: ModelContext, now: Date = .now) throws {
+    func finishWorkout(
+        _ session: WorkoutSession,
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext,
+        now: Date = .now
+    ) throws {
         applyFinalWorkoutTitle(to: session)
+        session.syncOwnerTokenIdentifier = ownerTokenIdentifier
         session.status = .completed
         session.endedAt = now
         session.durationSeconds = max(0, Int(now.timeIntervalSince(session.startedAt)))
@@ -257,7 +263,7 @@ final class ActiveWorkoutEngine {
             try recorder.recordCreate(
                 entityKind: .workoutSession,
                 entityID: session.id,
-                ownerTokenIdentifier: nil,
+                ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context,
                 now: now
             )
@@ -265,7 +271,7 @@ final class ActiveWorkoutEngine {
                 try recorder.recordCreate(
                     entityKind: .loggedExercise,
                     entityID: loggedExercise.id,
-                    ownerTokenIdentifier: nil,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
                     context: context,
                     now: now
                 )
@@ -273,7 +279,7 @@ final class ActiveWorkoutEngine {
                     try recorder.recordCreate(
                         entityKind: .loggedSet,
                         entityID: set.id,
-                        ownerTokenIdentifier: nil,
+                        ownerTokenIdentifier: ownerTokenIdentifier,
                         context: context,
                         now: now
                     )

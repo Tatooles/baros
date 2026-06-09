@@ -283,7 +283,8 @@ final class SyncCoordinatorTests: XCTestCase {
             source: .blank,
             createdAt: Date(timeIntervalSince1970: 100),
             updatedAt: deletedAt,
-            deletedAt: deletedAt
+            deletedAt: deletedAt,
+            syncOwnerTokenIdentifier: owner
         )
         let loggedExercise = LoggedExercise(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000005403")!,
@@ -817,6 +818,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let session = try XCTUnwrap(sessions.first { $0.id == sessionID })
         XCTAssertEqual(session.title, "Push")
         XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.syncOwnerTokenIdentifier, owner)
         XCTAssertEqual(session.sortedLoggedExercises.count, 1)
         let loggedExercise = try XCTUnwrap(session.sortedLoggedExercises.first)
         XCTAssertEqual(loggedExercise.id, loggedExerciseID)
@@ -1334,7 +1336,8 @@ final class SyncCoordinatorTests: XCTestCase {
             status: .completed,
             source: .blank,
             createdAt: Date(timeIntervalSince1970: 100),
-            updatedAt: Date(timeIntervalSince1970: 20)
+            updatedAt: Date(timeIntervalSince1970: 20),
+            syncOwnerTokenIdentifier: owner
         )
         context.insert(state)
         context.insert(session)

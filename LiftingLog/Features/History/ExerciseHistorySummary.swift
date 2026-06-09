@@ -23,10 +23,13 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
         return "\(equipment.displayName) • \(muscleGroup.displayName)"
     }
 
-    static func makeSummaries(from sessions: [WorkoutSession]) -> [ExerciseHistorySummary] {
+    static func makeSummaries(
+        from sessions: [WorkoutSession],
+        ownerTokenIdentifier: String? = nil
+    ) -> [ExerciseHistorySummary] {
         var grouped: [String: ExerciseHistorySummary] = [:]
 
-        for session in WorkoutSession.visibleCompletedSessions(from: sessions) {
+        for session in WorkoutSession.visibleCompletedSessions(from: sessions, ownerTokenIdentifier: ownerTokenIdentifier) {
             for loggedExercise in session.sortedLoggedExercises {
                 let completedSetCount = loggedExercise.sortedSets.filter(\.isCompleted).count
                 guard completedSetCount > 0 else { continue }

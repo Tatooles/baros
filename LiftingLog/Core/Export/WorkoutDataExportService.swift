@@ -14,10 +14,14 @@ struct WorkoutDataExportService {
         return formatter
     }
 
-    func csv(for sessions: [WorkoutSession], unit: MeasurementUnit) -> String {
+    func csv(
+        for sessions: [WorkoutSession],
+        unit: MeasurementUnit,
+        ownerTokenIdentifier: String? = nil
+    ) -> String {
         var rows: [[String]] = [Self.header]
 
-        for session in sortedCompletedSessions(from: sessions) {
+        for session in sortedCompletedSessions(from: sessions, ownerTokenIdentifier: ownerTokenIdentifier) {
             for loggedExercise in sortedLoggedExercises(from: session) {
                 for set in sortedSets(from: loggedExercise) {
                     rows.append(row(for: set, loggedExercise: loggedExercise, session: session, unit: unit))
@@ -51,8 +55,11 @@ struct WorkoutDataExportService {
         "set_id"
     ]
 
-    private func sortedCompletedSessions(from sessions: [WorkoutSession]) -> [WorkoutSession] {
-        WorkoutSession.visibleCompletedSessions(from: sessions)
+    private func sortedCompletedSessions(
+        from sessions: [WorkoutSession],
+        ownerTokenIdentifier: String?
+    ) -> [WorkoutSession] {
+        WorkoutSession.visibleCompletedSessions(from: sessions, ownerTokenIdentifier: ownerTokenIdentifier)
             .sorted { lhs, rhs in
                 if lhs.startedAt != rhs.startedAt {
                     return lhs.startedAt < rhs.startedAt

@@ -11,6 +11,7 @@ struct WorkoutHistoryMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws {
+        session.syncOwnerTokenIdentifier = ownerTokenIdentifier ?? session.syncOwnerTokenIdentifier
         session.markDeletedCascade(now: now)
         try recorder.recordDelete(
             entityKind: .workoutSession,

@@ -98,6 +98,11 @@ final class SyncCoordinator {
                 context: context
             ) {
                 entry.ownerTokenIdentifier = ownerTokenIdentifier
+                try claimWorkoutGraphOwnerIfNeeded(
+                    entry: entry,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context
+                )
             }
             if entry.ownerTokenIdentifier == ownerTokenIdentifier, entry.status == .inFlight || entry.status == .failed {
                 recorder.markPendingForRetry(entry, now: .now)
@@ -203,6 +208,7 @@ final class SyncCoordinator {
 
         for session in try context.fetch(FetchDescriptor<WorkoutSession>())
             where session.status == .completed && !session.isDeleted {
+            session.syncOwnerTokenIdentifier = ownerTokenIdentifier
             try recordBootstrapEntry(
                 entityKind: .workoutSession,
                 entityID: session.id,
@@ -252,6 +258,11 @@ final class SyncCoordinator {
             return false
         }
 
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        if sessions.contains(where: { $0.syncOwnerTokenIdentifier != nil && $0.syncOwnerTokenIdentifier != ownerTokenIdentifier }) {
+            return false
+        }
+
         return true
     }
 
@@ -279,6 +290,23 @@ final class SyncCoordinator {
                 context: context,
                 now: now
             )
+        }
+    }
+
+    private func claimWorkoutGraphOwnerIfNeeded(
+        entry: SyncOutboxEntry,
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws {
+        switch entry.entityKind {
+        case .workoutSession:
+            try findWorkoutSession(id: entry.entityID, context: context)?.syncOwnerTokenIdentifier = ownerTokenIdentifier
+        case .loggedExercise:
+            try findLoggedExercise(id: entry.entityID, context: context)?.session?.syncOwnerTokenIdentifier = ownerTokenIdentifier
+        case .loggedSet:
+            try findLoggedSet(id: entry.entityID, context: context)?.loggedExercise?.session?.syncOwnerTokenIdentifier = ownerTokenIdentifier
+        default:
+            break
         }
     }
 
@@ -377,6 +405,9 @@ final class SyncCoordinator {
             guard let session = try findWorkoutSession(id: entry.entityID, context: context) else {
                 return try await client.tombstone(entityKind: .workoutSession, clientId: entry.entityID, deletedAt: fallbackTimestamp)
             }
+            guard session.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
+                throw SyncCoordinatorError.ownerMismatch(entityKind: .workoutSession, entityID: entry.entityID)
+            }
             guard session.status != .active else { return nil }
             return try await client.upsertWorkoutSession(SyncPayloadMapper.workoutSessionPayload(from: session))
         case (.loggedExercise, .create), (.loggedExercise, .update):
@@ -384,6 +415,9 @@ final class SyncCoordinator {
                 return try await client.tombstone(entityKind: .loggedExercise, clientId: entry.entityID, deletedAt: fallbackTimestamp)
             }
             guard let session = loggedExercise.session, session.status != .active else { return nil }
+            guard session.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
+                throw SyncCoordinatorError.ownerMismatch(entityKind: .loggedExercise, entityID: entry.entityID)
+            }
             return try await client.upsertLoggedExercise(SyncPayloadMapper.loggedExercisePayload(from: loggedExercise))
         case (.loggedSet, .create), (.loggedSet, .update):
             guard let set = try findLoggedSet(id: entry.entityID, context: context) else {
@@ -392,6 +426,9 @@ final class SyncCoordinator {
             guard let loggedExercise = set.loggedExercise,
                   let session = loggedExercise.session,
                   session.status != .active else { return nil }
+            guard session.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
+                throw SyncCoordinatorError.ownerMismatch(entityKind: .loggedSet, entityID: entry.entityID)
+            }
             return try await client.upsertLoggedSet(SyncPayloadMapper.loggedSetPayload(from: set))
         case (.userSettings, .delete):
             let settings = try findUserSettings(id: entry.entityID, context: context)
@@ -409,14 +446,23 @@ final class SyncCoordinator {
             return try await client.tombstone(entityKind: .exercise, clientId: entry.entityID, deletedAt: deletedAt)
         case (.workoutSession, .delete):
             let session = try findWorkoutSession(id: entry.entityID, context: context)
+            if let session, session.syncOwnerTokenIdentifier != ownerTokenIdentifier {
+                throw SyncCoordinatorError.ownerMismatch(entityKind: .workoutSession, entityID: entry.entityID)
+            }
             let deletedAt = session?.deletedAt ?? fallbackTimestamp
             return try await client.tombstone(entityKind: .workoutSession, clientId: entry.entityID, deletedAt: deletedAt)
         case (.loggedExercise, .delete):
             let loggedExercise = try findLoggedExercise(id: entry.entityID, context: context)
+            if let session = loggedExercise?.session, session.syncOwnerTokenIdentifier != ownerTokenIdentifier {
+                throw SyncCoordinatorError.ownerMismatch(entityKind: .loggedExercise, entityID: entry.entityID)
+            }
             let deletedAt = loggedExercise?.deletedAt ?? fallbackTimestamp
             return try await client.tombstone(entityKind: .loggedExercise, clientId: entry.entityID, deletedAt: deletedAt)
         case (.loggedSet, .delete):
             let set = try findLoggedSet(id: entry.entityID, context: context)
+            if let session = set?.loggedExercise?.session, session.syncOwnerTokenIdentifier != ownerTokenIdentifier {
+                throw SyncCoordinatorError.ownerMismatch(entityKind: .loggedSet, entityID: entry.entityID)
+            }
             let deletedAt = set?.deletedAt ?? fallbackTimestamp
             return try await client.tombstone(entityKind: .loggedSet, clientId: entry.entityID, deletedAt: deletedAt)
         default:
@@ -498,9 +544,21 @@ final class SyncCoordinator {
             summary.record(response)
             try apply(userSettingsRecords: response.userSettings, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
             try apply(exerciseRecords: response.exercises, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
-            let appliedWorkoutSessionCursor = try apply(workoutSessionRecords: response.workoutSessions, context: context)
-            let loggedExerciseApplyResult = try apply(loggedExerciseRecords: response.loggedExercises, context: context)
-            let loggedSetApplyResult = try apply(loggedSetRecords: response.loggedSets, context: context)
+            let appliedWorkoutSessionCursor = try apply(
+                workoutSessionRecords: response.workoutSessions,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+            let loggedExerciseApplyResult = try apply(
+                loggedExerciseRecords: response.loggedExercises,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+            let loggedSetApplyResult = try apply(
+                loggedSetRecords: response.loggedSets,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
 
             state.userSettingsCursor = max(state.userSettingsCursor, response.cursors.userSettings)
             state.exercisesCursor = max(state.exercisesCursor, response.cursors.exercises)
@@ -702,7 +760,11 @@ final class SyncCoordinator {
         exercise.deletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))
     }
 
-    private func apply(workoutSessionRecords records: [WorkoutSessionSyncRecord], context: ModelContext) throws -> Double? {
+    private func apply(
+        workoutSessionRecords records: [WorkoutSessionSyncRecord],
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws -> Double? {
         var maxAppliedServerUpdatedAt: Double?
         for record in records {
             guard let id = UUID(uuidString: record.clientId) else {
@@ -713,6 +775,10 @@ final class SyncCoordinator {
             let incomingDeletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))
 
             if let session = try findWorkoutSession(id: id, context: context) {
+                guard session.syncOwnerTokenIdentifier == nil || session.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
+                    maxAppliedServerUpdatedAt = max(maxAppliedServerUpdatedAt ?? 0, record.serverUpdatedAt)
+                    continue
+                }
                 guard SyncConflictResolver.decision(
                     localUpdatedAt: session.updatedAt,
                     localDeletedAt: session.deletedAt,
@@ -723,7 +789,7 @@ final class SyncCoordinator {
                     maxAppliedServerUpdatedAt = max(maxAppliedServerUpdatedAt ?? 0, record.serverUpdatedAt)
                     continue
                 }
-                apply(record, to: session)
+                apply(record, to: session, ownerTokenIdentifier: ownerTokenIdentifier)
             } else {
                 guard incomingDeletedAt == nil else {
                     maxAppliedServerUpdatedAt = max(maxAppliedServerUpdatedAt ?? 0, record.serverUpdatedAt)
@@ -743,7 +809,8 @@ final class SyncCoordinator {
                     createdAt: Date(timeIntervalSince1970: record.createdAt),
                     updatedAt: incomingUpdatedAt,
                     deletedAt: incomingDeletedAt,
-                    healthLinkID: record.healthLinkID.flatMap(UUID.init(uuidString:))
+                    healthLinkID: record.healthLinkID.flatMap(UUID.init(uuidString:)),
+                    syncOwnerTokenIdentifier: ownerTokenIdentifier
                 )
                 context.insert(session)
             }
@@ -752,7 +819,8 @@ final class SyncCoordinator {
         return maxAppliedServerUpdatedAt
     }
 
-    private func apply(_ record: WorkoutSessionSyncRecord, to session: WorkoutSession) {
+    private func apply(_ record: WorkoutSessionSyncRecord, to session: WorkoutSession, ownerTokenIdentifier: String) {
+        session.syncOwnerTokenIdentifier = ownerTokenIdentifier
         session.title = record.title
         session.startedAt = Date(timeIntervalSince1970: record.startedAt)
         session.endedAt = record.endedAt.map(Date.init(timeIntervalSince1970:))
@@ -768,7 +836,11 @@ final class SyncCoordinator {
         session.healthLinkID = record.healthLinkID.flatMap(UUID.init(uuidString:))
     }
 
-    private func apply(loggedExerciseRecords records: [LoggedExerciseSyncRecord], context: ModelContext) throws -> WorkoutChildApplyResult {
+    private func apply(
+        loggedExerciseRecords records: [LoggedExerciseSyncRecord],
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws -> WorkoutChildApplyResult {
         var maxAppliedServerUpdatedAt: Double?
         for record in records {
             guard let id = UUID(uuidString: record.clientId) else {
@@ -781,6 +853,10 @@ final class SyncCoordinator {
                     appliedCursor: maxAppliedServerUpdatedAt,
                     deferredMissingParent: true
                 )
+            }
+            guard session.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
+                maxAppliedServerUpdatedAt = max(maxAppliedServerUpdatedAt ?? 0, record.serverUpdatedAt)
+                continue
             }
             let exercise = try record.exerciseClientId
                 .flatMap(UUID.init(uuidString:))
@@ -851,7 +927,11 @@ final class SyncCoordinator {
         }
     }
 
-    private func apply(loggedSetRecords records: [LoggedSetSyncRecord], context: ModelContext) throws -> WorkoutChildApplyResult {
+    private func apply(
+        loggedSetRecords records: [LoggedSetSyncRecord],
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws -> WorkoutChildApplyResult {
         var maxAppliedServerUpdatedAt: Double?
         for record in records {
             guard let id = UUID(uuidString: record.clientId) else {
@@ -864,6 +944,10 @@ final class SyncCoordinator {
                     appliedCursor: maxAppliedServerUpdatedAt,
                     deferredMissingParent: true
                 )
+            }
+            guard loggedExercise.session?.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
+                maxAppliedServerUpdatedAt = max(maxAppliedServerUpdatedAt ?? 0, record.serverUpdatedAt)
+                continue
             }
             let incomingUpdatedAt = Date(timeIntervalSince1970: record.updatedAt)
             let incomingDeletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))
@@ -953,14 +1037,37 @@ final class SyncCoordinator {
             return exercise.syncOwnerTokenIdentifier == nil
                 || exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier
         case .workoutSession:
-            return try findWorkoutSession(id: entry.entityID, context: context) != nil
+            guard let session = try findWorkoutSession(id: entry.entityID, context: context) else {
+                return false
+            }
+            return try canSyncWorkoutSession(session, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         case .loggedExercise:
-            return try findLoggedExercise(id: entry.entityID, context: context) != nil
+            guard let session = try findLoggedExercise(id: entry.entityID, context: context)?.session else {
+                return false
+            }
+            return try canSyncWorkoutSession(session, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         case .loggedSet:
-            return try findLoggedSet(id: entry.entityID, context: context) != nil
+            guard let session = try findLoggedSet(id: entry.entityID, context: context)?.loggedExercise?.session else {
+                return false
+            }
+            return try canSyncWorkoutSession(session, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         default:
             return false
         }
+    }
+
+    private func canSyncWorkoutSession(
+        _ session: WorkoutSession,
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws -> Bool {
+        if session.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+            return true
+        }
+        guard session.syncOwnerTokenIdentifier == nil else {
+            return false
+        }
+        return try canBootstrapOwnerlessWorkoutGraph(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
     }
 
     private func canClaimUnownedRecord(

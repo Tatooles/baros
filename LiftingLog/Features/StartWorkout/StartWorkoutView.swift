@@ -3,12 +3,16 @@ import SwiftUI
 
 struct StartWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     private var completedSessions: [WorkoutSession] {
-        WorkoutSession.visibleCompletedSessions(from: sessions)
+        WorkoutSession.visibleCompletedSessions(
+            from: sessions,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        )
     }
 
     var body: some View {
