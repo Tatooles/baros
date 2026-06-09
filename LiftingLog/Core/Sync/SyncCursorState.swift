@@ -8,9 +8,9 @@ final class SyncCursorState: Identifiable {
     var ownerTokenIdentifier: String
     var userSettingsCursor: Double
     var exercisesCursor: Double
-    var workoutSessionsCursor: Double
-    var loggedExercisesCursor: Double
-    var loggedSetsCursor: Double
+    var workoutSessionsCursor: Double = 0
+    var loggedExercisesCursor: Double = 0
+    var loggedSetsCursor: Double = 0
     var hasBootstrappedSettingsExercises: Bool = false
     var hasBootstrappedWorkoutGraph: Bool = false
 
