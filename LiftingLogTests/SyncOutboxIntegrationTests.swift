@@ -676,6 +676,73 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         }
     }
 
+    func testDeletingUnattemptedFinishedWorkoutRemovesCreateIntentInsteadOfTombstoning() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest"
+        )
+        context.insert(exercise)
+        try context.save()
+
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(loggedExercise.sets.first)
+        try engine.updateSet(set, weight: 185, reps: 5, rpe: 8, context: context)
+        try engine.finishWorkout(session, context: context, now: Date(timeIntervalSince1970: 200))
+
+        XCTAssertEqual(try fetchEntries(context).count, 3)
+
+        try WorkoutHistoryMutationService().deleteWorkoutHistory(
+            session,
+            context: context,
+            now: Date(timeIntervalSince1970: 250)
+        )
+
+        XCTAssertTrue(session.isDeleted)
+        XCTAssertTrue(try fetchEntries(context).isEmpty)
+    }
+
+    func testDeletingAttemptedFinishedWorkoutKeepsGraphDeleteIntent() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest"
+        )
+        context.insert(exercise)
+        try context.save()
+
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(loggedExercise.sets.first)
+        try engine.finishWorkout(session, context: context, now: Date(timeIntervalSince1970: 200))
+
+        let recorder = SyncOutboxRecorder()
+        for entry in try fetchEntries(context) {
+            recorder.markInFlight(entry, now: Date(timeIntervalSince1970: 225))
+        }
+
+        try WorkoutHistoryMutationService().deleteWorkoutHistory(
+            session,
+            context: context,
+            now: Date(timeIntervalSince1970: 250)
+        )
+
+        let entries = try fetchEntries(context)
+        XCTAssertEqual(entries.count, 3)
+        assertEntry(entries, kind: .workoutSession, id: session.id, operation: .delete)
+        assertEntry(entries, kind: .loggedExercise, id: loggedExercise.id, operation: .delete)
+        assertEntry(entries, kind: .loggedSet, id: set.id, operation: .delete)
+    }
+
     private func fetchEntries(_ context: ModelContext) throws -> [SyncOutboxEntry] {
         try context.fetch(FetchDescriptor<SyncOutboxEntry>())
             .sorted { lhs, rhs in

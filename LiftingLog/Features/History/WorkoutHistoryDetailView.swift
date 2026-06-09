@@ -4,6 +4,7 @@ import SwiftUI
 struct WorkoutHistoryDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(SyncScheduler.self) private var syncScheduler
     let session: WorkoutSession
     @State private var deleteErrorMessage: String?
 
@@ -73,7 +74,12 @@ struct WorkoutHistoryDetailView: View {
 
                 Button(role: .destructive) {
                     do {
-                        try WorkoutHistoryMutationService().deleteWorkoutHistory(session, context: modelContext)
+                        try WorkoutHistoryMutationService().deleteWorkoutHistory(
+                            session,
+                            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                            context: modelContext
+                        )
+                        syncScheduler.requestSync()
                         deleteErrorMessage = nil
                         dismiss()
                     } catch {

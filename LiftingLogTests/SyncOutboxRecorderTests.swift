@@ -132,6 +132,59 @@ final class SyncOutboxRecorderTests: XCTestCase {
         XCTAssertEqual(entry.lastAttemptAt, attemptedAt)
     }
 
+    func testUnattemptedWorkoutGraphCreatesDeletedBeforeSyncRemoveAllEntries() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let recorder = SyncOutboxRecorder()
+        let sessionID = UUID(uuidString: "00000000-0000-0000-0000-000000001019")!
+        let loggedExerciseID = UUID(uuidString: "00000000-0000-0000-0000-000000001020")!
+        let loggedSetID = UUID(uuidString: "00000000-0000-0000-0000-000000001021")!
+        let createdAt = Date(timeIntervalSince1970: 100)
+        let deletedAt = Date(timeIntervalSince1970: 200)
+
+        try recorder.recordCreate(entityKind: .workoutSession, entityID: sessionID, ownerTokenIdentifier: nil, context: context, now: createdAt)
+        try recorder.recordCreate(entityKind: .loggedExercise, entityID: loggedExerciseID, ownerTokenIdentifier: nil, context: context, now: createdAt)
+        try recorder.recordCreate(entityKind: .loggedSet, entityID: loggedSetID, ownerTokenIdentifier: nil, context: context, now: createdAt)
+
+        try recorder.recordDelete(entityKind: .workoutSession, entityID: sessionID, ownerTokenIdentifier: nil, context: context, now: deletedAt)
+        try recorder.recordDelete(entityKind: .loggedExercise, entityID: loggedExerciseID, ownerTokenIdentifier: nil, context: context, now: deletedAt)
+        try recorder.recordDelete(entityKind: .loggedSet, entityID: loggedSetID, ownerTokenIdentifier: nil, context: context, now: deletedAt)
+        try context.save()
+
+        XCTAssertTrue(try fetchEntries(context).isEmpty)
+    }
+
+    func testAttemptedWorkoutGraphCreatesDeletedBeforeAckBecomeDeletes() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let recorder = SyncOutboxRecorder()
+        let sessionID = UUID(uuidString: "00000000-0000-0000-0000-000000001022")!
+        let loggedExerciseID = UUID(uuidString: "00000000-0000-0000-0000-000000001023")!
+        let loggedSetID = UUID(uuidString: "00000000-0000-0000-0000-000000001024")!
+        let createdAt = Date(timeIntervalSince1970: 100)
+        let attemptedAt = Date(timeIntervalSince1970: 150)
+        let deletedAt = Date(timeIntervalSince1970: 200)
+
+        try recorder.recordCreate(entityKind: .workoutSession, entityID: sessionID, ownerTokenIdentifier: nil, context: context, now: createdAt)
+        try recorder.recordCreate(entityKind: .loggedExercise, entityID: loggedExerciseID, ownerTokenIdentifier: nil, context: context, now: createdAt)
+        try recorder.recordCreate(entityKind: .loggedSet, entityID: loggedSetID, ownerTokenIdentifier: nil, context: context, now: createdAt)
+        for entry in try fetchEntries(context) {
+            recorder.markInFlight(entry, now: attemptedAt)
+        }
+
+        try recorder.recordDelete(entityKind: .workoutSession, entityID: sessionID, ownerTokenIdentifier: nil, context: context, now: deletedAt)
+        try recorder.recordDelete(entityKind: .loggedExercise, entityID: loggedExerciseID, ownerTokenIdentifier: nil, context: context, now: deletedAt)
+        try recorder.recordDelete(entityKind: .loggedSet, entityID: loggedSetID, ownerTokenIdentifier: nil, context: context, now: deletedAt)
+        try context.save()
+
+        let entries = try fetchEntries(context)
+        XCTAssertEqual(entries.count, 3)
+        XCTAssertEqual(entries.map(\.operation), [.delete, .delete, .delete])
+        XCTAssertEqual(entries.map(\.status), [.pending, .pending, .pending])
+        XCTAssertEqual(entries.map(\.attemptCount), [1, 1, 1])
+        XCTAssertEqual(entries.map(\.lastAttemptAt), [attemptedAt, attemptedAt, attemptedAt])
+    }
+
     func testUpdateUpgradesToDelete() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
