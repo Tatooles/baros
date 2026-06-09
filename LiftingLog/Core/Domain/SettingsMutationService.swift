@@ -38,7 +38,7 @@ struct SettingsMutationService {
             if didConvertSet {
                 set.touch(now: now)
                 if set.loggedExercise?.session?.status != .active {
-                    try claimWorkoutGraphForExplicitSetIntent(
+                    try recordWorkoutGraphParentsForExplicitSetIntent(
                         set,
                         ownerTokenIdentifier: effectiveOwner,
                         context: context,
@@ -80,7 +80,7 @@ struct SettingsMutationService {
             || session.syncOwnerTokenIdentifier == ownerTokenIdentifier
     }
 
-    private func claimWorkoutGraphForExplicitSetIntent(
+    private func recordWorkoutGraphParentsForExplicitSetIntent(
         _ set: LoggedSet,
         ownerTokenIdentifier: String?,
         context: ModelContext,
@@ -88,19 +88,21 @@ struct SettingsMutationService {
     ) throws {
         guard let ownerTokenIdentifier,
               let loggedExercise = set.loggedExercise,
-              let session = loggedExercise.session,
-              session.syncOwnerTokenIdentifier == nil else {
+              let session = loggedExercise.session else {
             return
         }
 
-        session.syncOwnerTokenIdentifier = ownerTokenIdentifier
-        try recorder.recordUpdate(
-            entityKind: .workoutSession,
-            entityID: session.id,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context,
-            now: now
-        )
+        if session.syncOwnerTokenIdentifier == nil {
+            session.syncOwnerTokenIdentifier = ownerTokenIdentifier
+            try recorder.recordUpdate(
+                entityKind: .workoutSession,
+                entityID: session.id,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+        }
+        guard session.syncOwnerTokenIdentifier == ownerTokenIdentifier else { return }
         try recorder.recordUpdate(
             entityKind: .loggedExercise,
             entityID: loggedExercise.id,
