@@ -639,6 +639,71 @@ final class SettingsExerciseSyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
     }
 
+    func testIgnoredStaleSettingsPushRefetchesRemoteAfterAdoption() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let localSettingsID = UUID(uuidString: "00000000-0000-0000-0000-000000003215")!
+        let remoteSettingsID = UUID(uuidString: "00000000-0000-0000-0000-000000003216")!
+
+        let settings = UserSettings(
+            id: localSettingsID,
+            weightUnit: .pounds,
+            defaultRestTimerSeconds: 90,
+            updatedAt: Date(timeIntervalSince1970: 10)
+        )
+        context.insert(settings)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .userSettings,
+            entityID: settings.id,
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 10)
+        )
+        try context.save()
+
+        let remoteRecord = UserSettingsSyncRecord(
+            clientId: remoteSettingsID.uuidString.lowercased(),
+            createdAt: 5,
+            updatedAt: 20,
+            deletedAt: nil,
+            serverUpdatedAt: 30,
+            weightUnitRaw: "kilograms",
+            defaultRestTimerSeconds: 120,
+            hasCompletedOnboarding: true
+        )
+        let client = FakeSettingsExerciseSyncClient()
+        client.userSettingsMutationResults = [
+            SyncMutationResult(status: "ignored_stale", serverUpdatedAt: 30)
+        ]
+        client.fetchResponses = [
+            SyncFetchChangesResponse(
+                userSettings: [remoteRecord],
+                exercises: [],
+                cursors: SyncChangeCursors(userSettings: 30, exercises: 0),
+                hasMore: SyncHasMore(userSettings: false, exercises: false)
+            ),
+            SyncFetchChangesResponse(
+                userSettings: [remoteRecord],
+                exercises: [],
+                cursors: SyncChangeCursors(userSettings: 30, exercises: 0),
+                hasMore: SyncHasMore(userSettings: false, exercises: false)
+            )
+        ]
+
+        try await SettingsExerciseSyncCoordinator(client: client).run(ownerTokenIdentifier: "issuer|owner_a", context: context)
+
+        let syncedSettings = try XCTUnwrap(context.fetch(FetchDescriptor<UserSettings>()).first)
+        XCTAssertEqual(syncedSettings.id, remoteSettingsID)
+        XCTAssertEqual(syncedSettings.weightUnitRaw, "kilograms")
+        XCTAssertEqual(syncedSettings.defaultRestTimerSeconds, 120)
+        XCTAssertEqual(syncedSettings.updatedAt, Date(timeIntervalSince1970: 20))
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+        XCTAssertEqual(client.upsertedSettings.map(\.clientId), [remoteSettingsID.uuidString.lowercased()])
+        XCTAssertEqual(client.fetchRequests.count, 2)
+        XCTAssertEqual(client.fetchRequests.first?.cursors.userSettings, 0)
+        XCTAssertLessThan(try XCTUnwrap(client.fetchRequests.last?.cursors.userSettings), 30)
+    }
+
     func testFirstRunDoesNotBootstrapRowsOwnedByDifferentOwner() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -1210,6 +1275,9 @@ final class FakeSettingsExerciseSyncClient: SettingsExerciseSyncClient, @uncheck
     var upsertedExercises: [ExerciseSyncPayload] = []
     var tombstones: [(SyncEntityKind, UUID, Date)] = []
     var fetchRequests: [(cursors: SyncChangeCursors, limit: Int)] = []
+    var userSettingsMutationResults: [SyncMutationResult] = []
+    var exerciseMutationResults: [SyncMutationResult] = []
+    var tombstoneResults: [SyncMutationResult] = []
     var fetchResponses: [SyncFetchChangesResponse] = []
     var fetchResponse = SyncFetchChangesResponse(
         userSettings: [],
@@ -1224,18 +1292,27 @@ final class FakeSettingsExerciseSyncClient: SettingsExerciseSyncClient, @uncheck
     func upsertUserSettings(_ record: UserSettingsSyncPayload) async throws -> SyncMutationResult {
         if let error { throw error }
         upsertedSettings.append(record)
+        if !userSettingsMutationResults.isEmpty {
+            return userSettingsMutationResults.removeFirst()
+        }
         return SyncMutationResult(status: "updated", serverUpdatedAt: 1)
     }
 
     func upsertExercise(_ record: ExerciseSyncPayload) async throws -> SyncMutationResult {
         if let error { throw error }
         upsertedExercises.append(record)
+        if !exerciseMutationResults.isEmpty {
+            return exerciseMutationResults.removeFirst()
+        }
         return SyncMutationResult(status: "updated", serverUpdatedAt: 1)
     }
 
     func tombstone(entityKind: SyncEntityKind, clientId: UUID, deletedAt: Date) async throws -> SyncMutationResult {
         if let error { throw error }
         tombstones.append((entityKind, clientId, deletedAt))
+        if !tombstoneResults.isEmpty {
+            return tombstoneResults.removeFirst()
+        }
         return SyncMutationResult(status: "tombstoned", serverUpdatedAt: 1)
     }
 

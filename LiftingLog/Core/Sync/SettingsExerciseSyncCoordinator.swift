@@ -216,10 +216,16 @@ final class SettingsExerciseSyncCoordinator {
             try Task.checkCancellation()
 
             do {
-                try await push(
+                let result = try await push(
                     entry: entry,
                     ownerTokenIdentifier: ownerTokenIdentifier,
                     fallbackTimestamp: logicalUpdatedAt,
+                    context: context
+                )
+                try rewindCursorForIgnoredStaleResult(
+                    result,
+                    entry: entry,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
                     context: context
                 )
                 recorder.removeCompleted(entry, context: context)
@@ -245,44 +251,65 @@ final class SettingsExerciseSyncCoordinator {
         ownerTokenIdentifier: String,
         fallbackTimestamp: Date,
         context: ModelContext
-    ) async throws {
-        guard let entityKind = entry.entityKind, let operation = entry.operation else { return }
+    ) async throws -> SyncMutationResult? {
+        guard let entityKind = entry.entityKind, let operation = entry.operation else { return nil }
 
         switch (entityKind, operation) {
         case (.userSettings, .create), (.userSettings, .update):
             guard let settings = try findUserSettings(id: entry.entityID, context: context) else {
-                _ = try await client.tombstone(entityKind: .userSettings, clientId: entry.entityID, deletedAt: fallbackTimestamp)
-                return
+                return try await client.tombstone(entityKind: .userSettings, clientId: entry.entityID, deletedAt: fallbackTimestamp)
             }
             guard settings.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
                 throw SettingsExerciseSyncCoordinatorError.ownerMismatch(entityKind: .userSettings, entityID: entry.entityID)
             }
-            _ = try await client.upsertUserSettings(SyncPayloadMapper.userSettingsPayload(from: settings))
+            return try await client.upsertUserSettings(SyncPayloadMapper.userSettingsPayload(from: settings))
         case (.exercise, .create), (.exercise, .update):
             guard let exercise = try findExercise(id: entry.entityID, context: context) else {
-                _ = try await client.tombstone(entityKind: .exercise, clientId: entry.entityID, deletedAt: fallbackTimestamp)
-                return
+                return try await client.tombstone(entityKind: .exercise, clientId: entry.entityID, deletedAt: fallbackTimestamp)
             }
             guard exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
                 throw SettingsExerciseSyncCoordinatorError.ownerMismatch(entityKind: .exercise, entityID: entry.entityID)
             }
-            _ = try await client.upsertExercise(SyncPayloadMapper.exercisePayload(from: exercise))
+            return try await client.upsertExercise(SyncPayloadMapper.exercisePayload(from: exercise))
         case (.userSettings, .delete):
             let settings = try findUserSettings(id: entry.entityID, context: context)
             if let settings, settings.syncOwnerTokenIdentifier != ownerTokenIdentifier {
                 throw SettingsExerciseSyncCoordinatorError.ownerMismatch(entityKind: .userSettings, entityID: entry.entityID)
             }
             let deletedAt = settings?.deletedAt ?? fallbackTimestamp
-            _ = try await client.tombstone(entityKind: .userSettings, clientId: entry.entityID, deletedAt: deletedAt)
+            return try await client.tombstone(entityKind: .userSettings, clientId: entry.entityID, deletedAt: deletedAt)
         case (.exercise, .delete):
             let exercise = try findExercise(id: entry.entityID, context: context)
             if let exercise, exercise.syncOwnerTokenIdentifier != ownerTokenIdentifier {
                 throw SettingsExerciseSyncCoordinatorError.ownerMismatch(entityKind: .exercise, entityID: entry.entityID)
             }
             let deletedAt = exercise?.deletedAt ?? fallbackTimestamp
-            _ = try await client.tombstone(entityKind: .exercise, clientId: entry.entityID, deletedAt: deletedAt)
+            return try await client.tombstone(entityKind: .exercise, clientId: entry.entityID, deletedAt: deletedAt)
         default:
+            return nil
+        }
+    }
+
+    private func rewindCursorForIgnoredStaleResult(
+        _ result: SyncMutationResult?,
+        entry: SyncOutboxEntry,
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws {
+        guard result?.status == "ignored_stale",
+              let serverUpdatedAt = result?.serverUpdatedAt else {
             return
+        }
+
+        let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
+        let refetchCursor = max(0, serverUpdatedAt - 1)
+        switch entry.entityKind {
+        case .some(.userSettings):
+            state.userSettingsCursor = min(state.userSettingsCursor, refetchCursor)
+        case .some(.exercise):
+            state.exercisesCursor = min(state.exercisesCursor, refetchCursor)
+        default:
+            break
         }
     }
 
