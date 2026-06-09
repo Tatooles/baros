@@ -418,6 +418,51 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertNotNil(try context.fetch(FetchDescriptor<WorkoutSession>()).first { $0.id == remoteSessionID })
     }
 
+    func testFirstWorkoutGraphRunDoesNotBulkUploadOwnerlessLocalWorkoutForDifferentLocalOwner() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let previousOwner = "issuer|owner_a"
+        let currentOwner = "issuer|owner_b"
+        let localSession = WorkoutSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000007201")!,
+            title: "Previous Owner Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            endedAt: Date(timeIntervalSince1970: 200),
+            durationSeconds: 100,
+            status: .completed,
+            source: .blank
+        )
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: previousOwner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        context.insert(UserSettings(syncOwnerTokenIdentifier: previousOwner))
+        context.insert(localSession)
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.fetchResponses = [
+            SyncFetchChangesResponse(
+                userSettings: [],
+                exercises: [],
+                workoutSessions: [],
+                loggedExercises: [],
+                loggedSets: [],
+                cursors: SyncChangeCursors(userSettings: 0, exercises: 0),
+                hasMore: SyncHasMore(userSettings: false, exercises: false)
+            ),
+        ]
+
+        try await SyncCoordinator(client: client).run(ownerTokenIdentifier: currentOwner, context: context)
+
+        XCTAssertTrue(client.upsertedWorkoutSessions.isEmpty)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).count, 0)
+        let currentOwnerState = try XCTUnwrap(context.fetch(FetchDescriptor<SyncCursorState>())
+            .first { $0.ownerTokenIdentifier == currentOwner })
+        XCTAssertTrue(currentOwnerState.hasBootstrappedWorkoutGraph)
+    }
+
     func testRunSkipsActiveWorkoutSessionOutboxEntry() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
