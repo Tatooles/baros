@@ -92,6 +92,51 @@ function loggedExerciseRecord(
   };
 }
 
+function workoutSessionRecord(
+  overrides: Partial<WorkoutSessionRecord> = {},
+): WorkoutSessionRecord {
+  return {
+    clientId: "session-1",
+    title: "Push Day",
+    startedAt: 1,
+    endedAt: 2,
+    durationSeconds: 60,
+    notes: "",
+    referenceNotes: null,
+    statusRaw: "completed",
+    sourceRaw: "blank",
+    sourceSessionID: null,
+    healthLinkID: null,
+    createdAt: 1,
+    updatedAt: 2,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+function loggedSetRecord(overrides: Partial<LoggedSetRecord> = {}): LoggedSetRecord {
+  return {
+    clientId: "logged-set-1",
+    loggedExerciseClientId: "logged-exercise-1",
+    orderIndex: 0,
+    weight: 135,
+    reps: 10,
+    rpe: 8,
+    placeholderWeight: null,
+    placeholderReps: null,
+    placeholderRPE: null,
+    kindRaw: "working",
+    isCompleted: true,
+    completedAt: 2,
+    notes: "",
+    healthLinkID: null,
+    createdAt: 1,
+    updatedAt: 2,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
 type ExerciseRecord = {
   clientId: string;
   seedIdentifier: string | null;
@@ -118,6 +163,23 @@ type UserSettingsRecord = {
   deletedAt: number | null;
 };
 
+type WorkoutSessionRecord = {
+  clientId: string;
+  title: string;
+  startedAt: number;
+  endedAt: number | null;
+  durationSeconds: number;
+  notes: string;
+  referenceNotes: string | null;
+  statusRaw: "completed" | "discarded";
+  sourceRaw: "blank" | "pastWorkout" | "template";
+  sourceSessionID: string | null;
+  healthLinkID: string | null;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+};
+
 type LoggedExerciseRecord = {
   clientId: string;
   sessionClientId: string;
@@ -129,6 +191,26 @@ type LoggedExerciseRecord = {
   hasSnapshotMetadata: boolean;
   notes: string;
   referenceNotes: string | null;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+};
+
+type LoggedSetRecord = {
+  clientId: string;
+  loggedExerciseClientId: string;
+  orderIndex: number;
+  weight: number | null;
+  reps: number | null;
+  rpe: number | null;
+  placeholderWeight: number | null;
+  placeholderReps: number | null;
+  placeholderRPE: number | null;
+  kindRaw: "working" | "warmup" | "drop" | "failure";
+  isCompleted: boolean;
+  completedAt: number | null;
+  notes: string;
+  healthLinkID: string | null;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
@@ -481,6 +563,59 @@ describe("sync conflict behavior", () => {
     expect(changes.exercises[0].updatedAt).toBe(3);
   });
 
+  test("workout graph tombstones stay in fetchChanges", async () => {
+    const t = testDb().withIdentity(userA);
+
+    await t.mutation(api.sync.upsertWorkoutSession, {
+      record: workoutSessionRecord(),
+    });
+    await t.mutation(api.sync.upsertLoggedExercise, {
+      record: loggedExerciseRecord(),
+    });
+    await t.mutation(api.sync.upsertLoggedSet, {
+      record: loggedSetRecord(),
+    });
+
+    await t.mutation(api.sync.tombstone, {
+      entityKind: "workoutSessions",
+      clientId: "session-1",
+      deletedAt: 3,
+    });
+    await t.mutation(api.sync.tombstone, {
+      entityKind: "loggedExercises",
+      clientId: "logged-exercise-1",
+      deletedAt: 4,
+    });
+    await t.mutation(api.sync.tombstone, {
+      entityKind: "loggedSets",
+      clientId: "logged-set-1",
+      deletedAt: 5,
+    });
+
+    const changes = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(changes.workoutSessions).toHaveLength(1);
+    expect(changes.loggedExercises).toHaveLength(1);
+    expect(changes.loggedSets).toHaveLength(1);
+    expect(changes.workoutSessions[0]).toMatchObject({
+      clientId: "session-1",
+      deletedAt: 3,
+      updatedAt: 3,
+    });
+    expect(changes.loggedExercises[0]).toMatchObject({
+      clientId: "logged-exercise-1",
+      deletedAt: 4,
+      updatedAt: 4,
+    });
+    expect(changes.loggedSets[0]).toMatchObject({
+      clientId: "logged-set-1",
+      deletedAt: 5,
+      updatedAt: 5,
+    });
+  });
+
   test("stale and equal-timestamp upserts are ignored idempotently", async () => {
     const t = testDb().withIdentity(userA);
 
@@ -548,6 +683,87 @@ describe("sync conflict behavior", () => {
 });
 
 describe("sync change cursors", () => {
+  test("full workout graph round-trips through fetchChanges", async () => {
+    const t = testDb().withIdentity(userA);
+
+    await t.mutation(api.sync.upsertExercise, {
+      record: exerciseRecord(),
+    });
+    await t.mutation(api.sync.upsertWorkoutSession, {
+      record: workoutSessionRecord({
+        title: "Upper Strength",
+        notes: "Felt strong",
+        referenceNotes: "Repeat next week",
+        updatedAt: 3,
+      }),
+    });
+    await t.mutation(api.sync.upsertLoggedExercise, {
+      record: loggedExerciseRecord({
+        notes: "Smooth",
+        referenceNotes: "Add five pounds",
+        updatedAt: 4,
+      }),
+    });
+    await t.mutation(api.sync.upsertLoggedSet, {
+      record: loggedSetRecord({
+        weight: 185,
+        reps: 5,
+        rpe: 8.5,
+        placeholderWeight: 180,
+        placeholderReps: 5,
+        placeholderRPE: 8,
+        completedAt: 2,
+        notes: "Clean reps",
+        updatedAt: 5,
+      }),
+    });
+
+    const changes = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(changes.exercises).toHaveLength(1);
+    expect(changes.workoutSessions).toHaveLength(1);
+    expect(changes.loggedExercises).toHaveLength(1);
+    expect(changes.loggedSets).toHaveLength(1);
+    expect(changes.exercises[0]).toMatchObject(exerciseRecord());
+    expect(changes.workoutSessions[0]).toMatchObject({
+      clientId: "session-1",
+      title: "Upper Strength",
+      statusRaw: "completed",
+      sourceRaw: "blank",
+      notes: "Felt strong",
+      referenceNotes: "Repeat next week",
+    });
+    expect(changes.loggedExercises[0]).toMatchObject({
+      clientId: "logged-exercise-1",
+      sessionClientId: "session-1",
+      exerciseClientId: "exercise-1",
+      orderIndex: 0,
+      exerciseSnapshotName: "Bench Press",
+      exerciseSnapshotEquipmentRaw: "barbell",
+      exerciseSnapshotPrimaryMuscleGroupRaw: "chest",
+      hasSnapshotMetadata: true,
+      notes: "Smooth",
+      referenceNotes: "Add five pounds",
+    });
+    expect(changes.loggedSets[0]).toMatchObject({
+      clientId: "logged-set-1",
+      loggedExerciseClientId: "logged-exercise-1",
+      orderIndex: 0,
+      weight: 185,
+      reps: 5,
+      rpe: 8.5,
+      placeholderWeight: 180,
+      placeholderReps: 5,
+      placeholderRPE: 8,
+      kindRaw: "working",
+      isCompleted: true,
+      completedAt: 2,
+      notes: "Clean reps",
+    });
+  });
+
   test("settings exercise changes do not return workout history pages", async () => {
     const t = testDb().withIdentity(userA);
 
@@ -558,22 +774,7 @@ describe("sync change cursors", () => {
       record: exerciseRecord({ updatedAt: 3 }),
     });
     await t.mutation(api.sync.upsertWorkoutSession, {
-      record: {
-        clientId: "session-1",
-        title: "Push Day",
-        startedAt: 1,
-        endedAt: 2,
-        durationSeconds: 60,
-        notes: "",
-        referenceNotes: null,
-        statusRaw: "completed",
-        sourceRaw: "blank",
-        sourceSessionID: null,
-        healthLinkID: null,
-        createdAt: 1,
-        updatedAt: 4,
-        deletedAt: null,
-      },
+      record: workoutSessionRecord({ updatedAt: 4 }),
     });
     await t.mutation(api.sync.upsertLoggedExercise, {
       record: loggedExerciseRecord({ updatedAt: 5 }),
@@ -635,5 +836,79 @@ describe("sync change cursors", () => {
       "exercise-2",
     ]);
     expect(secondPage.userSettings).toHaveLength(0);
+  });
+
+  test("workout graph cursors page independently", async () => {
+    const t = testDb().withIdentity(userA);
+
+    await t.mutation(api.sync.upsertWorkoutSession, {
+      record: workoutSessionRecord({ clientId: "session-1", updatedAt: 2 }),
+    });
+    await t.mutation(api.sync.upsertWorkoutSession, {
+      record: workoutSessionRecord({ clientId: "session-2", updatedAt: 3 }),
+    });
+    await t.mutation(api.sync.upsertLoggedExercise, {
+      record: loggedExerciseRecord({
+        clientId: "logged-exercise-1",
+        sessionClientId: "session-1",
+        updatedAt: 4,
+      }),
+    });
+    await t.mutation(api.sync.upsertLoggedExercise, {
+      record: loggedExerciseRecord({
+        clientId: "logged-exercise-2",
+        sessionClientId: "session-2",
+        updatedAt: 5,
+      }),
+    });
+    await t.mutation(api.sync.upsertLoggedSet, {
+      record: loggedSetRecord({
+        clientId: "logged-set-1",
+        loggedExerciseClientId: "logged-exercise-1",
+        updatedAt: 6,
+      }),
+    });
+    await t.mutation(api.sync.upsertLoggedSet, {
+      record: loggedSetRecord({
+        clientId: "logged-set-2",
+        loggedExerciseClientId: "logged-exercise-2",
+        updatedAt: 7,
+      }),
+    });
+
+    const firstPage = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+      limit: 1,
+    });
+    const secondPage = await t.query(api.sync.fetchChanges, {
+      cursors: firstPage.cursors,
+      limit: 1,
+    });
+
+    expect(firstPage.workoutSessions.map((record) => record.clientId)).toEqual([
+      "session-1",
+    ]);
+    expect(firstPage.loggedExercises.map((record) => record.clientId)).toEqual([
+      "logged-exercise-1",
+    ]);
+    expect(firstPage.loggedSets.map((record) => record.clientId)).toEqual([
+      "logged-set-1",
+    ]);
+    expect(firstPage.hasMore.workoutSessions).toBe(true);
+    expect(firstPage.hasMore.loggedExercises).toBe(true);
+    expect(firstPage.hasMore.loggedSets).toBe(true);
+
+    expect(secondPage.workoutSessions.map((record) => record.clientId)).toEqual([
+      "session-2",
+    ]);
+    expect(secondPage.loggedExercises.map((record) => record.clientId)).toEqual([
+      "logged-exercise-2",
+    ]);
+    expect(secondPage.loggedSets.map((record) => record.clientId)).toEqual([
+      "logged-set-2",
+    ]);
+    expect(secondPage.hasMore.workoutSessions).toBe(false);
+    expect(secondPage.hasMore.loggedExercises).toBe(false);
+    expect(secondPage.hasMore.loggedSets).toBe(false);
   });
 });
