@@ -302,13 +302,15 @@ final class SyncCoordinator {
             guard let loggedExercise = try findLoggedExercise(id: entry.entityID, context: context) else {
                 return try await client.tombstone(entityKind: .loggedExercise, clientId: entry.entityID, deletedAt: fallbackTimestamp)
             }
-            guard loggedExercise.session?.status != .active else { return nil }
+            guard let session = loggedExercise.session, session.status != .active else { return nil }
             return try await client.upsertLoggedExercise(SyncPayloadMapper.loggedExercisePayload(from: loggedExercise))
         case (.loggedSet, .create), (.loggedSet, .update):
             guard let set = try findLoggedSet(id: entry.entityID, context: context) else {
                 return try await client.tombstone(entityKind: .loggedSet, clientId: entry.entityID, deletedAt: fallbackTimestamp)
             }
-            guard set.loggedExercise?.session?.status != .active else { return nil }
+            guard let loggedExercise = set.loggedExercise,
+                  let session = loggedExercise.session,
+                  session.status != .active else { return nil }
             return try await client.upsertLoggedSet(SyncPayloadMapper.loggedSetPayload(from: set))
         case (.userSettings, .delete):
             let settings = try findUserSettings(id: entry.entityID, context: context)

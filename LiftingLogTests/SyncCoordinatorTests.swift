@@ -288,6 +288,77 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(client.tombstones.isEmpty)
     }
 
+    func testRunSkipsLoggedExerciseWithoutSessionParent() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        let exercise = Exercise(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000005201")!,
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        let loggedExercise = LoggedExercise(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000005202")!,
+            orderIndex: 0,
+            exercise: exercise
+        )
+        context.insert(exercise)
+        context.insert(loggedExercise)
+        try SyncOutboxRecorder().recordCreate(
+            entityKind: .loggedExercise,
+            entityID: loggedExercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 200)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertTrue(client.upsertedLoggedExercises.isEmpty)
+        XCTAssertFalse(client.operationLog.contains { $0.hasPrefix("upsertLoggedExercise:") })
+    }
+
+    func testRunSkipsLoggedSetWithoutWorkoutSessionParent() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        let loggedExercise = LoggedExercise(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000005301")!,
+            orderIndex: 0
+        )
+        let set = LoggedSet(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000005302")!,
+            orderIndex: 0,
+            weight: 185,
+            reps: 5,
+            kind: .working,
+            isCompleted: true
+        )
+        set.loggedExercise = loggedExercise
+        loggedExercise.sets.append(set)
+        context.insert(loggedExercise)
+        context.insert(set)
+        try SyncOutboxRecorder().recordCreate(
+            entityKind: .loggedSet,
+            entityID: set.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 200)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertTrue(client.upsertedLoggedSets.isEmpty)
+        XCTAssertFalse(client.operationLog.contains { $0.hasPrefix("upsertLoggedSet:") })
+    }
+
     func testFirstRunBootstrapsExistingSettingsAndExercisesOnce() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
