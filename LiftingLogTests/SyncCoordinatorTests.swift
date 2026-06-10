@@ -419,6 +419,147 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertNotNil(try context.fetch(FetchDescriptor<WorkoutSession>()).first { $0.id == remoteSessionID })
     }
 
+    func testFirstWorkoutGraphRunDoesNotClaimOwnerlessWorkoutOutboxWhenRemoteGraphExists() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        let localSession = WorkoutSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000007111")!,
+            title: "Signed Out Local",
+            startedAt: Date(timeIntervalSince1970: 100),
+            endedAt: Date(timeIntervalSince1970: 200),
+            durationSeconds: 100,
+            status: .completed,
+            source: .blank
+        )
+        let loggedExercise = LoggedExercise(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000007112")!,
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press"
+        )
+        let set = LoggedSet(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000007113")!,
+            orderIndex: 0,
+            weight: 185,
+            reps: 5,
+            isCompleted: true
+        )
+        loggedExercise.session = localSession
+        set.loggedExercise = loggedExercise
+        localSession.loggedExercises.append(loggedExercise)
+        loggedExercise.sets.append(set)
+        context.insert(localSession)
+        context.insert(loggedExercise)
+        context.insert(set)
+        let recorder = SyncOutboxRecorder()
+        try recorder.recordCreate(entityKind: .workoutSession, entityID: localSession.id, ownerTokenIdentifier: nil, context: context, now: Date(timeIntervalSince1970: 201))
+        try recorder.recordCreate(entityKind: .loggedExercise, entityID: loggedExercise.id, ownerTokenIdentifier: nil, context: context, now: Date(timeIntervalSince1970: 202))
+        try recorder.recordCreate(entityKind: .loggedSet, entityID: set.id, ownerTokenIdentifier: nil, context: context, now: Date(timeIntervalSince1970: 203))
+        try context.save()
+
+        let remoteSessionID = UUID(uuidString: "00000000-0000-0000-0000-000000007114")!
+        let client = FakeSyncClient()
+        client.fetchResponses = [
+            SyncFetchChangesResponse(
+                userSettings: [],
+                exercises: [],
+                workoutSessions: [
+                    WorkoutSessionSyncRecord(
+                        clientId: remoteSessionID.uuidString.lowercased(),
+                        createdAt: 10,
+                        updatedAt: 20,
+                        deletedAt: nil,
+                        serverUpdatedAt: 30,
+                        title: "Remote Push",
+                        startedAt: 100,
+                        endedAt: 200,
+                        durationSeconds: 100,
+                        notes: "",
+                        referenceNotes: nil,
+                        statusRaw: "completed",
+                        sourceRaw: "blank",
+                        sourceSessionID: nil,
+                        healthLinkID: nil
+                    ),
+                ],
+                loggedExercises: [],
+                loggedSets: [],
+                cursors: SyncChangeCursors(userSettings: 0, exercises: 0, workoutSessions: 30),
+                hasMore: SyncHasMore(userSettings: false, exercises: false)
+            ),
+        ]
+
+        try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertTrue(client.operationLog.isEmpty)
+        XCTAssertNil(localSession.syncOwnerTokenIdentifier)
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertEqual(entries.count, 3)
+        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == nil })
+    }
+
+    func testFirstWorkoutGraphRunClaimsOwnerlessWorkoutOutboxWhenRemoteGraphIsEmpty() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        let session = WorkoutSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000007121")!,
+            title: "Signed Out Local",
+            startedAt: Date(timeIntervalSince1970: 100),
+            endedAt: Date(timeIntervalSince1970: 200),
+            durationSeconds: 100,
+            status: .completed,
+            source: .blank
+        )
+        let loggedExercise = LoggedExercise(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000007122")!,
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press"
+        )
+        let set = LoggedSet(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000007123")!,
+            orderIndex: 0,
+            weight: 185,
+            reps: 5,
+            isCompleted: true
+        )
+        loggedExercise.session = session
+        set.loggedExercise = loggedExercise
+        session.loggedExercises.append(loggedExercise)
+        loggedExercise.sets.append(set)
+        context.insert(session)
+        context.insert(loggedExercise)
+        context.insert(set)
+        let recorder = SyncOutboxRecorder()
+        try recorder.recordCreate(entityKind: .workoutSession, entityID: session.id, ownerTokenIdentifier: nil, context: context, now: Date(timeIntervalSince1970: 201))
+        try recorder.recordCreate(entityKind: .loggedExercise, entityID: loggedExercise.id, ownerTokenIdentifier: nil, context: context, now: Date(timeIntervalSince1970: 202))
+        try recorder.recordCreate(entityKind: .loggedSet, entityID: set.id, ownerTokenIdentifier: nil, context: context, now: Date(timeIntervalSince1970: 203))
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.fetchResponses = [
+            SyncFetchChangesResponse(
+                userSettings: [],
+                exercises: [],
+                workoutSessions: [],
+                loggedExercises: [],
+                loggedSets: [],
+                cursors: SyncChangeCursors(userSettings: 0, exercises: 0),
+                hasMore: SyncHasMore(userSettings: false, exercises: false)
+            ),
+        ]
+
+        try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertEqual(client.operationLog, [
+            "upsertWorkoutSession:\(session.id.uuidString.lowercased())",
+            "upsertLoggedExercise:\(loggedExercise.id.uuidString.lowercased())",
+            "upsertLoggedSet:\(set.id.uuidString.lowercased())",
+        ])
+        XCTAssertEqual(session.syncOwnerTokenIdentifier, owner)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
     func testFirstWorkoutGraphRunDoesNotBulkUploadOwnerlessLocalWorkoutForDifferentLocalOwner() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

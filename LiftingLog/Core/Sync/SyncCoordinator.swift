@@ -221,34 +221,58 @@ final class SyncCoordinator {
         for session in try context.fetch(FetchDescriptor<WorkoutSession>())
             where session.status == .completed && !session.isDeleted {
             session.syncOwnerTokenIdentifier = ownerTokenIdentifier
-            try recordBootstrapEntry(
+            if !(try claimOwnerlessOutboxEntryIfNeeded(
                 entityKind: .workoutSession,
                 entityID: session.id,
-                isDeleted: false,
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context,
                 now: now
-            )
-
-            for loggedExercise in session.sortedLoggedExercises where !loggedExercise.isDeleted {
+            )) {
                 try recordBootstrapEntry(
-                    entityKind: .loggedExercise,
-                    entityID: loggedExercise.id,
+                    entityKind: .workoutSession,
+                    entityID: session.id,
                     isDeleted: false,
                     ownerTokenIdentifier: ownerTokenIdentifier,
                     context: context,
                     now: now
                 )
+            }
 
-                for set in loggedExercise.sortedSets where !set.isDeleted {
+            for loggedExercise in session.sortedLoggedExercises where !loggedExercise.isDeleted {
+                if !(try claimOwnerlessOutboxEntryIfNeeded(
+                    entityKind: .loggedExercise,
+                    entityID: loggedExercise.id,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context,
+                    now: now
+                )) {
                     try recordBootstrapEntry(
-                        entityKind: .loggedSet,
-                        entityID: set.id,
+                        entityKind: .loggedExercise,
+                        entityID: loggedExercise.id,
                         isDeleted: false,
                         ownerTokenIdentifier: ownerTokenIdentifier,
                         context: context,
                         now: now
                     )
+                }
+
+                for set in loggedExercise.sortedSets where !set.isDeleted {
+                    if !(try claimOwnerlessOutboxEntryIfNeeded(
+                        entityKind: .loggedSet,
+                        entityID: set.id,
+                        ownerTokenIdentifier: ownerTokenIdentifier,
+                        context: context,
+                        now: now
+                    )) {
+                        try recordBootstrapEntry(
+                            entityKind: .loggedSet,
+                            entityID: set.id,
+                            isDeleted: false,
+                            ownerTokenIdentifier: ownerTokenIdentifier,
+                            context: context,
+                            now: now
+                        )
+                    }
                 }
             }
         }
@@ -347,6 +371,34 @@ final class SyncCoordinator {
         default:
             break
         }
+    }
+
+    private func claimOwnerlessOutboxEntryIfNeeded(
+        entityKind: SyncEntityKind,
+        entityID: UUID,
+        ownerTokenIdentifier: String,
+        context: ModelContext,
+        now: Date
+    ) throws -> Bool {
+        guard let entry = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+            .first(where: {
+                $0.entityKind == entityKind
+                    && $0.entityID == entityID
+                    && $0.ownerTokenIdentifier == nil
+                    && $0.isActive
+                    && $0.operation != nil
+            }) else {
+            return false
+        }
+
+        entry.ownerTokenIdentifier = ownerTokenIdentifier
+        entry.refreshPending(now: now)
+        try claimWorkoutGraphOwnerIfNeeded(
+            entry: entry,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        )
+        return true
     }
 
     private func pushPendingEntries(ownerTokenIdentifier: String, context: ModelContext) async throws -> SyncPushResult {
@@ -1127,14 +1179,23 @@ final class SyncCoordinator {
             guard let session = try findWorkoutSession(id: entry.entityID, context: context) else {
                 return false
             }
+            guard session.syncOwnerTokenIdentifier != nil else {
+                return false
+            }
             return try canSyncWorkoutSession(session, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         case .loggedExercise:
             guard let session = try findLoggedExercise(id: entry.entityID, context: context)?.session else {
                 return false
             }
+            guard session.syncOwnerTokenIdentifier != nil else {
+                return false
+            }
             return try canSyncWorkoutSession(session, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         case .loggedSet:
             guard let session = try findLoggedSet(id: entry.entityID, context: context)?.loggedExercise?.session else {
+                return false
+            }
+            guard session.syncOwnerTokenIdentifier != nil else {
                 return false
             }
             return try canSyncWorkoutSession(session, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
