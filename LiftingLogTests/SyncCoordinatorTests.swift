@@ -461,7 +461,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).count, 0)
         let currentOwnerState = try XCTUnwrap(context.fetch(FetchDescriptor<SyncCursorState>())
             .first { $0.ownerTokenIdentifier == currentOwner })
-        XCTAssertTrue(currentOwnerState.hasBootstrappedWorkoutGraph)
+        XCTAssertFalse(currentOwnerState.hasBootstrappedWorkoutGraph)
     }
 
     func testRunSkipsActiveWorkoutSessionOutboxEntry() async throws {
@@ -1749,6 +1749,74 @@ final class SyncCoordinatorTests: XCTestCase {
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
         XCTAssertEqual(entry.status, .failed)
         XCTAssertEqual(entry.lastErrorMessage, "Cannot sync exercise \(exercise.id.uuidString) because the local record belongs to a different owner.")
+    }
+
+    func testRunContinuesAfterOwnerMismatchWhenLaterEntriesAreValid() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        let otherOwner = "issuer|owner_b"
+        let state = try SyncCursorState.state(for: owner, context: context)
+        state.hasBootstrappedSettingsExercises = true
+        state.hasBootstrappedWorkoutGraph = true
+
+        let otherSession = WorkoutSession(
+            title: "Other Owner",
+            startedAt: Date(timeIntervalSince1970: 100),
+            endedAt: Date(timeIntervalSince1970: 200),
+            durationSeconds: 100,
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: otherOwner
+        )
+        let otherLoggedExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
+        let otherSet = LoggedSet(orderIndex: 0, weight: 100, reps: 5, isCompleted: true)
+        otherLoggedExercise.session = otherSession
+        otherSet.loggedExercise = otherLoggedExercise
+        otherSession.loggedExercises.append(otherLoggedExercise)
+        otherLoggedExercise.sets.append(otherSet)
+
+        let ownedSession = WorkoutSession(
+            title: "Owned Session",
+            startedAt: Date(timeIntervalSince1970: 300),
+            endedAt: Date(timeIntervalSince1970: 400),
+            durationSeconds: 100,
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: owner
+        )
+        let ownedLoggedExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Squat")
+        let ownedSet = LoggedSet(orderIndex: 0, weight: 200, reps: 5, isCompleted: true)
+        ownedLoggedExercise.session = ownedSession
+        ownedSet.loggedExercise = ownedLoggedExercise
+        ownedSession.loggedExercises.append(ownedLoggedExercise)
+        ownedLoggedExercise.sets.append(ownedSet)
+
+        context.insert(otherSession)
+        context.insert(otherLoggedExercise)
+        context.insert(otherSet)
+        context.insert(ownedSession)
+        context.insert(ownedLoggedExercise)
+        context.insert(ownedSet)
+        let staleEntry = SyncOutboxEntry(
+            entityKind: .loggedSet,
+            entityID: otherSet.id,
+            operation: .update,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 500),
+            updatedAt: Date(timeIntervalSince1970: 600)
+        )
+        context.insert(staleEntry)
+        try context.save()
+
+        let client = FakeSyncClient()
+        try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertEqual(client.upsertedLoggedSets.map(\.clientId), [ownedSet.id.uuidString.lowercased()])
+        XCTAssertEqual(staleEntry.status, .failed)
+        XCTAssertEqual(staleEntry.lastErrorMessage, "Cannot sync loggedSet \(otherSet.id.uuidString) because the local record belongs to a different owner.")
+        XCTAssertFalse(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).contains { $0.entityID == ownedSet.id })
     }
 
     func testRunTombstonesMissingExerciseForUpdateEntry() async throws {

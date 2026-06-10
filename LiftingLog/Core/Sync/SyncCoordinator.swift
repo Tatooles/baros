@@ -120,13 +120,15 @@ final class SyncCoordinator {
             state.hasBootstrappedSettingsExercises = true
         }
         if !state.hasBootstrappedWorkoutGraph {
-            try bootstrapWorkoutGraphForSync(
+            let didCompleteWorkoutGraphBootstrap = try bootstrapWorkoutGraphForSync(
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 includeOwnerlessCompletedWorkouts: includeOwnerlessCompletedWorkouts,
                 context: context,
                 now: .now
             )
-            state.hasBootstrappedWorkoutGraph = true
+            if didCompleteWorkoutGraphBootstrap {
+                state.hasBootstrappedWorkoutGraph = true
+            }
         }
         if hadBootstrappedWorkoutGraph && state.loggedSetsCursor == 0 {
             try backfillOwnedCompletedLoggedSetsForSync(
@@ -210,9 +212,11 @@ final class SyncCoordinator {
         includeOwnerlessCompletedWorkouts: Bool,
         context: ModelContext,
         now: Date
-    ) throws {
-        guard includeOwnerlessCompletedWorkouts else { return }
-        guard try canBootstrapOwnerlessWorkoutGraph(ownerTokenIdentifier: ownerTokenIdentifier, context: context) else { return }
+    ) throws -> Bool {
+        guard includeOwnerlessCompletedWorkouts else { return true }
+        guard try canBootstrapOwnerlessWorkoutGraph(ownerTokenIdentifier: ownerTokenIdentifier, context: context) else {
+            return false
+        }
 
         for session in try context.fetch(FetchDescriptor<WorkoutSession>())
             where session.status == .completed && !session.isDeleted {
@@ -248,6 +252,7 @@ final class SyncCoordinator {
                 }
             }
         }
+        return true
     }
 
     private func backfillOwnedCompletedLoggedSetsForSync(
@@ -387,6 +392,9 @@ final class SyncCoordinator {
                 if entry.status == .inFlight {
                     recorder.markFailed(entry, message: error.localizedDescription, now: .now)
                     try context.save()
+                }
+                if error is SyncCoordinatorError {
+                    continue
                 }
                 return SyncPushResult(didComplete: false, didPush: true)
             }
