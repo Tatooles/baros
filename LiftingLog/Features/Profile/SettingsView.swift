@@ -54,7 +54,10 @@ struct SettingsView: View {
     }
 
     private func exportWorkoutHistory() {
-        let completedSessions = WorkoutSession.visibleCompletedSessions(from: sessions)
+        let completedSessions = WorkoutSession.visibleCompletedSessions(
+            from: sessions,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        )
 
         guard !completedSessions.isEmpty else {
             alert = .noWorkoutHistory
@@ -62,7 +65,11 @@ struct SettingsView: View {
         }
 
         do {
-            let csv = WorkoutDataExportService().csv(for: completedSessions, unit: settings.weightUnit)
+            let csv = WorkoutDataExportService().csv(
+                for: completedSessions,
+                unit: settings.weightUnit,
+                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            )
             let url = try WorkoutExportFileWriter().write(csv: csv)
             exportFile = ExportFile(url: url)
         } catch {

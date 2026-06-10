@@ -4,6 +4,42 @@ import XCTest
 
 @MainActor
 final class SyncCursorStateTests: XCTestCase {
+    func testWorkoutCursorDefaultsStartAtZeroAndBootstrapIsFalse() throws {
+        let state = SyncCursorState(ownerTokenIdentifier: "issuer|owner_a")
+
+        XCTAssertEqual(state.userSettingsCursor, 0)
+        XCTAssertEqual(state.exercisesCursor, 0)
+        XCTAssertEqual(state.workoutSessionsCursor, 0)
+        XCTAssertEqual(state.loggedExercisesCursor, 0)
+        XCTAssertEqual(state.loggedSetsCursor, 0)
+        XCTAssertFalse(state.hasBootstrappedWorkoutGraph)
+    }
+
+    func testWorkoutCursorsPersistInSwiftData() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let state = SyncCursorState(
+            ownerTokenIdentifier: "issuer|owner_a",
+            userSettingsCursor: 1,
+            exercisesCursor: 2,
+            workoutSessionsCursor: 3,
+            loggedExercisesCursor: 4,
+            loggedSetsCursor: 5,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        )
+
+        context.insert(state)
+        try context.save()
+
+        let fetched = try XCTUnwrap(context.fetch(FetchDescriptor<SyncCursorState>()).first)
+
+        XCTAssertEqual(fetched.workoutSessionsCursor, 3)
+        XCTAssertEqual(fetched.loggedExercisesCursor, 4)
+        XCTAssertEqual(fetched.loggedSetsCursor, 5)
+        XCTAssertTrue(fetched.hasBootstrappedWorkoutGraph)
+    }
+
     func testCursorStatePersistsOwnerAndCursors() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

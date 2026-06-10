@@ -6,6 +6,7 @@ struct ExerciseQuickHistorySheet: View {
     let openFullHistory: (ExerciseHistoryRoute) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(SyncScheduler.self) private var syncScheduler
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     private var route: ExerciseHistoryRoute {
@@ -13,12 +14,18 @@ struct ExerciseQuickHistorySheet: View {
     }
 
     private var completedSessions: [WorkoutSession] {
-        WorkoutSession.visibleCompletedSessions(from: sessions)
+        WorkoutSession.visibleCompletedSessions(
+            from: sessions,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        )
     }
 
     private var summary: ExerciseHistorySummary? {
         ExerciseHistorySummary.find(
-            in: ExerciseHistorySummary.makeSummaries(from: completedSessions),
+            in: ExerciseHistorySummary.makeSummaries(
+                from: sessions,
+                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ),
             matching: route
         )
     }
@@ -27,8 +34,9 @@ struct ExerciseQuickHistorySheet: View {
         guard let summary else { return [] }
 
         return ExerciseHistorySessionGroup.recentGroups(
-            from: completedSessions,
+            from: sessions,
             matching: summary,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
             limit: 3
         )
     }

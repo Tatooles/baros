@@ -16,7 +16,10 @@ struct ProfileView: View {
     }
 
     private var completedWorkoutCount: Int {
-        WorkoutSession.visibleCompletedSessions(from: sessions).count
+        WorkoutSession.visibleCompletedSessions(
+            from: sessions,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        ).count
     }
 
     private var activeExerciseCount: Int {

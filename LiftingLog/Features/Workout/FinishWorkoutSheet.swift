@@ -4,6 +4,7 @@ import SwiftUI
 struct FinishWorkoutSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(SyncScheduler.self) private var syncScheduler
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
     @State private var showsDiscardConfirmation = false
@@ -37,7 +38,12 @@ struct FinishWorkoutSheet: View {
 
             Button {
                 do {
-                    try engine.finishWorkout(session, context: modelContext)
+                    try engine.finishWorkout(
+                        session,
+                        ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                        syncScheduler: syncScheduler,
+                        context: modelContext
+                    )
                     actionError = nil
                     dismiss()
                 } catch {

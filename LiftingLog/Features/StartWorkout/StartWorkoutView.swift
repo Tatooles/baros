@@ -3,12 +3,16 @@ import SwiftUI
 
 struct StartWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     private var completedSessions: [WorkoutSession] {
-        WorkoutSession.visibleCompletedSessions(from: sessions)
+        WorkoutSession.visibleCompletedSessions(
+            from: sessions,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        )
     }
 
     var body: some View {
@@ -67,7 +71,10 @@ struct StartWorkoutView: View {
 
     private func startBlankWorkout() {
         do {
-            _ = try activeWorkoutEngine.startBlankWorkout(context: modelContext)
+            _ = try activeWorkoutEngine.startBlankWorkout(
+                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                context: modelContext
+            )
             navigationState.selectedTab = .workout
         } catch {
             activeWorkoutEngine.lastErrorMessage = error.localizedDescription
@@ -76,7 +83,11 @@ struct StartWorkoutView: View {
 
     private func startWorkout(fromPast session: WorkoutSession) {
         do {
-            _ = try activeWorkoutEngine.startWorkout(fromPast: session, context: modelContext)
+            _ = try activeWorkoutEngine.startWorkout(
+                fromPast: session,
+                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                context: modelContext
+            )
             navigationState.selectedTab = .workout
         } catch {
             activeWorkoutEngine.lastErrorMessage = error.localizedDescription

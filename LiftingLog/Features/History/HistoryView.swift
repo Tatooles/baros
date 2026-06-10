@@ -2,15 +2,22 @@ import SwiftData
 import SwiftUI
 
 struct HistoryView: View {
+    @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     private var completedSessions: [WorkoutSession] {
-        WorkoutSession.visibleCompletedSessions(from: sessions)
+        WorkoutSession.visibleCompletedSessions(
+            from: sessions,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        )
     }
 
     private var exerciseSummaries: [ExerciseHistorySummary] {
-        ExerciseHistorySummary.makeSummaries(from: completedSessions)
+        ExerciseHistorySummary.makeSummaries(
+            from: sessions,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        )
     }
 
     var body: some View {

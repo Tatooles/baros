@@ -19,9 +19,9 @@ final class ActiveWorkoutEngine {
     var isStartingWorkout = false
     var lastErrorMessage: String?
 
-    func loadActiveSession(context: ModelContext) {
+    func loadActiveSession(ownerTokenIdentifier: String? = nil, context: ModelContext) {
         do {
-            activeSessionID = try currentActiveSession(context: context)?.id
+            activeSessionID = try currentActiveSession(ownerTokenIdentifier: ownerTokenIdentifier, context: context)?.id
             lastErrorMessage = nil
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -29,8 +29,12 @@ final class ActiveWorkoutEngine {
     }
 
     @discardableResult
-    func startBlankWorkout(context: ModelContext, now: Date = .now) throws -> WorkoutSession {
-        if let active = try currentActiveSession(context: context) {
+    func startBlankWorkout(
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext,
+        now: Date = .now
+    ) throws -> WorkoutSession {
+        if let active = try currentActiveSession(ownerTokenIdentifier: ownerTokenIdentifier, context: context) {
             activeSessionID = active.id
             return active
         }
@@ -38,7 +42,15 @@ final class ActiveWorkoutEngine {
         isStartingWorkout = true
         defer { isStartingWorkout = false }
 
-        let session = WorkoutSession(title: "Workout", startedAt: now, status: .active, source: .blank, createdAt: now, updatedAt: now)
+        let session = WorkoutSession(
+            title: "Workout",
+            startedAt: now,
+            status: .active,
+            source: .blank,
+            createdAt: now,
+            updatedAt: now,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier
+        )
         context.insert(session)
         try context.save()
         activeSessionID = session.id
@@ -46,8 +58,13 @@ final class ActiveWorkoutEngine {
     }
 
     @discardableResult
-    func startWorkout(fromPast pastSession: WorkoutSession, context: ModelContext, now: Date = .now) throws -> WorkoutSession {
-        if let active = try currentActiveSession(context: context) {
+    func startWorkout(
+        fromPast pastSession: WorkoutSession,
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext,
+        now: Date = .now
+    ) throws -> WorkoutSession {
+        if let active = try currentActiveSession(ownerTokenIdentifier: ownerTokenIdentifier, context: context) {
             activeSessionID = active.id
             return active
         }
@@ -63,7 +80,8 @@ final class ActiveWorkoutEngine {
             sourceSessionID: pastSession.id,
             referenceNotes: pastSession.notes,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier
         )
         context.insert(session)
 
@@ -246,8 +264,16 @@ final class ActiveWorkoutEngine {
     }
 
     @MainActor
-    func finishWorkout(_ session: WorkoutSession, context: ModelContext, now: Date = .now) throws {
+    func finishWorkout(
+        _ session: WorkoutSession,
+        ownerTokenIdentifier: String? = nil,
+        syncScheduler: SyncScheduler? = nil,
+        context: ModelContext,
+        now: Date = .now
+    ) throws {
+        let effectiveOwnerTokenIdentifier = session.syncOwnerTokenIdentifier ?? ownerTokenIdentifier
         applyFinalWorkoutTitle(to: session)
+        session.syncOwnerTokenIdentifier = effectiveOwnerTokenIdentifier
         session.status = .completed
         session.endedAt = now
         session.durationSeconds = max(0, Int(now.timeIntervalSince(session.startedAt)))
@@ -257,7 +283,7 @@ final class ActiveWorkoutEngine {
             try recorder.recordCreate(
                 entityKind: .workoutSession,
                 entityID: session.id,
-                ownerTokenIdentifier: nil,
+                ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
                 context: context,
                 now: now
             )
@@ -265,7 +291,7 @@ final class ActiveWorkoutEngine {
                 try recorder.recordCreate(
                     entityKind: .loggedExercise,
                     entityID: loggedExercise.id,
-                    ownerTokenIdentifier: nil,
+                    ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
                     context: context,
                     now: now
                 )
@@ -273,7 +299,7 @@ final class ActiveWorkoutEngine {
                     try recorder.recordCreate(
                         entityKind: .loggedSet,
                         entityID: set.id,
-                        ownerTokenIdentifier: nil,
+                        ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
                         context: context,
                         now: now
                     )
@@ -286,6 +312,10 @@ final class ActiveWorkoutEngine {
         }
         if activeSessionID == session.id {
             activeSessionID = nil
+        }
+        if syncScheduler?.currentOwnerTokenIdentifier == effectiveOwnerTokenIdentifier,
+           effectiveOwnerTokenIdentifier != nil {
+            syncScheduler?.requestSync()
         }
     }
 
@@ -303,8 +333,11 @@ final class ActiveWorkoutEngine {
         }
     }
 
-    private func currentActiveSession(context: ModelContext) throws -> WorkoutSession? {
-        let activeSessions = WorkoutSession.visibleActiveSessions(from: try context.fetch(FetchDescriptor<WorkoutSession>()))
+    private func currentActiveSession(ownerTokenIdentifier: String?, context: ModelContext) throws -> WorkoutSession? {
+        let activeSessions = WorkoutSession.visibleActiveSessions(
+            from: try context.fetch(FetchDescriptor<WorkoutSession>()),
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
             .sorted { $0.startedAt > $1.startedAt }
 
         if activeSessions.count > 1 {

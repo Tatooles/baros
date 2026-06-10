@@ -43,9 +43,10 @@ struct ExerciseHistorySessionGroup: Identifiable {
 
     static func makeGroups(
         from sessions: [WorkoutSession],
-        matching summary: ExerciseHistorySummary
+        matching summary: ExerciseHistorySummary,
+        ownerTokenIdentifier: String? = nil
     ) -> [ExerciseHistorySessionGroup] {
-        WorkoutSession.visibleCompletedSessions(from: sessions)
+        WorkoutSession.visibleCompletedSessions(from: sessions, ownerTokenIdentifier: ownerTokenIdentifier)
             .compactMap { session in
                 let entries = session.sortedLoggedExercises.flatMap { loggedExercise in
                     guard matches(loggedExercise, summary: summary) else { return [ExerciseHistorySetEntry]() }
@@ -69,9 +70,14 @@ struct ExerciseHistorySessionGroup: Identifiable {
     static func recentGroups(
         from sessions: [WorkoutSession],
         matching summary: ExerciseHistorySummary,
+        ownerTokenIdentifier: String? = nil,
         limit: Int = 3
     ) -> [ExerciseHistorySessionGroup] {
-        Array(makeGroups(from: sessions, matching: summary).prefix(limit))
+        Array(makeGroups(
+            from: sessions,
+            matching: summary,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        ).prefix(limit))
     }
 
     private static func matches(_ loggedExercise: LoggedExercise, summary: ExerciseHistorySummary) -> Bool {

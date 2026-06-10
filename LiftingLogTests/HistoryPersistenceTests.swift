@@ -61,6 +61,43 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(sessions.map(\.id), [visibleCompletedSession.id])
     }
 
+    func testVisibleCompletedSessionsAreScopedToOwnerAndSignedOutShowsLocalHistory() {
+        let ownerASession = WorkoutSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000304")!,
+            title: "Owner A",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: "issuer|owner_a"
+        )
+        let ownerBSession = WorkoutSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000305")!,
+            title: "Owner B",
+            startedAt: Date(timeIntervalSince1970: 200),
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: "issuer|owner_b"
+        )
+        let signedOutSession = WorkoutSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000306")!,
+            title: "Signed Out",
+            startedAt: Date(timeIntervalSince1970: 300),
+            status: .completed,
+            source: .blank
+        )
+
+        let sessions = [ownerASession, ownerBSession, signedOutSession]
+
+        XCTAssertEqual(
+            WorkoutSession.visibleCompletedSessions(from: sessions, ownerTokenIdentifier: "issuer|owner_b").map(\.id),
+            [ownerBSession.id, signedOutSession.id]
+        )
+        XCTAssertEqual(
+            WorkoutSession.visibleCompletedSessions(from: sessions, ownerTokenIdentifier: nil).map(\.id),
+            [ownerASession.id, ownerBSession.id, signedOutSession.id]
+        )
+    }
+
     func testWorkoutHistoryRowExerciseCountIgnoresTombstonedLoggedExercises() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

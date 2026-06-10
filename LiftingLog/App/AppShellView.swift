@@ -3,12 +3,16 @@ import SwiftUI
 
 struct AppShellView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     private var activeSession: WorkoutSession? {
-        WorkoutSession.visibleActiveSessions(from: sessions).first
+        WorkoutSession.visibleActiveSessions(
+            from: sessions,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        ).first
     }
 
     var body: some View {
@@ -47,7 +51,10 @@ struct AppShellView: View {
         .tint(AppTheme.accentBright)
         .preferredColorScheme(.dark)
         .task {
-            activeWorkoutEngine.loadActiveSession(context: modelContext)
+            activeWorkoutEngine.loadActiveSession(
+                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                context: modelContext
+            )
         }
     }
 }

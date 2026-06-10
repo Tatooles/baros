@@ -11,17 +11,17 @@ final class SyncScheduler {
         }
     }
     private(set) var requestCount = 0
-    private var coordinator: SettingsExerciseSyncCoordinator?
+    private var coordinator: SyncCoordinator?
     private var modelContext: ModelContext?
     private var syncTask: Task<Void, Never>?
     private var needsSync = false
 
-    init(coordinator: SettingsExerciseSyncCoordinator? = nil, modelContext: ModelContext? = nil) {
+    init(coordinator: SyncCoordinator? = nil, modelContext: ModelContext? = nil) {
         self.coordinator = coordinator
         self.modelContext = modelContext
     }
 
-    func configure(coordinator: SettingsExerciseSyncCoordinator, modelContext: ModelContext) {
+    func configure(coordinator: SyncCoordinator, modelContext: ModelContext) {
         self.coordinator = coordinator
         self.modelContext = modelContext
     }
@@ -61,7 +61,7 @@ final class SyncScheduler {
         syncTask.cancel()
     }
 
-    private func startSyncTask(coordinator: SettingsExerciseSyncCoordinator, modelContext: ModelContext) {
+    private func startSyncTask(coordinator: SyncCoordinator, modelContext: ModelContext) {
         syncTask = Task { @MainActor in
             while true {
                 needsSync = false

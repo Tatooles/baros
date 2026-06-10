@@ -209,6 +209,28 @@ final class LiftingLogUITests: XCTestCase {
     }
 
     @MainActor
+    func testDeletingCompletedWorkoutRemovesItFromHistory() {
+        let app = makeApp()
+        app.launch()
+
+        createCompletedBenchWorkout(in: app, title: "Delete Me")
+
+        app.buttons["HistoryTab"].tap()
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["WorkoutHistoryButton-0"].tap()
+
+        let deleteWorkoutButton = app.buttons["Delete Workout"]
+        for _ in 0..<6 where !deleteWorkoutButton.exists || !deleteWorkoutButton.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(deleteWorkoutButton.waitForExistence(timeout: 3))
+        deleteWorkoutButton.tap()
+
+        XCTAssertTrue(app.staticTexts["HistoryTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 1))
+    }
+
+    @MainActor
     func testActiveWorkoutHistorySeparatesSameNameDifferentEquipment() {
         let app = makeApp()
         app.launch()
