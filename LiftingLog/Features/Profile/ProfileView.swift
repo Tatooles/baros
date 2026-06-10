@@ -8,8 +8,6 @@ struct ProfileView: View {
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
 
-    @Bindable var navigationState: AppNavigationState
-
     private var settings: UserSettings? {
         UserSettings.visibleSettingsRecords(
             from: settingsRecords,
@@ -80,9 +78,7 @@ struct ProfileView: View {
         .navigationDestination(for: ProfileRoute.self) { route in
             switch route {
             case .settings:
-                if let settings {
-                    SettingsView(settings: settings)
-                }
+                SettingsRouteView()
             }
         }
         .task(id: syncScheduler.currentOwnerTokenIdentifier) {
@@ -136,5 +132,46 @@ struct ProfileView: View {
                 .foregroundStyle(AppTheme.textSecondary)
         }
         .font(.system(size: 16, weight: .medium))
+    }
+}
+
+private struct SettingsRouteView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(SyncScheduler.self) private var syncScheduler
+    @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
+
+    private var settings: UserSettings? {
+        UserSettings.visibleSettingsRecords(
+            from: settingsRecords,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        ).first
+    }
+
+    var body: some View {
+        Group {
+            if let settings {
+                SettingsView(settings: settings)
+            } else {
+                ProgressView()
+                    .tint(AppTheme.accentBright)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AppTheme.subtleBackground.ignoresSafeArea())
+            }
+        }
+        .task(id: syncScheduler.currentOwnerTokenIdentifier) {
+            seedSettingsIfNeeded()
+        }
+    }
+
+    private func seedSettingsIfNeeded() {
+        if UserSettings.visibleSettingsRecords(
+            from: settingsRecords,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        ).isEmpty {
+            try? SeedDataService.seedIfNeeded(
+                context: modelContext,
+                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            )
+        }
     }
 }

@@ -60,7 +60,7 @@ struct AppShellView: View {
             .tag(AppTab.workout)
 
             NavigationStack(path: $navigationState.profilePath) {
-                ProfileView(navigationState: navigationState)
+                ProfileView()
             }
             .tabItem {
                 Label(AppTab.profile.title(isWorkoutActive: activeSession != nil), systemImage: AppTab.profile.symbolName(isWorkoutActive: activeSession != nil))
@@ -94,21 +94,23 @@ private struct GlobalSyncFailureBanner: View {
     let details: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "exclamationmark.icloud")
-                .foregroundStyle(AppTheme.accentBright)
-                .font(.system(size: 20, weight: .semibold))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.icloud")
+                    .foregroundStyle(AppTheme.accentBright)
+                    .font(.system(size: 20, weight: .semibold))
+                    .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Cloud sync failed")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(AppTheme.textPrimary)
-                Text("Your data is saved on this iPhone.")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.textSecondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Cloud sync failed")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Text("Your data is saved on this iPhone.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+                .fixedSize(horizontal: false, vertical: true)
             }
-
-            Spacer(minLength: 8)
 
             HStack(spacing: 8) {
                 Button("Retry", action: retry)
@@ -119,17 +121,16 @@ private struct GlobalSyncFailureBanner: View {
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("GlobalSyncDetailsButton")
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(AppTheme.surface)
-                .accessibilityIdentifier("GlobalSyncFailureBanner")
-        )
+        .background(AppTheme.surface)
         .overlay(
             RoundedRectangle(cornerRadius: 14)
                 .stroke(AppTheme.accentBright.opacity(0.45))
         )
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("GlobalSyncFailureBanner")
     }
 }
