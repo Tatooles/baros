@@ -624,6 +624,46 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         assertEntry(entries, kind: .loggedSet, id: secondSet.id, operation: .create)
     }
 
+    func testPrepareForSyncBackfillsOwnedCompletedSetsWhenSetCursorNeverAdvanced() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        let state = try SyncCursorState.state(for: owner, context: context)
+        state.hasBootstrappedSettingsExercises = true
+        state.hasBootstrappedWorkoutGraph = true
+        let session = WorkoutSession(
+            title: "Partially Bootstrapped",
+            startedAt: Date(timeIntervalSince1970: 100),
+            endedAt: Date(timeIntervalSince1970: 200),
+            durationSeconds: 100,
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: owner
+        )
+        let loggedExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
+        let set = LoggedSet(orderIndex: 0, weight: 185, reps: 5, rpe: 8, isCompleted: true)
+        loggedExercise.session = session
+        set.loggedExercise = loggedExercise
+        session.loggedExercises.append(loggedExercise)
+        loggedExercise.sets.append(set)
+        context.insert(session)
+        context.insert(loggedExercise)
+        context.insert(set)
+        try context.save()
+
+        try SyncCoordinator(client: FakeSyncClient()).prepareForSync(
+            ownerTokenIdentifier: owner,
+            context: context,
+            bootstrapScope: .allOwned,
+            includeOwnerlessCompletedWorkouts: false
+        )
+
+        let entries = try fetchEntries(context)
+        XCTAssertFalse(entries.contains { $0.entityKind == .workoutSession })
+        XCTAssertFalse(entries.contains { $0.entityKind == .loggedExercise })
+        assertEntry(entries, kind: .loggedSet, id: set.id, operation: .create)
+    }
+
     func testFinishingWorkoutSkipsDeletedDraftChildrenWhenRecordingCreateIntent() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

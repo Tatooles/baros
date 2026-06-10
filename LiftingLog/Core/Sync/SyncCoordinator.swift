@@ -55,6 +55,7 @@ final class SyncCoordinator {
         includeOwnerlessCompletedWorkouts: Bool = true
     ) throws {
         let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
+        let hadBootstrappedWorkoutGraph = state.hasBootstrappedWorkoutGraph
         let bootstrapCandidates = try state.hasBootstrappedSettingsExercises
             ? BootstrapCandidates()
             : candidatesForBootstrap(
@@ -126,6 +127,13 @@ final class SyncCoordinator {
                 now: .now
             )
             state.hasBootstrappedWorkoutGraph = true
+        }
+        if hadBootstrappedWorkoutGraph && state.loggedSetsCursor == 0 {
+            try backfillOwnedCompletedLoggedSetsForSync(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: .now
+            )
         }
 
         try context.save()
@@ -239,6 +247,32 @@ final class SyncCoordinator {
                     )
                 }
             }
+        }
+    }
+
+    private func backfillOwnedCompletedLoggedSetsForSync(
+        ownerTokenIdentifier: String,
+        context: ModelContext,
+        now: Date
+    ) throws {
+        for set in try context.fetch(FetchDescriptor<LoggedSet>()) where !set.isDeleted {
+            guard let loggedExercise = set.loggedExercise,
+                  !loggedExercise.isDeleted,
+                  let session = loggedExercise.session,
+                  session.status == .completed,
+                  !session.isDeleted,
+                  session.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
+                continue
+            }
+
+            try recordBootstrapEntry(
+                entityKind: .loggedSet,
+                entityID: set.id,
+                isDeleted: false,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
         }
     }
 
