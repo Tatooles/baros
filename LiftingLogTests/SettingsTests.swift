@@ -27,39 +27,34 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(fetched.weightUnit, .kilograms)
     }
 
-    func testUpdatingWeightUnitConvertsExistingLoggedWeights() throws {
+    func testUpdatingWeightUnitDoesNotRewriteExistingLoggedWeights() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         try SeedDataService.seedIfNeeded(context: context)
         let settings = try XCTUnwrap(context.fetch(FetchDescriptor<UserSettings>()).first)
-        let set = LoggedSet(orderIndex: 0, weight: 225, reps: 5, isCompleted: true)
+        let originalUpdatedAt = Date(timeIntervalSince1970: 50)
+        let set = LoggedSet(
+            orderIndex: 0,
+            weight: 225,
+            reps: 5,
+            placeholderWeight: 185,
+            placeholderReps: 5,
+            isCompleted: true,
+            updatedAt: originalUpdatedAt
+        )
         context.insert(set)
         try context.save()
 
         try settings.updateWeightUnit(.kilograms, context: context)
 
-        XCTAssertEqual(set.weight ?? 0, 102.058, accuracy: 0.001)
-        XCTAssertEqual(set.completedVolume, 510.291, accuracy: 0.001)
+        XCTAssertEqual(settings.weightUnit, .kilograms)
+        XCTAssertEqual(set.weight, 225)
+        XCTAssertEqual(set.placeholderWeight, 185)
+        XCTAssertEqual(set.completedVolume, 1125)
+        XCTAssertEqual(set.updatedAt, originalUpdatedAt)
     }
 
-    func testUpdatingWeightUnitConvertsPlaceholderWeights() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        try SeedDataService.seedIfNeeded(context: context)
-        let settings = try XCTUnwrap(context.fetch(FetchDescriptor<UserSettings>()).first)
-        let set = LoggedSet(orderIndex: 0, placeholderWeight: 225, placeholderReps: 5)
-        context.insert(set)
-        try context.save()
-
-        try settings.updateWeightUnit(.kilograms, context: context)
-        try ActiveWorkoutEngine().toggleSetCompletion(set, context: context)
-
-        XCTAssertEqual(set.weight ?? 0, 102.058, accuracy: 0.001)
-        XCTAssertEqual(set.placeholderWeight ?? 0, 102.058, accuracy: 0.001)
-        XCTAssertEqual(set.placeholderReps, 5)
-    }
-
-    func testUpdatingWeightUnitDoesNotConvertTombstonedSets() throws {
+    func testUpdatingWeightUnitDoesNotRewriteTombstonedSets() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         try SeedDataService.seedIfNeeded(context: context)

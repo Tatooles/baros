@@ -17,43 +17,11 @@ struct SettingsMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws {
-        let previousUnit = settings.weightUnit
-        guard previousUnit != newUnit else { return }
+        guard settings.weightUnit != newUnit else { return }
         let effectiveOwner = try mutationOwner(
             currentOwner: settings.syncOwnerTokenIdentifier,
             requestedOwner: ownerTokenIdentifier ?? syncScheduler?.currentOwnerTokenIdentifier
         )
-
-        let sets = try context.fetch(FetchDescriptor<LoggedSet>())
-        for set in sets where !set.isDeleted && canApplyWeightUnitChange(to: set, ownerTokenIdentifier: effectiveOwner) {
-            var didConvertSet = false
-            if let weight = set.weight {
-                set.weight = previousUnit.convert(weight, to: newUnit)
-                didConvertSet = true
-            }
-            if let placeholderWeight = set.placeholderWeight {
-                set.placeholderWeight = previousUnit.convert(placeholderWeight, to: newUnit)
-                didConvertSet = true
-            }
-            if didConvertSet {
-                set.touch(now: now)
-                if set.loggedExercise?.session?.status != .active {
-                    try recordWorkoutGraphParentsForExplicitSetIntent(
-                        set,
-                        ownerTokenIdentifier: effectiveOwner,
-                        context: context,
-                        now: now
-                    )
-                    try recorder.recordUpdate(
-                        entityKind: .loggedSet,
-                        entityID: set.id,
-                        ownerTokenIdentifier: effectiveOwner,
-                        context: context,
-                        now: now
-                    )
-                }
-            }
-        }
 
         settings.syncOwnerTokenIdentifier = effectiveOwner ?? settings.syncOwnerTokenIdentifier
         settings.weightUnitRaw = newUnit.rawValue
@@ -67,49 +35,6 @@ struct SettingsMutationService {
         )
         try context.save()
         syncScheduler?.requestSync()
-    }
-
-    private func canApplyWeightUnitChange(to set: LoggedSet, ownerTokenIdentifier: String?) -> Bool {
-        guard let session = set.loggedExercise?.session else {
-            return ownerTokenIdentifier == nil
-        }
-        guard let ownerTokenIdentifier else {
-            return session.syncOwnerTokenIdentifier == nil
-        }
-        return session.syncOwnerTokenIdentifier == nil
-            || session.syncOwnerTokenIdentifier == ownerTokenIdentifier
-    }
-
-    private func recordWorkoutGraphParentsForExplicitSetIntent(
-        _ set: LoggedSet,
-        ownerTokenIdentifier: String?,
-        context: ModelContext,
-        now: Date
-    ) throws {
-        guard let ownerTokenIdentifier,
-              let loggedExercise = set.loggedExercise,
-              let session = loggedExercise.session else {
-            return
-        }
-
-        if session.syncOwnerTokenIdentifier == nil {
-            session.syncOwnerTokenIdentifier = ownerTokenIdentifier
-            try recorder.recordUpdate(
-                entityKind: .workoutSession,
-                entityID: session.id,
-                ownerTokenIdentifier: ownerTokenIdentifier,
-                context: context,
-                now: now
-            )
-        }
-        guard session.syncOwnerTokenIdentifier == ownerTokenIdentifier else { return }
-        try recorder.recordUpdate(
-            entityKind: .loggedExercise,
-            entityID: loggedExercise.id,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context,
-            now: now
-        )
     }
 
     func updateDefaultRestTimerSeconds(

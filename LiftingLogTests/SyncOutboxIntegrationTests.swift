@@ -91,27 +91,29 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(entry.operation, .update)
     }
 
-    func testSettingsWeightUnitConversionRecordsSettingsAndConvertedSetUpdates() throws {
+    func testSettingsWeightUnitChangeRecordsOnlySettingsUpdate() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let service = SettingsMutationService()
         let settings = UserSettings(weightUnit: .pounds)
-        let completedSet = LoggedSet(orderIndex: 0, weight: 225, reps: 5, isCompleted: true)
-        let placeholderSet = LoggedSet(orderIndex: 1, placeholderWeight: 135, placeholderReps: 8)
-        let deletedSet = LoggedSet(
-            orderIndex: 2,
-            weight: 315,
-            reps: 3,
-            placeholderWeight: 315,
-            placeholderReps: 3,
+        let completedUpdatedAt = Date(timeIntervalSince1970: 40)
+        let placeholderUpdatedAt = Date(timeIntervalSince1970: 45)
+        let completedSet = LoggedSet(
+            orderIndex: 0,
+            weight: 225,
+            reps: 5,
             isCompleted: true,
-            updatedAt: Date(timeIntervalSince1970: 50)
+            updatedAt: completedUpdatedAt
         )
-        deletedSet.markDeleted(now: Date(timeIntervalSince1970: 60))
+        let placeholderSet = LoggedSet(
+            orderIndex: 1,
+            placeholderWeight: 135,
+            placeholderReps: 8,
+            updatedAt: placeholderUpdatedAt
+        )
         context.insert(settings)
         context.insert(completedSet)
         context.insert(placeholderSet)
-        context.insert(deletedSet)
         try context.save()
 
         try service.updateWeightUnit(
@@ -122,20 +124,17 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         )
 
         XCTAssertEqual(settings.weightUnit, .kilograms)
-        XCTAssertEqual(completedSet.weight ?? 0, 102.058, accuracy: 0.001)
-        XCTAssertEqual(placeholderSet.placeholderWeight ?? 0, 61.235, accuracy: 0.001)
-        XCTAssertEqual(deletedSet.weight, 315)
-        XCTAssertEqual(deletedSet.placeholderWeight, 315)
+        XCTAssertEqual(completedSet.weight, 225)
+        XCTAssertEqual(completedSet.updatedAt, completedUpdatedAt)
+        XCTAssertEqual(placeholderSet.placeholderWeight, 135)
+        XCTAssertEqual(placeholderSet.updatedAt, placeholderUpdatedAt)
 
         let entries = try fetchEntries(context)
-        XCTAssertEqual(entries.count, 3)
+        XCTAssertEqual(entries.count, 1)
         assertEntry(entries, kind: .userSettings, id: settings.id, operation: .update)
-        assertEntry(entries, kind: .loggedSet, id: completedSet.id, operation: .update)
-        assertEntry(entries, kind: .loggedSet, id: placeholderSet.id, operation: .update)
-        XCTAssertFalse(entries.contains { $0.entityID == deletedSet.id })
     }
 
-    func testSettingsWeightUnitConversionKeepsActiveDraftSetOutboxLocalUntilFinish() throws {
+    func testSettingsWeightUnitChangeKeepsActiveDraftSetCanonicalUntilFinish() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let settings = UserSettings(weightUnit: .pounds)
@@ -161,7 +160,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
             now: Date(timeIntervalSince1970: 200)
         )
 
-        XCTAssertEqual(set.weight ?? 0, 102.058, accuracy: 0.001)
+        XCTAssertEqual(set.weight, 225)
         var entries = try fetchEntries(context)
         XCTAssertEqual(entries.count, 1)
         assertEntry(entries, kind: .userSettings, id: settings.id, operation: .update)
@@ -179,7 +178,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         assertEntry(entries, kind: .loggedSet, id: set.id, operation: .create)
     }
 
-    func testSettingsWeightUnitConversionClaimsEveryOwnerlessCompletedWorkoutParentForSetIntents() throws {
+    func testSettingsWeightUnitChangeDoesNotClaimOwnerlessCompletedWorkoutGraph() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let scheduler = SyncScheduler()
@@ -191,24 +190,16 @@ final class SyncOutboxIntegrationTests: XCTestCase {
             status: .completed,
             source: .blank
         )
-        let firstLoggedExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
-        let firstSet = LoggedSet(orderIndex: 0, weight: 225, reps: 5, isCompleted: true)
-        firstSet.loggedExercise = firstLoggedExercise
-        firstLoggedExercise.session = session
-        firstLoggedExercise.sets.append(firstSet)
-        let secondLoggedExercise = LoggedExercise(orderIndex: 1, exerciseSnapshotName: "Incline Press")
-        let secondSet = LoggedSet(orderIndex: 0, weight: 135, reps: 8, isCompleted: true)
-        secondSet.loggedExercise = secondLoggedExercise
-        secondLoggedExercise.session = session
-        secondLoggedExercise.sets.append(secondSet)
-        session.loggedExercises.append(firstLoggedExercise)
-        session.loggedExercises.append(secondLoggedExercise)
+        let loggedExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
+        let set = LoggedSet(orderIndex: 0, weight: 225, reps: 5, isCompleted: true)
+        set.loggedExercise = loggedExercise
+        loggedExercise.session = session
+        loggedExercise.sets.append(set)
+        session.loggedExercises.append(loggedExercise)
         context.insert(settings)
         context.insert(session)
-        context.insert(firstLoggedExercise)
-        context.insert(firstSet)
-        context.insert(secondLoggedExercise)
-        context.insert(secondSet)
+        context.insert(loggedExercise)
+        context.insert(set)
         try context.save()
 
         try SettingsMutationService(syncScheduler: scheduler).updateWeightUnit(
@@ -219,16 +210,10 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         )
 
         let entries = try fetchEntries(context)
-        XCTAssertEqual(firstSet.weight ?? 0, 102.058, accuracy: 0.001)
-        XCTAssertEqual(secondSet.weight ?? 0, 61.235, accuracy: 0.001)
-        XCTAssertEqual(session.syncOwnerTokenIdentifier, "issuer|owner_a")
-        XCTAssertEqual(entries.count, 6)
+        XCTAssertEqual(set.weight, 225)
+        XCTAssertNil(session.syncOwnerTokenIdentifier)
+        XCTAssertEqual(entries.count, 1)
         assertEntry(entries, kind: .userSettings, id: settings.id, operation: .update)
-        assertEntry(entries, kind: .workoutSession, id: session.id, operation: .update)
-        assertEntry(entries, kind: .loggedExercise, id: firstLoggedExercise.id, operation: .update)
-        assertEntry(entries, kind: .loggedExercise, id: secondLoggedExercise.id, operation: .update)
-        assertEntry(entries, kind: .loggedSet, id: firstSet.id, operation: .update)
-        assertEntry(entries, kind: .loggedSet, id: secondSet.id, operation: .update)
         XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == "issuer|owner_a" })
         XCTAssertEqual(scheduler.requestCount, 1)
     }
