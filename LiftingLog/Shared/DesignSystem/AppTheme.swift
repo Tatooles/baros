@@ -1,33 +1,65 @@
 import SwiftUI
+import UIKit
 
 enum AppTheme {
-    static let background = Color(red: 13 / 255, green: 13 / 255, blue: 13 / 255)
-    static let backgroundTop = Color(red: 23 / 255, green: 23 / 255, blue: 23 / 255)
-    static let surface = Color(red: 34 / 255, green: 34 / 255, blue: 34 / 255)
-    static let surfaceMuted = Color(red: 46 / 255, green: 46 / 255, blue: 46 / 255)
-    static let surfaceStrong = Color(red: 56 / 255, green: 56 / 255, blue: 56 / 255)
-    static let border = Color.white.opacity(0.12)
-    static let borderStrong = Color.white.opacity(0.2)
-    static let accent = Color(red: 192 / 255, green: 57 / 255, blue: 43 / 255)
-    static let accentBright = Color(red: 232 / 255, green: 76 / 255, blue: 61 / 255)
+    // MARK: Backgrounds
+
+    static let background = dynamicColor(
+        light: UIColor(red: 0.949, green: 0.945, blue: 0.941, alpha: 1),
+        dark: UIColor(red: 0.051, green: 0.051, blue: 0.055, alpha: 1)
+    )
+    static let backgroundTop = dynamicColor(
+        light: UIColor(red: 0.973, green: 0.965, blue: 0.957, alpha: 1),
+        dark: UIColor(red: 0.094, green: 0.090, blue: 0.094, alpha: 1)
+    )
+
+    /// Opaque surface for contexts where glass/material isn't appropriate.
+    static let surface = Color(.secondarySystemGroupedBackground)
+    /// Recessed fill for grouped content inside a card.
+    static let surfaceMuted = Color(.tertiarySystemFill)
+    /// Recessed fill for input fields inside a card.
+    static let surfaceStrong = Color(.quaternarySystemFill)
+
+    static let border = Color(.separator).opacity(0.5)
+    static let borderStrong = Color(.separator)
+
+    // MARK: Accent
+
+    static let accent = dynamicColor(
+        light: UIColor(red: 0.753, green: 0.224, blue: 0.169, alpha: 1),
+        dark: UIColor(red: 0.753, green: 0.224, blue: 0.169, alpha: 1)
+    )
+    static let accentBright = dynamicColor(
+        light: UIColor(red: 0.835, green: 0.247, blue: 0.188, alpha: 1),
+        dark: UIColor(red: 0.910, green: 0.298, blue: 0.239, alpha: 1)
+    )
     static let accentMuted = accent.opacity(0.18)
-    static let accentGlow = Color(red: 192 / 255, green: 57 / 255, blue: 43 / 255).opacity(0.34)
-    static let success = Color(red: 52 / 255, green: 199 / 255, blue: 89 / 255)
-    static let textPrimary = Color(red: 240 / 255, green: 240 / 255, blue: 240 / 255)
-    static let textSecondary = textPrimary.opacity(0.55)
-    static let textTertiary = textPrimary.opacity(0.3)
+    static let accentGlow = accent.opacity(0.34)
+    static let success = Color(.systemGreen)
+
+    // MARK: Text
+
+    static let textPrimary = Color(.label)
+    static let textSecondary = Color(.secondaryLabel)
+    static let textTertiary = Color(.tertiaryLabel)
+
     static let accentGradient = LinearGradient(
         colors: [accent, accentBright],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
+
+    /// Soft page background that content floats above.
     static let subtleBackground = LinearGradient(
         colors: [backgroundTop, background],
         startPoint: .top,
         endPoint: .bottom
     )
 
-    static let cardCornerRadius: CGFloat = 22
+    // MARK: Metrics
+
+    static let cardCornerRadius: CGFloat = 26
+    static let fieldCornerRadius: CGFloat = 14
     static let shellPadding: CGFloat = 16
 
     static func formatDuration(_ seconds: Int) -> String {
@@ -36,5 +68,11 @@ enum AppTheme {
 
     static func formatDate(_ date: Date) -> String {
         WorkoutFormatters.date(date)
+    }
+
+    private static func dynamicColor(light: UIColor, dark: UIColor) -> Color {
+        Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark ? dark : light
+        })
     }
 }

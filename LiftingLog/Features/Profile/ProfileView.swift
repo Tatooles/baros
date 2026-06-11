@@ -33,7 +33,7 @@ struct ProfileView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Profile")
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.largeTitle.weight(.bold))
                     .foregroundStyle(AppTheme.textPrimary)
                     .accessibilityIdentifier("ProfileTitle")
 
@@ -48,7 +48,7 @@ struct ProfileView: View {
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: 14) {
                         row("Units", value: settings?.weightUnit.displayName ?? "Pounds")
-                        row("Theme", value: "Dark")
+                        row("Theme", value: "System")
                         row("Data Source", value: "SwiftData")
                     }
                 }

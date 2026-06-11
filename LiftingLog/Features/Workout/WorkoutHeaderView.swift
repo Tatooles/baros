@@ -14,75 +14,65 @@ struct WorkoutHeaderView: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(AppTheme.accentBright)
-                    .frame(width: 6, height: 6)
-                Text(AppTheme.formatDuration(elapsedSeconds))
-                    .font(.system(size: 15, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(AppTheme.textPrimary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(AppTheme.surfaceMuted)
-            .overlay(
-                Capsule()
-                    .stroke(AppTheme.borderStrong)
-            )
+        GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 10) {
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(AppTheme.accentBright)
+                        .frame(width: 7, height: 7)
+                    Text(AppTheme.formatDuration(elapsedSeconds))
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .contentTransition(.numericText())
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+                .glassEffect(.regular)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Elapsed time \(AppTheme.formatDuration(elapsedSeconds))")
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Text("Sets")
-                    Spacer()
+                HStack(spacing: 10) {
+                    ProgressView(value: progressValue)
+                        .progressViewStyle(.linear)
+                        .tint(AppTheme.accentBright)
                     Text("\(completedSets)/\(totalSets)")
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .contentTransition(.numericText())
                 }
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppTheme.textSecondary)
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .glassEffect(.regular)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(completedSets) of \(totalSets) sets completed")
 
-                ProgressView(value: progressValue)
-                    .tint(AppTheme.accentBright)
-                    .scaleEffect(x: 1, y: 1.05, anchor: .center)
-            }
+                Menu {
+                    Button {
+                        onFinish()
+                    } label: {
+                        Label("Finish Workout", systemImage: "checkmark.circle")
+                    }
 
-            Menu {
-                Button {
-                    onFinish()
+                    Button {
+                        onReorderExercises()
+                    } label: {
+                        Label("Reorder Exercises", systemImage: "arrow.up.arrow.down")
+                    }
+                    .disabled(!canReorderExercises)
                 } label: {
-                    Label("Finish Workout", systemImage: "checkmark.circle")
+                    Image(systemName: "ellipsis")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
                 }
-
-                Button {
-                    onReorderExercises()
-                } label: {
-                    Label("Reorder Exercises", systemImage: "arrow.up.arrow.down")
-                }
-                .disabled(!canReorderExercises)
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(AppTheme.textPrimary)
-                    .frame(width: 44, height: 44)
-                    .background(AppTheme.surfaceMuted)
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(AppTheme.borderStrong)
-                    )
-                    .contentShape(Circle())
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("Workout options")
+                .accessibilityIdentifier("WorkoutOptionsButton")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Workout options")
-            .accessibilityIdentifier("WorkoutOptionsButton")
         }
         .padding(.horizontal, AppTheme.shellPadding)
-        .padding(.top, 6)
-        .padding(.bottom, 7)
-        .background(.ultraThinMaterial.opacity(0.92))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(AppTheme.border)
-                .frame(height: 1)
-        }
+        .padding(.top, 4)
+        .padding(.bottom, 10)
     }
 }

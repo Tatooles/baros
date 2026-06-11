@@ -14,9 +14,20 @@ struct SetRowView: View {
     @State private var suppressedCompletionClearField: WorkoutField?
 
     var body: some View {
+        SwipeToDeleteRow(
+            deleteAccessibilityLabel: "Remove set",
+            deleteAccessibilityIdentifier: "DeleteSetButton-\(exerciseIndex)-\(index)"
+        ) {
+            try? engine.removeSet(set, context: modelContext)
+        } content: {
+            rowContent
+        }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: 10) {
             Text("\(index + 1)")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.subheadline.weight(.semibold).monospacedDigit())
                 .foregroundStyle(AppTheme.textTertiary)
                 .frame(width: 18)
 
@@ -52,22 +63,15 @@ struct SetRowView: View {
                 }
             } label: {
                 Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 26, weight: .regular))
-                    .foregroundStyle(set.isCompleted ? AppTheme.accentBright : AppTheme.borderStrong)
+                    .font(.title2)
+                    .foregroundStyle(set.isCompleted ? AppTheme.accentBright : AppTheme.textTertiary)
+                    .symbolEffect(.bounce, value: set.isCompleted)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(set.isCompleted ? "Mark set incomplete" : "Mark set complete")
             .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
-
-            Button(role: .destructive) {
-                try? engine.removeSet(set, context: modelContext)
-            } label: {
-                Image(systemName: "minus.circle")
-                    .font(.system(size: 22, weight: .regular))
-                    .foregroundStyle(AppTheme.textTertiary)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Remove set")
         }
         .onChange(of: focusedField.wrappedValue) { previousField, newField in
             if previousField == .setWeight(set.id), newField != .setWeight(set.id) {
@@ -89,17 +93,24 @@ struct SetRowView: View {
         TextField(placeholder, text: text)
             .keyboardType(keyboard)
             .multilineTextAlignment(.center)
-            .font(.system(size: 16, weight: .semibold, design: .rounded))
+            .font(.body.weight(.semibold))
+            .fontDesign(.rounded)
             .foregroundStyle(AppTheme.textPrimary)
             .focused(focusedField, equals: focusTarget)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
-            .background(AppTheme.surfaceStrong)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(AppTheme.borderStrong)
+            .background(
+                AppTheme.surfaceMuted,
+                in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                    .strokeBorder(
+                        focusedField.wrappedValue == focusTarget ? AppTheme.accentBright.opacity(0.7) : .clear,
+                        lineWidth: 1.5
+                    )
+            )
+            .animation(.easeOut(duration: 0.15), value: focusedField.wrappedValue == focusTarget)
             .accessibilityIdentifier(accessibilityIdentifier)
             .id(focusTarget)
     }

@@ -19,7 +19,7 @@ struct StartWorkoutView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Start Workout")
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.largeTitle.weight(.bold))
                     .foregroundStyle(AppTheme.textPrimary)
                     .accessibilityIdentifier("StartWorkoutTitle")
 
@@ -28,21 +28,22 @@ struct StartWorkoutView: View {
                 } label: {
                     SurfaceCard {
                         HStack(spacing: 14) {
-                            RoundedRectangle(cornerRadius: 14)
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .fill(AppTheme.accentGradient)
                                 .frame(width: 56, height: 56)
                                 .overlay {
                                     Image(systemName: "plus")
-                                        .font(.system(size: 24, weight: .bold))
+                                        .font(.title2.weight(.bold))
                                         .foregroundStyle(.white)
                                 }
+                                .shadow(color: AppTheme.accentGlow, radius: 10, y: 4)
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Blank Workout")
-                                    .font(.system(size: 22, weight: .bold))
+                                    .font(.title3.weight(.bold))
                                     .foregroundStyle(AppTheme.textPrimary)
                                 Text("Start logging sets from scratch.")
-                                    .font(.system(size: 14, weight: .medium))
+                                    .font(.footnote.weight(.medium))
                                     .foregroundStyle(AppTheme.textSecondary)
                             }
 
@@ -55,7 +56,7 @@ struct StartWorkoutView: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Use Past Workout")
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.headline)
                         .foregroundStyle(AppTheme.textPrimary)
 
                     PastWorkoutPickerView(sessions: completedSessions) { session in

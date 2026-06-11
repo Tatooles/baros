@@ -30,18 +30,19 @@ struct WorkoutSessionView: View {
         ScrollViewReader { scrollProxy in
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 14) {
                         VStack(alignment: .leading, spacing: 2) {
                             TextField("Workout Name", text: workoutTitleBinding)
-                                .font(.system(size: 28, weight: .bold))
+                                .font(.title.weight(.bold))
                                 .foregroundStyle(AppTheme.textPrimary)
                                 .focused($focusedField, equals: .workoutTitle)
                                 .accessibilityIdentifier("WorkoutTitle")
                                 .id(WorkoutField.workoutTitle)
                             Text(AppTheme.formatDate(session.startedAt))
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.subheadline.weight(.medium))
                                 .foregroundStyle(AppTheme.textSecondary)
                         }
+                        .padding(.horizontal, 4)
 
                         ForEach(Array(session.sortedLoggedExercises.enumerated()), id: \.element.id) { exerciseIndex, loggedExercise in
                             ExerciseCardView(
@@ -59,24 +60,18 @@ struct WorkoutSessionView: View {
                             isAddExercisePresented = true
                         } label: {
                             Label("Add Exercise", systemImage: "plus")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.headline)
                                 .foregroundStyle(AppTheme.accentBright)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 11)
-                                .frame(minHeight: 44)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 18)
-                                        .stroke(style: StrokeStyle(lineWidth: 1.25, dash: [6, 4]))
-                                        .foregroundStyle(AppTheme.accentBright.opacity(0.45))
-                                )
+                                .padding(.vertical, 8)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.glass)
                         .accessibilityIdentifier("AddExerciseButton")
 
                         SurfaceCard {
-                            VStack(alignment: .leading, spacing: 6) {
+                            VStack(alignment: .leading, spacing: 8) {
                                 Text("WORKOUT NOTES")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .font(.caption2.weight(.bold))
                                     .tracking(1.8)
                                     .foregroundStyle(AppTheme.textSecondary)
                                 TextField(
@@ -84,7 +79,7 @@ struct WorkoutSessionView: View {
                                     text: workoutNotesBinding,
                                     axis: .vertical
                                 )
-                                .font(.system(size: 15))
+                                .font(.subheadline)
                                 .foregroundStyle(AppTheme.textPrimary)
                                 .lineLimit(4...6)
                                 .focused($focusedField, equals: .workoutNotes)
@@ -92,15 +87,14 @@ struct WorkoutSessionView: View {
 
                                 if let referenceNotes {
                                     Divider()
-                                        .overlay(AppTheme.border)
                                         .padding(.vertical, 4)
 
                                     Text("LAST TIME")
-                                        .font(.system(size: 10, weight: .bold))
+                                        .font(.caption2.weight(.bold))
                                         .tracking(1.4)
                                         .foregroundStyle(AppTheme.textTertiary)
                                     Text(referenceNotes)
-                                        .font(.system(size: 14))
+                                        .font(.footnote)
                                         .foregroundStyle(AppTheme.textSecondary)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }

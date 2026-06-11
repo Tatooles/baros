@@ -24,7 +24,7 @@ struct HistoryView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
                 Text("History")
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.largeTitle.weight(.bold))
                     .foregroundStyle(AppTheme.textPrimary)
                     .accessibilityIdentifier("HistoryTitle")
 

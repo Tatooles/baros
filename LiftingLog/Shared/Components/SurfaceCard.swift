@@ -3,21 +3,33 @@ import SwiftUI
 struct SurfaceCard<Content: View>: View {
     let padding: CGFloat
     @ViewBuilder var content: Content
+    @Environment(\.colorScheme) private var colorScheme
 
-    init(padding: CGFloat = 14, @ViewBuilder content: () -> Content) {
+    init(padding: CGFloat = 16, @ViewBuilder content: () -> Content) {
         self.padding = padding
         self.content = content()
+    }
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius, style: .continuous)
     }
 
     var body: some View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppTheme.surface)
+            .background(.regularMaterial, in: shape)
             .overlay(
-                RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius)
-                    .stroke(AppTheme.border)
+                shape.strokeBorder(
+                    colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05),
+                    lineWidth: 1
+                )
             )
-            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+            .shadow(
+                color: .black.opacity(colorScheme == .dark ? 0.3 : 0.07),
+                radius: 14,
+                y: 5
+            )
+            .containerShape(shape)
     }
 }

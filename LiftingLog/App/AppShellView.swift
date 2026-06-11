@@ -107,7 +107,6 @@ struct AppShellView: View {
             .tag(AppTab.profile)
         }
         .tint(AppTheme.accentBright)
-        .preferredColorScheme(.dark)
         .safeAreaInset(edge: .bottom) {
             if shouldShowGlobalSyncFailureBanner {
                 GlobalSyncFailureBanner(
@@ -145,15 +144,15 @@ private struct GlobalSyncFailureBanner: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "exclamationmark.icloud")
                     .foregroundStyle(AppTheme.accentBright)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Cloud sync failed")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.subheadline.weight(.bold))
                         .foregroundStyle(AppTheme.textPrimary)
                     Text("Your data is saved on this iPhone.")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.footnote.weight(.medium))
                         .foregroundStyle(AppTheme.textSecondary)
                 }
                 .fixedSize(horizontal: false, vertical: true)
@@ -162,7 +161,7 @@ private struct GlobalSyncFailureBanner: View {
 
                 Button(action: dismiss) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(AppTheme.textSecondary)
                 }
                 .buttonStyle(.plain)
@@ -172,22 +171,21 @@ private struct GlobalSyncFailureBanner: View {
 
             HStack(spacing: 8) {
                 Button("Retry", action: retry)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .tint(AppTheme.accentBright)
                     .accessibilityIdentifier("GlobalSyncRetryButton")
                 Button("Details", action: details)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("GlobalSyncDetailsButton")
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .padding(12)
-        .background(AppTheme.surface)
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(AppTheme.accentBright.opacity(0.45))
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(AppTheme.accentBright.opacity(0.4))
         )
-        .clipShape(RoundedRectangle(cornerRadius: 14))
         .gesture(
             DragGesture(minimumDistance: 20)
                 .onEnded { value in

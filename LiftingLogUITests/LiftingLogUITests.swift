@@ -549,6 +549,31 @@ final class LiftingLogUITests: XCTestCase {
     }
 
     @MainActor
+    func testSwipeToDeleteSetRemovesSet() {
+        let app = makeApp()
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+
+        addExercise("Bench Press, Barbell • Chest", in: app)
+        dismissKeyboardIfNeeded(in: app)
+
+        app.buttons["AddSetButton-0"].tap()
+        dismissKeyboardIfNeeded(in: app)
+        let secondWeightField = app.textFields["SetWeightField-0-1"]
+        XCTAssertTrue(secondWeightField.waitForExistence(timeout: 3))
+
+        secondWeightField.swipeLeft()
+        let deleteButton = app.buttons["DeleteSetButton-0-1"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 2))
+        deleteButton.tap()
+
+        XCTAssertFalse(app.textFields["SetWeightField-0-1"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.textFields["SetWeightField-0-0"].exists)
+    }
+
+    @MainActor
     private func makeApp(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [

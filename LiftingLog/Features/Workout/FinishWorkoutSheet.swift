@@ -16,19 +16,15 @@ struct FinishWorkoutSheet: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Capsule()
-                .fill(AppTheme.borderStrong)
-                .frame(width: 40, height: 5)
-                .padding(.top, 8)
-
             VStack(spacing: 4) {
                 Text("Finish Workout?")
-                    .font(.system(size: 26, weight: .bold))
+                    .font(.title2.weight(.bold))
                     .foregroundStyle(AppTheme.textPrimary)
                 Text("Review your session summary")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(AppTheme.textSecondary)
             }
+            .padding(.top, 24)
 
             HStack(spacing: 10) {
                 summaryCard(title: "Duration", value: AppTheme.formatDuration(metrics.durationSeconds))
@@ -51,20 +47,18 @@ struct FinishWorkoutSheet: View {
                 }
             } label: {
                 Text("Save Workout")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(.white)
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-                    .background(AppTheme.accentGradient)
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .padding(.vertical, 8)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.glassProminent)
+            .tint(AppTheme.accentBright)
             .accessibilityIdentifier("SaveWorkoutButton")
 
             Button("Keep Going") {
                 dismiss()
             }
-            .font(.system(size: 16, weight: .medium))
+            .font(.callout.weight(.medium))
             .foregroundStyle(AppTheme.textSecondary)
             .accessibilityIdentifier("KeepGoingButton")
 
@@ -72,15 +66,15 @@ struct FinishWorkoutSheet: View {
                 showsDiscardConfirmation = true
             } label: {
                 Text("Discard Workout")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppTheme.accentBright)
             }
             .padding(.bottom, 8)
         }
         .padding(.horizontal, 20)
-        .background(AppTheme.surface)
         .presentationDetents([.height(390)])
-        .presentationCornerRadius(28)
+        .presentationCornerRadius(36)
+        .presentationDragIndicator(.visible)
         .alert("Discard Workout?", isPresented: $showsDiscardConfirmation) {
             Button("Discard", role: .destructive) {
                 do {
@@ -113,20 +107,18 @@ struct FinishWorkoutSheet: View {
     private func summaryCard(title: String, value: String) -> some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.system(size: 20, weight: .bold))
+                .font(.title3.weight(.bold))
                 .foregroundStyle(AppTheme.textPrimary)
                 .minimumScaleFactor(0.7)
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .font(.caption.weight(.medium))
                 .foregroundStyle(AppTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
-        .background(AppTheme.surfaceMuted)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(AppTheme.border)
+        .background(
+            AppTheme.surfaceMuted,
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }
