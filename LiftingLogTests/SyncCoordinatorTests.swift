@@ -2784,6 +2784,11 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
             userSettings: 0
         )
     )
+    var cancelAccountDeletionCallCount = 0
+    var cancelAccountDeletionError: Error?
+    var cancelAccountDeletionResult = AccountDeletionCancellationResult(
+        status: "cancelled"
+    )
     var fetchResponse = SyncFetchChangesResponse(
         userSettings: [],
         exercises: [],
@@ -2866,8 +2871,17 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
 
     func deleteAccountData() async throws -> AccountDataDeletionResult {
         deleteAccountDataCallCount += 1
+        operationLog.append("deleteAccountData")
         if let deleteAccountDataError { throw deleteAccountDataError }
         if let error { throw error }
         return deleteAccountDataResult
+    }
+
+    func cancelAccountDeletion() async throws -> AccountDeletionCancellationResult {
+        cancelAccountDeletionCallCount += 1
+        operationLog.append("cancelAccountDeletion")
+        if let cancelAccountDeletionError { throw cancelAccountDeletionError }
+        if let error { throw error }
+        return cancelAccountDeletionResult
     }
 }

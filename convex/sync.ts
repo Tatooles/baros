@@ -1162,6 +1162,22 @@ export const deleteAccountData = action({
   },
 });
 
+export const cancelAccountDeletion = action({
+  args: {},
+  handler: async (ctx): Promise<{ status: "cancelled" }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity === null) {
+      throw new Error("Not authenticated");
+    }
+
+    await ctx.runMutation(internal.sync.clearAccountDeletion, {
+      ownerTokenIdentifier: identity.tokenIdentifier,
+    });
+
+    return { status: "cancelled" };
+  },
+});
+
 export async function deleteAccountDataForOwner(
   startDeletion: () => Promise<void>,
   clearDeletionMarker: () => Promise<void>,

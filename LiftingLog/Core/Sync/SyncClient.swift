@@ -9,4 +9,5 @@ protocol SyncClient {
     func tombstone(entityKind: SyncEntityKind, clientId: UUID, deletedAt: Date) async throws -> SyncMutationResult
     func fetchChanges(cursors: SyncChangeCursors, limit: Int) async throws -> SyncFetchChangesResponse
     func deleteAccountData() async throws -> AccountDataDeletionResult
+    func cancelAccountDeletion() async throws -> AccountDeletionCancellationResult
 }

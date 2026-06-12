@@ -539,6 +539,22 @@ describe("account data deletion", () => {
     ]);
   });
 
+  test("cancelAccountDeletion clears the marker for the authenticated owner", async () => {
+    const t = testDb();
+
+    await t.withIdentity(userA).action(api.sync.deleteAccountData, {});
+
+    await expect(
+      t.withIdentity(userA).action(api.sync.cancelAccountDeletion, {}),
+    ).resolves.toEqual({ status: "cancelled" });
+
+    await expect(
+      t.withIdentity(userA).mutation(api.sync.upsertExercise, {
+        record: exerciseRecord({ clientId: "post-cancel-exercise" }),
+      }),
+    ).resolves.toMatchObject({ status: "inserted" });
+  });
+
   test("deleteAccountDataForOwner clears the marker when deletion fails", async () => {
     let started = false;
     let cleared = false;

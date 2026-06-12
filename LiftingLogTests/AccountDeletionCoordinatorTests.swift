@@ -62,7 +62,12 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
         await coordinator.deleteAccount()
 
         XCTAssertEqual(client.deleteAccountDataCallCount, 1)
+        XCTAssertEqual(client.cancelAccountDeletionCallCount, 1)
         XCTAssertEqual(accountDeleter.deleteCallCount, 1)
+        XCTAssertEqual(
+            client.operationLog,
+            ["deleteAccountData", "cancelAccountDeletion"]
+        )
         XCTAssertEqual(try context.fetch(FetchDescriptor<UserSettings>()).count, 1)
         XCTAssertEqual(coordinator.phase, .failed("Account deletion could not finish. Your local data is still saved on this iPhone."))
         XCTAssertFalse(scheduler.isDeletionModeEnabled)

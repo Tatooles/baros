@@ -74,6 +74,10 @@ struct ConvexSyncClient: SyncClient, @unchecked Sendable {
     func deleteAccountData() async throws -> AccountDataDeletionResult {
         try await client.action("sync:deleteAccountData")
     }
+
+    func cancelAccountDeletion() async throws -> AccountDeletionCancellationResult {
+        try await client.action("sync:cancelAccountDeletion")
+    }
 }
 
 enum ConvexSyncArgumentMapper {

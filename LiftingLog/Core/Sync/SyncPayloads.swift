@@ -297,3 +297,7 @@ struct AccountDataDeletionResult: Codable, Equatable {
     let status: String
     let deletedCounts: AccountDataDeletionCounts
 }
+
+struct AccountDeletionCancellationResult: Codable, Equatable {
+    let status: String
+}

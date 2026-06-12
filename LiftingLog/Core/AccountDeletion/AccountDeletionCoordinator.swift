@@ -57,7 +57,12 @@ final class AccountDeletionCoordinator: ObservableObject {
             _ = try await syncClient.deleteAccountData()
 
             phase = .deletingAccount
-            try await accountDeleter.deleteCurrentAccount()
+            do {
+                try await accountDeleter.deleteCurrentAccount()
+            } catch {
+                _ = try await syncClient.cancelAccountDeletion()
+                throw error
+            }
 
             phase = .clearingLocalData
             try localDataResetService.reset(context: modelContext)
