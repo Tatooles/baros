@@ -351,7 +351,7 @@ describe("account data deletion", () => {
   test("deleteAccountData rejects unauthenticated callers", async () => {
     const t = testDb();
 
-    await expect(t.mutation(api.sync.deleteAccountData, {})).rejects.toThrow(
+    await expect(t.action(api.sync.deleteAccountData, {})).rejects.toThrow(
       "Not authenticated",
     );
   });
@@ -362,7 +362,7 @@ describe("account data deletion", () => {
     await seedFullSyncGraphForOwner(t, userB, "B");
 
     await expect(
-      t.withIdentity(userA).mutation(api.sync.deleteAccountData, {}),
+      t.withIdentity(userA).action(api.sync.deleteAccountData, {}),
     ).resolves.toEqual({
       status: "deleted",
       deletedCounts: {
@@ -407,10 +407,10 @@ describe("account data deletion", () => {
     const t = testDb();
     await seedFullSyncGraphForOwner(t, userA, "A");
 
-    await t.withIdentity(userA).mutation(api.sync.deleteAccountData, {});
+    await t.withIdentity(userA).action(api.sync.deleteAccountData, {});
 
     await expect(
-      t.withIdentity(userA).mutation(api.sync.deleteAccountData, {}),
+      t.withIdentity(userA).action(api.sync.deleteAccountData, {}),
     ).resolves.toEqual({
       status: "deleted",
       deletedCounts: {
@@ -428,7 +428,7 @@ describe("account data deletion", () => {
     await seedLoggedSetsDirectlyForOwner(t, userA, 1001);
 
     await expect(
-      t.withIdentity(userA).mutation(api.sync.deleteAccountData, {}),
+      t.withIdentity(userA).action(api.sync.deleteAccountData, {}),
     ).resolves.toEqual({
       status: "deleted",
       deletedCounts: {

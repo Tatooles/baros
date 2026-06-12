@@ -1,5 +1,13 @@
 import { v, type Infer } from "convex/values";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import {
+  action,
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { type Doc } from "./_generated/dataModel";
 import { requireOwnerTokenIdentifier } from "./lib/auth";
 import {
@@ -52,6 +60,10 @@ type AccountDataDeletionResult = {
     exercises: number;
     userSettings: number;
   };
+};
+
+type AccountDataDeletionBatchResult = AccountDataDeletionResult & {
+  hasMore: boolean;
 };
 
 type ChangePage<TRecord extends { serverUpdatedAt: number }> = {
@@ -725,102 +737,99 @@ async function fetchLoggedSetChanges(
   return pageFromOverfetch(records, limit);
 }
 
-async function deleteRowsInBatches<TRecord extends { _id: string }>(
+async function deleteRowsForOwnerBatch<TRecord extends { _id: string }>(
   fetchBatch: () => Promise<TRecord[]>,
   deleteRow: (row: TRecord) => Promise<void>,
-): Promise<number> {
-  let deletedCount = 0;
+): Promise<{ deletedCount: number; hasMore: boolean }> {
+  const rows = await fetchBatch();
+  const rowsToDelete = rows.slice(0, accountDeletionBatchSize);
 
-  while (true) {
-    const rows = await fetchBatch();
-    if (rows.length === 0) {
-      return deletedCount;
-    }
-
-    for (const row of rows) {
-      await deleteRow(row);
-    }
-
-    deletedCount += rows.length;
+  for (const row of rowsToDelete) {
+    await deleteRow(row);
   }
+
+  return {
+    deletedCount: rowsToDelete.length,
+    hasMore: rows.length > accountDeletionBatchSize,
+  };
 }
 
-async function deleteUserSettingsForOwner(
+async function deleteUserSettingsForOwnerBatch(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
-): Promise<number> {
-  return await deleteRowsInBatches(
+): Promise<{ deletedCount: number; hasMore: boolean }> {
+  return await deleteRowsForOwnerBatch(
     () =>
       ctx.db
         .query("userSettings")
         .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
           q.eq("ownerTokenIdentifier", ownerTokenIdentifier),
         )
-        .take(accountDeletionBatchSize),
+        .take(accountDeletionBatchSize + 1),
     (row) => ctx.db.delete(row._id),
   );
 }
 
-async function deleteExercisesForOwner(
+async function deleteExercisesForOwnerBatch(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
-): Promise<number> {
-  return await deleteRowsInBatches(
+): Promise<{ deletedCount: number; hasMore: boolean }> {
+  return await deleteRowsForOwnerBatch(
     () =>
       ctx.db
         .query("exercises")
         .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
           q.eq("ownerTokenIdentifier", ownerTokenIdentifier),
         )
-        .take(accountDeletionBatchSize),
+        .take(accountDeletionBatchSize + 1),
     (row) => ctx.db.delete(row._id),
   );
 }
 
-async function deleteWorkoutSessionsForOwner(
+async function deleteWorkoutSessionsForOwnerBatch(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
-): Promise<number> {
-  return await deleteRowsInBatches(
+): Promise<{ deletedCount: number; hasMore: boolean }> {
+  return await deleteRowsForOwnerBatch(
     () =>
       ctx.db
         .query("workoutSessions")
         .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
           q.eq("ownerTokenIdentifier", ownerTokenIdentifier),
         )
-        .take(accountDeletionBatchSize),
+        .take(accountDeletionBatchSize + 1),
     (row) => ctx.db.delete(row._id),
   );
 }
 
-async function deleteLoggedExercisesForOwner(
+async function deleteLoggedExercisesForOwnerBatch(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
-): Promise<number> {
-  return await deleteRowsInBatches(
+): Promise<{ deletedCount: number; hasMore: boolean }> {
+  return await deleteRowsForOwnerBatch(
     () =>
       ctx.db
         .query("loggedExercises")
         .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
           q.eq("ownerTokenIdentifier", ownerTokenIdentifier),
         )
-        .take(accountDeletionBatchSize),
+        .take(accountDeletionBatchSize + 1),
     (row) => ctx.db.delete(row._id),
   );
 }
 
-async function deleteLoggedSetsForOwner(
+async function deleteLoggedSetsForOwnerBatch(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
-): Promise<number> {
-  return await deleteRowsInBatches(
+): Promise<{ deletedCount: number; hasMore: boolean }> {
+  return await deleteRowsForOwnerBatch(
     () =>
       ctx.db
         .query("loggedSets")
         .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
           q.eq("ownerTokenIdentifier", ownerTokenIdentifier),
         )
-        .take(accountDeletionBatchSize),
+        .take(accountDeletionBatchSize + 1),
     (row) => ctx.db.delete(row._id),
   );
 }
@@ -932,35 +941,86 @@ export const tombstone = mutation({
   },
 });
 
-export const deleteAccountData = mutation({
-  args: {},
-  handler: async (ctx): Promise<AccountDataDeletionResult> => {
-    const ownerTokenIdentifier = await requireOwnerTokenIdentifier(ctx);
-
-    const loggedSets = await deleteLoggedSetsForOwner(ctx, ownerTokenIdentifier);
-    const loggedExercises = await deleteLoggedExercisesForOwner(
+export const deleteAccountDataBatch = internalMutation({
+  args: { ownerTokenIdentifier: v.string() },
+  handler: async (ctx, args): Promise<AccountDataDeletionBatchResult> => {
+    const loggedSets = await deleteLoggedSetsForOwnerBatch(
       ctx,
-      ownerTokenIdentifier,
+      args.ownerTokenIdentifier,
     );
-    const workoutSessions = await deleteWorkoutSessionsForOwner(
+    const loggedExercises = await deleteLoggedExercisesForOwnerBatch(
       ctx,
-      ownerTokenIdentifier,
+      args.ownerTokenIdentifier,
     );
-    const exercises = await deleteExercisesForOwner(ctx, ownerTokenIdentifier);
-    const userSettings = await deleteUserSettingsForOwner(
+    const workoutSessions = await deleteWorkoutSessionsForOwnerBatch(
       ctx,
-      ownerTokenIdentifier,
+      args.ownerTokenIdentifier,
+    );
+    const exercises = await deleteExercisesForOwnerBatch(
+      ctx,
+      args.ownerTokenIdentifier,
+    );
+    const userSettings = await deleteUserSettingsForOwnerBatch(
+      ctx,
+      args.ownerTokenIdentifier,
     );
 
     return {
       status: "deleted",
       deletedCounts: {
-        loggedSets,
-        loggedExercises,
-        workoutSessions,
-        exercises,
-        userSettings,
+        loggedSets: loggedSets.deletedCount,
+        loggedExercises: loggedExercises.deletedCount,
+        workoutSessions: workoutSessions.deletedCount,
+        exercises: exercises.deletedCount,
+        userSettings: userSettings.deletedCount,
       },
+      hasMore:
+        loggedSets.hasMore ||
+        loggedExercises.hasMore ||
+        workoutSessions.hasMore ||
+        exercises.hasMore ||
+        userSettings.hasMore,
+    };
+  },
+});
+
+export const deleteAccountData = action({
+  args: {},
+  handler: async (ctx): Promise<AccountDataDeletionResult> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity === null) {
+      throw new Error("Not authenticated");
+    }
+
+    const ownerTokenIdentifier = identity.tokenIdentifier;
+    const deletedCounts: AccountDataDeletionResult["deletedCounts"] = {
+      loggedSets: 0,
+      loggedExercises: 0,
+      workoutSessions: 0,
+      exercises: 0,
+      userSettings: 0,
+    };
+
+    while (true) {
+      const result: AccountDataDeletionBatchResult = await ctx.runMutation(
+        internal.sync.deleteAccountDataBatch,
+        { ownerTokenIdentifier },
+      );
+
+      deletedCounts.loggedSets += result.deletedCounts.loggedSets;
+      deletedCounts.loggedExercises += result.deletedCounts.loggedExercises;
+      deletedCounts.workoutSessions += result.deletedCounts.workoutSessions;
+      deletedCounts.exercises += result.deletedCounts.exercises;
+      deletedCounts.userSettings += result.deletedCounts.userSettings;
+
+      if (!result.hasMore) {
+        break;
+      }
+    }
+
+    return {
+      status: "deleted",
+      deletedCounts,
     };
   },
 });
