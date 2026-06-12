@@ -195,6 +195,71 @@ struct SyncOutboxRecorder {
         }
     }
 
+    func enqueueOwnedV1SyncableRecords(
+        ownerTokenIdentifier: String,
+        context: ModelContext,
+        now: Date
+    ) throws {
+        for settings in try context.fetch(FetchDescriptor<UserSettings>())
+            where settings.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+            try recordBootstrapEntry(
+                entityKind: .userSettings,
+                entityID: settings.id,
+                isDeleted: settings.isDeleted,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+        }
+
+        for exercise in try context.fetch(FetchDescriptor<Exercise>())
+            where exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+            try recordBootstrapEntry(
+                entityKind: .exercise,
+                entityID: exercise.id,
+                isDeleted: exercise.isDeleted,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+        }
+
+        for session in try context.fetch(FetchDescriptor<WorkoutSession>())
+            where session.status != .active
+                && session.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+            try recordBootstrapEntry(
+                entityKind: .workoutSession,
+                entityID: session.id,
+                isDeleted: session.isDeleted,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+
+            for loggedExercise in session.loggedExercises {
+                try recordBootstrapEntry(
+                    entityKind: .loggedExercise,
+                    entityID: loggedExercise.id,
+                    isDeleted: loggedExercise.isDeleted,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context,
+                    now: now
+                )
+
+                for set in loggedExercise.sets {
+                    try recordBootstrapEntry(
+                        entityKind: .loggedSet,
+                        entityID: set.id,
+                        isDeleted: set.isDeleted,
+                        ownerTokenIdentifier: ownerTokenIdentifier,
+                        context: context,
+                        now: now
+                    )
+                }
+            }
+        }
+    }
+
     func pendingEntries(context: ModelContext) throws -> [SyncOutboxEntry] {
         let pendingStatus = SyncOutboxStatus.pending.rawValue
         return try context.fetch(FetchDescriptor<SyncOutboxEntry>(

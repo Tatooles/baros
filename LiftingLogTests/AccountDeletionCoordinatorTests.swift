@@ -15,6 +15,7 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
         client.deleteAccountDataError = ConvexError()
         let accountDeleter = FakeAccountDeleter()
         let scheduler = SyncScheduler()
+        scheduler.configure(modelContext: context)
         scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
         context.insert(UserSettings(syncOwnerTokenIdentifier: "issuer|owner_a"))
         try context.save()
@@ -31,7 +32,13 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(client.deleteAccountDataCallCount, 1)
         XCTAssertEqual(accountDeleter.deleteCallCount, 0)
+        XCTAssertEqual(scheduler.requestCount, 1)
         XCTAssertEqual(try context.fetch(FetchDescriptor<UserSettings>()).count, 1)
+        let outboxEntries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertEqual(outboxEntries.count, 1)
+        XCTAssertEqual(outboxEntries.first?.entityKind, .userSettings)
+        XCTAssertEqual(outboxEntries.first?.operation, .create)
+        XCTAssertEqual(outboxEntries.first?.ownerTokenIdentifier, "issuer|owner_a")
         XCTAssertEqual(coordinator.phase, .failed("Cloud data could not be deleted. Your account and data are still intact."))
         XCTAssertFalse(scheduler.isDeletionModeEnabled)
     }
@@ -47,6 +54,7 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
         let accountDeleter = FakeAccountDeleter()
         accountDeleter.error = ClerkError()
         let scheduler = SyncScheduler()
+        scheduler.configure(modelContext: context)
         scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
         context.insert(UserSettings(syncOwnerTokenIdentifier: "issuer|owner_a"))
         try context.save()
@@ -71,7 +79,13 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
             client.operationLog,
             ["deleteAccountData", "cancelAccountDeletion"]
         )
+        XCTAssertEqual(scheduler.requestCount, 1)
         XCTAssertEqual(try context.fetch(FetchDescriptor<UserSettings>()).count, 1)
+        let outboxEntries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertEqual(outboxEntries.count, 1)
+        XCTAssertEqual(outboxEntries.first?.entityKind, .userSettings)
+        XCTAssertEqual(outboxEntries.first?.operation, .create)
+        XCTAssertEqual(outboxEntries.first?.ownerTokenIdentifier, "issuer|owner_a")
         XCTAssertEqual(coordinator.phase, .failed("Account deletion could not finish. Your local data is still saved on this iPhone."))
         XCTAssertFalse(scheduler.isDeletionModeEnabled)
     }
@@ -98,6 +112,7 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(client.deleteAccountDataCallCount, 1)
         XCTAssertEqual(accountDeleter.deleteCallCount, 1)
+        XCTAssertEqual(scheduler.requestCount, 0)
         XCTAssertEqual(coordinator.phase, .completed)
         XCTAssertNil(scheduler.currentOwnerTokenIdentifier)
         XCTAssertEqual(try context.fetch(FetchDescriptor<UserSettings>()).count, 1)

@@ -43,6 +43,10 @@ final class SyncScheduler {
         self.modelContext = modelContext
     }
 
+    func configure(modelContext: ModelContext) {
+        self.modelContext = modelContext
+    }
+
     func requestSync() {
         requestCount += 1
         guard !isDeletionModeEnabled else { return }
@@ -69,6 +73,23 @@ final class SyncScheduler {
 
     func endDeletionMode() {
         isDeletionModeEnabled = false
+    }
+
+    func recoverAfterFailedAccountDeletion() {
+        guard let currentOwnerTokenIdentifier, let modelContext else {
+            endDeletionMode()
+            return
+        }
+
+        let recorder = SyncOutboxRecorder()
+        try? recorder.enqueueOwnedV1SyncableRecords(
+            ownerTokenIdentifier: currentOwnerTokenIdentifier,
+            context: modelContext,
+            now: .now
+        )
+        try? modelContext.save()
+        endDeletionMode()
+        requestSync()
     }
 
     func resetAfterDataDeletion() {
