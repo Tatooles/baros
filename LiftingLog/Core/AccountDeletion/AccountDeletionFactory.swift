@@ -14,6 +14,7 @@ struct AccountDeletionFactory {
             AccountDeletionCoordinator(
                 syncClient: syncClient,
                 accountDeleter: ClerkAccountDeleter(clerk: clerk),
+                attemptStore: UserDefaultsAccountDeletionAttemptStore(),
                 localDataResetService: LocalDataResetService(),
                 syncScheduler: syncScheduler,
                 modelContext: modelContext
