@@ -482,7 +482,7 @@ final class LiftingLogUITests: XCTestCase {
 
     @MainActor
     func testSettingsShowsSignedInAccountDeletionOnly() {
-        let app = makeApp(extraArguments: ["--uitest-sync-owner", "issuer|ui_owner"])
+        let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth"])
         app.launch()
 
         app.buttons["ProfileTab"].tap()

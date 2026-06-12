@@ -37,4 +37,16 @@ final class AccountDisplayStateTests: XCTestCase {
         XCTAssertEqual(state.actionTitle, "Manage account")
         XCTAssertTrue(state.isSignedIn)
     }
+
+    func testPrivacyDeletionActionPrefersAccountDeletionWhenAuthenticatedWithoutOwner() {
+        let action = PrivacyDataDeletionAction.resolve(isAuthenticated: true)
+
+        XCTAssertEqual(action, .account)
+    }
+
+    func testPrivacyDeletionActionUsesLocalDeletionWhenSignedOut() {
+        let action = PrivacyDataDeletionAction.resolve(isAuthenticated: false)
+
+        XCTAssertEqual(action, .localData)
+    }
 }

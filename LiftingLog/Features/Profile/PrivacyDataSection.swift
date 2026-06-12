@@ -2,6 +2,64 @@ import ClerkKit
 import SwiftData
 import SwiftUI
 
+enum PrivacyDataDeletionAction: Equatable {
+    case account
+    case localData
+
+    static func resolve(isAuthenticated: Bool) -> Self {
+        if isAuthenticated {
+            return .account
+        }
+
+        return .localData
+    }
+
+    var mode: DeleteDataMode {
+        switch self {
+        case .account:
+            .account
+        case .localData:
+            .localData
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .account:
+            "Delete Account"
+        case .localData:
+            "Delete Local Data"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .account:
+            "Delete cloud account and data."
+        case .localData:
+            "Delete data saved on this iPhone."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .account:
+            "person.crop.circle.badge.xmark"
+        case .localData:
+            "trash"
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .account:
+            "SettingsDeleteAccountRow"
+        case .localData:
+            "SettingsDeleteLocalDataRow"
+        }
+    }
+}
+
 struct PrivacyDataSection: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accountDeletionFactory) private var accountDeletionFactory
@@ -12,8 +70,12 @@ struct PrivacyDataSection: View {
     let exportWorkoutHistory: () -> Void
     let links: PrivacySupportConfiguration
 
-    private var isSignedInForDeletion: Bool {
-        syncScheduler.currentOwnerTokenIdentifier != nil
+    private var deletionAction: PrivacyDataDeletionAction {
+        let isAuthenticated =
+            UITestAuthOverride.isForcedSignedIn ||
+            (!UITestAuthOverride.isForcedSignedOut && clerk.user != nil)
+
+        return PrivacyDataDeletionAction.resolve(isAuthenticated: isAuthenticated)
     }
 
     var body: some View {
@@ -31,7 +93,7 @@ struct PrivacyDataSection: View {
 
             NavigationLink {
                 DeleteDataConfirmationView(
-                    mode: isSignedInForDeletion ? .account : .localData,
+                    mode: deletionAction.mode,
                     coordinator: accountDeletionFactory.makeCoordinator(
                         modelContext,
                         syncScheduler,
@@ -41,18 +103,18 @@ struct PrivacyDataSection: View {
             } label: {
                 Label {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(isSignedInForDeletion ? "Delete Account" : "Delete Local Data")
+                        Text(deletionAction.title)
                             .foregroundStyle(.red)
-                        Text(isSignedInForDeletion ? "Delete cloud account and data." : "Delete data saved on this iPhone.")
+                        Text(deletionAction.detail)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 } icon: {
-                    Image(systemName: isSignedInForDeletion ? "person.crop.circle.badge.xmark" : "trash")
+                    Image(systemName: deletionAction.systemImage)
                         .foregroundStyle(.red)
                 }
             }
-            .accessibilityIdentifier(isSignedInForDeletion ? "SettingsDeleteAccountRow" : "SettingsDeleteLocalDataRow")
+            .accessibilityIdentifier(deletionAction.accessibilityIdentifier)
         }
     }
 

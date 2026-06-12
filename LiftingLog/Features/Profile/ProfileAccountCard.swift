@@ -2,17 +2,27 @@ import ClerkKit
 import ClerkKitUI
 import SwiftUI
 
+enum UITestAuthOverride {
+    static var isForcedSignedOut: Bool {
+        ProcessInfo.processInfo.arguments.contains("--uitest-force-signed-out-auth")
+    }
+
+    static var isForcedSignedIn: Bool {
+        ProcessInfo.processInfo.arguments.contains("--uitest-force-signed-in-auth")
+    }
+}
+
 struct ProfileAccountCard: View {
     @Environment(Clerk.self) private var clerk
     @State private var authIsPresented = false
 
-    private var forceSignedOutAuth: Bool {
-        ProcessInfo.processInfo.arguments.contains("--uitest-force-signed-out-auth")
-    }
-
     private var displayState: AccountDisplayState {
-        if forceSignedOutAuth {
+        if UITestAuthOverride.isForcedSignedOut {
             return .signedOut
+        }
+
+        if UITestAuthOverride.isForcedSignedIn {
+            return .signedIn(fullName: "UI Test Account", email: "ui-test@example.com")
         }
 
         guard let user = clerk.user else {
