@@ -25,7 +25,9 @@ struct ExerciseCardView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     Button {
-                        isCollapsed.toggle()
+                        withAnimation(.snappy(duration: 0.3, extraBounce: 0)) {
+                            isCollapsed.toggle()
+                        }
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "chevron.down")
@@ -194,6 +196,9 @@ struct ExerciseCardView: View {
                             .padding(.horizontal, 16)
                         }
                     }
+                    // Content stays put and fades while the clipped card edge
+                    // swallows it; a .move transition here reads as jank.
+                    .transition(.opacity)
                     .padding(.bottom, 16)
                 }
             }

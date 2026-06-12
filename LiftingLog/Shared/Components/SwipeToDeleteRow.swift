@@ -11,8 +11,12 @@ struct SwipeToDeleteRow<Content: View>: View {
     @State private var offsetX: CGFloat = 0
     @State private var isOpen = false
     @State private var lockedAxis: Axis?
+    @State private var rowWidth: CGFloat = 0
 
     private let revealWidth: CGFloat = 72
+    /// Dragging past this fraction of the row width commits the delete
+    /// directly on release, like a full swipe in List.
+    private let fullSwipeFraction: CGFloat = 0.5
     private let deleteShape = RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
 
     var body: some View {
@@ -42,6 +46,9 @@ struct SwipeToDeleteRow<Content: View>: View {
                     .accessibilityIdentifier(deleteAccessibilityIdentifier ?? deleteAccessibilityLabel)
                 }
             }
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
+                rowWidth = width
+            }
             .contentShape(Rectangle())
             .onTapGesture {
                 if isOpen {
@@ -70,9 +77,21 @@ struct SwipeToDeleteRow<Content: View>: View {
                         guard lockedAxis == .horizontal else { return }
 
                         let base: CGFloat = isOpen ? -revealWidth : 0
+                        let dragged = base + value.translation.width
                         let projected = base + value.predictedEndTranslation.width
+
+                        // Actual distance (not flick projection) commits the
+                        // delete, so a quick flick only reveals the button.
+                        if rowWidth > 0, dragged < -rowWidth * fullSwipeFraction {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                offsetX = -rowWidth
+                            }
+                            performDelete()
+                            return
+                        }
+
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                            if projected < -revealWidth * 0.6 {
+                            if projected < -revealWidth * 0.5 {
                                 offsetX = -revealWidth
                                 isOpen = true
                             } else {
