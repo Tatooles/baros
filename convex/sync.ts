@@ -408,14 +408,19 @@ async function assertAccountDeletionNotStarted(
 async function markAccountDeletionStarted(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
+  cancellationToken: string,
 ): Promise<void> {
   const existing = await accountDeletionMarkerForOwner(ctx, ownerTokenIdentifier);
   if (existing !== null) {
+    if (existing.cancellationToken !== cancellationToken) {
+      throw new Error("Account deletion is already in progress on another client");
+    }
     return;
   }
 
   await ctx.db.insert("accountDeletionMarkers", {
     ownerTokenIdentifier,
+    cancellationToken,
     createdAt: Date.now(),
   });
 }
@@ -423,10 +428,15 @@ async function markAccountDeletionStarted(
 async function clearAccountDeletionMarker(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
+  cancellationToken: string,
 ): Promise<void> {
   const existing = await accountDeletionMarkerForOwner(ctx, ownerTokenIdentifier);
   if (existing === null) {
     return;
+  }
+
+  if (existing.cancellationToken !== cancellationToken) {
+    throw new Error("Account deletion is already in progress on another client");
   }
 
   await ctx.db.delete(existing._id);
@@ -1070,18 +1080,28 @@ export const tombstone = mutation({
 export const startAccountDeletion = internalMutation({
   args: {
     ownerTokenIdentifier: v.string(),
+    cancellationToken: v.string(),
   },
   handler: async (ctx, args) => {
-    await markAccountDeletionStarted(ctx, args.ownerTokenIdentifier);
+    await markAccountDeletionStarted(
+      ctx,
+      args.ownerTokenIdentifier,
+      args.cancellationToken,
+    );
   },
 });
 
 export const clearAccountDeletion = internalMutation({
   args: {
     ownerTokenIdentifier: v.string(),
+    cancellationToken: v.string(),
   },
   handler: async (ctx, args) => {
-    await clearAccountDeletionMarker(ctx, args.ownerTokenIdentifier);
+    await clearAccountDeletionMarker(
+      ctx,
+      args.ownerTokenIdentifier,
+      args.cancellationToken,
+    );
   },
 });
 
@@ -1132,8 +1152,10 @@ export const deleteAccountDataBatch = internalMutation({
 });
 
 export const deleteAccountData = action({
-  args: {},
-  handler: async (ctx): Promise<AccountDataDeletionResult> => {
+  args: {
+    cancellationToken: v.string(),
+  },
+  handler: async (ctx, args): Promise<AccountDataDeletionResult> => {
     const identity = await ctx.auth.getUserIdentity();
     if (identity === null) {
       throw new Error("Not authenticated");
@@ -1145,11 +1167,13 @@ export const deleteAccountData = action({
       async () => {
         await ctx.runMutation(internal.sync.startAccountDeletion, {
           ownerTokenIdentifier,
+          cancellationToken: args.cancellationToken,
         });
       },
       async () => {
         await ctx.runMutation(internal.sync.clearAccountDeletion, {
           ownerTokenIdentifier,
+          cancellationToken: args.cancellationToken,
         });
       },
       async (tableName) => {
@@ -1163,8 +1187,10 @@ export const deleteAccountData = action({
 });
 
 export const cancelAccountDeletion = action({
-  args: {},
-  handler: async (ctx): Promise<{ status: "cancelled" }> => {
+  args: {
+    cancellationToken: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ status: "cancelled" }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (identity === null) {
       throw new Error("Not authenticated");
@@ -1172,6 +1198,7 @@ export const cancelAccountDeletion = action({
 
     await ctx.runMutation(internal.sync.clearAccountDeletion, {
       ownerTokenIdentifier: identity.tokenIdentifier,
+      cancellationToken: args.cancellationToken,
     });
 
     return { status: "cancelled" };

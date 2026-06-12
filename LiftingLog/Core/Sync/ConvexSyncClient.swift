@@ -71,12 +71,18 @@ struct ConvexSyncClient: SyncClient, @unchecked Sendable {
         throw ConvexSyncClientError.noFetchChangesValue
     }
 
-    func deleteAccountData() async throws -> AccountDataDeletionResult {
-        try await client.action("sync:deleteAccountData")
+    func deleteAccountData(cancellationToken: UUID) async throws -> AccountDataDeletionResult {
+        try await client.action(
+            "sync:deleteAccountData",
+            with: ["cancellationToken": cancellationToken.uuidString.lowercased()]
+        )
     }
 
-    func cancelAccountDeletion() async throws -> AccountDeletionCancellationResult {
-        try await client.action("sync:cancelAccountDeletion")
+    func cancelAccountDeletion(cancellationToken: UUID) async throws -> AccountDeletionCancellationResult {
+        try await client.action(
+            "sync:cancelAccountDeletion",
+            with: ["cancellationToken": cancellationToken.uuidString.lowercased()]
+        )
     }
 }
 

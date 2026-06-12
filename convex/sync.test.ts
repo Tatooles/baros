@@ -422,9 +422,11 @@ describe("account data deletion", () => {
   test("deleteAccountData rejects unauthenticated callers", async () => {
     const t = testDb();
 
-    await expect(t.action(api.sync.deleteAccountData, {})).rejects.toThrow(
-      "Not authenticated",
-    );
+    await expect(
+      t.action(api.sync.deleteAccountData, {
+        cancellationToken: "device-a",
+      }),
+    ).rejects.toThrow("Not authenticated");
   });
 
   test("deleteAccountData deletes only the authenticated owner rows", async () => {
@@ -433,7 +435,9 @@ describe("account data deletion", () => {
     await seedFullSyncGraphForOwner(t, userB, "B");
 
     await expect(
-      t.withIdentity(userA).action(api.sync.deleteAccountData, {}),
+      t.withIdentity(userA).action(api.sync.deleteAccountData, {
+        cancellationToken: "device-a",
+      }),
     ).resolves.toEqual({
       status: "deleted",
       deletedCounts: {
@@ -478,10 +482,14 @@ describe("account data deletion", () => {
     const t = testDb();
     await seedFullSyncGraphForOwner(t, userA, "A");
 
-    await t.withIdentity(userA).action(api.sync.deleteAccountData, {});
+    await t.withIdentity(userA).action(api.sync.deleteAccountData, {
+      cancellationToken: "device-a",
+    });
 
     await expect(
-      t.withIdentity(userA).action(api.sync.deleteAccountData, {}),
+      t.withIdentity(userA).action(api.sync.deleteAccountData, {
+        cancellationToken: "device-a",
+      }),
     ).resolves.toEqual({
       status: "deleted",
       deletedCounts: {
@@ -497,7 +505,9 @@ describe("account data deletion", () => {
   test("account deletion marker blocks new writes for the deleted owner", async () => {
     const t = testDb();
 
-    await t.withIdentity(userA).action(api.sync.deleteAccountData, {});
+    await t.withIdentity(userA).action(api.sync.deleteAccountData, {
+      cancellationToken: "device-a",
+    });
 
     await expect(
       t.withIdentity(userA).mutation(api.sync.upsertExercise, {
@@ -522,7 +532,9 @@ describe("account data deletion", () => {
   test("account deletion marker does not block other owners", async () => {
     const t = testDb();
 
-    await t.withIdentity(userA).action(api.sync.deleteAccountData, {});
+    await t.withIdentity(userA).action(api.sync.deleteAccountData, {
+      cancellationToken: "device-a",
+    });
 
     await expect(
       t.withIdentity(userB).mutation(api.sync.upsertExercise, {
@@ -539,13 +551,17 @@ describe("account data deletion", () => {
     ]);
   });
 
-  test("cancelAccountDeletion clears the marker for the authenticated owner", async () => {
+  test("cancelAccountDeletion clears the marker for the initiating client token", async () => {
     const t = testDb();
 
-    await t.withIdentity(userA).action(api.sync.deleteAccountData, {});
+    await t.withIdentity(userA).action(api.sync.deleteAccountData, {
+      cancellationToken: "device-a",
+    });
 
     await expect(
-      t.withIdentity(userA).action(api.sync.cancelAccountDeletion, {}),
+      t.withIdentity(userA).action(api.sync.cancelAccountDeletion, {
+        cancellationToken: "device-a",
+      }),
     ).resolves.toEqual({ status: "cancelled" });
 
     await expect(
@@ -553,6 +569,26 @@ describe("account data deletion", () => {
         record: exerciseRecord({ clientId: "post-cancel-exercise" }),
       }),
     ).resolves.toMatchObject({ status: "inserted" });
+  });
+
+  test("cancelAccountDeletion rejects a different client token for the same owner", async () => {
+    const t = testDb();
+
+    await t.withIdentity(userA).action(api.sync.deleteAccountData, {
+      cancellationToken: "device-a",
+    });
+
+    await expect(
+      t.withIdentity(userA).action(api.sync.cancelAccountDeletion, {
+        cancellationToken: "different-client-token",
+      }),
+    ).rejects.toThrow("Account deletion is already in progress on another client");
+
+    await expect(
+      t.withIdentity(userA).mutation(api.sync.upsertExercise, {
+        record: exerciseRecord({ clientId: "still-blocked-exercise" }),
+      }),
+    ).rejects.toThrow("Account deletion is in progress");
   });
 
   test("deleteAccountDataForOwner clears the marker when deletion fails", async () => {
@@ -662,7 +698,9 @@ describe("account data deletion", () => {
     await seedMixedDeletionGraphForOwner(t, userA);
 
     await expect(
-      t.withIdentity(userA).action(api.sync.deleteAccountData, {}),
+      t.withIdentity(userA).action(api.sync.deleteAccountData, {
+        cancellationToken: "device-a",
+      }),
     ).resolves.toEqual({
       status: "deleted",
       deletedCounts: {
@@ -687,7 +725,9 @@ describe("account data deletion", () => {
     await seedLoggedSetsDirectlyForOwner(t, userA, 1001);
 
     await expect(
-      t.withIdentity(userA).action(api.sync.deleteAccountData, {}),
+      t.withIdentity(userA).action(api.sync.deleteAccountData, {
+        cancellationToken: "device-a",
+      }),
     ).resolves.toEqual({
       status: "deleted",
       deletedCounts: {

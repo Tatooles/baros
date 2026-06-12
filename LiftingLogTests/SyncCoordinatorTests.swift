@@ -2773,6 +2773,7 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
     var tombstoneResults: [SyncMutationResult] = []
     var fetchResponses: [SyncFetchChangesResponse] = []
     var deleteAccountDataCallCount = 0
+    var deleteAccountDataTokens: [UUID] = []
     var deleteAccountDataError: Error?
     var deleteAccountDataResult = AccountDataDeletionResult(
         status: "deleted",
@@ -2785,6 +2786,7 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
         )
     )
     var cancelAccountDeletionCallCount = 0
+    var cancelAccountDeletionTokens: [UUID] = []
     var cancelAccountDeletionError: Error?
     var cancelAccountDeletionResult = AccountDeletionCancellationResult(
         status: "cancelled"
@@ -2869,16 +2871,18 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
         return fetchResponse
     }
 
-    func deleteAccountData() async throws -> AccountDataDeletionResult {
+    func deleteAccountData(cancellationToken: UUID) async throws -> AccountDataDeletionResult {
         deleteAccountDataCallCount += 1
+        deleteAccountDataTokens.append(cancellationToken)
         operationLog.append("deleteAccountData")
         if let deleteAccountDataError { throw deleteAccountDataError }
         if let error { throw error }
         return deleteAccountDataResult
     }
 
-    func cancelAccountDeletion() async throws -> AccountDeletionCancellationResult {
+    func cancelAccountDeletion(cancellationToken: UUID) async throws -> AccountDeletionCancellationResult {
         cancelAccountDeletionCallCount += 1
+        cancelAccountDeletionTokens.append(cancellationToken)
         operationLog.append("cancelAccountDeletion")
         if let cancelAccountDeletionError { throw cancelAccountDeletionError }
         if let error { throw error }

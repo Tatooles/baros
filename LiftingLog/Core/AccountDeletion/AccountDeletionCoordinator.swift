@@ -1,4 +1,5 @@
 import Combine
+import Foundation
 import SwiftData
 
 @MainActor
@@ -51,16 +52,17 @@ final class AccountDeletionCoordinator: ObservableObject {
     func deleteAccount() async {
         guard !phase.isRunning else { return }
         syncScheduler.beginDeletionMode()
+        let cancellationToken = UUID()
 
         do {
             phase = .deletingCloudData
-            _ = try await syncClient.deleteAccountData()
+            _ = try await syncClient.deleteAccountData(cancellationToken: cancellationToken)
 
             phase = .deletingAccount
             do {
                 try await accountDeleter.deleteCurrentAccount()
             } catch {
-                _ = try await syncClient.cancelAccountDeletion()
+                _ = try await syncClient.cancelAccountDeletion(cancellationToken: cancellationToken)
                 throw error
             }
 

@@ -63,6 +63,9 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(client.deleteAccountDataCallCount, 1)
         XCTAssertEqual(client.cancelAccountDeletionCallCount, 1)
+        XCTAssertEqual(client.deleteAccountDataTokens.count, 1)
+        XCTAssertEqual(client.cancelAccountDeletionTokens.count, 1)
+        XCTAssertEqual(client.cancelAccountDeletionTokens, client.deleteAccountDataTokens)
         XCTAssertEqual(accountDeleter.deleteCallCount, 1)
         XCTAssertEqual(
             client.operationLog,

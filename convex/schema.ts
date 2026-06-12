@@ -16,6 +16,7 @@ const syncFields = {
 export default defineSchema({
   accountDeletionMarkers: defineTable({
     ownerTokenIdentifier: v.string(),
+    cancellationToken: v.string(),
     createdAt: v.number(),
   }).index("by_ownerTokenIdentifier", ["ownerTokenIdentifier"]),
 
