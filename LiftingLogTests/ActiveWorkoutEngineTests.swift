@@ -188,6 +188,23 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertFalse(newSet.isCompleted)
     }
 
+    func testFillSetFromPreviousOnlyFillsEmptyFields() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let set = loggedExercise.sets[0]
+        set.reps = 8
+
+        try engine.fillSetFromPrevious(set, previous: PreviousSetPerformance(weight: 185, reps: 5), context: context)
+
+        XCTAssertEqual(set.weight, 185)
+        XCTAssertEqual(set.reps, 8)
+    }
+
     func testRemovingSetReindexesRemainingSets() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

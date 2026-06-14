@@ -227,6 +227,25 @@ final class ActiveWorkoutEngine {
         try context.save()
     }
 
+    func fillSetFromPrevious(_ set: LoggedSet, previous: PreviousSetPerformance, context: ModelContext) throws {
+        var didChange = false
+
+        if set.weight == nil, let weight = previous.weight {
+            set.weight = weight
+            didChange = true
+        }
+
+        if set.reps == nil, let reps = previous.reps {
+            set.reps = reps
+            didChange = true
+        }
+
+        guard didChange else { return }
+
+        set.touch()
+        try context.save()
+    }
+
     func toggleSetCompletion(_ set: LoggedSet, context: ModelContext, now: Date = .now) throws {
         let willComplete = !set.isCompleted
         if willComplete {
