@@ -61,7 +61,9 @@ final class LiftingLogUITests: XCTestCase {
 
         let secondWeightField = app.textFields["SetWeightField-0-1"]
         XCTAssertTrue(secondWeightField.waitForExistence(timeout: 3))
-        XCTAssertEqual(secondWeightField.value as? String, "185")
+        // Adding a set creates a blank row and moves focus to its weight field,
+        // so it shows the unit placeholder rather than carrying the prior value.
+        XCTAssertEqual(secondWeightField.value as? String, "LBS")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
     }
 
@@ -381,6 +383,11 @@ final class LiftingLogUITests: XCTestCase {
         app.buttons["AddSetButton-0"].tap()
         let secondWeightField = app.textFields["SetWeightField-0-1"]
         XCTAssertTrue(secondWeightField.waitForExistence(timeout: 3))
+        // A newly added set is blank, so it shows the kilogram placeholder.
+        XCTAssertEqual(secondWeightField.value as? String, "KG")
+        secondWeightField.tap()
+        secondWeightField.typeText("100")
+        dismissKeyboardIfNeeded(in: app)
         XCTAssertEqual(secondWeightField.value as? String, "100")
 
         app.buttons["ProfileTab"].tap()
