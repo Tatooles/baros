@@ -50,6 +50,18 @@ struct PreviousSetPerformance: Equatable {
             )
         }
 
+        return lastCompletedSetsByExerciseIDFromHistory(
+            for: loggedExercises,
+            in: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
+    }
+
+    private static func lastCompletedSetsByExerciseIDFromHistory(
+        for loggedExercises: [LoggedExercise],
+        in sessions: [WorkoutSession],
+        ownerTokenIdentifier: String?
+    ) -> [UUID: [PreviousSetPerformance]] {
         let routeIDByLoggedExerciseID = Dictionary(
             uniqueKeysWithValues: loggedExercises.map { loggedExercise in
                 (loggedExercise.id, ExerciseHistoryRoute(loggedExercise: loggedExercise).id)
@@ -90,6 +102,19 @@ struct PreviousSetPerformance: Equatable {
         let sourceEntriesByID = Dictionary(
             uniqueKeysWithValues: sourceSession.sortedLoggedExercises.map { ($0.id, $0) }
         )
+
+        // Modern clones link each cloned exercise to its source entry. When any
+        // link is present, an exercise without one was added after cloning, so it
+        // uses normal history (like a blank workout) rather than the legacy
+        // occurrence fallback, which would reuse a cloned source exercise's sets.
+        let hasLinkedExercise = loggedExercises.contains { $0.sourceLoggedExerciseID != nil }
+        let historyForAddedExercises = hasLinkedExercise
+            ? lastCompletedSetsByExerciseIDFromHistory(
+                for: loggedExercises.filter { $0.sourceLoggedExerciseID == nil },
+                in: sessions,
+                ownerTokenIdentifier: ownerTokenIdentifier
+            )
+            : [:]
         var consumedSourceEntryCountByRouteID: [String: Int] = [:]
 
         return Dictionary(
@@ -102,6 +127,11 @@ struct PreviousSetPerformance: Equatable {
                     )
                 }
 
+                if hasLinkedExercise {
+                    return (loggedExercise.id, historyForAddedExercises[loggedExercise.id] ?? [])
+                }
+
+                // Legacy clone (no stable links): best-effort occurrence mapping.
                 let routeID = ExerciseHistoryRoute(loggedExercise: loggedExercise).id
                 let sourceIndex = consumedSourceEntryCountByRouteID[routeID, default: 0]
                 consumedSourceEntryCountByRouteID[routeID] = sourceIndex + 1

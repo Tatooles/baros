@@ -541,6 +541,86 @@ final class PreviousSetPerformanceTests: XCTestCase {
         ])
     }
 
+    func testPastWorkoutLookupUsesHistoryForExerciseAddedAfterCloning() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscleGroup: .chest
+        )
+        context.insert(exercise)
+
+        let selectedSource = WorkoutSession(
+            title: "Selected Past Workout",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .completed,
+            source: .blank
+        )
+        let sourceBench = LoggedExercise(orderIndex: 0, exercise: exercise)
+        let sourceBenchSet = LoggedSet(
+            orderIndex: 0, weight: 185, reps: 5, isCompleted: true, completedAt: selectedSource.startedAt
+        )
+        sourceBench.sets.append(sourceBenchSet)
+        selectedSource.loggedExercises.append(sourceBench)
+        context.insert(selectedSource)
+        context.insert(sourceBench)
+
+        let newerSession = WorkoutSession(
+            title: "Newer Workout",
+            startedAt: Date(timeIntervalSince1970: 200),
+            status: .completed,
+            source: .blank
+        )
+        let newerBench = LoggedExercise(orderIndex: 0, exercise: exercise)
+        newerBench.sets.append(
+            LoggedSet(orderIndex: 0, weight: 225, reps: 3, isCompleted: true, completedAt: newerSession.startedAt)
+        )
+        newerSession.loggedExercises.append(newerBench)
+        context.insert(newerSession)
+        context.insert(newerBench)
+
+        let active = WorkoutSession(
+            title: "Today",
+            startedAt: Date(timeIntervalSince1970: 300),
+            status: .active,
+            source: .pastWorkout,
+            sourceSessionID: selectedSource.id
+        )
+        let clonedBench = LoggedExercise(
+            orderIndex: 0,
+            exercise: exercise,
+            sourceLoggedExerciseID: sourceBench.id
+        )
+        clonedBench.sets.append(LoggedSet(orderIndex: 0, sourceLoggedSetID: sourceBenchSet.id))
+        // A second Bench Press card added by hand after cloning carries no source link.
+        let addedBench = LoggedExercise(orderIndex: 1, exercise: exercise)
+        addedBench.sets.append(LoggedSet(orderIndex: 0))
+        active.loggedExercises.append(contentsOf: [clonedBench, addedBench])
+        context.insert(active)
+        context.insert(clonedBench)
+        context.insert(addedBench)
+        try context.save()
+
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let lookup = PreviousSetPerformance.lastCompletedSetsByExerciseID(
+            for: active.sortedLoggedExercises,
+            in: sessions,
+            ownerTokenIdentifier: nil,
+            sourceSessionID: active.sourceSessionID
+        )
+
+        // The cloned card keeps its linked source values; the added card uses
+        // normal history (the newer session) instead of reusing the source clone.
+        XCTAssertEqual(lookup[clonedBench.id], [
+            PreviousSetPerformance(weight: 185, reps: 5),
+        ])
+        XCTAssertEqual(lookup[addedBench.id], [
+            PreviousSetPerformance(weight: 225, reps: 3),
+        ])
+    }
+
     func testPastWorkoutLookupUsesStableSourceExerciseIDsForAllClonedDuplicates() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
