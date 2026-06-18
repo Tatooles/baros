@@ -59,7 +59,7 @@ final class SyncCoordinator {
         }
         if pushResult.didPush || !didPullBeforePush {
             let summary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
-            hasIncompleteRemotePull = hasIncompleteRemotePull || summary.hasIncompleteRemotePull
+            hasIncompleteRemotePull = summary.hasIncompleteRemotePull
         }
         return SyncRunResult(didPush: pushResult.didPush, hasIncompleteRemotePull: hasIncompleteRemotePull)
     }
