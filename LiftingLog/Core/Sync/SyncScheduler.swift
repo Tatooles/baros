@@ -6,9 +6,15 @@ import SwiftData
 final class SyncScheduler {
     private static let incompleteSyncFailureMessage = "Cloud sync could not finish."
 
+    enum FailureKind: Equatable {
+        case generic
+        case incompleteRemotePull
+    }
+
     struct Failure: Equatable {
         let message: String
         let occurredAt: Date
+        let kind: FailureKind
     }
 
     var currentOwnerTokenIdentifier: String? {
@@ -117,8 +123,8 @@ final class SyncScheduler {
         try? SeedDataService.seedIfNeeded(context: modelContext)
     }
 
-    func recordFailureForTesting(message: String, at date: Date = .now) {
-        lastFailure = Failure(message: message, occurredAt: date)
+    func recordFailureForTesting(message: String, at date: Date = .now, kind: FailureKind = .generic) {
+        lastFailure = Failure(message: message, occurredAt: date, kind: kind)
     }
 
     private func cancelInFlightSync() {
@@ -150,13 +156,13 @@ final class SyncScheduler {
                         ownerTokenIdentifier: syncOwnerTokenIdentifier,
                         context: modelContext
                     ) else {
-                        lastFailure = Failure(message: Self.incompleteSyncFailureMessage, occurredAt: .now)
+                        lastFailure = Failure(message: Self.incompleteSyncFailureMessage, occurredAt: .now, kind: .generic)
                         break
                     }
                     if result.hasMorePendingEntries {
                         needsSync = true
                     } else if result.hasIncompleteRemotePull {
-                        lastFailure = Failure(message: Self.incompleteSyncFailureMessage, occurredAt: .now)
+                        lastFailure = Failure(message: Self.incompleteSyncFailureMessage, occurredAt: .now, kind: .incompleteRemotePull)
                         break
                     } else {
                         lastSyncedAt = .now
@@ -168,7 +174,7 @@ final class SyncScheduler {
                     guard !Task.isCancelled, currentOwnerTokenIdentifier == syncOwnerTokenIdentifier else {
                         break
                     }
-                    lastFailure = Failure(message: error.localizedDescription, occurredAt: .now)
+                    lastFailure = Failure(message: error.localizedDescription, occurredAt: .now, kind: .generic)
                     break
                 }
                 if Task.isCancelled {

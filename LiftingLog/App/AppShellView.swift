@@ -35,6 +35,7 @@ struct AppShellView: View {
             isSyncing: syncScheduler.isSyncing,
             lastSyncedAt: syncScheduler.lastSyncedAt,
             lastFailureMessage: syncScheduler.lastFailure?.message,
+            lastFailureKind: syncScheduler.lastFailure?.kind,
             pendingCount: activeEntries.filter { $0.status == .pending || $0.status == .inFlight }.count,
             failedCount: activeEntries.filter { $0.status == .failed }.count
         )
@@ -43,7 +44,7 @@ struct AppShellView: View {
     private var currentSyncFailureSignature: String? {
         var components: [String] = []
         if let lastFailure = syncScheduler.lastFailure {
-            components.append("scheduler:\(lastFailure.occurredAt.timeIntervalSince1970):\(lastFailure.message)")
+            components.append("scheduler:\(lastFailure.occurredAt.timeIntervalSince1970):\(lastFailure.kind):\(lastFailure.message)")
         }
         let failedEntries = activeV1OutboxEntries
             .filter { $0.status == .failed }

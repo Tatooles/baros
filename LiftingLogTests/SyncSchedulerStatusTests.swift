@@ -125,6 +125,7 @@ final class SyncSchedulerStatusTests: XCTestCase {
 
         XCTAssertNil(scheduler.lastSyncedAt)
         XCTAssertEqual(scheduler.lastFailure?.message, "Cloud sync could not finish.")
+        XCTAssertEqual(scheduler.lastFailure?.kind, .generic)
     }
 
     func testSchedulerDoesNotRecordSuccessWhenRemotePullIsIncomplete() async throws {
@@ -171,6 +172,7 @@ final class SyncSchedulerStatusTests: XCTestCase {
 
         XCTAssertNil(scheduler.lastSyncedAt)
         XCTAssertEqual(scheduler.lastFailure?.message, "Cloud sync could not finish.")
+        XCTAssertEqual(scheduler.lastFailure?.kind, .incompleteRemotePull)
     }
 
     func testSchedulerDrainsMorePendingEntriesBeforeFailingIncompleteRemotePull() async throws {
