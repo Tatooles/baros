@@ -35,6 +35,7 @@ struct AppShellView: View {
             isSyncing: syncScheduler.isSyncing,
             lastSyncedAt: syncScheduler.lastSyncedAt,
             lastFailureMessage: syncScheduler.lastFailure?.message,
+            lastFailureReason: syncScheduler.lastFailure?.reason,
             pendingCount: activeEntries.filter { $0.status == .pending || $0.status == .inFlight }.count,
             failedCount: activeEntries.filter { $0.status == .failed }.count
         )
@@ -43,7 +44,7 @@ struct AppShellView: View {
     private var currentSyncFailureSignature: String? {
         var components: [String] = []
         if let lastFailure = syncScheduler.lastFailure {
-            components.append("scheduler:\(lastFailure.occurredAt.timeIntervalSince1970):\(lastFailure.message)")
+            components.append("scheduler:\(lastFailure.occurredAt.timeIntervalSince1970):\(lastFailure.reason):\(lastFailure.message)")
         }
         let failedEntries = activeV1OutboxEntries
             .filter { $0.status == .failed }
@@ -110,6 +111,8 @@ struct AppShellView: View {
         .safeAreaInset(edge: .bottom) {
             if shouldShowGlobalSyncFailureBanner {
                 GlobalSyncFailureBanner(
+                    title: syncDisplayState.failureNoticeTitle ?? "Cloud sync failed",
+                    message: syncDisplayState.failureNoticeMessage ?? "Your data is saved on this iPhone.",
                     retry: { syncScheduler.retrySync() },
                     details: { navigationState.openSyncSettings() },
                     dismiss: { dismissGlobalSyncFailureBanner() }
@@ -135,6 +138,8 @@ struct AppShellView: View {
 }
 
 private struct GlobalSyncFailureBanner: View {
+    let title: String
+    let message: String
     let retry: () -> Void
     let details: () -> Void
     let dismiss: () -> Void
@@ -148,10 +153,10 @@ private struct GlobalSyncFailureBanner: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Cloud sync failed")
+                    Text(title)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(AppTheme.textPrimary)
-                    Text("Your data is saved on this iPhone.")
+                    Text(message)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(AppTheme.textSecondary)
                 }

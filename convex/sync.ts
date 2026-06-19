@@ -553,6 +553,111 @@ async function upsertWorkoutSessionByClientId(
   return { status: "updated", serverUpdatedAt };
 }
 
+async function findWorkoutSessionByClientId(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+  clientId: string,
+): Promise<Doc<"workoutSessions"> | null> {
+  return await ctx.db
+    .query("workoutSessions")
+    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
+      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
+    )
+    .unique();
+}
+
+async function findExerciseByClientId(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+  clientId: string,
+): Promise<Doc<"exercises"> | null> {
+  return await ctx.db
+    .query("exercises")
+    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
+      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
+    )
+    .unique();
+}
+
+async function findLoggedExerciseByClientId(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+  clientId: string,
+): Promise<Doc<"loggedExercises"> | null> {
+  return await ctx.db
+    .query("loggedExercises")
+    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
+      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
+    )
+    .unique();
+}
+
+async function assertLoggedExerciseParentExists(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+  record: LoggedExercisePayload,
+): Promise<void> {
+  if (record.deletedAt !== null) {
+    return;
+  }
+
+  const session = await findWorkoutSessionByClientId(
+    ctx,
+    ownerTokenIdentifier,
+    record.sessionClientId,
+  );
+  if (session === null || session.deletedAt !== null) {
+    throw new Error(
+      "Cannot upsert active logged exercise without its workout session parent.",
+    );
+  }
+
+  if (record.exerciseClientId !== null) {
+    const exercise = await findExerciseByClientId(
+      ctx,
+      ownerTokenIdentifier,
+      record.exerciseClientId,
+    );
+    if (exercise === null || exercise.deletedAt !== null) {
+      throw new Error(
+        "Cannot upsert active logged exercise with a missing exercise reference.",
+      );
+    }
+  }
+}
+
+async function assertLoggedSetParentExists(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+  record: LoggedSetPayload,
+): Promise<void> {
+  if (record.deletedAt !== null) {
+    return;
+  }
+
+  const loggedExercise = await findLoggedExerciseByClientId(
+    ctx,
+    ownerTokenIdentifier,
+    record.loggedExerciseClientId,
+  );
+  if (loggedExercise === null || loggedExercise.deletedAt !== null) {
+    throw new Error(
+      "Cannot upsert active logged set without its logged exercise parent.",
+    );
+  }
+
+  const session = await findWorkoutSessionByClientId(
+    ctx,
+    ownerTokenIdentifier,
+    loggedExercise.sessionClientId,
+  );
+  if (session === null || session.deletedAt !== null) {
+    throw new Error(
+      "Cannot upsert active logged set without its logged exercise parent.",
+    );
+  }
+}
+
 async function upsertLoggedExerciseByClientId(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
@@ -571,6 +676,8 @@ async function upsertLoggedExerciseByClientId(
       serverUpdatedAt: existing.serverUpdatedAt,
     };
   }
+
+  await assertLoggedExerciseParentExists(ctx, ownerTokenIdentifier, record);
 
   const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
   const normalizedRecord =
@@ -610,6 +717,8 @@ async function upsertLoggedSetByClientId(
       serverUpdatedAt: existing.serverUpdatedAt,
     };
   }
+
+  await assertLoggedSetParentExists(ctx, ownerTokenIdentifier, record);
 
   const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
   const nextRecord = withServerFields(record, ownerTokenIdentifier, serverUpdatedAt);

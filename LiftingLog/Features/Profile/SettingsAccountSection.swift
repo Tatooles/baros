@@ -12,6 +12,7 @@ struct SettingsAccountSection: View {
             isSyncing: syncScheduler.isSyncing,
             lastSyncedAt: syncScheduler.lastSyncedAt,
             lastFailureMessage: syncScheduler.lastFailure?.message,
+            lastFailureReason: syncScheduler.lastFailure?.reason,
             pendingCount: entries.filter { $0.status == .pending || $0.status == .inFlight }.count,
             failedCount: entries.filter { $0.status == .failed }.count
         )

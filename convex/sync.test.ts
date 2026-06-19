@@ -733,6 +733,79 @@ describe("account data deletion", () => {
 });
 
 describe("sync conflict behavior", () => {
+  test("active logged exercise upsert rejects a missing workout session parent", async () => {
+    const t = testDb().withIdentity(userA);
+
+    await expect(
+      t.mutation(api.sync.upsertLoggedExercise, {
+        record: loggedExerciseRecord({ sessionClientId: "missing-session" }),
+      }),
+    ).rejects.toThrow(
+      "Cannot upsert active logged exercise without its workout session parent.",
+    );
+  });
+
+  test("active logged exercise upsert rejects a missing exercise reference", async () => {
+    const t = testDb().withIdentity(userA);
+    await t.mutation(api.sync.upsertWorkoutSession, {
+      record: workoutSessionRecord(),
+    });
+
+    await expect(
+      t.mutation(api.sync.upsertLoggedExercise, {
+        record: loggedExerciseRecord({ exerciseClientId: "missing-exercise" }),
+      }),
+    ).rejects.toThrow(
+      "Cannot upsert active logged exercise with a missing exercise reference.",
+    );
+  });
+
+  test("active logged set upsert rejects a missing logged exercise parent", async () => {
+    const t = testDb().withIdentity(userA);
+
+    await expect(
+      t.mutation(api.sync.upsertLoggedSet, {
+        record: loggedSetRecord({ loggedExerciseClientId: "missing-logged-exercise" }),
+      }),
+    ).rejects.toThrow(
+      "Cannot upsert active logged set without its logged exercise parent.",
+    );
+  });
+
+  test("deleted workout children can upsert without parent rows", async () => {
+    const t = testDb().withIdentity(userA);
+
+    await t.mutation(api.sync.upsertLoggedExercise, {
+      record: loggedExerciseRecord({
+        sessionClientId: "missing-session",
+        updatedAt: 4,
+        deletedAt: 4,
+      }),
+    });
+    await t.mutation(api.sync.upsertLoggedSet, {
+      record: loggedSetRecord({
+        loggedExerciseClientId: "missing-logged-exercise",
+        updatedAt: 5,
+        deletedAt: 5,
+      }),
+    });
+
+    const changes = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(changes.loggedExercises).toHaveLength(1);
+    expect(changes.loggedSets).toHaveLength(1);
+    expect(changes.loggedExercises[0]).toMatchObject({
+      clientId: "logged-exercise-1",
+      deletedAt: 4,
+    });
+    expect(changes.loggedSets[0]).toMatchObject({
+      clientId: "logged-set-1",
+      deletedAt: 5,
+    });
+  });
+
   test("legacy stored exercise docs without muscle group are normalized in changes", async () => {
     const t = testDb();
 
@@ -845,6 +918,11 @@ describe("sync conflict behavior", () => {
   test("logged exercise snapshot metadata round-trips through sync", async () => {
     const t = testDb().withIdentity(userA);
 
+    await t.mutation(api.sync.upsertExercise, { record: exerciseRecord() });
+    await t.mutation(api.sync.upsertWorkoutSession, {
+      record: workoutSessionRecord(),
+    });
+
     await t.mutation(api.sync.upsertLoggedExercise, {
       record: loggedExerciseRecord({
         exerciseSnapshotEquipmentRaw: "smithMachine",
@@ -876,6 +954,11 @@ describe("sync conflict behavior", () => {
       hasSnapshotMetadata: _hasSnapshotMetadata,
       ...legacyRecord
     } = loggedExerciseRecord();
+
+    await t.mutation(api.sync.upsertExercise, { record: exerciseRecord() });
+    await t.mutation(api.sync.upsertWorkoutSession, {
+      record: workoutSessionRecord(),
+    });
 
     await t.mutation(api.sync.upsertLoggedExercise, { record: legacyRecord });
 
@@ -928,6 +1011,11 @@ describe("sync conflict behavior", () => {
 
   test("legacy logged exercise update payloads preserve existing snapshot metadata", async () => {
     const t = testDb().withIdentity(userA);
+
+    await t.mutation(api.sync.upsertExercise, { record: exerciseRecord() });
+    await t.mutation(api.sync.upsertWorkoutSession, {
+      record: workoutSessionRecord(),
+    });
 
     await t.mutation(api.sync.upsertLoggedExercise, {
       record: loggedExerciseRecord({
@@ -1013,6 +1101,7 @@ describe("sync conflict behavior", () => {
   test("workout graph tombstones stay in fetchChanges", async () => {
     const t = testDb().withIdentity(userA);
 
+    await t.mutation(api.sync.upsertExercise, { record: exerciseRecord() });
     await t.mutation(api.sync.upsertWorkoutSession, {
       record: workoutSessionRecord(),
     });
@@ -1284,6 +1373,7 @@ describe("sync change cursors", () => {
   test("workout graph cursors page independently", async () => {
     const t = testDb().withIdentity(userA);
 
+    await t.mutation(api.sync.upsertExercise, { record: exerciseRecord() });
     await t.mutation(api.sync.upsertWorkoutSession, {
       record: workoutSessionRecord({ clientId: "session-1", updatedAt: 2 }),
     });

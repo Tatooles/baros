@@ -24,6 +24,8 @@ struct SyncStatusDisplayState {
     let tint: Tint
     let canRetry: Bool
     let showsGlobalFailureNotice: Bool
+    let failureNoticeTitle: String?
+    let failureNoticeMessage: String?
     let userVisibleFailureMessage: String?
 
     static func make(
@@ -31,6 +33,7 @@ struct SyncStatusDisplayState {
         isSyncing: Bool,
         lastSyncedAt: Date?,
         lastFailureMessage: String?,
+        lastFailureReason: SyncScheduler.FailureReason? = nil,
         pendingCount: Int,
         failedCount: Int,
         now: Date = .now
@@ -46,6 +49,8 @@ struct SyncStatusDisplayState {
                 tint: .secondary,
                 canRetry: false,
                 showsGlobalFailureNotice: false,
+                failureNoticeTitle: nil,
+                failureNoticeMessage: nil,
                 userVisibleFailureMessage: nil
             )
         }
@@ -61,24 +66,31 @@ struct SyncStatusDisplayState {
                 tint: .attention,
                 canRetry: false,
                 showsGlobalFailureNotice: false,
+                failureNoticeTitle: nil,
+                failureNoticeMessage: nil,
                 userVisibleFailureMessage: nil
             )
         }
 
         if failedCount > 0 || lastFailureMessage != nil {
-            let defaultMessage = "Cloud sync could not finish. Your data is saved on this iPhone."
+            let failureCopy = displayCopy(forFailureReason: lastFailureReason)
+            let fallbackDetailText: String? = failureCopy.suppressesDetailFallback
+                ? nil
+                : sanitizedFailureReason(from: lastFailureMessage ?? "")
             return SyncStatusDisplayState(
                 kind: .needsAttention,
-                title: "Sync Status",
-                subtitle: defaultMessage,
+                title: failureCopy.statusTitle,
+                subtitle: failureCopy.statusMessage,
                 detailText: countsText(pendingCount: pendingCount, failedCount: failedCount, lastSyncedAt: lastSyncedAt, now: now)
-                    ?? sanitizedFailureReason(from: lastFailureMessage ?? ""),
+                    ?? fallbackDetailText,
                 trailingText: "Retry",
                 systemImage: "exclamationmark.icloud",
                 tint: .attention,
                 canRetry: true,
                 showsGlobalFailureNotice: true,
-                userVisibleFailureMessage: defaultMessage
+                failureNoticeTitle: failureCopy.noticeTitle,
+                failureNoticeMessage: failureCopy.noticeMessage,
+                userVisibleFailureMessage: failureCopy.userVisibleFailureMessage
             )
         }
 
@@ -93,6 +105,8 @@ struct SyncStatusDisplayState {
                 tint: .secondary,
                 canRetry: true,
                 showsGlobalFailureNotice: false,
+                failureNoticeTitle: nil,
+                failureNoticeMessage: nil,
                 userVisibleFailureMessage: nil
             )
         }
@@ -107,7 +121,41 @@ struct SyncStatusDisplayState {
             tint: .success,
             canRetry: false,
             showsGlobalFailureNotice: false,
+            failureNoticeTitle: nil,
+            failureNoticeMessage: nil,
             userVisibleFailureMessage: nil
+        )
+    }
+
+    private static func displayCopy(forFailureReason reason: SyncScheduler.FailureReason?) -> (
+        statusTitle: String,
+        statusMessage: String,
+        noticeTitle: String,
+        noticeMessage: String,
+        userVisibleFailureMessage: String,
+        suppressesDetailFallback: Bool
+    ) {
+        if reason == .incompleteRemotePull {
+            let title = "Cloud sync could not finish"
+            let message = "Some cloud workout data is incomplete. Your local data is still available."
+            return (
+                statusTitle: title,
+                statusMessage: message,
+                noticeTitle: title,
+                noticeMessage: message,
+                userVisibleFailureMessage: message,
+                suppressesDetailFallback: true
+            )
+        }
+
+        let statusMessage = "Cloud sync could not finish. Your data is saved on this iPhone."
+        return (
+            statusTitle: "Sync Status",
+            statusMessage: statusMessage,
+            noticeTitle: "Cloud sync failed",
+            noticeMessage: "Your data is saved on this iPhone.",
+            userVisibleFailureMessage: statusMessage,
+            suppressesDetailFallback: false
         )
     }
 
