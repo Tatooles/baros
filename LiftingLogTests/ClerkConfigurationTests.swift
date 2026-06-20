@@ -17,6 +17,8 @@ final class ClerkConfigurationTests: XCTestCase {
         XCTAssertNotNil(infoDictionary["ClerkPublishableKey"])
         XCTAssertNotNil(infoDictionary["ClerkAssociatedDomain"])
         XCTAssertNotNil(infoDictionary["ConvexDeploymentURL"])
+        XCTAssertNotNil(infoDictionary["CFBundleShortVersionString"])
+        XCTAssertNotNil(infoDictionary["CFBundleVersion"])
     }
 
     func testDevelopmentInfoDictionaryBuildsDevelopmentConfiguration() {
