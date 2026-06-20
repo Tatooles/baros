@@ -9,6 +9,7 @@ export default {
       issuer: clerkJwtIssuerDomain,
       jwks: `${clerkJwtIssuerDomain}/.well-known/jwks.json`,
       algorithm: "RS256",
+      applicationID: "convex",
     },
   ],
 } satisfies AuthConfig;

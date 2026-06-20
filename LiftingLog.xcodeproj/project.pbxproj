@@ -36,7 +36,7 @@
 		3852A3BFBF3E8FA88AB4DAB5 /* ExerciseCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93AE1955F1EF73E5A390F35D /* ExerciseCardView.swift */; };
 		3919D105799D48321D1A404B /* SwiftDataTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 812E14546F80B4664B72FBE7 /* SwiftDataTestSupport.swift */; };
 		395C34428AEA9CC5B06A6B72 /* ConvexClientFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54DE670FB152B27AC0198DE0 /* ConvexClientFactory.swift */; };
-		3A4AFD3054C1D8D0316135FF /* ClerkConvex in Frameworks */ = {isa = PBXBuildFile; productRef = 80EB456184EA2C9C07A036C4 /* ClerkConvex */; };
+		3A4AFD3054C1D8D0316135FF /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = 3C353543E5E4D3B6B115FB81 /* ConvexMobile */; };
 		3B3720E0719766B2A8AABBCD /* ExerciseHistorySessionGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DDD8951A67801CE5736726 /* ExerciseHistorySessionGroup.swift */; };
 		3E21D89CF9C6112D04F2F1B9 /* ClerkConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3957F5D924F68821B3600811 /* ClerkConfiguration.swift */; };
 		3ED94241B48E627EAF382A60 /* SyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9E0A101658215ADF7C3800F /* SyncClient.swift */; };
@@ -95,6 +95,7 @@
 		A361DB46C578E9FA96B2A9CB /* SetCompletionPreviousFillPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EF30C91D83564A6B9591409 /* SetCompletionPreviousFillPolicyTests.swift */; };
 		A593FE853D37B47DB15B0BDE /* SettingsAccountSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E38895847F5DA6ABF0B4512E /* SettingsAccountSection.swift */; };
 		A8477CBCB15422EDA15B2055 /* ReorderExercisesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A4C97B8DD77B49241EA51 /* ReorderExercisesSheet.swift */; };
+		A8DEE8E00CDB0947B4D23BF7 /* ClerkConvexTemplateAuthProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45C58F9B32DD52AD02600850 /* ClerkConvexTemplateAuthProvider.swift */; };
 		AB4F2E874EF076CD6CD30A77 /* SyncOutboxIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F732960ACFFD3709931AFB /* SyncOutboxIntegrationTests.swift */; };
 		AD646CF5B13A9138E4EB3479 /* SyncFailureNoticePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F2C94F445734EFFD8A865F4 /* SyncFailureNoticePresentationTests.swift */; };
 		AD9B0899FA656A3E141643A6 /* ExerciseMuscleGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF74B7CE70C49E564ED00FDF /* ExerciseMuscleGroup.swift */; };
@@ -111,7 +112,6 @@
 		C1A20B70F444096542509886 /* ExercisePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 992513EFB89E50F1B4F46664 /* ExercisePickerView.swift */; };
 		C3B664AC2AD3AE23F1D39492 /* AddExerciseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E1ED3B5916BAE378A8DC03 /* AddExerciseSheet.swift */; };
 		C42D9BC675A2DCBC3A2BBAE4 /* SyncCursorStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 055B0168D310AB732E99946A /* SyncCursorStateTests.swift */; };
-		C99444526A4FE33305FF01D5 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = 3C353543E5E4D3B6B115FB81 /* ConvexMobile */; };
 		C99E2EDB6ACD054D91DCDE24 /* ExerciseEquipment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FBDF8A21B7C773137D8593A /* ExerciseEquipment.swift */; };
 		D6734D7425D9F70ACF365AD4 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFD611D025EF1E9C19B5F6B0 /* SettingsView.swift */; };
 		D85855E4C38E1E9A0B0A4067 /* WorkoutFocusNavigatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D41DF9D24F54196760629B7 /* WorkoutFocusNavigatorTests.swift */; };
@@ -198,6 +198,7 @@
 		3F2C94F445734EFFD8A865F4 /* SyncFailureNoticePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncFailureNoticePresentationTests.swift; sourceTree = "<group>"; };
 		440384EEC9EC6785B3D846A2 /* WorkoutExportFileWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutExportFileWriterTests.swift; sourceTree = "<group>"; };
 		45C4D9744D95F3023BC8AC26 /* SyncScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncScheduler.swift; sourceTree = "<group>"; };
+		45C58F9B32DD52AD02600850 /* ClerkConvexTemplateAuthProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClerkConvexTemplateAuthProvider.swift; sourceTree = "<group>"; };
 		471BBCA3415CCB0142B4844B /* PreviousSetPerformance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviousSetPerformance.swift; sourceTree = "<group>"; };
 		4D0EE1D080F54768F9E215FA /* DeleteDataConfirmationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteDataConfirmationView.swift; sourceTree = "<group>"; };
 		53A0AC2A67CDFE8BE93F6F99 /* SyncEntityKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEntityKind.swift; sourceTree = "<group>"; };
@@ -295,8 +296,7 @@
 			files = (
 				1E77041F190062BF15A351DE /* ClerkKit in Frameworks */,
 				30EF808BE842D69208851793 /* ClerkKitUI in Frameworks */,
-				3A4AFD3054C1D8D0316135FF /* ClerkConvex in Frameworks */,
-				C99444526A4FE33305FF01D5 /* ConvexMobile in Frameworks */,
+				3A4AFD3054C1D8D0316135FF /* ConvexMobile in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -434,6 +434,7 @@
 		7C2A8AB27B10949F7BF0D729 /* Sync */ = {
 			isa = PBXGroup;
 			children = (
+				45C58F9B32DD52AD02600850 /* ClerkConvexTemplateAuthProvider.swift */,
 				54DE670FB152B27AC0198DE0 /* ConvexClientFactory.swift */,
 				725ED241191390A7E4C1A6A1 /* ConvexConfiguration.swift */,
 				E2DF24671651F0149914C0A4 /* ConvexSyncClient.swift */,
@@ -667,7 +668,6 @@
 			packageProductDependencies = (
 				D2A34A4495B8AADE381320A4 /* ClerkKit */,
 				5203727E822B09D861A4C790 /* ClerkKitUI */,
-				80EB456184EA2C9C07A036C4 /* ClerkConvex */,
 				3C353543E5E4D3B6B115FB81 /* ConvexMobile */,
 			);
 			productName = LiftingLog;
@@ -721,7 +721,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				883DF58C80F88BFEDDA8BEC1 /* XCRemoteSwiftPackageReference "clerk-ios" */,
-				C7B503A12BF9F74BC6C18524 /* XCRemoteSwiftPackageReference "clerk-convex-swift" */,
 				A5337032103304DDB37FE2C3 /* XCRemoteSwiftPackageReference "convex-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -792,6 +791,7 @@
 				6AB7A0F44B97D2ED6BC30998 /* AppTheme.swift in Sources */,
 				F8BD4E8C575892BD5C4EC38D /* ClerkAccountDeleter.swift in Sources */,
 				3E21D89CF9C6112D04F2F1B9 /* ClerkConfiguration.swift in Sources */,
+				A8DEE8E00CDB0947B4D23BF7 /* ClerkConvexTemplateAuthProvider.swift in Sources */,
 				0C661C6A22B2CAC892CD88C3 /* ClerkJWTIdentityResolver.swift in Sources */,
 				395C34428AEA9CC5B06A6B72 /* ConvexClientFactory.swift in Sources */,
 				DECE9DCEC80F4E126DF7ABA4 /* ConvexConfiguration.swift in Sources */,
@@ -1213,14 +1213,6 @@
 				minimumVersion = 0.8.1;
 			};
 		};
-		C7B503A12BF9F74BC6C18524 /* XCRemoteSwiftPackageReference "clerk-convex-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/clerk/clerk-convex-swift";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.1.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1233,11 +1225,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 883DF58C80F88BFEDDA8BEC1 /* XCRemoteSwiftPackageReference "clerk-ios" */;
 			productName = ClerkKitUI;
-		};
-		80EB456184EA2C9C07A036C4 /* ClerkConvex */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C7B503A12BF9F74BC6C18524 /* XCRemoteSwiftPackageReference "clerk-convex-swift" */;
-			productName = ClerkConvex;
 		};
 		D2A34A4495B8AADE381320A4 /* ClerkKit */ = {
 			isa = XCSwiftPackageProductDependency;

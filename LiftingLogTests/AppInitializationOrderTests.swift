@@ -16,7 +16,7 @@ final class AppInitializationOrderTests: XCTestCase {
         XCTAssertLessThan(
             appSource.distance(from: appSource.startIndex, to: clerkConfigureOffset),
             appSource.distance(from: appSource.startIndex, to: convexClientOffset),
-            "Clerk.configure must run before ConvexClientFactory creates the ClerkConvex auth provider."
+            "Clerk.configure must run before ConvexClientFactory creates the Clerk-backed Convex auth provider."
         )
     }
 

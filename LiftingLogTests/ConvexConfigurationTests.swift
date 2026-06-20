@@ -54,4 +54,30 @@ final class ConvexConfigurationTests: XCTestCase {
 
         XCTAssertTrue(firstClient === secondClient)
     }
+
+    func testAuthenticatedClientFactoryRequestsConvexJWTTemplate() throws {
+        let factorySource = try sourceFileContents("LiftingLog/Core/Sync/ConvexClientFactory.swift")
+
+        XCTAssertTrue(
+            factorySource.contains(#"ClerkConvexTemplateAuthProvider(jwtTemplate: "convex")"#),
+            "Convex auth must request the Clerk JWT template that emits aud=convex."
+        )
+    }
+
+    func testConvexAuthConfigRequiresConvexAudience() throws {
+        let authConfigSource = try sourceFileContents("convex/auth.config.ts")
+
+        XCTAssertTrue(
+            authConfigSource.contains(#"applicationID: "convex""#),
+            "Production Convex auth must preserve audience verification for Clerk JWTs."
+        )
+    }
+
+    private func sourceFileContents(_ relativePath: String) throws -> String {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let projectRootURL = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try String(contentsOf: projectRootURL.appending(path: relativePath), encoding: .utf8)
+    }
 }

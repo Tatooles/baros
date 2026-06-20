@@ -96,15 +96,18 @@ This feeds issue #14 App Privacy and App Review notes.
 
 Owner: Kevin, with Codex if CLI help is needed
 
-1. Identify or create the production Convex deployment.
-2. Set the production Clerk JWT issuer domain on that Convex deployment:
+1. In the production Clerk dashboard, add a JWT template named `convex`.
+   - The token audience must be `convex`.
+   - This is required because Convex validates the JWT `aud` claim for production sync.
+2. Identify or create the production Convex deployment.
+3. Set the production Clerk JWT issuer domain on that Convex deployment:
 
    ```sh
    pnpm exec convex env set CLERK_JWT_ISSUER_DOMAIN 'https://YOUR_PRODUCTION_CLERK_ISSUER_DOMAIN'
    ```
 
-3. Deploy Convex functions to the production deployment.
-4. Record the production Convex deployment URL.
+4. Deploy Convex functions to the production deployment.
+5. Record the production Convex deployment URL.
 
 The existing `convex/auth.config.ts` reads `CLERK_JWT_ISSUER_DOMAIN`, so the production deployment must have that environment variable set before auth can work.
 
