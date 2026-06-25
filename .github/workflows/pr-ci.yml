@@ -1,0 +1,93 @@
+name: PR CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-unit-tests:
+    name: ios-unit-tests
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      IOS_TEST_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=26.5
+      IOS_DERIVED_DATA_PATH: ${{ runner.temp }}/LiftingLogDerivedData
+      IOS_RESULT_BUNDLE_PATH: ${{ runner.temp }}/LiftingLogTests.xcresult
+      IOS_TEST_LOG_PATH: ${{ runner.temp }}/LiftingLogTests.log
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.5
+        run: sudo xcode-select -s /Applications/Xcode_26.5.app
+
+      - name: Show Xcode and simulator environment
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available | grep -E "iPhone 17" || true
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project LiftingLog.xcodeproj \
+            -scheme LiftingLogUnitTests \
+            -derivedDataPath "${IOS_DERIVED_DATA_PATH}"
+
+      - name: Run LiftingLog unit tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project LiftingLog.xcodeproj \
+            -scheme LiftingLogUnitTests \
+            -destination "${IOS_TEST_DESTINATION}" \
+            -derivedDataPath "${IOS_DERIVED_DATA_PATH}" \
+            -resultBundlePath "${IOS_RESULT_BUNDLE_PATH}" \
+            2>&1 | tee "${IOS_TEST_LOG_PATH}"
+
+      - name: Upload iOS failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiftingLogTests-xcresult
+          path: |
+            ${{ env.IOS_RESULT_BUNDLE_PATH }}
+            ${{ env.IOS_TEST_LOG_PATH }}
+          if-no-files-found: warn
+          retention-days: 14
+
+  convex-checks:
+    name: convex-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Convex tests
+        run: pnpm run convex:test
+
+      - name: Run Convex typecheck
+        run: pnpm run convex:typecheck

@@ -10,11 +10,29 @@ Native SwiftUI workout logging app for iPhone with a SwiftData-backed offline wo
 
 ## Commands
 
-- `xcodegen generate`
-- `xcodebuild build -project LiftingLog.xcodeproj -scheme LiftingLog -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/codex-ios-app-derived-data`
-- `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
-- `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -only-testing:LiftingLogTests -derivedDataPath /private/tmp/codex-ios-app-derived-data`
-- `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -only-testing:LiftingLogUITests -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Generate project: `xcodegen generate`
+- Build simulator app: `xcodebuild build -project LiftingLog.xcodeproj -scheme LiftingLog -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Run full XCTest suite: `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Run unit tests only: `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLogUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Run UI tests only: `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -only-testing:LiftingLogUITests -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+
+## CI
+
+Pull requests and pushes to `main` run two GitHub Actions checks:
+
+- `ios-unit-tests`: builds the `LiftingLogUnitTests` scheme and runs `LiftingLogTests`.
+- `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
+
+The iOS job intentionally excludes `LiftingLogUITests` from the required PR gate. If `ios-unit-tests` fails, first inspect the GitHub Actions log. The failed workflow run also uploads a `LiftingLogTests-xcresult` artifact containing the `.xcresult` bundle and test log for local Xcode inspection.
+
+Local equivalents:
+
+```sh
+xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLogUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.5 -derivedDataPath /private/tmp/codex-ios-app-derived-data
+pnpm install --frozen-lockfile
+pnpm run convex:test
+pnpm run convex:typecheck
+```
 
 ## Convex Setup
 
