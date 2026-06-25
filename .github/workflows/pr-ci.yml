@@ -17,9 +17,6 @@ jobs:
     timeout-minutes: 30
     env:
       IOS_TEST_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=26.5
-      IOS_DERIVED_DATA_PATH: ${{ runner.temp }}/LiftingLogDerivedData
-      IOS_RESULT_BUNDLE_PATH: ${{ runner.temp }}/LiftingLogTests.xcresult
-      IOS_TEST_LOG_PATH: ${{ runner.temp }}/LiftingLogTests.log
 
     steps:
       - name: Check out repository
@@ -38,7 +35,7 @@ jobs:
           xcodebuild -resolvePackageDependencies \
             -project LiftingLog.xcodeproj \
             -scheme LiftingLogUnitTests \
-            -derivedDataPath "${IOS_DERIVED_DATA_PATH}"
+            -derivedDataPath "${RUNNER_TEMP}/LiftingLogDerivedData"
 
       - name: Run LiftingLog unit tests
         run: |
@@ -47,9 +44,9 @@ jobs:
             -project LiftingLog.xcodeproj \
             -scheme LiftingLogUnitTests \
             -destination "${IOS_TEST_DESTINATION}" \
-            -derivedDataPath "${IOS_DERIVED_DATA_PATH}" \
-            -resultBundlePath "${IOS_RESULT_BUNDLE_PATH}" \
-            2>&1 | tee "${IOS_TEST_LOG_PATH}"
+            -derivedDataPath "${RUNNER_TEMP}/LiftingLogDerivedData" \
+            -resultBundlePath "${RUNNER_TEMP}/LiftingLogTests.xcresult" \
+            2>&1 | tee "${RUNNER_TEMP}/LiftingLogTests.log"
 
       - name: Upload iOS failure diagnostics
         if: failure()
@@ -57,8 +54,8 @@ jobs:
         with:
           name: LiftingLogTests-xcresult
           path: |
-            ${{ env.IOS_RESULT_BUNDLE_PATH }}
-            ${{ env.IOS_TEST_LOG_PATH }}
+            ${{ runner.temp }}/LiftingLogTests.xcresult
+            ${{ runner.temp }}/LiftingLogTests.log
           if-no-files-found: warn
           retention-days: 14
 
