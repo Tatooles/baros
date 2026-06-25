@@ -142,6 +142,11 @@ struct WorkoutHistoryMutationService {
 
         var didChange = false
         var didChangeSessionFields = false
+        let shouldRecordOwnerlessOutbox = try shouldRecordOwnerlessOutbox(
+            for: session,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        )
 
         let normalizedDurationSeconds = max(0, draft.durationSeconds)
         let willChangeSessionFields = session.title != draft.title ||
@@ -175,10 +180,11 @@ struct WorkoutHistoryMutationService {
 
         if didChangeSessionFields {
             session.updatedAt = now
-            try recordUpdateIfOwned(
+            try recordUpdateIfNeeded(
                 entityKind: .workoutSession,
                 entityID: session.id,
                 ownerTokenIdentifier: ownerTokenIdentifier,
+                shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
                 context: context,
                 now: now
             )
@@ -216,10 +222,11 @@ struct WorkoutHistoryMutationService {
                         now: now
                     )
                     set.markDeleted(now: now)
-                    try recordDeleteIfOwned(
+                    try recordDeleteIfNeeded(
                         entityKind: .loggedSet,
                         entityID: set.id,
                         ownerTokenIdentifier: ownerTokenIdentifier,
+                        shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
                         context: context,
                         now: now
                     )
@@ -232,10 +239,11 @@ struct WorkoutHistoryMutationService {
                         now: now
                     )
                     _ = apply(setDraft, to: set, now: now)
-                    try recordUpdateIfOwned(
+                    try recordUpdateIfNeeded(
                         entityKind: .loggedSet,
                         entityID: set.id,
                         ownerTokenIdentifier: ownerTokenIdentifier,
+                        shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
                         context: context,
                         now: now
                     )
@@ -250,7 +258,13 @@ struct WorkoutHistoryMutationService {
                     context: context,
                     now: now
                 )
-                _ = try reindexVisibleSets(for: loggedExercise, ownerTokenIdentifier: ownerTokenIdentifier, context: context, now: now)
+                _ = try reindexVisibleSets(
+                    for: loggedExercise,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
+                    context: context,
+                    now: now
+                )
                 didChange = true
             }
 
@@ -278,10 +292,11 @@ struct WorkoutHistoryMutationService {
                 set.loggedExercise = loggedExercise
                 context.insert(set)
                 loggedExercise.sets.append(set)
-                try recordCreateIfOwned(
+                try recordCreateIfNeeded(
                     entityKind: .loggedSet,
                     entityID: set.id,
                     ownerTokenIdentifier: ownerTokenIdentifier,
+                    shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
                     context: context,
                     now: now
                 )
@@ -443,6 +458,7 @@ struct WorkoutHistoryMutationService {
     private func reindexVisibleSets(
         for loggedExercise: LoggedExercise,
         ownerTokenIdentifier: String?,
+        shouldRecordOwnerlessOutbox: Bool,
         context: ModelContext,
         now: Date
     ) throws -> Bool {
@@ -450,10 +466,11 @@ struct WorkoutHistoryMutationService {
         for (index, set) in loggedExercise.sortedSets.enumerated() where set.orderIndex != index {
             set.orderIndex = index
             set.updatedAt = now
-            try recordUpdateIfOwned(
+            try recordUpdateIfNeeded(
                 entityKind: .loggedSet,
                 entityID: set.id,
                 ownerTokenIdentifier: ownerTokenIdentifier,
+                shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
                 context: context,
                 now: now
             )
@@ -462,14 +479,50 @@ struct WorkoutHistoryMutationService {
         return didChange
     }
 
-    private func recordCreateIfOwned(
+    private func shouldRecordOwnerlessOutbox(
+        for session: WorkoutSession,
+        ownerTokenIdentifier: String?,
+        context: ModelContext
+    ) throws -> Bool {
+        guard ownerTokenIdentifier == nil, session.syncOwnerTokenIdentifier == nil else {
+            return false
+        }
+
+        return try hasActiveOwnerlessOutboxEntry(
+            entityKind: .workoutSession,
+            entityID: session.id,
+            context: context
+        )
+    }
+
+    private func hasActiveOwnerlessOutboxEntry(
+        entityKind: SyncEntityKind,
+        entityID: UUID,
+        context: ModelContext
+    ) throws -> Bool {
+        let entityKindRaw = entityKind.rawValue
+        let completedStatus = SyncOutboxStatus.completed.rawValue
+        return try context.fetch(FetchDescriptor<SyncOutboxEntry>(
+            predicate: #Predicate { entry in
+                entry.entityKindRaw == entityKindRaw
+                    && entry.entityID == entityID
+                    && entry.ownerTokenIdentifier == nil
+                    && entry.statusRaw != completedStatus
+                    && entry.operationRaw != ""
+            }
+        ))
+        .contains { $0.isActive && $0.operation != nil }
+    }
+
+    private func recordCreateIfNeeded(
         entityKind: SyncEntityKind,
         entityID: UUID,
         ownerTokenIdentifier: String?,
+        shouldRecordOwnerlessOutbox: Bool,
         context: ModelContext,
         now: Date
     ) throws {
-        guard let ownerTokenIdentifier else { return }
+        guard ownerTokenIdentifier != nil || shouldRecordOwnerlessOutbox else { return }
         try recorder.recordCreate(
             entityKind: entityKind,
             entityID: entityID,
@@ -479,14 +532,15 @@ struct WorkoutHistoryMutationService {
         )
     }
 
-    private func recordUpdateIfOwned(
+    private func recordUpdateIfNeeded(
         entityKind: SyncEntityKind,
         entityID: UUID,
         ownerTokenIdentifier: String?,
+        shouldRecordOwnerlessOutbox: Bool,
         context: ModelContext,
         now: Date
     ) throws {
-        guard let ownerTokenIdentifier else { return }
+        guard ownerTokenIdentifier != nil || shouldRecordOwnerlessOutbox else { return }
         try recorder.recordUpdate(
             entityKind: entityKind,
             entityID: entityID,
@@ -496,14 +550,15 @@ struct WorkoutHistoryMutationService {
         )
     }
 
-    private func recordDeleteIfOwned(
+    private func recordDeleteIfNeeded(
         entityKind: SyncEntityKind,
         entityID: UUID,
         ownerTokenIdentifier: String?,
+        shouldRecordOwnerlessOutbox: Bool,
         context: ModelContext,
         now: Date
     ) throws {
-        guard let ownerTokenIdentifier else { return }
+        guard ownerTokenIdentifier != nil || shouldRecordOwnerlessOutbox else { return }
         try recorder.recordDelete(
             entityKind: entityKind,
             entityID: entityID,

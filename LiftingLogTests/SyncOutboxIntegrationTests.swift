@@ -981,6 +981,70 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertTrue(entries.isEmpty)
     }
 
+    func testSignedOutEditingPendingOwnerlessCompletedWorkoutEnqueuesAddedSetForClaim() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            userSettingsCursor: 1,
+            exercisesCursor: 1,
+            workoutSessionsCursor: 1,
+            loggedExercisesCursor: 1,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let session = makeCompletedWorkout(context: context)
+        let loggedExercise = try XCTUnwrap(session.sortedLoggedExercises.first)
+        try context.save()
+
+        try SyncOutboxRecorder().bootstrapV1SyncableRecords(
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 1_500)
+        )
+        XCTAssertEqual(try fetchEntries(context).count, 4)
+
+        var draft = CompletedWorkoutEditDraft(session: session)
+        draft.exercises[0].sets.append(CompletedWorkoutEditSetDraft(
+            orderIndex: 2,
+            weight: 245,
+            reps: 2,
+            rpe: 9.5,
+            kind: .working,
+            isCompleted: true,
+            notes: "Signed-out added set"
+        ))
+
+        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+            draft,
+            for: session,
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 2_000)
+        )
+
+        let addedSet = try XCTUnwrap(loggedExercise.sortedSets.first { $0.notes == "Signed-out added set" })
+        let entries = try fetchEntries(context)
+        XCTAssertEqual(entries.count, 5)
+        assertEntry(entries, kind: .loggedSet, id: addedSet.id, operation: .create)
+        XCTAssertNil(entries.first { $0.entityKind == .loggedSet && $0.entityID == addedSet.id }?.ownerTokenIdentifier)
+
+        let client = FakeSyncClient()
+        let result = try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertTrue(result.didPush)
+        XCTAssertEqual(session.syncOwnerTokenIdentifier, owner)
+        let addedPayload = try XCTUnwrap(client.upsertedLoggedSets.first {
+            $0.clientId == addedSet.id.uuidString.lowercased()
+        })
+        XCTAssertEqual(addedPayload.weight, 245)
+        XCTAssertEqual(addedPayload.reps, 2)
+        XCTAssertEqual(addedPayload.rpe, 9.5)
+        XCTAssertTrue(try fetchEntries(context).isEmpty)
+    }
+
     func testSignedOutEditingOwnerlessCompletedWorkoutDoesNotBypassBootstrapPolicyOnSignIn() async throws {
         let ownerA = "issuer|owner_a"
         let ownerB = "issuer|owner_b"
