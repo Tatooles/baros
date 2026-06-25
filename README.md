@@ -10,11 +10,11 @@ Native SwiftUI workout logging app for iPhone with a SwiftData-backed offline wo
 
 ## Commands
 
-- `xcodegen generate`
-- `xcodebuild build -project LiftingLog.xcodeproj -scheme LiftingLog -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/codex-ios-app-derived-data`
-- `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
-- `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLogUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
-- `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -only-testing:LiftingLogUITests -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Generate project: `xcodegen generate`
+- Build simulator app: `xcodebuild build -project LiftingLog.xcodeproj -scheme LiftingLog -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Run full XCTest suite: `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Run unit tests only: `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLogUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Run UI tests only: `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -only-testing:LiftingLogUITests -derivedDataPath /private/tmp/codex-ios-app-derived-data`
 
 ## CI
 

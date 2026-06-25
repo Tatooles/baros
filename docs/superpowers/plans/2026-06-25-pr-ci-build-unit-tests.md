@@ -13,6 +13,8 @@
 ## File Structure
 
 - Create `.github/workflows/pr-ci.yml`: Defines the pull request and `main` push workflow with `ios-unit-tests` and `convex-checks`.
+- Modify `project.yml`: Defines the `LiftingLogUnitTests` scheme so XcodeGen preserves the unit-test-only scheme.
+- Create `LiftingLog.xcodeproj/xcshareddata/xcschemes/LiftingLogUnitTests.xcscheme`: Shares the generated unit-test-only scheme with Xcode and CI.
 - Modify `README.md`: Adds a short CI section with required check names, local equivalents, and the `.xcresult` artifact behavior.
 
 ## Task 1: Add GitHub Actions CI Workflow
