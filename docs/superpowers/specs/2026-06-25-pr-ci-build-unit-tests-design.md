@@ -4,7 +4,7 @@
 
 GitHub issue 74 adds the first blocking GitHub Actions baseline for LiftingLog pull requests. The app needs a required CI signal that proves the iOS app still builds, the unit test target passes, and the Convex backend tests/typecheck remain healthy.
 
-The shared `LiftingLog` Xcode scheme currently includes both `LiftingLogTests` and `LiftingLogUITests`. Prior UI test validation found the full UI suite too unstable and slow for an initial blocking PR gate, so this workflow must explicitly run only `LiftingLogTests`.
+The shared `LiftingLog` Xcode scheme currently includes both `LiftingLogTests` and `LiftingLogUITests`. Prior UI test validation found the full UI suite too unstable and slow for an initial blocking PR gate, so this workflow must use the `LiftingLogUnitTests` scheme to run only `LiftingLogTests`.
 
 The repo already documents the canonical local unit-test command in `README.md`, and `package.json` exposes stable local Convex scripts:
 
@@ -55,7 +55,7 @@ The job should:
 - Check out the repository.
 - Select or rely on an Xcode installation that supports the repo's iOS 26 deployment target.
 - Resolve Swift packages as part of the `xcodebuild test` flow or with an explicit package-resolution step.
-- Run `xcodebuild test` for the `LiftingLog` scheme with `-only-testing:LiftingLogTests`.
+- Run `xcodebuild test` for the `LiftingLogUnitTests` scheme.
 - Use a stable simulator destination matching the hosted image's available iOS 26 simulator runtime.
 - Write DerivedData and the result bundle under `${{ runner.temp }}`.
 
@@ -64,9 +64,8 @@ The command should follow this shape:
 ```sh
 xcodebuild test \
   -project LiftingLog.xcodeproj \
-  -scheme LiftingLog \
+  -scheme LiftingLogUnitTests \
   -destination "${IOS_TEST_DESTINATION}" \
-  -only-testing:LiftingLogTests \
   -derivedDataPath "${RUNNER_TEMP}/LiftingLogDerivedData" \
   -resultBundlePath "${RUNNER_TEMP}/LiftingLogTests.xcresult"
 ```

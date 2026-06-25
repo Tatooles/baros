@@ -83,9 +83,8 @@ jobs:
           set -o pipefail
           xcodebuild test \
             -project LiftingLog.xcodeproj \
-            -scheme LiftingLog \
+            -scheme LiftingLogUnitTests \
             -destination "${IOS_TEST_DESTINATION}" \
-            -only-testing:LiftingLogTests \
             -derivedDataPath "${IOS_DERIVED_DATA_PATH}" \
             -resultBundlePath "${IOS_RESULT_BUNDLE_PATH}" \
             2>&1 | tee "${IOS_TEST_LOG_PATH}"
@@ -157,7 +156,7 @@ git diff -- .github/workflows/pr-ci.yml
 Expected:
 
 - The workflow has exactly two jobs named `ios-unit-tests` and `convex-checks`.
-- The iOS command contains `-only-testing:LiftingLogTests`.
+- The iOS command uses the `LiftingLogUnitTests` scheme.
 - The workflow does not contain `LiftingLogUITests`.
 - The artifact upload step uses `if: failure()`.
 
@@ -186,7 +185,7 @@ Modify `README.md` so the section after the existing command list looks like thi
 
 Pull requests and pushes to `main` run two GitHub Actions checks:
 
-- `ios-unit-tests`: builds the `LiftingLog` scheme and runs only `LiftingLogTests`.
+- `ios-unit-tests`: builds the `LiftingLogUnitTests` scheme and runs `LiftingLogTests`.
 - `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
 
 The iOS job intentionally excludes `LiftingLogUITests` from the required PR gate. If `ios-unit-tests` fails, first inspect the GitHub Actions log. The failed workflow run also uploads a `LiftingLogTests-xcresult` artifact containing the `.xcresult` bundle and test log for local Xcode inspection.
@@ -194,7 +193,7 @@ The iOS job intentionally excludes `LiftingLogUITests` from the required PR gate
 Local equivalents:
 
 ```sh
-xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.5 -only-testing:LiftingLogTests -derivedDataPath /private/tmp/codex-ios-app-derived-data
+xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLogUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.5 -derivedDataPath /private/tmp/codex-ios-app-derived-data
 pnpm install --frozen-lockfile
 pnpm run convex:test
 pnpm run convex:typecheck
@@ -306,9 +305,8 @@ Run:
 RESULT_BUNDLE="/private/tmp/LiftingLogTests-issue74-$(date +%Y%m%d%H%M%S).xcresult"
 xcodebuild test \
   -project LiftingLog.xcodeproj \
-  -scheme LiftingLog \
+  -scheme LiftingLogUnitTests \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
-  -only-testing:LiftingLogTests \
   -derivedDataPath /private/tmp/codex-ios-app-derived-data \
   -resultBundlePath "${RESULT_BUNDLE}"
 ```
@@ -353,7 +351,7 @@ Use this in the PR body:
 - `ruby -e "require 'yaml'; YAML.load_file('.github/workflows/pr-ci.yml'); puts 'workflow yaml parses'"`
 - `pnpm run convex:test`
 - `pnpm run convex:typecheck`
-- `RESULT_BUNDLE="/private/tmp/LiftingLogTests-issue74-$(date +%Y%m%d%H%M%S).xcresult" && xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -only-testing:LiftingLogTests -derivedDataPath /private/tmp/codex-ios-app-derived-data -resultBundlePath "${RESULT_BUNDLE}"`
+- `RESULT_BUNDLE="/private/tmp/LiftingLogTests-issue74-$(date +%Y%m%d%H%M%S).xcresult" && xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLogUnitTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/codex-ios-app-derived-data -resultBundlePath "${RESULT_BUNDLE}"`
 
 ## Branch Protection Follow-up
 

@@ -37,7 +37,7 @@ jobs:
         run: |
           xcodebuild -resolvePackageDependencies \
             -project LiftingLog.xcodeproj \
-            -scheme LiftingLog \
+            -scheme LiftingLogUnitTests \
             -derivedDataPath "${IOS_DERIVED_DATA_PATH}"
 
       - name: Run LiftingLog unit tests
@@ -45,9 +45,8 @@ jobs:
           set -o pipefail
           xcodebuild test \
             -project LiftingLog.xcodeproj \
-            -scheme LiftingLog \
+            -scheme LiftingLogUnitTests \
             -destination "${IOS_TEST_DESTINATION}" \
-            -only-testing:LiftingLogTests \
             -derivedDataPath "${IOS_DERIVED_DATA_PATH}" \
             -resultBundlePath "${IOS_RESULT_BUNDLE_PATH}" \
             2>&1 | tee "${IOS_TEST_LOG_PATH}"

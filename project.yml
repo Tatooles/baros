@@ -17,6 +17,17 @@ packages:
   ConvexMobile:
     url: https://github.com/get-convex/convex-swift
     from: 0.8.1
+schemes:
+  LiftingLogUnitTests:
+    build:
+      targets:
+        LiftingLog: all
+    test:
+      config: Debug
+      targets:
+        - LiftingLogTests
+    run:
+      config: Debug
 targets:
   LiftingLog:
     type: application
