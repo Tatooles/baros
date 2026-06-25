@@ -258,7 +258,8 @@ final class LiftingLogUITests: XCTestCase {
         replaceText(in: app.textFields["HistorySetRepsField-0-0"], with: "6")
         dismissKeyboardIfNeeded(in: app)
 
-        app.buttons["AddHistorySetButton-0"].tap()
+        assertRemovedDraftHistorySetDoesNotReuseCachedNumberText(in: app)
+
         replaceText(in: app.textFields["HistorySetWeightField-0-1"], with: "135")
         replaceText(in: app.textFields["HistorySetRepsField-0-1"], with: "8")
         replaceText(in: app.textFields["HistorySetRPEField-0-1"], with: "7.")
@@ -800,6 +801,26 @@ final class LiftingLogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["CompletedWorkoutDurationPreview"].label.contains("\(minutes) min"))
         app.buttons["DoneDurationEditButton"].tap()
         XCTAssertTrue(durationButton.waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    private func assertRemovedDraftHistorySetDoesNotReuseCachedNumberText(in app: XCUIApplication) {
+        app.buttons["AddHistorySetButton-0"].tap()
+        let draftWeightField = app.textFields["HistorySetWeightField-0-1"]
+        XCTAssertTrue(draftWeightField.waitForExistence(timeout: 3))
+        replaceText(in: draftWeightField, with: "155.")
+        XCTAssertEqual(draftWeightField.value as? String, "155.")
+        dismissKeyboardIfNeeded(in: app)
+
+        app.buttons["RemoveHistorySetButton-0-1"].tap()
+        let removeButton = app.alerts.buttons["Remove"]
+        XCTAssertTrue(removeButton.waitForExistence(timeout: 3))
+        removeButton.tap()
+
+        app.buttons["AddHistorySetButton-0"].tap()
+        let replacementWeightField = app.textFields["HistorySetWeightField-0-1"]
+        XCTAssertTrue(replacementWeightField.waitForExistence(timeout: 3))
+        XCTAssertEqual(replacementWeightField.value as? String, "LBS")
     }
 
     @MainActor

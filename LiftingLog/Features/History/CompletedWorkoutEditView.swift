@@ -365,10 +365,25 @@ struct CompletedWorkoutEditView: View {
 
         if draft.exercises[candidate.exerciseIndex].sets[candidate.setIndex].id == nil {
             draft.exercises[candidate.exerciseIndex].sets.remove(at: candidate.setIndex)
+            rebaseNumberInputTextsAfterRemovingSet(
+                exerciseIndex: candidate.exerciseIndex,
+                removedSetIndex: candidate.setIndex
+            )
         } else {
             draft.exercises[candidate.exerciseIndex].sets[candidate.setIndex].isRemoved = true
         }
         reindexDraftSets(for: candidate.exerciseIndex)
+    }
+
+    private func rebaseNumberInputTextsAfterRemovingSet(exerciseIndex: Int, removedSetIndex: Int) {
+        var rebasedInputTexts: [CompletedWorkoutEditFocusedField: WorkoutNumberInputText] = [:]
+        for (field, inputText) in numberInputTexts {
+            if let rebasedField = field.rebasedAfterRemovingSet(exerciseIndex: exerciseIndex, removedSetIndex: removedSetIndex) {
+                rebasedInputTexts[rebasedField] = inputText
+            }
+        }
+        numberInputTexts = rebasedInputTexts
+        focusedField = focusedField?.rebasedAfterRemovingSet(exerciseIndex: exerciseIndex, removedSetIndex: removedSetIndex)
     }
 
     private func reindexDraftSets(for exerciseIndex: Int) {
@@ -598,4 +613,23 @@ private enum CompletedWorkoutEditFocusedField: Hashable {
     case setWeight(Int, Int)
     case setReps(Int, Int)
     case setRPE(Int, Int)
+
+    func rebasedAfterRemovingSet(exerciseIndex: Int, removedSetIndex: Int) -> CompletedWorkoutEditFocusedField? {
+        switch self {
+        case let .setWeight(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex == removedSetIndex:
+            return nil
+        case let .setReps(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex == removedSetIndex:
+            return nil
+        case let .setRPE(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex == removedSetIndex:
+            return nil
+        case let .setWeight(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex > removedSetIndex:
+            return .setWeight(fieldExerciseIndex, setIndex - 1)
+        case let .setReps(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex > removedSetIndex:
+            return .setReps(fieldExerciseIndex, setIndex - 1)
+        case let .setRPE(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex > removedSetIndex:
+            return .setRPE(fieldExerciseIndex, setIndex - 1)
+        default:
+            return self
+        }
+    }
 }
