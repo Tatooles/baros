@@ -812,7 +812,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         assertEntry(entries, kind: .loggedSet, id: set.id, operation: .delete)
     }
 
-    func testEditingCompletedWorkoutSessionFieldsRecordsOnlySessionUpdate() throws {
+    func testEditingOwnerlessCompletedWorkoutSessionFieldsBootstrapsGraphForSignedInSync() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let startedAt = Date(timeIntervalSince1970: 1_000)
@@ -847,14 +847,19 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(session.endedAt, startedAt.addingTimeInterval(2_700))
         XCTAssertEqual(session.updatedAt, editTime)
         XCTAssertEqual(session.syncOwnerTokenIdentifier, "issuer|owner_a")
-        XCTAssertEqual(entries.count, 1)
-        assertEntry(entries, kind: .workoutSession, id: session.id, operation: .update)
+        XCTAssertEqual(entries.count, 4)
+        assertEntry(entries, kind: .workoutSession, id: session.id, operation: .create)
+        assertEntry(entries, kind: .loggedExercise, id: try XCTUnwrap(session.sortedLoggedExercises.first?.id), operation: .create)
+        for set in try XCTUnwrap(session.sortedLoggedExercises.first).sortedSets {
+            assertEntry(entries, kind: .loggedSet, id: set.id, operation: .create)
+        }
     }
 
-    func testEditingCompletedWorkoutSetRecordsOnlySetUpdateAndStampsOwner() throws {
+    func testEditingOwnerlessCompletedWorkoutSetBootstrapsGraphForSignedInSync() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let session = makeCompletedWorkout(context: context)
+        let loggedExercise = try XCTUnwrap(session.sortedLoggedExercises.first)
         let set = try XCTUnwrap(session.sortedLoggedExercises.first?.sortedSets.first)
         let editTime = Date(timeIntervalSince1970: 2_000)
         try context.save()
@@ -886,6 +891,38 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(set.notes, "Corrected set")
         XCTAssertEqual(set.updatedAt, editTime)
         XCTAssertEqual(session.updatedAt, Date(timeIntervalSince1970: 100))
+        XCTAssertEqual(entries.count, 4)
+        assertEntry(entries, kind: .workoutSession, id: session.id, operation: .create)
+        assertEntry(entries, kind: .loggedExercise, id: loggedExercise.id, operation: .create)
+        for visibleSet in loggedExercise.sortedSets {
+            assertEntry(entries, kind: .loggedSet, id: visibleSet.id, operation: .create)
+        }
+    }
+
+    func testEditingOwnedCompletedWorkoutSetRecordsOnlySetUpdate() throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = makeCompletedWorkout(context: context, ownerTokenIdentifier: owner)
+        let set = try XCTUnwrap(session.sortedLoggedExercises.first?.sortedSets.first)
+        let editTime = Date(timeIntervalSince1970: 2_000)
+        try context.save()
+
+        var draft = CompletedWorkoutEditDraft(session: session)
+        draft.exercises[0].sets[0].weight = 225
+
+        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+            draft,
+            for: session,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: editTime
+        )
+
+        let entries = try fetchEntries(context)
+        XCTAssertEqual(session.syncOwnerTokenIdentifier, owner)
+        XCTAssertEqual(set.weight, 225)
+        XCTAssertEqual(set.updatedAt, editTime)
         XCTAssertEqual(entries.count, 1)
         assertEntry(entries, kind: .loggedSet, id: set.id, operation: .update)
     }
@@ -1076,6 +1113,30 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertTrue(try fetchEntries(context).isEmpty)
     }
 
+    func testCompletedWorkoutEditRejectsOwnedWorkoutWhileSignedOut() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = makeCompletedWorkout(context: context, ownerTokenIdentifier: "issuer|owner_a")
+        try context.save()
+
+        var draft = CompletedWorkoutEditDraft(session: session)
+        draft.title = "Should not save"
+
+        XCTAssertThrowsError(try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+            draft,
+            for: session,
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 2_000)
+        )) { error in
+            XCTAssertEqual(error as? WorkoutHistoryMutationError, .ownerMismatch)
+        }
+
+        XCTAssertEqual(session.title, "Push")
+        XCTAssertEqual(session.syncOwnerTokenIdentifier, "issuer|owner_a")
+        XCTAssertTrue(try fetchEntries(context).isEmpty)
+    }
+
     func testSignedInEditOfOwnerlessCompletedWorkoutStampsOwnerForSetSyncReplay() async throws {
         let owner = "issuer|owner_a"
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
@@ -1107,6 +1168,10 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
 
         XCTAssertEqual(session.syncOwnerTokenIdentifier, owner)
+        XCTAssertEqual(client.operationLog.prefix(2), [
+            "upsertWorkoutSession:\(session.id.uuidString.lowercased())",
+            "upsertLoggedExercise:\(try XCTUnwrap(session.sortedLoggedExercises.first?.id.uuidString.lowercased()))",
+        ])
         let editedPayload = try XCTUnwrap(client.upsertedLoggedSets.first {
             $0.clientId == editedSetID.uuidString.lowercased()
         })

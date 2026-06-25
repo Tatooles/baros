@@ -158,7 +158,12 @@ struct WorkoutHistoryMutationService {
         }
 
         if didChangeSessionFields {
-            stampOwnerIfNeeded(session, ownerTokenIdentifier: ownerTokenIdentifier)
+            try claimOwnerlessWorkoutGraphIfNeeded(
+                session,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
             session.updatedAt = now
             try recorder.recordUpdate(
                 entityKind: .workoutSession,
@@ -194,7 +199,12 @@ struct WorkoutHistoryMutationService {
                 }
 
                 if setDraft.isRemoved {
-                    stampOwnerIfNeeded(session, ownerTokenIdentifier: ownerTokenIdentifier)
+                    try claimOwnerlessWorkoutGraphIfNeeded(
+                        session,
+                        ownerTokenIdentifier: ownerTokenIdentifier,
+                        context: context,
+                        now: now
+                    )
                     set.markDeleted(now: now)
                     try recorder.recordDelete(
                         entityKind: .loggedSet,
@@ -205,7 +215,12 @@ struct WorkoutHistoryMutationService {
                     )
                     didChange = true
                 } else if apply(setDraft, to: set, now: now) {
-                    stampOwnerIfNeeded(session, ownerTokenIdentifier: ownerTokenIdentifier)
+                    try claimOwnerlessWorkoutGraphIfNeeded(
+                        session,
+                        ownerTokenIdentifier: ownerTokenIdentifier,
+                        context: context,
+                        now: now
+                    )
                     try recorder.recordUpdate(
                         entityKind: .loggedSet,
                         entityID: set.id,
@@ -218,13 +233,23 @@ struct WorkoutHistoryMutationService {
             }
 
             if try reindexVisibleSets(for: loggedExercise, ownerTokenIdentifier: ownerTokenIdentifier, context: context, now: now) {
-                stampOwnerIfNeeded(session, ownerTokenIdentifier: ownerTokenIdentifier)
+                try claimOwnerlessWorkoutGraphIfNeeded(
+                    session,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context,
+                    now: now
+                )
                 didChange = true
             }
 
             let newSetDrafts = exerciseDraft.sets.filter { $0.id == nil && !$0.isRemoved && !isEmptyNewSet($0) }
             for setDraft in newSetDrafts {
-                stampOwnerIfNeeded(session, ownerTokenIdentifier: ownerTokenIdentifier)
+                try claimOwnerlessWorkoutGraphIfNeeded(
+                    session,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context,
+                    now: now
+                )
                 let nextOrderIndex = (loggedExercise.sortedSets.map(\.orderIndex).max() ?? -1) + 1
                 let set = LoggedSet(
                     orderIndex: nextOrderIndex,
@@ -300,16 +325,46 @@ struct WorkoutHistoryMutationService {
             throw WorkoutHistoryMutationError.cannotEditWorkout
         }
 
-        if let ownerTokenIdentifier,
-           let sessionOwner = session.syncOwnerTokenIdentifier,
-           sessionOwner != ownerTokenIdentifier {
-            throw WorkoutHistoryMutationError.ownerMismatch
+        if let sessionOwner = session.syncOwnerTokenIdentifier {
+            guard let ownerTokenIdentifier, ownerTokenIdentifier == sessionOwner else {
+                throw WorkoutHistoryMutationError.ownerMismatch
+            }
         }
     }
 
-    private func stampOwnerIfNeeded(_ session: WorkoutSession, ownerTokenIdentifier: String?) {
+    private func claimOwnerlessWorkoutGraphIfNeeded(
+        _ session: WorkoutSession,
+        ownerTokenIdentifier: String?,
+        context: ModelContext,
+        now: Date
+    ) throws {
         guard let ownerTokenIdentifier, session.syncOwnerTokenIdentifier == nil else { return }
         session.syncOwnerTokenIdentifier = ownerTokenIdentifier
+        try recorder.recordCreate(
+            entityKind: .workoutSession,
+            entityID: session.id,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context,
+            now: now
+        )
+        for loggedExercise in session.sortedLoggedExercises where !loggedExercise.isDeleted {
+            try recorder.recordCreate(
+                entityKind: .loggedExercise,
+                entityID: loggedExercise.id,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+            for set in loggedExercise.sortedSets where !set.isDeleted {
+                try recorder.recordCreate(
+                    entityKind: .loggedSet,
+                    entityID: set.id,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context,
+                    now: now
+                )
+            }
+        }
     }
 
     private func apply(_ draft: CompletedWorkoutEditSetDraft, to set: LoggedSet, now: Date) -> Bool {
