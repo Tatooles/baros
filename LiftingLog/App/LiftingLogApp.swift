@@ -81,6 +81,7 @@ struct LiftingLogApp: App {
                 }
                 if uiTestForcesSignedOutAuth {
                     syncScheduler.currentOwnerTokenIdentifier = nil
+                    syncScheduler.configure(modelContext: modelContainer.mainContext)
                     syncScheduler.seedDefaultsForLocalMode()
                     return
                 }

@@ -82,6 +82,17 @@ final class AppInitializationOrderTests: XCTestCase {
             appSource.contains("if uiTestForcesSignedOutAuth"),
             "Forced signed-out UI tests must skip restored Clerk/Convex sync startup."
         )
+        XCTAssertTrue(
+            appSource.contains("""
+                if uiTestForcesSignedOutAuth {
+                    syncScheduler.currentOwnerTokenIdentifier = nil
+                    syncScheduler.configure(modelContext: modelContainer.mainContext)
+                    syncScheduler.seedDefaultsForLocalMode()
+                    return
+                }
+"""),
+            "Forced signed-out UI tests must configure the scheduler model context before seeding local defaults."
+        )
 
         let syncOwnerOffset = try XCTUnwrap(appSource.range(of: "if let uiTestSyncOwner")).lowerBound
         let forcedSignedOutOffset = try XCTUnwrap(appSource.range(of: "if uiTestForcesSignedOutAuth")).lowerBound
