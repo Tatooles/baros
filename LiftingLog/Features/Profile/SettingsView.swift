@@ -33,7 +33,7 @@ struct SettingsView: View {
 
             PrivacyDataSection(
                 exportWorkoutHistory: exportWorkoutHistory,
-                links: .issue13Development,
+                links: .release,
                 onDeletionCompleted: onDataDeletionCompleted
             )
         }
