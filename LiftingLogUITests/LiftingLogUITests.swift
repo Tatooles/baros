@@ -13,6 +13,84 @@ final class LiftingLogUITests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutTitleFieldsShowEditAffordance() {
+        let app = makeApp(completedBenchWorkoutTitles: ["Existing Editable"])
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        let activeTitleField = app.textFields["WorkoutTitle"]
+        XCTAssertTrue(activeTitleField.waitForExistence(timeout: 3))
+        let activeTitleAffordance = app.buttons["WorkoutTitleEditAffordance"]
+        XCTAssertFalse(activeTitleAffordance.exists)
+        activeTitleField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        dismissKeyboardIfNeeded(in: app)
+
+        app.buttons["HistoryTab"].tap()
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["WorkoutHistoryButton-0"].tap()
+
+        XCTAssertTrue(app.buttons["EditWorkoutButton"].waitForExistence(timeout: 3))
+        app.buttons["EditWorkoutButton"].tap()
+        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 3))
+
+        XCTAssertTrue(app.staticTexts["CompletedWorkoutTitleLabel"].waitForExistence(timeout: 3))
+        let completedTitleField = app.textFields["CompletedWorkoutTitleField"]
+        XCTAssertTrue(completedTitleField.waitForExistence(timeout: 3))
+        completedTitleField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testFinishWorkoutSheetCanRenameDefaultWorkoutBeforeSaving() {
+        let app = makeApp()
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+
+        openFinishWorkoutSheet(in: app)
+        let finishTitleField = app.textFields["FinishWorkoutTitleField"]
+        XCTAssertTrue(finishTitleField.waitForExistence(timeout: 3))
+        XCTAssertEqual(finishTitleField.value as? String, "Workout")
+        XCTAssertTrue(app.staticTexts["FinishWorkoutTitleDefaultHint"].exists)
+        replaceText(in: finishTitleField, with: "Saturday Push")
+        let keyboardDoneButton = app.buttons["Done"]
+        XCTAssertTrue(keyboardDoneButton.waitForExistence(timeout: 3))
+        keyboardDoneButton.tap()
+
+        XCTAssertTrue(app.buttons["KeepGoingButton"].waitForExistence(timeout: 3))
+        app.buttons["KeepGoingButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.textFields["WorkoutTitle"].value as? String, "Saturday Push")
+    }
+
+    @MainActor
+    func testFinishWorkoutSheetNormalizesBlankTitleBeforeKeepGoing() {
+        let app = makeApp()
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+
+        openFinishWorkoutSheet(in: app)
+        let finishTitleField = app.textFields["FinishWorkoutTitleField"]
+        XCTAssertTrue(finishTitleField.waitForExistence(timeout: 3))
+        replaceText(in: finishTitleField, with: "")
+
+        let keyboardDoneButton = app.buttons["Done"]
+        XCTAssertTrue(keyboardDoneButton.waitForExistence(timeout: 3))
+        keyboardDoneButton.tap()
+
+        XCTAssertTrue(app.buttons["KeepGoingButton"].waitForExistence(timeout: 3))
+        app.buttons["KeepGoingButton"].tap()
+
+        let activeTitleField = app.textFields["WorkoutTitle"]
+        XCTAssertTrue(activeTitleField.waitForExistence(timeout: 3))
+        XCTAssertEqual(activeTitleField.value as? String, "Workout")
+    }
+
+    @MainActor
     func testTabNavigationAndFinishSheetSmoke() {
         let app = makeApp()
         app.launch()

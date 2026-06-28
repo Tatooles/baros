@@ -130,15 +130,21 @@ struct CompletedWorkoutEditView: View {
 
     private var workoutHeader: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TextField("Workout Name", text: $draft.title)
-                .font(.title.weight(.bold))
-                .foregroundStyle(AppTheme.textPrimary)
-                .focused($focusedField, equals: .title)
-                .accessibilityIdentifier("CompletedWorkoutTitleField")
+            LabeledWorkoutTitleField(
+                label: "WORKOUT NAME",
+                placeholder: "Workout Name",
+                text: $draft.title,
+                focusTarget: .title,
+                focusedField: $focusedField,
+                accessibilityIdentifier: "CompletedWorkoutTitleField",
+                labelIdentifier: "CompletedWorkoutTitleLabel",
+                editAffordanceIdentifier: "CompletedWorkoutTitleEditAffordance"
+            )
 
             Text(WorkoutFormatters.compactDate(session.startedAt))
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(AppTheme.textSecondary)
+                .padding(.horizontal, 12)
 
             Button {
                 focusedField = nil

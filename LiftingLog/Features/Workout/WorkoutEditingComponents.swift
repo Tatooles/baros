@@ -64,6 +64,116 @@ struct WorkoutSetColumnHeader: View {
     }
 }
 
+struct WorkoutTitleField<Focus: Hashable>: View {
+    let placeholder: String
+    @Binding var text: String
+    let focusTarget: Focus
+    var focusedField: FocusState<Focus?>.Binding
+    let accessibilityIdentifier: String
+
+    var body: some View {
+        TextField(placeholder, text: $text)
+            .font(.title.weight(.bold))
+            .foregroundStyle(AppTheme.textPrimary)
+            .lineLimit(1)
+            .focused(focusedField, equals: focusTarget)
+            .submitLabel(.done)
+            .accessibilityHint("Double-tap to edit the workout name")
+            .accessibilityIdentifier(accessibilityIdentifier)
+            .padding(.leading, 12)
+            .padding(.trailing, 12)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous))
+            .onTapGesture {
+                focusedField.wrappedValue = focusTarget
+            }
+            .background(
+                isFocused ? AnyShapeStyle(AppTheme.fieldFill) : AnyShapeStyle(Color.clear),
+                in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                    .strokeBorder(isFocused ? AppTheme.accentBright.opacity(0.7) : .clear, lineWidth: 1.5)
+            )
+            .animation(.easeOut(duration: 0.15), value: isFocused)
+            .id(focusTarget)
+    }
+
+    private var isFocused: Bool {
+        focusedField.wrappedValue == focusTarget
+    }
+}
+
+struct LabeledWorkoutTitleField<Focus: Hashable>: View {
+    let label: String
+    let placeholder: String
+    @Binding var text: String
+    let focusTarget: Focus
+    var focusedField: FocusState<Focus?>.Binding
+    let accessibilityIdentifier: String
+    let labelIdentifier: String
+    let editAffordanceIdentifier: String
+    var titleFont: Font = .title.weight(.bold)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.caption2.weight(.bold))
+                .tracking(1.8)
+                .foregroundStyle(AppTheme.textSecondary)
+                .accessibilityIdentifier(labelIdentifier)
+
+            HStack(spacing: 6) {
+                TextField(placeholder, text: $text)
+                    .font(titleFont)
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .lineLimit(1)
+                    .focused(focusedField, equals: focusTarget)
+                    .submitLabel(.done)
+                    .accessibilityHint("Double-tap to edit the workout name")
+                    .accessibilityIdentifier(accessibilityIdentifier)
+
+                Button {
+                    focusedField.wrappedValue = focusTarget
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(isFocused ? AppTheme.accentBright : AppTheme.textSecondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        .accessibilityIdentifier(editAffordanceIdentifier)
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Edit workout name")
+                .accessibilityIdentifier(editAffordanceIdentifier)
+            }
+            .padding(.leading, 12)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous))
+            .onTapGesture {
+                focusedField.wrappedValue = focusTarget
+            }
+            .background(
+                AppTheme.fieldFill,
+                in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                    .strokeBorder(isFocused ? AppTheme.accentBright.opacity(0.7) : .clear, lineWidth: 1.5)
+            )
+            .animation(.easeOut(duration: 0.15), value: isFocused)
+            .id(focusTarget)
+        }
+    }
+
+    private var isFocused: Bool {
+        focusedField.wrappedValue == focusTarget
+    }
+}
+
 struct WorkoutNumericTextField<Focus: Hashable>: View {
     let placeholder: String
     @Binding var text: String

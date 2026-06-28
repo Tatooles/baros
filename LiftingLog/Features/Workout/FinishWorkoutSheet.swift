@@ -9,6 +9,7 @@ struct FinishWorkoutSheet: View {
     @Bindable var engine: ActiveWorkoutEngine
     @State private var showsDiscardConfirmation = false
     @State private var actionError: WorkoutActionError?
+    @FocusState private var focusedField: FinishWorkoutFocusedField?
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
     private var metrics: WorkoutMetrics {
@@ -34,6 +35,28 @@ struct FinishWorkoutSheet: View {
             }
             .padding(.top, 24)
 
+            VStack(alignment: .leading, spacing: 6) {
+                LabeledWorkoutTitleField(
+                    label: "WORKOUT NAME",
+                    placeholder: "Workout Name",
+                    text: workoutTitleBinding,
+                    focusTarget: .title,
+                    focusedField: $focusedField,
+                    accessibilityIdentifier: "FinishWorkoutTitleField",
+                    labelIdentifier: "FinishWorkoutTitleLabel",
+                    editAffordanceIdentifier: "FinishWorkoutTitleEditAffordance",
+                    titleFont: .title3.weight(.bold)
+                )
+
+                if showsDefaultTitleHint {
+                    Text("Name it now so it is easier to find in history.")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .padding(.horizontal, 12)
+                        .accessibilityIdentifier("FinishWorkoutTitleDefaultHint")
+                }
+            }
+
             HStack(spacing: 10) {
                 MetricSummaryCard(title: "Duration", value: AppTheme.formatDuration(metrics.durationSeconds))
                 MetricSummaryCard(title: "Sets Done", value: "\(metrics.completedSetCount)/\(metrics.totalSetCount)")
@@ -44,6 +67,7 @@ struct FinishWorkoutSheet: View {
             }
 
             Button {
+                focusedField = nil
                 do {
                     try engine.finishWorkout(
                         session,
@@ -67,6 +91,7 @@ struct FinishWorkoutSheet: View {
             .accessibilityIdentifier("SaveWorkoutButton")
 
             Button("Keep Going") {
+                finalizeWorkoutTitle()
                 dismiss()
             }
             .font(.callout.weight(.medium))
@@ -83,9 +108,23 @@ struct FinishWorkoutSheet: View {
             .padding(.bottom, 8)
         }
         .padding(.horizontal, 20)
-        .presentationDetents([.height(390)])
+        .presentationDetents([.height(500)])
         .presentationCornerRadius(36)
         .presentationDragIndicator(.visible)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    focusedField = nil
+                }
+                .accessibilityIdentifier("DismissKeyboardButton")
+            }
+        }
+        .onChange(of: focusedField) { previousField, newField in
+            if previousField == .title, newField != .title {
+                finalizeWorkoutTitle()
+            }
+        }
         .alert("Discard Workout?", isPresented: $showsDiscardConfirmation) {
             Button("Discard", role: .destructive) {
                 do {
@@ -109,9 +148,30 @@ struct FinishWorkoutSheet: View {
         }
     }
 
+    private var workoutTitleBinding: Binding<String> {
+        Binding(
+            get: { session.title },
+            set: { newValue in
+                try? engine.updateWorkoutTitle(newValue, session: session, context: modelContext)
+            }
+        )
+    }
+
+    private var showsDefaultTitleHint: Bool {
+        session.title.trimmingCharacters(in: .whitespacesAndNewlines) == "Workout"
+    }
+
+    private func finalizeWorkoutTitle() {
+        try? engine.finalizeWorkoutTitle(session, context: modelContext)
+    }
+
     private struct WorkoutActionError: Identifiable {
         let id = UUID()
         let title: String
         let message: String
     }
+}
+
+private enum FinishWorkoutFocusedField: Hashable {
+    case title
 }

@@ -37,16 +37,19 @@ struct WorkoutSessionView: View {
         ScrollViewReader { scrollProxy in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        TextField("Workout Name", text: workoutTitleBinding)
-                            .font(.title.weight(.bold))
-                            .foregroundStyle(AppTheme.textPrimary)
-                            .focused($focusedField, equals: .workoutTitle)
-                            .accessibilityIdentifier("WorkoutTitle")
-                            .id(WorkoutField.workoutTitle)
+                    VStack(alignment: .leading, spacing: 8) {
+                        WorkoutTitleField(
+                            placeholder: "Workout Name",
+                            text: workoutTitleBinding,
+                            focusTarget: .workoutTitle,
+                            focusedField: $focusedField,
+                            accessibilityIdentifier: "WorkoutTitle"
+                        )
+
                         Text(AppTheme.formatDate(session.startedAt))
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(AppTheme.textSecondary)
+                            .padding(.horizontal, 12)
                     }
                     .padding(.horizontal, 4)
 
