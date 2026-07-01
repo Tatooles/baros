@@ -1,7 +1,6 @@
 import XCTest
 @testable import LiftingLog
 
-@MainActor
 final class FirstRunExperienceStoreTests: XCTestCase {
     private var suiteName: String!
     private var defaults: UserDefaults!
@@ -20,6 +19,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
         super.tearDown()
     }
 
+    @MainActor
     func testFreshInstallShowsWelcomeOnly() {
         let store = FirstRunExperienceStore(defaults: defaults)
         let release = WhatsNewRelease(
@@ -36,6 +36,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
         XCTAssertFalse(store.shouldShowWhatsNew(for: release))
     }
 
+    @MainActor
     func testMarkWelcomeSeenSuppressesCurrentWhatsNewVersion() {
         let store = FirstRunExperienceStore(defaults: defaults)
         let release = WhatsNewRelease(
@@ -55,6 +56,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
         XCTAssertEqual(store.lastSeenWhatsNewVersion, "1.0")
     }
 
+    @MainActor
     func testExistingUserSeesAutoShownNewVersionOnce() {
         let store = FirstRunExperienceStore(defaults: defaults)
         store.markWelcomeSeen(currentWhatsNewVersion: "1.0")
@@ -75,6 +77,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
         XCTAssertFalse(store.shouldShowWhatsNew(for: release))
     }
 
+    @MainActor
     func testReleaseCanOptOutOfAutomaticWhatsNewPresentation() {
         let store = FirstRunExperienceStore(defaults: defaults)
         store.markWelcomeSeen(currentWhatsNewVersion: "1.0")
@@ -91,6 +94,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
         XCTAssertFalse(store.shouldShowWhatsNew(for: release))
     }
 
+    @MainActor
     func testResetForUITestingClearsStoredValues() {
         let store = FirstRunExperienceStore(defaults: defaults)
         store.markWelcomeSeen(currentWhatsNewVersion: "1.0")
@@ -104,6 +108,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
         XCTAssertNil(store.lastSeenWhatsNewVersion)
     }
 
+    @MainActor
     func testMarkSeenForUITestingSkipsFirstRunExperience() {
         let store = FirstRunExperienceStore(defaults: defaults)
 
@@ -116,6 +121,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
         XCTAssertEqual(store.lastSeenWhatsNewVersion, WhatsNewContent.current().version)
     }
 
+    @MainActor
     func testResetForUITestingTakesPrecedenceOverSkip() {
         let store = FirstRunExperienceStore(defaults: defaults)
 
