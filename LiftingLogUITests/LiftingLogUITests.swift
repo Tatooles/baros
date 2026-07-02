@@ -119,7 +119,7 @@ final class LiftingLogUITests: XCTestCase {
         firstLaunch.launch()
 
         XCTAssertTrue(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
-        XCTAssertTrue(firstLaunch.staticTexts["Welcome to LiftingLog"].exists)
+        XCTAssertTrue(firstLaunch.staticTexts["Welcome to the Lifting Log"].exists)
         XCTAssertTrue(firstLaunch.staticTexts["Fast workout logging"].exists)
         XCTAssertTrue(firstLaunch.staticTexts["Your history stays put"].exists)
         XCTAssertTrue(firstLaunch.staticTexts["Optional cloud sync"].exists)
@@ -132,7 +132,7 @@ final class LiftingLogUITests: XCTestCase {
         let secondLaunch = makeDiskBackedApp(skipsFirstRunExperience: false)
         secondLaunch.launch()
 
-        XCTAssertFalse(secondLaunch.staticTexts["Welcome to LiftingLog"].waitForExistence(timeout: 1))
+        XCTAssertFalse(secondLaunch.staticTexts["Welcome to the Lifting Log"].waitForExistence(timeout: 1))
         XCTAssertTrue(secondLaunch.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3))
     }
 
@@ -155,7 +155,7 @@ final class LiftingLogUITests: XCTestCase {
         whatsNewButton.tap()
 
         XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["What's New in LiftingLog"].exists)
+        XCTAssertTrue(app.staticTexts["What's New in the Lifting Log"].exists)
         XCTAssertTrue(app.staticTexts["Cloud sync"].exists)
     }
 

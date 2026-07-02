@@ -14,7 +14,11 @@ final class WhatsNewContentTests: XCTestCase {
         let release = WhatsNewContent.current(buildInfo: buildInfo)
 
         XCTAssertEqual(release.version, "1.0")
-        XCTAssertEqual(release.title, "What's New in LiftingLog")
+        XCTAssertEqual(release.title, "What's New in the Lifting Log")
+        XCTAssertEqual(
+            release.summary,
+            "The first release of the Lifting Log: fast workout logging, a safe local history, and optional cloud sync."
+        )
         XCTAssertTrue(release.shouldAutoShow)
     }
 
