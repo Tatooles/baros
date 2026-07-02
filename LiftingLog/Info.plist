@@ -28,6 +28,8 @@
 	<string>$(CLERK_PUBLISHABLE_KEY)</string>
 	<key>ConvexDeploymentURL</key>
 	<string>$(CONVEX_DEPLOYMENT_URL)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>LiftingLogEnvironment</key>

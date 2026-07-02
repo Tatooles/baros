@@ -91,10 +91,10 @@ Capture final screenshots after UI stabilizes:
 - Release build uses production Clerk publishable key.
 - Release build uses webcredentials:clerk.auth.liftinglog.app.
 - Release build uses https://sensible-reindeer-16.convex.cloud.
-- App target includes PrivacyInfo.xcprivacy with required-reason API declarations, including UserDefaults usage, and archive/upload validation passes before App Store submission.
+- [x] App target includes PrivacyInfo.xcprivacy with required-reason API declarations, including UserDefaults usage, and archive/upload validation passes before App Store submission.
 - Final app icon ticket is complete before submission.
 - App Store screenshots are final.
-- Export compliance answer is ready for standard HTTPS encryption use.
+- [x] Export compliance answer is ready for standard HTTPS encryption use.
 - Pricing and availability are set to Free and the intended launch regions.
 
 ## Production Smoke Test

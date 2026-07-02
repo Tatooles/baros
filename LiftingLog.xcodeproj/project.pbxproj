@@ -119,6 +119,7 @@
 		C99444526A4FE33305FF01D5 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = 3C353543E5E4D3B6B115FB81 /* ConvexMobile */; };
 		C99E2EDB6ACD054D91DCDE24 /* ExerciseEquipment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FBDF8A21B7C773137D8593A /* ExerciseEquipment.swift */; };
 		C9FE24E5C43C2ADDC754B5E0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D5788B8F028D630B08D1917A /* Assets.xcassets */; };
+		CDFC8CB5216B711BDB3443CC /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E9B5204EB42B0BA878E2ED2B /* PrivacyInfo.xcprivacy */; };
 		D6734D7425D9F70ACF365AD4 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFD611D025EF1E9C19B5F6B0 /* SettingsView.swift */; };
 		D85855E4C38E1E9A0B0A4067 /* WorkoutFocusNavigatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D41DF9D24F54196760629B7 /* WorkoutFocusNavigatorTests.swift */; };
 		D8F385412A10FBC50F1E253B /* SeedDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F25C1CBC03FE371C7E528CCC /* SeedDataService.swift */; };
@@ -289,6 +290,7 @@
 		E527B735029DE8AD97045DBD /* SettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTests.swift; sourceTree = "<group>"; };
 		E8C3106AF3F418992CD41685 /* SyncOutboxEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxEntryTests.swift; sourceTree = "<group>"; };
 		E93751C706B7DADA2679123D /* HealthDataLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataLink.swift; sourceTree = "<group>"; };
+		E9B5204EB42B0BA878E2ED2B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		EC1E1DBA22DE39474403900F /* ExerciseQuickHistorySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseQuickHistorySheet.swift; sourceTree = "<group>"; };
 		ECCEC90E77EA3890CA779E25 /* RPEChipRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RPEChipRow.swift; sourceTree = "<group>"; };
 		EFD611D025EF1E9C19B5F6B0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -374,6 +376,7 @@
 				D5788B8F028D630B08D1917A /* Assets.xcassets */,
 				16DA0E25F88D6F44862C43F7 /* Info.plist */,
 				3DB3484AD2211A8F31EC4FC1 /* LiftingLog.entitlements */,
+				E9B5204EB42B0BA878E2ED2B /* PrivacyInfo.xcprivacy */,
 				F623F80C35B8454B64D03A3A /* App */,
 				2FA5E6FC9D297E93F2EA7365 /* Core */,
 				F71189CBBE5BAA20088AF608 /* Features */,
@@ -762,6 +765,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C9FE24E5C43C2ADDC754B5E0 /* Assets.xcassets in Resources */,
+				CDFC8CB5216B711BDB3443CC /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
