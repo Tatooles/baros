@@ -110,6 +110,27 @@ final class AppInitializationOrderTests: XCTestCase {
         )
     }
 
+    func testAppRequestsSyncWhenSceneBecomesActive() throws {
+        let appSource = try sourceFileContents("LiftingLog/App/LiftingLogApp.swift")
+
+        XCTAssertTrue(
+            appSource.contains("@Environment(\\.scenePhase)"),
+            "The app must observe scenePhase so returning to the foreground can trigger sync."
+        )
+        XCTAssertTrue(
+            appSource.contains(".onChange(of: scenePhase)"),
+            "The root scene should respond to foreground lifecycle changes."
+        )
+        XCTAssertTrue(
+            appSource.contains("newScenePhase == .active"),
+            "Only foreground activation should trigger the lifecycle sync request."
+        )
+        XCTAssertTrue(
+            appSource.contains("syncScheduler.requestSyncOnAppForeground()"),
+            "Foreground activation should use the guarded scheduler trigger for signed-in, non-deletion-mode sync."
+        )
+    }
+
     func testUITestHelpersForceSignedOutAuthByDefault() throws {
         let uiTestSource = try sourceFileContents("LiftingLogUITests/LiftingLogUITests.swift")
 

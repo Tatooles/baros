@@ -9,6 +9,7 @@ struct LiftingLogApp: App {
     private let convexClient: ConvexClientWithAuth<String>
     private let uiTestSyncOwner: String?
     private let uiTestForcesSignedOutAuth: Bool
+    @Environment(\.scenePhase) private var scenePhase
     @State private var navigationState = AppNavigationState()
     @State private var activeWorkoutEngine = ActiveWorkoutEngine()
     @State private var syncScheduler = SyncScheduler()
@@ -86,6 +87,10 @@ struct LiftingLogApp: App {
                     return
                 }
                 configureSyncIfNeeded()
+            }
+            .onChange(of: scenePhase) { _, newScenePhase in
+                guard newScenePhase == .active else { return }
+                syncScheduler.requestSyncOnAppForeground()
             }
         }
     }

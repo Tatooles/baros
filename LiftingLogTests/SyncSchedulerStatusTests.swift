@@ -300,6 +300,79 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertFalse(scheduler.isSyncing)
     }
 
+    func testForegroundTriggerRetriesFailedOutboxEntry() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(exercise)
+        let failedEntry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            operation: .update,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200),
+            lastAttemptAt: Date(timeIntervalSince1970: 150),
+            attemptCount: 1,
+            lastErrorMessage: "offline"
+        )
+        context.insert(failedEntry)
+        try context.save()
+
+        let client = FakeSyncClient()
+        let scheduler = SyncScheduler(coordinator: SyncCoordinator(client: client), modelContext: context)
+        scheduler.currentOwnerTokenIdentifier = owner
+
+        scheduler.requestSyncOnAppForeground()
+        try await waitUntil {
+            !scheduler.isSyncing
+                && ((try? context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty) == true)
+        }
+
+        XCTAssertEqual(scheduler.requestCount, 1)
+        XCTAssertEqual(client.upsertedExercises.map(\.clientId), [exercise.id.uuidString.lowercased()])
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertNotNil(scheduler.lastSyncedAt)
+    }
+
+    func testForegroundTriggerIsNoOpInDeletionMode() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let client = FakeSyncClient()
+        let scheduler = SyncScheduler(coordinator: SyncCoordinator(client: client), modelContext: context)
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+        scheduler.beginDeletionMode()
+
+        scheduler.requestSyncOnAppForeground()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(scheduler.requestCount, 0)
+        XCTAssertFalse(scheduler.isSyncing)
+        XCTAssertTrue(client.fetchRequests.isEmpty)
+    }
+
+    func testForegroundTriggerIsNoOpWhenSignedOut() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let client = FakeSyncClient()
+        let scheduler = SyncScheduler(coordinator: SyncCoordinator(client: client), modelContext: context)
+
+        scheduler.requestSyncOnAppForeground()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(scheduler.requestCount, 0)
+        XCTAssertFalse(scheduler.isSyncing)
+        XCTAssertTrue(client.fetchRequests.isEmpty)
+    }
+
     func testOwnerChangeClearsRuntimeFailureAndCancelsQueuedState() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

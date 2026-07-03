@@ -68,6 +68,14 @@ final class SyncScheduler {
         startSyncTask(coordinator: coordinator, modelContext: modelContext)
     }
 
+    func requestSyncOnAppForeground() {
+        guard !isDeletionModeEnabled else { return }
+        guard currentOwnerTokenIdentifier != nil else { return }
+        guard coordinator != nil, modelContext != nil else { return }
+
+        requestSync()
+    }
+
     func retrySync() {
         requestSync()
     }
