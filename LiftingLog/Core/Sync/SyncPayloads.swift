@@ -135,7 +135,7 @@ enum SyncPayloadMapper {
             updatedAt: loggedExercise.updatedAt.timeIntervalSince1970,
             deletedAt: loggedExercise.deletedAt?.timeIntervalSince1970,
             sessionClientId: loggedExercise.session?.id.uuidString.lowercased() ?? "",
-            exerciseClientId: loggedExercise.exercise?.id.uuidString.lowercased(),
+            exerciseClientId: activeExerciseClientId(for: loggedExercise),
             orderIndex: loggedExercise.orderIndex,
             exerciseSnapshotName: loggedExercise.exerciseSnapshotName,
             exerciseSnapshotEquipmentRaw: loggedExercise.effectiveSnapshotEquipmentRaw,
@@ -145,6 +145,14 @@ enum SyncPayloadMapper {
             referenceNotes: loggedExercise.referenceNotes,
             sourceLoggedExerciseID: loggedExercise.sourceLoggedExerciseID?.uuidString.lowercased()
         )
+    }
+
+    private static func activeExerciseClientId(for loggedExercise: LoggedExercise) -> String? {
+        guard let exercise = loggedExercise.exercise, !exercise.isDeleted else {
+            return nil
+        }
+
+        return exercise.id.uuidString.lowercased()
     }
 
     static func loggedSetPayload(from set: LoggedSet) -> LoggedSetSyncPayload {

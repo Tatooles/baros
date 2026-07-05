@@ -2132,6 +2132,105 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(state.loggedExercisesCursor, 32)
     }
 
+    func testRunPushesLoggedExerciseWithoutExerciseReferenceAfterPulledExerciseTombstone() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        let exerciseID = UUID(uuidString: "00000000-0000-0000-0000-000000006271")!
+        let sessionID = UUID(uuidString: "00000000-0000-0000-0000-000000006272")!
+        let loggedExerciseID = UUID(uuidString: "00000000-0000-0000-0000-000000006273")!
+        let state = SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        )
+        let exercise = Exercise(
+            id: exerciseID,
+            name: "Deleted Bench",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscleGroup: .chest,
+            syncOwnerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 9),
+            updatedAt: Date(timeIntervalSince1970: 19)
+        )
+        let session = WorkoutSession(
+            id: sessionID,
+            title: "Offline Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            endedAt: Date(timeIntervalSince1970: 200),
+            durationSeconds: 100,
+            status: .completed,
+            source: .blank,
+            createdAt: Date(timeIntervalSince1970: 10),
+            updatedAt: Date(timeIntervalSince1970: 20),
+            syncOwnerTokenIdentifier: owner
+        )
+        let loggedExercise = LoggedExercise(
+            id: loggedExerciseID,
+            orderIndex: 0,
+            exercise: exercise,
+            exerciseSnapshotName: "Bench Press",
+            exerciseSnapshotEquipmentRaw: "barbell",
+            exerciseSnapshotPrimaryMuscleGroupRaw: "chest",
+            createdAt: Date(timeIntervalSince1970: 11),
+            updatedAt: Date(timeIntervalSince1970: 21)
+        )
+        loggedExercise.session = session
+        session.loggedExercises.append(loggedExercise)
+        context.insert(state)
+        context.insert(exercise)
+        context.insert(session)
+        context.insert(loggedExercise)
+        try SyncOutboxRecorder().recordCreate(
+            entityKind: .loggedExercise,
+            entityID: loggedExercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 300)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.fetchResponses = [
+            SyncFetchChangesResponse(
+                userSettings: [],
+                exercises: [
+                    ExerciseSyncRecord(
+                        clientId: exerciseID.uuidString.lowercased(),
+                        createdAt: 9,
+                        updatedAt: 29,
+                        deletedAt: 29,
+                        serverUpdatedAt: 30,
+                        seedIdentifier: nil,
+                        name: "Deleted Bench",
+                        categoryRaw: "strength",
+                        equipmentRaw: "barbell",
+                        primaryMuscleRaw: "Chest",
+                        primaryMuscleGroupRaw: "chest",
+                        notes: "",
+                        isArchived: false,
+                        isSeeded: false
+                    )
+                ],
+                workoutSessions: [],
+                loggedExercises: [],
+                loggedSets: [],
+                cursors: SyncChangeCursors(userSettings: 0, exercises: 30, workoutSessions: 0, loggedExercises: 0),
+                hasMore: SyncHasMore(userSettings: false, exercises: false)
+            )
+        ]
+
+        let result = try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertTrue(result.didPush)
+        XCTAssertEqual(exercise.deletedAt, Date(timeIntervalSince1970: 29))
+        XCTAssertEqual(client.upsertedLoggedExercises.count, 1)
+        XCTAssertNil(client.upsertedLoggedExercises.first?.exerciseClientId)
+        XCTAssertEqual(client.upsertedLoggedExercises.first?.exerciseSnapshotName, "Bench Press")
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
     func testPullAdvancesLoggedExerciseCursorForTombstoneWhenSessionIsMissing() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
