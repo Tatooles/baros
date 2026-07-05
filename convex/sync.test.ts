@@ -362,6 +362,59 @@ describe("account data deletion", () => {
     });
   }
 
+  async function seedAccountDeletionMarker(
+    t: ReturnType<typeof testDb>,
+    identity: typeof userA,
+    cancellationToken: string,
+    createdAt = Date.now(),
+    phaseRaw:
+      | "started"
+      | "deleting"
+      | "deletionIncomplete"
+      | "cloudDataDeleted" = "started",
+  ) {
+    await t.run(async (ctx) => {
+      await ctx.db.insert("accountDeletionMarkers", {
+        ownerTokenIdentifier: identity.tokenIdentifier,
+        cancellationToken,
+        createdAt,
+        phaseRaw,
+        ...(phaseRaw === "cloudDataDeleted"
+          ? { cloudDataDeletedAt: createdAt + 1 }
+          : {}),
+      });
+    });
+  }
+
+  async function seedLegacyAccountDeletionMarker(
+    t: ReturnType<typeof testDb>,
+    identity: typeof userA,
+    cancellationToken: string,
+    createdAt = Date.now(),
+  ) {
+    await t.run(async (ctx) => {
+      await ctx.db.insert("accountDeletionMarkers", {
+        ownerTokenIdentifier: identity.tokenIdentifier,
+        cancellationToken,
+        createdAt,
+      });
+    });
+  }
+
+  async function accountDeletionMarkersForOwner(
+    t: ReturnType<typeof testDb>,
+    identity: typeof userA,
+  ) {
+    return await t.run(async (ctx) => {
+      return await ctx.db
+        .query("accountDeletionMarkers")
+        .withIndex("by_ownerTokenIdentifier", (q) =>
+          q.eq("ownerTokenIdentifier", identity.tokenIdentifier),
+        )
+        .collect();
+    });
+  }
+
   async function seedMixedDeletionGraphForOwner(
     t: ReturnType<typeof testDb>,
     identity: typeof userA,
@@ -508,12 +561,42 @@ describe("account data deletion", () => {
     });
   });
 
-  test("account deletion marker blocks new writes for the deleted owner", async () => {
+  test("deleteAccountData keeps the marker after successful cloud deletion", async () => {
     const t = testDb();
 
     await t.withIdentity(userA).action(api.sync.deleteAccountData, {
       cancellationToken: "device-a",
     });
+
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+      {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        cancellationToken: "device-a",
+        phaseRaw: "cloudDataDeleted",
+      },
+    ]);
+    await expect(
+      t.withIdentity(userA).mutation(api.sync.upsertExercise, {
+        record: exerciseRecord({ clientId: "post-delete-exercise" }),
+      }),
+    ).rejects.toThrow("Account deletion is in progress");
+
+    await expect(
+      t.withIdentity(userA).action(api.sync.cancelAccountDeletion, {
+        cancellationToken: "device-a",
+      }),
+    ).resolves.toEqual({ status: "cancelled" });
+
+    await expect(
+      t.withIdentity(userA).mutation(api.sync.upsertExercise, {
+        record: exerciseRecord({ clientId: "post-delete-exercise" }),
+      }),
+    ).resolves.toMatchObject({ status: "inserted" });
+  });
+
+  test("active account deletion marker blocks writes until the owner cancels it", async () => {
+    const t = testDb();
+    await seedAccountDeletionMarker(t, userA, "device-a");
 
     await expect(
       t.withIdentity(userA).mutation(api.sync.upsertExercise, {
@@ -528,19 +611,41 @@ describe("account data deletion", () => {
       }),
     ).rejects.toThrow("Account deletion is in progress");
 
-    const changes = await t
-      .withIdentity(userA)
-      .query(api.sync.fetchChanges, { cursors: zeroCursors });
+    await expect(
+      t.withIdentity(userA).action(api.sync.cancelAccountDeletion, {
+        cancellationToken: "device-a",
+      }),
+    ).resolves.toEqual({ status: "cancelled" });
 
-    expect(changes.exercises).toEqual([]);
+    await expect(
+      t.withIdentity(userA).mutation(api.sync.upsertExercise, {
+        record: exerciseRecord({ clientId: "late-exercise" }),
+      }),
+    ).resolves.toMatchObject({ status: "inserted" });
+  });
+
+  test("cancelAccountDeletion rejects a different token for an active started marker", async () => {
+    const t = testDb();
+
+    await seedAccountDeletionMarker(t, userA, "device-a");
+
+    await expect(
+      t.withIdentity(userA).action(api.sync.cancelAccountDeletion, {
+        cancellationToken: "different-client-token",
+      }),
+    ).rejects.toThrow("Account deletion is already in progress on another client");
+
+    await expect(
+      t.withIdentity(userA).mutation(api.sync.upsertExercise, {
+        record: exerciseRecord({ clientId: "still-blocked-exercise" }),
+      }),
+    ).rejects.toThrow("Account deletion is in progress");
   });
 
   test("account deletion marker does not block other owners", async () => {
     const t = testDb();
 
-    await t.withIdentity(userA).action(api.sync.deleteAccountData, {
-      cancellationToken: "device-a",
-    });
+    await seedAccountDeletionMarker(t, userA, "device-a");
 
     await expect(
       t.withIdentity(userB).mutation(api.sync.upsertExercise, {
@@ -560,9 +665,7 @@ describe("account data deletion", () => {
   test("cancelAccountDeletion clears the marker for the initiating client token", async () => {
     const t = testDb();
 
-    await t.withIdentity(userA).action(api.sync.deleteAccountData, {
-      cancellationToken: "device-a",
-    });
+    await seedAccountDeletionMarker(t, userA, "device-a");
 
     await expect(
       t.withIdentity(userA).action(api.sync.cancelAccountDeletion, {
@@ -577,24 +680,118 @@ describe("account data deletion", () => {
     ).resolves.toMatchObject({ status: "inserted" });
   });
 
-  test("cancelAccountDeletion rejects a different client token for the same owner", async () => {
+  test("cancelAccountDeletion lets the authenticated owner recover with a new token", async () => {
     const t = testDb();
 
-    await t.withIdentity(userA).action(api.sync.deleteAccountData, {
-      cancellationToken: "device-a",
-    });
+    await seedAccountDeletionMarker(t, userA, "lost-device-token", 1_000);
 
     await expect(
       t.withIdentity(userA).action(api.sync.cancelAccountDeletion, {
-        cancellationToken: "different-client-token",
+        cancellationToken: "fresh-install-token",
       }),
-    ).rejects.toThrow("Account deletion is already in progress on another client");
+    ).resolves.toEqual({ status: "cancelled" });
 
     await expect(
       t.withIdentity(userA).mutation(api.sync.upsertExercise, {
-        record: exerciseRecord({ clientId: "still-blocked-exercise" }),
+        record: exerciseRecord({ clientId: "post-recovery-exercise" }),
+      }),
+    ).resolves.toMatchObject({ status: "inserted" });
+  });
+
+  test("deleteAccountData resumes an owner marker created with a lost token", async () => {
+    const t = testDb();
+    await seedFullSyncGraphForOwner(t, userA, "A");
+    await seedAccountDeletionMarker(t, userA, "lost-device-token", 1_000);
+
+    await expect(
+      t.withIdentity(userA).action(api.sync.deleteAccountData, {
+        cancellationToken: "fresh-install-token",
+      }),
+    ).resolves.toEqual({
+      status: "deleted",
+      deletedCounts: {
+        loggedSets: 1,
+        loggedExercises: 1,
+        workoutSessions: 1,
+        exercises: 1,
+        userSettings: 1,
+      },
+    });
+
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+      {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        cancellationToken: "fresh-install-token",
+        phaseRaw: "cloudDataDeleted",
+      },
+    ]);
+    await expect(
+      t.withIdentity(userA).mutation(api.sync.upsertExercise, {
+        record: exerciseRecord({ clientId: "post-resume-exercise" }),
       }),
     ).rejects.toThrow("Account deletion is in progress");
+
+    await expect(
+      t.withIdentity(userA).action(api.sync.cancelAccountDeletion, {
+        cancellationToken: "fresh-install-token",
+      }),
+    ).resolves.toEqual({ status: "cancelled" });
+  });
+
+  test("deleteAccountDataBatch marks the marker once destructive deletion begins", async () => {
+    const t = testDb();
+    await seedFullSyncGraphForOwner(t, userA, "A");
+    await seedAccountDeletionMarker(t, userA, "device-a");
+
+    await expect(
+      t.mutation(internal.sync.deleteAccountDataBatch, {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        tableName: "loggedSets",
+      }),
+    ).resolves.toMatchObject({ tableName: "loggedSets", deletedCount: 1 });
+
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+      {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        cancellationToken: "device-a",
+        phaseRaw: "deleting",
+      },
+    ]);
+  });
+
+  test("startAccountDeletion refreshes a resumed stale pre-wipe marker", async () => {
+    const t = testDb();
+    await seedAccountDeletionMarker(t, userA, "lost-device-token", 1_000);
+
+    await t.mutation(internal.sync.startAccountDeletion, {
+      ownerTokenIdentifier: userA.tokenIdentifier,
+      cancellationToken: "fresh-install-token",
+    });
+
+    await expect(
+      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+        expiresBefore: 1_500,
+      }),
+    ).resolves.toEqual({ deletedCount: 0, hasMore: false });
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+      {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        cancellationToken: "fresh-install-token",
+        phaseRaw: "started",
+      },
+    ]);
+  });
+
+  test("startAccountDeletion rejects a different token for an active started marker", async () => {
+    const t = testDb();
+    await seedAccountDeletionMarker(t, userA, "device-a");
+
+    await expect(
+      t.mutation(internal.sync.startAccountDeletion, {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        cancellationToken: "different-client-token",
+      }),
+    ).rejects.toThrow("Account deletion is already in progress on another client");
   });
 
   test("deleteAccountDataForOwner keeps the marker when deletion fails", async () => {
@@ -615,6 +812,168 @@ describe("account data deletion", () => {
 
     expect(started).toBe(true);
     expect(seenTables).toEqual(["loggedSets"]);
+  });
+
+  test("clearExpiredAccountDeletionMarkers removes only stale pre-wipe markers", async () => {
+    const t = testDb();
+    await seedFullSyncGraphForOwner(t, userA, "A");
+    await seedAccountDeletionMarker(t, userA, "stale-token", 1_000);
+    await seedAccountDeletionMarker(
+      t,
+      userB,
+      "protected-token",
+      1_000,
+      "cloudDataDeleted",
+    );
+
+    await expect(
+      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+        expiresBefore: 1_500,
+      }),
+    ).resolves.toEqual({ deletedCount: 1, hasMore: false });
+
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toEqual([]);
+    await expect(accountDeletionMarkersForOwner(t, userB)).resolves.toMatchObject([
+      {
+        ownerTokenIdentifier: userB.tokenIdentifier,
+        cancellationToken: "protected-token",
+        createdAt: 1_000,
+        phaseRaw: "cloudDataDeleted",
+      },
+    ]);
+  });
+
+  test("clearExpiredAccountDeletionMarkers protects stale markers after cloud data is gone", async () => {
+    const t = testDb();
+    await seedAccountDeletionMarker(t, userA, "stale-token", 1_000, "deleting");
+
+    await expect(
+      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+        expiresBefore: 1_500,
+      }),
+    ).resolves.toEqual({ deletedCount: 0, hasMore: false });
+
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+      {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        cancellationToken: "stale-token",
+        phaseRaw: "cloudDataDeleted",
+      },
+    ]);
+  });
+
+  test("clearExpiredAccountDeletionMarkers keeps partial deletion markers when data remains", async () => {
+    const t = testDb();
+    await seedFullSyncGraphForOwner(t, userA, "A");
+    await seedAccountDeletionMarker(t, userA, "partial-token", 1_000, "deleting");
+
+    await expect(
+      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+        expiresBefore: 1_500,
+      }),
+    ).resolves.toEqual({ deletedCount: 0, hasMore: false });
+
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+      {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        cancellationToken: "partial-token",
+        phaseRaw: "deletionIncomplete",
+      },
+    ]);
+  });
+
+  test("clearExpiredAccountDeletionMarkers handles legacy markers without a phase", async () => {
+    const t = testDb();
+    await seedFullSyncGraphForOwner(t, userA, "A");
+    await seedLegacyAccountDeletionMarker(t, userA, "legacy-with-data", 1_000);
+    await seedLegacyAccountDeletionMarker(t, userB, "legacy-without-data", 1_000);
+
+    await expect(
+      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+        expiresBefore: 1_500,
+      }),
+    ).resolves.toEqual({ deletedCount: 0, hasMore: false });
+
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+      {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        cancellationToken: "legacy-with-data",
+        phaseRaw: "deletionIncomplete",
+      },
+    ]);
+    await expect(accountDeletionMarkersForOwner(t, userB)).resolves.toMatchObject([
+      {
+        ownerTokenIdentifier: userB.tokenIdentifier,
+        cancellationToken: "legacy-without-data",
+        phaseRaw: "cloudDataDeleted",
+      },
+    ]);
+  });
+
+  test("clearExpiredAccountDeletionMarkers reaches stale started markers behind completed markers", async () => {
+    const t = testDb();
+    await t.run(async (ctx) => {
+      for (let i = 0; i <= 100; i++) {
+        await ctx.db.insert("accountDeletionMarkers", {
+          ownerTokenIdentifier: `protected-owner-${i}`,
+          cancellationToken: `protected-token-${i}`,
+          createdAt: 1_000 + i,
+          phaseRaw: "cloudDataDeleted",
+          cloudDataDeletedAt: 1_001 + i,
+        });
+      }
+    });
+    await seedFullSyncGraphForOwner(t, userA, "A");
+    await seedAccountDeletionMarker(t, userA, "stale-started-token", 2_000);
+
+    await expect(
+      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+        expiresBefore: 3_000,
+      }),
+    ).resolves.toEqual({ deletedCount: 1, hasMore: false });
+
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toEqual([]);
+  });
+
+  test("clearExpiredAccountDeletionMarkers moves past retained partial markers", async () => {
+    const t = testDb();
+    await seedFullSyncGraphForOwner(t, userA, "A");
+    await t.run(async (ctx) => {
+      for (let i = 0; i <= 100; i++) {
+        await ctx.db.insert("accountDeletionMarkers", {
+          ownerTokenIdentifier: userA.tokenIdentifier,
+          cancellationToken: `partial-token-${i}`,
+          createdAt: 1_000 + i,
+          phaseRaw: "deleting",
+        });
+      }
+    });
+    await seedAccountDeletionMarker(
+      t,
+      userB,
+      "clean-deleting-token",
+      2_000,
+      "deleting",
+    );
+
+    await expect(
+      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+        expiresBefore: 3_000,
+      }),
+    ).resolves.toEqual({ deletedCount: 0, hasMore: true });
+    await expect(
+      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+        expiresBefore: 3_000,
+      }),
+    ).resolves.toEqual({ deletedCount: 0, hasMore: false });
+
+    await expect(accountDeletionMarkersForOwner(t, userB)).resolves.toMatchObject([
+      {
+        ownerTokenIdentifier: userB.tokenIdentifier,
+        cancellationToken: "clean-deleting-token",
+        phaseRaw: "cloudDataDeleted",
+      },
+    ]);
   });
 
   test("account deletion pass limit helper respects the configured cap", async () => {

@@ -18,7 +18,19 @@ export default defineSchema({
     ownerTokenIdentifier: v.string(),
     cancellationToken: v.string(),
     createdAt: v.number(),
-  }).index("by_ownerTokenIdentifier", ["ownerTokenIdentifier"]),
+    phaseRaw: v.optional(
+      v.union(
+        v.literal("started"),
+        v.literal("deleting"),
+        v.literal("deletionIncomplete"),
+        v.literal("cloudDataDeleted"),
+      ),
+    ),
+    cloudDataDeletedAt: v.optional(v.number()),
+  })
+    .index("by_ownerTokenIdentifier", ["ownerTokenIdentifier"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_phaseRaw_and_createdAt", ["phaseRaw", "createdAt"]),
 
   userSettings: defineTable({
     ...syncFields,

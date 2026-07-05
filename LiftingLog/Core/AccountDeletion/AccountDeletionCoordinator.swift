@@ -9,37 +9,57 @@ protocol AccountDeleting: AnyObject {
 
 @MainActor
 protocol AccountDeletionAttemptStoring: AnyObject {
-    var persistedCancellationToken: UUID? { get set }
+    func persistedCancellationToken(for ownerTokenIdentifier: String?) -> UUID?
+    func setPersistedCancellationToken(_ token: UUID?, for ownerTokenIdentifier: String?)
 }
 
 @MainActor
 final class UserDefaultsAccountDeletionAttemptStore: AccountDeletionAttemptStoring {
     private let defaults: UserDefaults
-    private let key: String
+    private let baseKey: String
 
     init(
         defaults: UserDefaults = .standard,
-        key: String = "AccountDeletionCoordinator.persistedCancellationToken"
+        baseKey: String = "AccountDeletionCoordinator.persistedCancellationToken"
     ) {
         self.defaults = defaults
-        self.key = key
+        self.baseKey = baseKey
     }
 
-    var persistedCancellationToken: UUID? {
-        get {
-            guard let rawValue = defaults.string(forKey: key) else {
-                return nil
-            }
-
+    func persistedCancellationToken(for ownerTokenIdentifier: String?) -> UUID? {
+        let scopedKey = key(for: ownerTokenIdentifier)
+        if let rawValue = defaults.string(forKey: scopedKey) {
             return UUID(uuidString: rawValue)
         }
-        set {
-            if let newValue {
-                defaults.set(newValue.uuidString.lowercased(), forKey: key)
-            } else {
-                defaults.removeObject(forKey: key)
-            }
+
+        guard
+            scopedKey != baseKey,
+            let legacyRawValue = defaults.string(forKey: baseKey),
+            let legacyToken = UUID(uuidString: legacyRawValue)
+        else {
+            return nil
         }
+
+        defaults.set(legacyToken.uuidString.lowercased(), forKey: scopedKey)
+        defaults.removeObject(forKey: baseKey)
+        return legacyToken
+    }
+
+    func setPersistedCancellationToken(_ token: UUID?, for ownerTokenIdentifier: String?) {
+        let key = key(for: ownerTokenIdentifier)
+        if let token {
+            defaults.set(token.uuidString.lowercased(), forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private func key(for ownerTokenIdentifier: String?) -> String {
+        guard let ownerTokenIdentifier, !ownerTokenIdentifier.isEmpty else {
+            return baseKey
+        }
+
+        return "\(baseKey).owner.\(ownerTokenIdentifier)"
     }
 }
 
@@ -91,8 +111,9 @@ final class AccountDeletionCoordinator: ObservableObject {
     func deleteAccount() async {
         guard !phase.isRunning else { return }
         syncScheduler.beginDeletionMode()
-        let cancellationToken = attemptStore.persistedCancellationToken ?? UUID()
-        attemptStore.persistedCancellationToken = cancellationToken
+        let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
+        let cancellationToken = attemptStore.persistedCancellationToken(for: ownerTokenIdentifier) ?? UUID()
+        attemptStore.setPersistedCancellationToken(cancellationToken, for: ownerTokenIdentifier)
 
         do {
             phase = .deletingCloudData
@@ -104,7 +125,7 @@ final class AccountDeletionCoordinator: ObservableObject {
             } catch {
                 do {
                     _ = try await syncClient.cancelAccountDeletion(cancellationToken: cancellationToken)
-                    attemptStore.persistedCancellationToken = nil
+                    attemptStore.setPersistedCancellationToken(nil, for: ownerTokenIdentifier)
                     syncScheduler.recoverAfterFailedAccountDeletion()
                     throw error
                 } catch {
@@ -112,7 +133,7 @@ final class AccountDeletionCoordinator: ObservableObject {
                 }
             }
 
-            attemptStore.persistedCancellationToken = nil
+            attemptStore.setPersistedCancellationToken(nil, for: ownerTokenIdentifier)
             phase = .clearingLocalData
             try localDataResetService.reset(context: modelContext)
             syncScheduler.resetAfterDataDeletion()

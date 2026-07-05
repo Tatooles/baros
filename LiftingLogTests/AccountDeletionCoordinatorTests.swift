@@ -33,7 +33,10 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
         await coordinator.deleteAccount()
 
         XCTAssertEqual(client.deleteAccountDataCallCount, 1)
-        XCTAssertEqual(attemptStore.persistedCancellationToken, client.deleteAccountDataTokens.first)
+        XCTAssertEqual(
+            attemptStore.persistedCancellationToken(for: "issuer|owner_a"),
+            client.deleteAccountDataTokens.first
+        )
         XCTAssertEqual(accountDeleter.deleteCallCount, 0)
         XCTAssertEqual(scheduler.requestCount, 0)
         XCTAssertEqual(try context.fetch(FetchDescriptor<UserSettings>()).count, 1)
@@ -76,7 +79,7 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
         XCTAssertEqual(client.deleteAccountDataTokens.count, 1)
         XCTAssertEqual(client.cancelAccountDeletionTokens.count, 1)
         XCTAssertEqual(client.cancelAccountDeletionTokens, client.deleteAccountDataTokens)
-        XCTAssertNil(attemptStore.persistedCancellationToken)
+        XCTAssertNil(attemptStore.persistedCancellationToken(for: "issuer|owner_a"))
         XCTAssertEqual(accountDeleter.deleteCallCount, 1)
         XCTAssertEqual(
             client.operationLog,
@@ -117,7 +120,7 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(client.deleteAccountDataCallCount, 1)
         XCTAssertEqual(accountDeleter.deleteCallCount, 1)
-        XCTAssertNil(attemptStore.persistedCancellationToken)
+        XCTAssertNil(attemptStore.persistedCancellationToken(for: "issuer|owner_a"))
         XCTAssertEqual(scheduler.requestCount, 0)
         XCTAssertEqual(coordinator.phase, .completed)
         XCTAssertNil(scheduler.currentOwnerTokenIdentifier)
@@ -165,7 +168,7 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
         accountDeleter.error = ClerkError()
         let attemptStore = TestAccountDeletionAttemptStore()
         let persistedToken = UUID()
-        attemptStore.persistedCancellationToken = persistedToken
+        attemptStore.setPersistedCancellationToken(persistedToken, for: "issuer|owner_a")
         let scheduler = SyncScheduler()
         scheduler.configure(modelContext: context)
         scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
@@ -185,7 +188,7 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(client.deleteAccountDataTokens, [persistedToken])
         XCTAssertEqual(client.cancelAccountDeletionTokens, [persistedToken])
-        XCTAssertNil(attemptStore.persistedCancellationToken)
+        XCTAssertNil(attemptStore.persistedCancellationToken(for: "issuer|owner_a"))
         XCTAssertEqual(coordinator.phase, .failed("Account deletion could not finish. Your local data is still saved on this iPhone."))
     }
 
@@ -224,10 +227,60 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(client.deleteAccountDataTokens.count, 1)
         XCTAssertEqual(client.cancelAccountDeletionTokens, client.deleteAccountDataTokens)
-        XCTAssertEqual(attemptStore.persistedCancellationToken, client.deleteAccountDataTokens.first)
+        XCTAssertEqual(
+            attemptStore.persistedCancellationToken(for: "issuer|owner_a"),
+            client.deleteAccountDataTokens.first
+        )
         XCTAssertEqual(scheduler.requestCount, 0)
         XCTAssertFalse(scheduler.isDeletionModeEnabled)
         XCTAssertEqual(coordinator.phase, .failed("Account deletion could not finish. Your local data is still saved on this iPhone."))
+    }
+
+    func testUserDefaultsDeletionAttemptStoreScopesTokensByOwner() {
+        let suiteName = "AccountDeletionCoordinatorTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let store = UserDefaultsAccountDeletionAttemptStore(defaults: defaults)
+        let ownerAToken = UUID()
+        let ownerBToken = UUID()
+
+        store.setPersistedCancellationToken(ownerAToken, for: "issuer|owner_a")
+        store.setPersistedCancellationToken(ownerBToken, for: "issuer|owner_b")
+
+        XCTAssertEqual(store.persistedCancellationToken(for: "issuer|owner_a"), ownerAToken)
+        XCTAssertEqual(store.persistedCancellationToken(for: "issuer|owner_b"), ownerBToken)
+
+        store.setPersistedCancellationToken(nil, for: "issuer|owner_b")
+
+        XCTAssertEqual(store.persistedCancellationToken(for: "issuer|owner_a"), ownerAToken)
+        XCTAssertNil(store.persistedCancellationToken(for: "issuer|owner_b"))
+    }
+
+    func testUserDefaultsDeletionAttemptStoreMigratesLegacyTokenToOwnerScope() {
+        let suiteName = "AccountDeletionCoordinatorTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let baseKey = "AccountDeletionCoordinatorTests.persistedCancellationToken"
+        let store = UserDefaultsAccountDeletionAttemptStore(
+            defaults: defaults,
+            baseKey: baseKey
+        )
+        let legacyToken = UUID()
+        defaults.set(legacyToken.uuidString.lowercased(), forKey: baseKey)
+
+        XCTAssertEqual(
+            store.persistedCancellationToken(for: "issuer|owner_a"),
+            legacyToken
+        )
+        XCTAssertNil(defaults.string(forKey: baseKey))
+        XCTAssertEqual(
+            store.persistedCancellationToken(for: "issuer|owner_a"),
+            legacyToken
+        )
     }
 }
 
@@ -246,5 +299,22 @@ private final class FakeAccountDeleter: AccountDeleting {
 
 @MainActor
 private final class TestAccountDeletionAttemptStore: AccountDeletionAttemptStoring {
-    var persistedCancellationToken: UUID?
+    private var persistedTokens: [String: UUID] = [:]
+
+    func persistedCancellationToken(for ownerTokenIdentifier: String?) -> UUID? {
+        persistedTokens[key(for: ownerTokenIdentifier)]
+    }
+
+    func setPersistedCancellationToken(_ token: UUID?, for ownerTokenIdentifier: String?) {
+        let key = key(for: ownerTokenIdentifier)
+        if let token {
+            persistedTokens[key] = token
+        } else {
+            persistedTokens[key] = nil
+        }
+    }
+
+    private func key(for ownerTokenIdentifier: String?) -> String {
+        ownerTokenIdentifier ?? "ownerless"
+    }
 }
