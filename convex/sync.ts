@@ -541,9 +541,6 @@ async function resolveExpiredAccountDeletionMarker(
 
   if (await ownerHasAccountData(ctx, marker.ownerTokenIdentifier)) {
     await ctx.db.patch(marker._id, { phaseRaw: "deletionIncomplete" });
-    await ctx.scheduler.runAfter(0, internal.sync.resumeIncompleteAccountDeletion, {
-      ownerTokenIdentifier: marker.ownerTokenIdentifier,
-    });
     return false;
   }
 
@@ -1405,6 +1402,16 @@ export const clearExpiredAccountDeletionMarkers = internalMutation({
       .take(accountDeletionMarkerCleanupBatchSize + 1);
     hasMore = hasMore || purgeCandidates.length > accountDeletionMarkerCleanupBatchSize;
     for (const marker of purgeCandidates.slice(0, accountDeletionMarkerCleanupBatchSize)) {
+      const purgeEligibleAt = marker.cloudDataDeletedAt ?? marker.createdAt;
+      if (purgeEligibleAt >= purgeBefore) {
+        if (
+          marker.cloudDataDeletedAt !== undefined &&
+          marker.createdAt !== marker.cloudDataDeletedAt
+        ) {
+          await ctx.db.patch(marker._id, { createdAt: marker.cloudDataDeletedAt });
+        }
+        continue;
+      }
       await ctx.db.delete(marker._id);
       deletedCount += 1;
     }

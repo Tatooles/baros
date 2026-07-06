@@ -960,6 +960,76 @@ describe("account data deletion", () => {
     ]);
   });
 
+  test("clearExpiredAccountDeletionMarkers uses cloud deletion time for post-wipe purge", async () => {
+    const t = testDb();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("accountDeletionMarkers", {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        cancellationToken: "freshly-completed-token",
+        createdAt: 1_000,
+        phaseRaw: "cloudDataDeleted",
+        cloudDataDeletedAt: 5_000,
+      });
+      await ctx.db.insert("accountDeletionMarkers", {
+        ownerTokenIdentifier: userB.tokenIdentifier,
+        cancellationToken: "legacy-completed-token",
+        createdAt: 1_000,
+        phaseRaw: "cloudDataDeleted",
+      });
+    });
+
+    await expect(
+      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+        expiresBefore: 0,
+        purgeBefore: 2_000,
+      }),
+    ).resolves.toEqual({ deletedCount: 1, hasMore: false });
+
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+      {
+        cancellationToken: "freshly-completed-token",
+        phaseRaw: "cloudDataDeleted",
+      },
+    ]);
+    await expect(accountDeletionMarkersForOwner(t, userB)).resolves.toEqual([]);
+  });
+
+  test("clearExpiredAccountDeletionMarkers advances past fresh post-wipe markers", async () => {
+    const t = testDb();
+    await t.run(async (ctx) => {
+      for (let i = 0; i <= 100; i++) {
+        await ctx.db.insert("accountDeletionMarkers", {
+          ownerTokenIdentifier: `fresh-completed-owner-${i}`,
+          cancellationToken: `fresh-completed-token-${i}`,
+          createdAt: 1_000 + i,
+          phaseRaw: "cloudDataDeleted",
+          cloudDataDeletedAt: 5_000,
+        });
+      }
+      await ctx.db.insert("accountDeletionMarkers", {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        cancellationToken: "legacy-completed-token",
+        createdAt: 2_000,
+        phaseRaw: "cloudDataDeleted",
+      });
+    });
+
+    await expect(
+      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+        expiresBefore: 0,
+        purgeBefore: 3_000,
+      }),
+    ).resolves.toEqual({ deletedCount: 0, hasMore: true });
+    await expect(
+      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+        expiresBefore: 0,
+        purgeBefore: 3_000,
+      }),
+    ).resolves.toEqual({ deletedCount: 1, hasMore: false });
+
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toEqual([]);
+  });
+
   test("expired partial deletion is parked and then finished server-side", async () => {
     vi.useFakeTimers();
     try {
