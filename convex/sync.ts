@@ -498,6 +498,11 @@ async function clearAccountDeletionMarker(
     existing.phaseRaw === "cloudDataDeleted" ||
     (existing.phaseRaw === "started" && accountDeletionMarkerExpired(existing));
 
+  // A matching token may clear the marker in any phase, including mid-wipe:
+  // the token holder is the device that initiated deletion, and the client
+  // always follows a successful cancellation with a full local re-push
+  // (SyncScheduler.recoverAfterFailedAccountDeletion), which restores any
+  // partially deleted cloud data.
   if (existing.cancellationToken !== cancellationToken && !ownerRecoverable) {
     throw new Error("Account deletion is already in progress on another client");
   }
