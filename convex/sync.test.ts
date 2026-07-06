@@ -776,6 +776,27 @@ describe("sync conflict behavior", () => {
     );
   });
 
+  test("active logged exercise upsert accepts a tombstoned exercise reference", async () => {
+    const t = testDb().withIdentity(userA);
+    await t.mutation(api.sync.upsertExercise, {
+      record: exerciseRecord(),
+    });
+    await t.mutation(api.sync.tombstone, {
+      entityKind: "exercises",
+      clientId: "exercise-1",
+      deletedAt: 3,
+    });
+    await t.mutation(api.sync.upsertWorkoutSession, {
+      record: workoutSessionRecord(),
+    });
+
+    await expect(
+      t.mutation(api.sync.upsertLoggedExercise, {
+        record: loggedExerciseRecord({ updatedAt: 4 }),
+      }),
+    ).resolves.toMatchObject({ status: "inserted" });
+  });
+
   test("active logged set upsert rejects a missing logged exercise parent", async () => {
     const t = testDb().withIdentity(userA);
 

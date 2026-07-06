@@ -2132,7 +2132,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(state.loggedExercisesCursor, 32)
     }
 
-    func testRunPushesLoggedExerciseWithoutExerciseReferenceAfterPulledExerciseTombstone() async throws {
+    func testRunPushesLoggedExerciseKeepingReferenceToPulledExerciseTombstone() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let owner = "issuer|owner_a"
@@ -2226,7 +2226,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(result.didPush)
         XCTAssertEqual(exercise.deletedAt, Date(timeIntervalSince1970: 29))
         XCTAssertEqual(client.upsertedLoggedExercises.count, 1)
-        XCTAssertNil(client.upsertedLoggedExercises.first?.exerciseClientId)
+        XCTAssertEqual(client.upsertedLoggedExercises.first?.exerciseClientId, exerciseID.uuidString.lowercased())
         XCTAssertEqual(client.upsertedLoggedExercises.first?.exerciseSnapshotName, "Bench Press")
         XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
     }

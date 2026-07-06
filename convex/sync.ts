@@ -625,7 +625,7 @@ async function assertLoggedExerciseParentExists(
       ownerTokenIdentifier,
       record.exerciseClientId,
     );
-    if (exercise === null || exercise.deletedAt !== null) {
+    if (exercise === null) {
       throw new Error(
         "Cannot upsert active logged exercise with a missing exercise reference.",
       );
