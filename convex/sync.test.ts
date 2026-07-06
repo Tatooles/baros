@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import {
   accountDeletionPassLimitReached,
@@ -907,6 +907,7 @@ describe("account data deletion", () => {
     await expect(
       t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
         expiresBefore: 1_500,
+        purgeBefore: 0,
       }),
     ).resolves.toEqual({ deletedCount: 1, hasMore: false });
 
@@ -928,6 +929,7 @@ describe("account data deletion", () => {
     await expect(
       t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
         expiresBefore: 1_500,
+        purgeBefore: 0,
       }),
     ).resolves.toEqual({ deletedCount: 0, hasMore: false });
 
@@ -940,52 +942,161 @@ describe("account data deletion", () => {
     ]);
   });
 
-  test("clearExpiredAccountDeletionMarkers keeps partial deletion markers when data remains", async () => {
+  test("clearExpiredAccountDeletionMarkers purges aged post-wipe markers", async () => {
     const t = testDb();
-    await seedFullSyncGraphForOwner(t, userA, "A");
-    await seedAccountDeletionMarker(t, userA, "partial-token", 1_000, "deleting");
+    await seedAccountDeletionMarker(t, userA, "old-post-wipe", 1_000, "cloudDataDeleted");
+    await seedAccountDeletionMarker(t, userB, "fresh-post-wipe", 5_000, "cloudDataDeleted");
 
     await expect(
       t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
-        expiresBefore: 1_500,
+        expiresBefore: 0,
+        purgeBefore: 2_000,
       }),
-    ).resolves.toEqual({ deletedCount: 0, hasMore: false });
+    ).resolves.toEqual({ deletedCount: 1, hasMore: false });
 
-    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
-      {
-        ownerTokenIdentifier: userA.tokenIdentifier,
-        cancellationToken: "partial-token",
-        phaseRaw: "deletionIncomplete",
-      },
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toEqual([]);
+    await expect(accountDeletionMarkersForOwner(t, userB)).resolves.toMatchObject([
+      { phaseRaw: "cloudDataDeleted" },
     ]);
   });
 
+  test("expired partial deletion is parked and then finished server-side", async () => {
+    vi.useFakeTimers();
+    try {
+      const t = testDb();
+      await seedFullSyncGraphForOwner(t, userA, "A");
+      await seedAccountDeletionMarker(t, userA, "partial-token", 1_000, "deleting");
+
+      await expect(
+        t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+          expiresBefore: 1_500,
+          purgeBefore: 0,
+        }),
+      ).resolves.toEqual({ deletedCount: 0, hasMore: false });
+      await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+        { phaseRaw: "deletionIncomplete", cancellationToken: "partial-token" },
+      ]);
+
+      await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+      await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+        { phaseRaw: "cloudDataDeleted", cancellationToken: "partial-token" },
+      ]);
+      const remaining = await t.run(async (ctx) => {
+        return await ctx.db
+          .query("exercises")
+          .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
+            q.eq("ownerTokenIdentifier", userA.tokenIdentifier),
+          )
+          .collect();
+      });
+      expect(remaining).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("clearExpiredAccountDeletionMarkers self-reschedules through a backlog", async () => {
+    vi.useFakeTimers();
+    try {
+      const t = testDb();
+      await t.run(async (ctx) => {
+        for (let i = 0; i <= 100; i++) {
+          await ctx.db.insert("accountDeletionMarkers", {
+            ownerTokenIdentifier: `backlog-owner-${i}`,
+            cancellationToken: `backlog-token-${i}`,
+            createdAt: 1_000 + i,
+            phaseRaw: "started",
+          });
+        }
+      });
+
+      await expect(
+        t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+          expiresBefore: 3_000,
+          purgeBefore: 0,
+        }),
+      ).resolves.toEqual({ deletedCount: 100, hasMore: true });
+
+      await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+      const leftover = await t.run(async (ctx) => {
+        return await ctx.db.query("accountDeletionMarkers").collect();
+      });
+      expect(leftover).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("clearExpiredAccountDeletionMarkers keeps partial deletion markers when data remains", async () => {
+    vi.useFakeTimers();
+    try {
+      const t = testDb();
+      await seedFullSyncGraphForOwner(t, userA, "A");
+      await seedAccountDeletionMarker(t, userA, "partial-token", 1_000, "deleting");
+
+      await expect(
+        t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+          expiresBefore: 1_500,
+          purgeBefore: 0,
+        }),
+      ).resolves.toEqual({ deletedCount: 0, hasMore: false });
+
+      await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+        {
+          ownerTokenIdentifier: userA.tokenIdentifier,
+          cancellationToken: "partial-token",
+          phaseRaw: "deletionIncomplete",
+        },
+      ]);
+
+      await t.finishAllScheduledFunctions(vi.runAllTimers);
+      await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+        { phaseRaw: "cloudDataDeleted" },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("clearExpiredAccountDeletionMarkers handles legacy markers without a phase", async () => {
-    const t = testDb();
-    await seedFullSyncGraphForOwner(t, userA, "A");
-    await seedLegacyAccountDeletionMarker(t, userA, "legacy-with-data", 1_000);
-    await seedLegacyAccountDeletionMarker(t, userB, "legacy-without-data", 1_000);
+    vi.useFakeTimers();
+    try {
+      const t = testDb();
+      await seedFullSyncGraphForOwner(t, userA, "A");
+      await seedLegacyAccountDeletionMarker(t, userA, "legacy-with-data", 1_000);
+      await seedLegacyAccountDeletionMarker(t, userB, "legacy-without-data", 1_000);
 
-    await expect(
-      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
-        expiresBefore: 1_500,
-      }),
-    ).resolves.toEqual({ deletedCount: 0, hasMore: false });
+      await expect(
+        t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
+          expiresBefore: 1_500,
+          purgeBefore: 0,
+        }),
+      ).resolves.toEqual({ deletedCount: 0, hasMore: false });
 
-    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
-      {
-        ownerTokenIdentifier: userA.tokenIdentifier,
-        cancellationToken: "legacy-with-data",
-        phaseRaw: "deletionIncomplete",
-      },
-    ]);
-    await expect(accountDeletionMarkersForOwner(t, userB)).resolves.toMatchObject([
-      {
-        ownerTokenIdentifier: userB.tokenIdentifier,
-        cancellationToken: "legacy-without-data",
-        phaseRaw: "cloudDataDeleted",
-      },
-    ]);
+      await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+        {
+          ownerTokenIdentifier: userA.tokenIdentifier,
+          cancellationToken: "legacy-with-data",
+          phaseRaw: "deletionIncomplete",
+        },
+      ]);
+      await expect(accountDeletionMarkersForOwner(t, userB)).resolves.toMatchObject([
+        {
+          ownerTokenIdentifier: userB.tokenIdentifier,
+          cancellationToken: "legacy-without-data",
+          phaseRaw: "cloudDataDeleted",
+        },
+      ]);
+
+      await t.finishAllScheduledFunctions(vi.runAllTimers);
+      await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+        { phaseRaw: "cloudDataDeleted" },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("clearExpiredAccountDeletionMarkers reaches stale started markers behind completed markers", async () => {
@@ -1007,51 +1118,11 @@ describe("account data deletion", () => {
     await expect(
       t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
         expiresBefore: 3_000,
+        purgeBefore: 0,
       }),
     ).resolves.toEqual({ deletedCount: 1, hasMore: false });
 
     await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toEqual([]);
-  });
-
-  test("clearExpiredAccountDeletionMarkers moves past retained partial markers", async () => {
-    const t = testDb();
-    await seedFullSyncGraphForOwner(t, userA, "A");
-    await t.run(async (ctx) => {
-      for (let i = 0; i <= 100; i++) {
-        await ctx.db.insert("accountDeletionMarkers", {
-          ownerTokenIdentifier: userA.tokenIdentifier,
-          cancellationToken: `partial-token-${i}`,
-          createdAt: 1_000 + i,
-          phaseRaw: "deleting",
-        });
-      }
-    });
-    await seedAccountDeletionMarker(
-      t,
-      userB,
-      "clean-deleting-token",
-      2_000,
-      "deleting",
-    );
-
-    await expect(
-      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
-        expiresBefore: 3_000,
-      }),
-    ).resolves.toEqual({ deletedCount: 0, hasMore: true });
-    await expect(
-      t.mutation(internal.sync.clearExpiredAccountDeletionMarkers, {
-        expiresBefore: 3_000,
-      }),
-    ).resolves.toEqual({ deletedCount: 0, hasMore: false });
-
-    await expect(accountDeletionMarkersForOwner(t, userB)).resolves.toMatchObject([
-      {
-        ownerTokenIdentifier: userB.tokenIdentifier,
-        cancellationToken: "clean-deleting-token",
-        phaseRaw: "cloudDataDeleted",
-      },
-    ]);
   });
 
   test("account deletion pass limit helper respects the configured cap", async () => {
