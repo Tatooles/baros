@@ -783,6 +783,32 @@ describe("account data deletion", () => {
     ]);
   });
 
+  test("deleteAccountDataBatch is a no-op when no marker exists", async () => {
+    const t = testDb();
+    await seedFullSyncGraphForOwner(t, userA, "A");
+
+    await expect(
+      t.mutation(internal.sync.deleteAccountDataBatch, {
+        ownerTokenIdentifier: userA.tokenIdentifier,
+        tableName: "loggedSets",
+      }),
+    ).resolves.toEqual({ tableName: "loggedSets", deletedCount: 0, hasMore: false });
+  });
+
+  test("markAccountDeletionDataDeleted ignores a stale attempt's token", async () => {
+    const t = testDb();
+    await seedAccountDeletionMarker(t, userA, "current-token");
+
+    await t.mutation(internal.sync.markAccountDeletionDataDeleted, {
+      ownerTokenIdentifier: userA.tokenIdentifier,
+      cancellationToken: "previous-attempt-token",
+    });
+
+    await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toMatchObject([
+      { phaseRaw: "started" },
+    ]);
+  });
+
   test("startAccountDeletion refreshes a resumed stale pre-wipe marker", async () => {
     const t = testDb();
     await seedAccountDeletionMarker(t, userA, "lost-device-token", 1_000);
@@ -1083,6 +1109,7 @@ describe("account data deletion", () => {
       });
     });
     await seedLoggedSetsDirectlyForOwner(t, userA, 1001);
+    await seedAccountDeletionMarker(t, userA, "device-a");
 
     await expect(
       t.mutation(internal.sync.deleteAccountDataBatch, {

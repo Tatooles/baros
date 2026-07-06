@@ -481,35 +481,6 @@ function canTakeOverAccountDeletionMarker(
   );
 }
 
-async function markAccountDeletionCloudDataDeleted(
-  ctx: MutationCtx,
-  ownerTokenIdentifier: string,
-): Promise<void> {
-  const existing = await accountDeletionMarkerForOwner(ctx, ownerTokenIdentifier);
-  if (existing === null || existing.phaseRaw === "cloudDataDeleted") {
-    return;
-  }
-
-  await ctx.db.patch(existing._id, {
-    phaseRaw: "cloudDataDeleted",
-    cloudDataDeletedAt: Date.now(),
-  });
-}
-
-async function markAccountDeletionDeleting(
-  ctx: MutationCtx,
-  ownerTokenIdentifier: string,
-): Promise<void> {
-  const existing = await accountDeletionMarkerForOwner(ctx, ownerTokenIdentifier);
-  if (existing === null || existing.phaseRaw === "cloudDataDeleted") {
-    return;
-  }
-
-  await ctx.db.patch(existing._id, {
-    phaseRaw: "deleting",
-  });
-}
-
 async function clearAccountDeletionMarker(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
@@ -1447,9 +1418,22 @@ export const clearExpiredAccountDeletionMarkers = internalMutation({
 export const markAccountDeletionDataDeleted = internalMutation({
   args: {
     ownerTokenIdentifier: v.string(),
+    cancellationToken: v.string(),
   },
   handler: async (ctx, args) => {
-    await markAccountDeletionCloudDataDeleted(ctx, args.ownerTokenIdentifier);
+    const existing = await accountDeletionMarkerForOwner(ctx, args.ownerTokenIdentifier);
+    if (
+      existing === null ||
+      existing.phaseRaw === "cloudDataDeleted" ||
+      existing.cancellationToken !== args.cancellationToken
+    ) {
+      return;
+    }
+
+    await ctx.db.patch(existing._id, {
+      phaseRaw: "cloudDataDeleted",
+      cloudDataDeletedAt: Date.now(),
+    });
   },
 });
 
@@ -1459,7 +1443,13 @@ export const deleteAccountDataBatch = internalMutation({
     tableName: accountDeletionTableValidator,
   },
   handler: async (ctx, args): Promise<AccountDataDeletionTableBatchResult> => {
-    await markAccountDeletionDeleting(ctx, args.ownerTokenIdentifier);
+    const marker = await accountDeletionMarkerForOwner(ctx, args.ownerTokenIdentifier);
+    if (marker === null) {
+      return { tableName: args.tableName, deletedCount: 0, hasMore: false };
+    }
+    if (marker.phaseRaw !== "deleting" && marker.phaseRaw !== "cloudDataDeleted") {
+      await ctx.db.patch(marker._id, { phaseRaw: "deleting" });
+    }
 
     switch (args.tableName) {
       case "loggedSets": {
@@ -1530,6 +1520,7 @@ export const deleteAccountData = action({
 
     await ctx.runMutation(internal.sync.markAccountDeletionDataDeleted, {
       ownerTokenIdentifier,
+      cancellationToken: args.cancellationToken,
     });
 
     return result;
