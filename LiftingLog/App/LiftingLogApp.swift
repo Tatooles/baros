@@ -149,7 +149,7 @@ struct LiftingLogApp: App {
         await waitUntilClerkIsLoaded()
         guard !Task.isCancelled else { return }
         guard Clerk.shared.session?.status == .active else { return }
-        restoreCachedOwnerForActiveClerkUserOrHideOwnerScopedData()
+        restoreCachedOwnerForActiveClerkUserOrSeedLocalDefaults()
 
         let result = await convexClient.loginFromCache()
         let token: String
@@ -171,23 +171,56 @@ struct LiftingLogApp: App {
         guard !Task.isCancelled else { return true }
         guard Clerk.shared.session?.status == .active else { return false }
 
-        restoreCachedOwnerForActiveClerkUserOrHideOwnerScopedData()
+        restoreCachedOwnerForActiveClerkUserOrSeedLocalDefaults()
         return true
     }
 
-    private func restoreCachedOwnerForActiveClerkUserOrHideOwnerScopedData() {
+    @discardableResult
+    private func restoreCachedOwnerForActiveClerkUserOrSeedLocalDefaults() -> Bool {
+        if !restoreCachedOwnerForActiveClerkUserOrHideOwnerScopedData() {
+            syncScheduler.seedDefaultsForLocalMode()
+            return false
+        }
+
+        return true
+    }
+
+    @discardableResult
+    private func restoreCachedOwnerForActiveClerkUserOrHideOwnerScopedData() -> Bool {
+        if let activeClerkOwnerTokenIdentifier {
+            if syncScheduler.restoreLastKnownOwnerTokenIdentifier(
+                matchingOwnerTokenIdentifier: activeClerkOwnerTokenIdentifier
+            ) {
+                return true
+            }
+
+            syncScheduler.currentOwnerTokenIdentifier = nil
+            return false
+        }
+
         guard let activeClerkUserID else {
             syncScheduler.currentOwnerTokenIdentifier = nil
-            return
+            return false
         }
 
         if !syncScheduler.restoreLastKnownOwnerTokenIdentifier(matchingOwnerSubject: activeClerkUserID) {
             syncScheduler.currentOwnerTokenIdentifier = nil
+            return false
         }
+
+        return true
     }
 
     private var activeClerkUserID: String? {
         Clerk.shared.user?.id ?? Clerk.shared.session?.publicUserData?.userId
+    }
+
+    private var activeClerkOwnerTokenIdentifier: String? {
+        guard let jwt = Clerk.shared.session?.lastActiveToken?.jwt else {
+            return nil
+        }
+
+        return ClerkJWTIdentityResolver.ownerTokenIdentifier(from: jwt)
     }
 
     private func waitUntilClerkIsLoaded() async {

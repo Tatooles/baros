@@ -183,6 +183,73 @@ final class AppInitializationOrderTests: XCTestCase {
         )
     }
 
+    func testActiveClerkRestoreMissSeedsLocalDefaultsWithoutClearingCachedOwner() throws {
+        let appSource = try sourceFileContents("LiftingLog/App/LiftingLogApp.swift")
+
+        let seedWrapperOffset = try XCTUnwrap(
+            appSource.range(of: "private func restoreCachedOwnerForActiveClerkUserOrSeedLocalDefaults() -> Bool")
+        ).lowerBound
+        let missOffset = try XCTUnwrap(
+            appSource.range(
+                of: "if !restoreCachedOwnerForActiveClerkUserOrHideOwnerScopedData()",
+                range: seedWrapperOffset..<appSource.endIndex
+            )
+        ).lowerBound
+        let seedOffset = try XCTUnwrap(
+            appSource.range(
+                of: "syncScheduler.seedDefaultsForLocalMode()",
+                range: missOffset..<appSource.endIndex
+            )
+        ).lowerBound
+        let returnFalseOffset = try XCTUnwrap(
+            appSource.range(of: "return false", range: seedOffset..<appSource.endIndex)
+        ).lowerBound
+
+        XCTAssertTrue(
+            appSource.contains("restoreCachedOwnerForActiveClerkUserOrSeedLocalDefaults()"),
+            "Active Clerk startup paths should share the local-default restore miss fallback."
+        )
+        XCTAssertTrue(
+            appSource.contains("@discardableResult\n    private func restoreCachedOwnerForActiveClerkUserOrHideOwnerScopedData() -> Bool"),
+            "The guarded restore helper should report whether an owner was actually restored."
+        )
+        XCTAssertLessThan(
+            appSource.distance(from: appSource.startIndex, to: missOffset),
+            appSource.distance(from: appSource.startIndex, to: seedOffset),
+            "An active Clerk session with no restorable owner should seed ownerless defaults."
+        )
+        XCTAssertLessThan(
+            appSource.distance(from: appSource.startIndex, to: seedOffset),
+            appSource.distance(from: appSource.startIndex, to: returnFalseOffset),
+            "The local seed fallback should still report that no owner was restored."
+        )
+        XCTAssertFalse(
+            appSource.contains("""
+                if !restoreCachedOwnerForActiveClerkUserOrHideOwnerScopedData() {
+                    syncScheduler.enterSignedOutMode()
+                }
+"""),
+            "An active Clerk restore miss must not clear the cached owner token as a signed-out transition."
+        )
+    }
+
+    func testActiveClerkRestoreUsesCachedSessionOwnerTokenWhenAvailable() throws {
+        let appSource = try sourceFileContents("LiftingLog/App/LiftingLogApp.swift")
+
+        XCTAssertTrue(
+            appSource.contains("private var activeClerkOwnerTokenIdentifier: String?"),
+            "App startup should derive the full owner token from Clerk's cached session token when available."
+        )
+        XCTAssertTrue(
+            appSource.contains("Clerk.shared.session?.lastActiveToken?.jwt"),
+            "Offline owner restoration should use Clerk's cached session JWT to validate the issuer as well as subject."
+        )
+        XCTAssertTrue(
+            appSource.contains("matchingOwnerTokenIdentifier: activeClerkOwnerTokenIdentifier"),
+            "Cached owner restoration should prefer exact iss|sub matching when the active session token is available."
+        )
+    }
+
     func testAppRequestsSyncWhenSceneBecomesActive() throws {
         let appSource = try sourceFileContents("LiftingLog/App/LiftingLogApp.swift")
 
