@@ -29,6 +29,7 @@ final class SyncRecoveryCoordinator {
     private struct ActiveRecovery {
         let id: UUID
         let recoveryInvalidationGeneration: UInt
+        let sessionIdentifier: String?
         let task: Task<Void, Never>
     }
 
@@ -55,6 +56,7 @@ final class SyncRecoveryCoordinator {
         return hasActiveSession()
             && !syncScheduler.isDeletionModeEnabled
             && syncScheduler.recoveryInvalidationGeneration == activeRecovery.recoveryInvalidationGeneration
+            && currentSessionIdentifier() == activeRecovery.sessionIdentifier
     }
 
     init(
@@ -109,15 +111,19 @@ final class SyncRecoveryCoordinator {
 
         let recoveryID = UUID()
         let recoveryInvalidationGeneration = syncScheduler.recoveryInvalidationGeneration
+        let recoverySessionIdentifier = currentSessionIdentifier()
         inFlightRecoveries[recoveryID] = RecoveryMetadata(
-            sessionIdentifier: currentSessionIdentifier()
+            sessionIdentifier: recoverySessionIdentifier
         )
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { finishRecovery(recoveryID) }
 
             guard !Task.isCancelled,
-                  isRecoveryValid(recoveryInvalidationGeneration) else {
+                  isRecoveryValid(
+                      recoveryInvalidationGeneration,
+                      sessionIdentifier: recoverySessionIdentifier
+                  ) else {
                 return
             }
             let result = await authenticationClient.loginFromCache()
@@ -130,7 +136,10 @@ final class SyncRecoveryCoordinator {
                 recoveryID: recoveryID
             )
             guard !Task.isCancelled,
-                  isRecoveryValid(recoveryInvalidationGeneration) else {
+                  isRecoveryValid(
+                      recoveryInvalidationGeneration,
+                      sessionIdentifier: recoverySessionIdentifier
+                  ) else {
                 return
             }
 
@@ -147,6 +156,7 @@ final class SyncRecoveryCoordinator {
         activeRecovery = ActiveRecovery(
             id: recoveryID,
             recoveryInvalidationGeneration: recoveryInvalidationGeneration,
+            sessionIdentifier: recoverySessionIdentifier,
             task: task
         )
         await task.value
@@ -155,10 +165,14 @@ final class SyncRecoveryCoordinator {
         }
     }
 
-    private func isRecoveryValid(_ recoveryInvalidationGeneration: UInt) -> Bool {
+    private func isRecoveryValid(
+        _ recoveryInvalidationGeneration: UInt,
+        sessionIdentifier: String?
+    ) -> Bool {
         hasActiveSession()
             && !syncScheduler.isDeletionModeEnabled
             && syncScheduler.recoveryInvalidationGeneration == recoveryInvalidationGeneration
+            && currentSessionIdentifier() == sessionIdentifier
     }
 
     private func registerAuthenticatedState(

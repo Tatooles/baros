@@ -342,6 +342,42 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         await recovery.value
     }
 
+    func testRecoveryDoesNotResumeForAChangedClerkSession() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let client = FakeSyncClient()
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client),
+            modelContext: container.mainContext,
+            lastKnownOwnerTokenStore: makeOwnerStore()
+        )
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+        let authenticationClient = StubSyncAuthenticationClient(
+            result: .success(makeJWT(issuer: "issuer", subject: "owner_a")),
+            waitsForResume: true
+        )
+        let sessionState = SessionIdentifierState(identifier: "session_a")
+        let coordinator = SyncRecoveryCoordinator(
+            authenticationClient: authenticationClient,
+            syncScheduler: scheduler,
+            hasActiveSession: { true },
+            currentSessionIdentifier: { sessionState.identifier }
+        )
+
+        let recovery = Task { @MainActor in
+            await coordinator.recoverAuthenticationAndRequestSync(for: .appForeground)
+        }
+        try await waitUntil { authenticationClient.hasPendingLogin }
+        XCTAssertTrue(coordinator.willActiveRecoveryRequestSync)
+        sessionState.identifier = "session_b"
+        XCTAssertFalse(coordinator.willActiveRecoveryRequestSync)
+        authenticationClient.resumeLogin()
+        await recovery.value
+
+        XCTAssertEqual(scheduler.requestCount, 0)
+        XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, "issuer|owner_a")
+        XCTAssertTrue(client.fetchRequests.isEmpty)
+    }
+
     func testInvalidatedRecoveryAllowsFreshRetry() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let client = FakeSyncClient()
@@ -493,6 +529,15 @@ private final class StubSyncAuthenticationClient: SyncAuthenticationClient {
 @MainActor
 private final class ActiveSessionState {
     var isActive = true
+}
+
+@MainActor
+private final class SessionIdentifierState {
+    var identifier: String
+
+    init(identifier: String) {
+        self.identifier = identifier
+    }
 }
 
 private extension Data {
