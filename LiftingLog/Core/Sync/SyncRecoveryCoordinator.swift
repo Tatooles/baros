@@ -56,8 +56,13 @@ final class SyncRecoveryCoordinator {
 
     func recoverAuthenticationAndRequestSync(for trigger: Trigger) async {
         if let activeRecovery {
-            await activeRecovery.task.value
-            return
+            if willActiveRecoveryRequestSync {
+                await activeRecovery.task.value
+                return
+            }
+
+            activeRecovery.task.cancel()
+            self.activeRecovery = nil
         }
 
         guard hasActiveSession(), !syncScheduler.isDeletionModeEnabled else {

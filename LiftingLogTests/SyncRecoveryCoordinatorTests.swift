@@ -255,10 +255,11 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         XCTAssertTrue(client.fetchRequests.isEmpty)
     }
 
-    func testInvalidatedRecoveryNoLongerSuppressesAuthenticatedStateSync() async throws {
+    func testInvalidatedRecoveryAllowsFreshRetry() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let client = FakeSyncClient()
         let scheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: FakeSyncClient()),
+            coordinator: SyncCoordinator(client: client),
             modelContext: container.mainContext,
             lastKnownOwnerTokenStore: makeOwnerStore()
         )
@@ -282,9 +283,23 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         scheduler.enterSignedOutMode()
 
         XCTAssertFalse(coordinator.willActiveRecoveryRequestSync)
+        let freshRetry = Task { @MainActor in
+            await coordinator.recoverAuthenticationAndRequestSync(for: .manualRetry)
+        }
+        try await waitUntil {
+            authenticationClient.loginFromCacheCallCount == 2
+                && authenticationClient.pendingLoginCount == 2
+        }
+        XCTAssertTrue(coordinator.willActiveRecoveryRequestSync)
+        authenticationClient.resumeLogin()
         authenticationClient.resumeLogin()
         await recovery.value
-        XCTAssertEqual(scheduler.requestCount, 0)
+        await freshRetry.value
+        try await waitUntil { scheduler.lastSyncedAt != nil }
+
+        XCTAssertEqual(authenticationClient.loginFromCacheCallCount, 2)
+        XCTAssertEqual(scheduler.requestCount, 1)
+        XCTAssertFalse(client.fetchRequests.isEmpty)
     }
 
     func testOverlappingRecoveryRequestsShareOneAuthenticationAndSync() async throws {
@@ -356,11 +371,15 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
 private final class StubSyncAuthenticationClient: SyncAuthenticationClient {
     private let result: Result<String, Error>
     private let waitsForResume: Bool
-    private var continuation: CheckedContinuation<Result<String, Error>, Never>?
+    private var continuations: [CheckedContinuation<Result<String, Error>, Never>] = []
     private(set) var loginFromCacheCallCount = 0
 
     var hasPendingLogin: Bool {
-        continuation != nil
+        !continuations.isEmpty
+    }
+
+    var pendingLoginCount: Int {
+        continuations.count
     }
 
     init(result: Result<String, Error>, waitsForResume: Bool = false) {
@@ -372,15 +391,15 @@ private final class StubSyncAuthenticationClient: SyncAuthenticationClient {
         loginFromCacheCallCount += 1
         if waitsForResume {
             return await withCheckedContinuation { continuation in
-                self.continuation = continuation
+                continuations.append(continuation)
             }
         }
         return result
     }
 
     func resumeLogin() {
-        continuation?.resume(returning: result)
-        continuation = nil
+        guard !continuations.isEmpty else { return }
+        continuations.removeFirst().resume(returning: result)
     }
 }
 
