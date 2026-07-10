@@ -21,6 +21,26 @@ final class ClerkJWTIdentityResolverTests: XCTestCase {
         XCTAssertNil(ClerkJWTIdentityResolver.ownerTokenIdentifier(from: jwt))
     }
 
+    func testIssuerFromPublishableKeyUsesDecodedFrontendHost() {
+        XCTAssertEqual(
+            ClerkJWTIdentityResolver.issuer(
+                fromPublishableKey: "pk_test_Z2xhZC1rcmlsbC0yMi5jbGVyay5hY2NvdW50cy5kZXYk"
+            ),
+            "https://glad-krill-22.clerk.accounts.dev"
+        )
+        XCTAssertEqual(
+            ClerkJWTIdentityResolver.issuer(
+                fromPublishableKey: "pk_live_Y2xlcmsuYXV0aC5saWZ0aW5nbG9nLmFwcCQ"
+            ),
+            "https://clerk.auth.liftinglog.app"
+        )
+    }
+
+    func testIssuerFromPublishableKeyRejectsMalformedKeys() {
+        XCTAssertNil(ClerkJWTIdentityResolver.issuer(fromPublishableKey: "not-a-key"))
+        XCTAssertNil(ClerkJWTIdentityResolver.issuer(fromPublishableKey: "pk_test_"))
+    }
+
     private func makeJWT(payload: String) -> String {
         [
             base64URL("{}"),

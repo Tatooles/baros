@@ -947,6 +947,46 @@ final class LiftingLogUITests: XCTestCase {
     }
 
     @MainActor
+    func testOfflineColdLaunchWithCachedOwnerPreservesOwnerScopedData() {
+        let owner = "issuer|offline_cached_owner"
+        let app = makeDiskBackedResetApp(extraArguments: [
+            "--uitest-sync-owner", owner,
+            "--uitest-seed-completed-bench-workout", "Offline Cached Owner Push",
+        ])
+        app.launch()
+
+        app.buttons["ProfileTab"].tap()
+        app.buttons["ProfileSettingsLink"].tap()
+        XCTAssertTrue(app.segmentedControls["WeightUnitPicker"].waitForExistence(timeout: 3))
+        app.segmentedControls["WeightUnitPicker"].buttons["Kilograms"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        app.buttons["ProfileExerciseLibraryLink"].tap()
+        XCTAssertTrue(app.navigationBars["Exercises"].waitForExistence(timeout: 3))
+        createExercise(name: "Aardvark Offline Press", equipment: "Barbell", muscle: "Chest", in: app)
+        XCTAssertTrue(app.buttons["ExerciseLibraryRow-Aardvark Offline Press-Barbell"].waitForExistence(timeout: 3))
+        app.terminate()
+
+        let relaunchedApp = makeDiskBackedApp(extraArguments: [
+            "--uitest-force-signed-in-auth",
+            "--uitest-restore-cached-sync-owner",
+            "--uitest-restore-cached-sync-owner-subject", "offline_cached_owner",
+        ])
+        relaunchedApp.launch()
+
+        relaunchedApp.buttons["ProfileTab"].tap()
+        XCTAssertTrue(relaunchedApp.staticTexts["KG"].waitForExistence(timeout: 3))
+        relaunchedApp.buttons["ProfileExerciseLibraryLink"].tap()
+        XCTAssertTrue(relaunchedApp.navigationBars["Exercises"].waitForExistence(timeout: 3))
+        XCTAssertTrue(relaunchedApp.buttons["ExerciseLibraryRow-Aardvark Offline Press-Barbell"].waitForExistence(timeout: 3))
+
+        relaunchedApp.buttons["HistoryTab"].tap()
+        XCTAssertTrue(relaunchedApp.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+        relaunchedApp.buttons["WorkoutHistoryButton-0"].tap()
+        XCTAssertTrue(relaunchedApp.staticTexts["Offline Cached Owner Push"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
     func testSwipeToDeleteSetRemovesSet() {
         let app = makeApp()
         app.launch()

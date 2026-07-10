@@ -98,7 +98,9 @@ final class WorkoutSession: Identifiable {
             session.status == .completed && !session.isDeleted
         }
         guard let ownerTokenIdentifier else {
-            return visibleCompleted
+            return visibleCompleted.filter { session in
+                session.syncOwnerTokenIdentifier == nil
+            }
         }
 
         return visibleCompleted.filter { session in

@@ -14,6 +14,25 @@ enum ClerkJWTIdentityResolver {
         return "\(claims.iss)|\(claims.sub)"
     }
 
+    static func issuer(fromPublishableKey publishableKey: String) -> String? {
+        let segments = publishableKey.split(separator: "_", maxSplits: 2, omittingEmptySubsequences: false)
+        guard segments.count == 3,
+              segments[0] == "pk",
+              !segments[2].isEmpty,
+              let decodedData = base64URLDecodedData(String(segments[2])),
+              let decodedValue = String(data: decodedData, encoding: .utf8),
+              decodedValue.hasSuffix("$") else {
+            return nil
+        }
+
+        let frontendHost = decodedValue.dropLast()
+        guard !frontendHost.isEmpty else {
+            return nil
+        }
+
+        return "https://\(frontendHost)"
+    }
+
     private static func base64URLDecodedData(_ value: String) -> Data? {
         var base64 = value
             .replacingOccurrences(of: "-", with: "+")

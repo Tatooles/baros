@@ -2,6 +2,39 @@ import Foundation
 import SwiftData
 
 @MainActor
+final class LastKnownSyncOwnerTokenStore {
+    static let standard = LastKnownSyncOwnerTokenStore()
+
+    private let userDefaults: UserDefaults
+    private let key: String
+
+    init(
+        userDefaults: UserDefaults = .standard,
+        key: String = "lastKnownSyncOwnerTokenIdentifier"
+    ) {
+        self.userDefaults = userDefaults
+        self.key = key
+    }
+
+    var ownerTokenIdentifier: String? {
+        get {
+            userDefaults.string(forKey: key)
+        }
+        set {
+            guard let newValue, !newValue.isEmpty else {
+                userDefaults.removeObject(forKey: key)
+                return
+            }
+            userDefaults.set(newValue, forKey: key)
+        }
+    }
+
+    func clear() {
+        ownerTokenIdentifier = nil
+    }
+}
+
+@MainActor
 @Observable
 final class SyncScheduler {
     private static let incompleteSyncFailureMessage = "Cloud sync could not finish."
@@ -20,6 +53,9 @@ final class SyncScheduler {
 
     var currentOwnerTokenIdentifier: String? {
         didSet {
+            if let currentOwnerTokenIdentifier {
+                lastKnownOwnerTokenStore.ownerTokenIdentifier = currentOwnerTokenIdentifier
+            }
             guard oldValue != currentOwnerTokenIdentifier else { return }
             cancelInFlightSync()
             clearRuntimeStateForOwnerChange()
@@ -36,13 +72,16 @@ final class SyncScheduler {
     private var modelContext: ModelContext?
     private var syncTask: Task<Void, Never>?
     private var needsSync = false
+    private let lastKnownOwnerTokenStore: LastKnownSyncOwnerTokenStore
 
     init(
         coordinator: SyncCoordinator? = nil,
-        modelContext: ModelContext? = nil
+        modelContext: ModelContext? = nil,
+        lastKnownOwnerTokenStore: LastKnownSyncOwnerTokenStore = .standard
     ) {
         self.coordinator = coordinator
         self.modelContext = modelContext
+        self.lastKnownOwnerTokenStore = lastKnownOwnerTokenStore
     }
 
     func configure(coordinator: SyncCoordinator, modelContext: ModelContext) {
@@ -109,9 +148,58 @@ final class SyncScheduler {
 
     func resetAfterDataDeletion() {
         isDeletionModeEnabled = false
+        lastKnownOwnerTokenStore.clear()
         currentOwnerTokenIdentifier = nil
         cancelInFlightSync()
         clearRuntimeStateForOwnerChange()
+    }
+
+    @discardableResult
+    func restoreLastKnownOwnerTokenIdentifier() -> Bool {
+        restoreLastKnownOwnerTokenIdentifier(where: { _ in true })
+    }
+
+    @discardableResult
+    func restoreLastKnownOwnerTokenIdentifier(matchingOwnerSubject ownerSubject: String) -> Bool {
+        restoreLastKnownOwnerTokenIdentifier { ownerTokenIdentifier in
+            Self.ownerTokenIdentifier(ownerTokenIdentifier, matchesSubject: ownerSubject)
+        }
+    }
+
+    @discardableResult
+    func activateValidatedOwnerTokenIdentifier(_ ownerTokenIdentifier: String) -> Bool {
+        guard !ownerTokenIdentifier.isEmpty else {
+            return false
+        }
+
+        activateOwnerTokenIdentifier(ownerTokenIdentifier)
+        return true
+    }
+
+    private func restoreLastKnownOwnerTokenIdentifier(where isAllowedOwner: (String) -> Bool) -> Bool {
+        let cachedOwnerTokenIdentifier = lastKnownOwnerTokenStore.ownerTokenIdentifier
+        let ownerTokenIdentifier: String?
+        if let cachedOwnerTokenIdentifier, isAllowedOwner(cachedOwnerTokenIdentifier) {
+            ownerTokenIdentifier = cachedOwnerTokenIdentifier
+        } else if let inferredOwnerTokenIdentifier = inferSingleLocalOwnerTokenIdentifier(),
+                  isAllowedOwner(inferredOwnerTokenIdentifier) {
+            ownerTokenIdentifier = inferredOwnerTokenIdentifier
+        } else {
+            ownerTokenIdentifier = nil
+        }
+
+        guard let ownerTokenIdentifier else {
+            return false
+        }
+
+        activateOwnerTokenIdentifier(ownerTokenIdentifier)
+        return true
+    }
+
+    func enterSignedOutMode() {
+        lastKnownOwnerTokenStore.clear()
+        currentOwnerTokenIdentifier = nil
+        seedDefaultsForLocalMode()
     }
 
     func seedDefaultsForCurrentOwner() {
@@ -130,6 +218,58 @@ final class SyncScheduler {
     func seedDefaultsForLocalMode() {
         guard let modelContext else { return }
         try? SeedDataService.seedIfNeeded(context: modelContext)
+    }
+
+    private func inferSingleLocalOwnerTokenIdentifier() -> String? {
+        let owners = localOwnerTokenIdentifiers()
+
+        return owners.count == 1 ? owners.first : nil
+    }
+
+    private func localOwnerTokenIdentifiers() -> Set<String> {
+        guard let modelContext else { return [] }
+
+        var owners = Set<String>()
+        if let cursorStates = try? modelContext.fetch(FetchDescriptor<SyncCursorState>()) {
+            owners.formUnion(cursorStates.map(\.ownerTokenIdentifier))
+        }
+        if let settings = try? modelContext.fetch(FetchDescriptor<UserSettings>()) {
+            owners.formUnion(settings.compactMap { settings in
+                settings.isDeleted ? nil : settings.syncOwnerTokenIdentifier
+            })
+        }
+        if let exercises = try? modelContext.fetch(FetchDescriptor<Exercise>()) {
+            owners.formUnion(exercises.compactMap { exercise in
+                exercise.isDeleted ? nil : exercise.syncOwnerTokenIdentifier
+            })
+        }
+        if let sessions = try? modelContext.fetch(FetchDescriptor<WorkoutSession>()) {
+            owners.formUnion(sessions.compactMap { session in
+                session.isDeleted ? nil : session.syncOwnerTokenIdentifier
+            })
+        }
+
+        return owners
+    }
+
+    private func activateOwnerTokenIdentifier(_ ownerTokenIdentifier: String) {
+        lastKnownOwnerTokenStore.ownerTokenIdentifier = ownerTokenIdentifier
+        currentOwnerTokenIdentifier = ownerTokenIdentifier
+        seedDefaultsForCurrentOwner()
+    }
+
+    private static func ownerTokenIdentifier(_ ownerTokenIdentifier: String, matchesSubject subject: String) -> Bool {
+        guard !subject.isEmpty,
+              let separatorIndex = ownerTokenIdentifier.lastIndex(of: "|") else {
+            return false
+        }
+
+        let subjectStartIndex = ownerTokenIdentifier.index(after: separatorIndex)
+        guard subjectStartIndex < ownerTokenIdentifier.endIndex else {
+            return false
+        }
+
+        return String(ownerTokenIdentifier[subjectStartIndex...]) == subject
     }
 
     func recordFailureForTesting(message: String, at date: Date = .now, reason: FailureReason = .syncError) {
