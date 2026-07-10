@@ -28,7 +28,8 @@ struct LiftingLogApp: App {
             initialValue: SyncRecoveryCoordinator(
                 authenticationClient: ConvexSyncAuthenticationClient(client: convexClient),
                 syncScheduler: syncScheduler,
-                hasActiveSession: { Clerk.shared.session?.status == .active }
+                hasActiveSession: { Clerk.shared.session?.status == .active },
+                currentSessionIdentifier: { Clerk.shared.session?.id }
             )
         )
         let arguments = ProcessInfo.processInfo.arguments
@@ -176,10 +177,16 @@ struct LiftingLogApp: App {
                     guard let ownerTokenIdentifier = ClerkJWTIdentityResolver.ownerTokenIdentifier(from: token) else {
                         break
                     }
-                    authenticateSyncOwner(
-                        ownerTokenIdentifier,
-                        requestsSync: !syncRecoveryCoordinator.willActiveRecoveryRequestSync
-                    )
+                    guard ownerTokenIdentifier == expectedClerkOwnerTokenIdentifier else {
+                        break
+                    }
+                    guard !syncRecoveryCoordinator.shouldDeferAuthenticatedState(
+                        ownerTokenIdentifier: ownerTokenIdentifier,
+                        sessionIdentifier: Clerk.shared.session?.id
+                    ) else {
+                        break
+                    }
+                    authenticateSyncOwner(ownerTokenIdentifier)
                 }
             }
         }
@@ -272,14 +279,9 @@ struct LiftingLogApp: App {
         }
     }
 
-    private func authenticateSyncOwner(
-        _ ownerTokenIdentifier: String,
-        requestsSync: Bool = true
-    ) {
+    private func authenticateSyncOwner(_ ownerTokenIdentifier: String) {
         syncScheduler.currentOwnerTokenIdentifier = ownerTokenIdentifier
         syncScheduler.seedDefaultsForCurrentOwner()
-        if requestsSync {
-            syncScheduler.requestSync()
-        }
+        syncScheduler.requestSync()
     }
 }
