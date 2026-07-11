@@ -67,6 +67,7 @@ final class SyncScheduler {
     private(set) var lastSyncedAt: Date?
     private(set) var lastFailure: Failure?
     private(set) var isDeletionModeEnabled = false
+    private(set) var recoveryInvalidationGeneration: UInt = 0
 
     private var coordinator: SyncCoordinator?
     private var modelContext: ModelContext?
@@ -120,6 +121,7 @@ final class SyncScheduler {
     }
 
     func beginDeletionMode() {
+        invalidateRecoveryAttempts()
         isDeletionModeEnabled = true
         cancelInFlightSync()
         clearRuntimeStateForOwnerChange()
@@ -147,6 +149,7 @@ final class SyncScheduler {
     }
 
     func resetAfterDataDeletion() {
+        invalidateRecoveryAttempts()
         isDeletionModeEnabled = false
         lastKnownOwnerTokenStore.clear()
         currentOwnerTokenIdentifier = nil
@@ -197,6 +200,7 @@ final class SyncScheduler {
     }
 
     func enterSignedOutMode() {
+        invalidateRecoveryAttempts()
         lastKnownOwnerTokenStore.clear()
         currentOwnerTokenIdentifier = nil
         seedDefaultsForLocalMode()
@@ -280,6 +284,10 @@ final class SyncScheduler {
         guard let syncTask else { return }
         needsSync = false
         syncTask.cancel()
+    }
+
+    private func invalidateRecoveryAttempts() {
+        recoveryInvalidationGeneration &+= 1
     }
 
     private func clearRuntimeStateForOwnerChange() {

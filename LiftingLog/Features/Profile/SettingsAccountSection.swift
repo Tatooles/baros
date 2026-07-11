@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsAccountSection: View {
     @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(\.syncRecoveryAction) private var syncRecoveryAction
     @Query(sort: \SyncOutboxEntry.updatedAt, order: .reverse) private var outboxEntries: [SyncOutboxEntry]
 
     private var displayState: SyncStatusDisplayState {
@@ -79,7 +80,7 @@ struct SettingsAccountSection: View {
 
             if displayState.canRetry {
                 Button("Retry") {
-                    syncScheduler.retrySync()
+                    syncRecoveryAction(.manualRetry)
                 }
                 .buttonStyle(.borderless)
                 .accessibilityIdentifier("SettingsSyncRetryButton")
@@ -88,7 +89,6 @@ struct SettingsAccountSection: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .accessibilityIdentifier("SettingsSyncStatusRow")
     }
 
     private var displayTint: Color {

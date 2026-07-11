@@ -760,6 +760,23 @@ final class LiftingLogUITests: XCTestCase {
     }
 
     @MainActor
+    func testSettingsSyncRetryRequestsSyncInUITestMode() {
+        let app = makeApp(extraArguments: [
+            "--uitest-sync-owner", "issuer|ui_owner",
+            "--uitest-show-sync-failure",
+        ])
+        app.launch()
+
+        app.buttons["GlobalSyncDetailsButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+        let settingsRetryButton = app.buttons["SettingsSyncRetryButton"]
+        XCTAssertTrue(settingsRetryButton.waitForExistence(timeout: 3))
+        settingsRetryButton.tap()
+
+        XCTAssertTrue(app.staticTexts["UITestSyncRequestCount-1"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
     func testFailedSyncBannerCanBeDismissed() {
         let app = makeApp(extraArguments: [
             "--uitest-sync-owner", "issuer|ui_owner",

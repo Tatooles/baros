@@ -51,17 +51,27 @@ final class AppInitializationOrderTests: XCTestCase {
             appSource.contains("Clerk.shared.isLoaded"),
             "Convex cache login must wait until Clerk can issue session tokens."
         )
-        let waitForClerkOffset = try XCTUnwrap(appSource.range(of: "await waitUntilClerkIsLoaded()")).lowerBound
-        let activeSessionOffset = try XCTUnwrap(appSource.range(of: "guard Clerk.shared.session?.status == .active")).lowerBound
-        let loginFromCacheOffset = try XCTUnwrap(appSource.range(of: "await convexClient.loginFromCache()")).lowerBound
+        let startupFunctionStart = try XCTUnwrap(
+            appSource.range(of: "private func syncConvexAuthFromRestoredClerkSessionIfAvailable()")
+        ).lowerBound
+        let nextFunctionStart = try XCTUnwrap(
+            appSource.range(
+                of: "private func restoreCachedSyncOwnerForActiveClerkSessionIfAvailable()",
+                range: startupFunctionStart..<appSource.endIndex
+            )
+        ).lowerBound
+        let startupSource = appSource[startupFunctionStart..<nextFunctionStart]
+        let waitForClerkOffset = try XCTUnwrap(startupSource.range(of: "await waitUntilClerkIsLoaded()")).lowerBound
+        let activeSessionOffset = try XCTUnwrap(startupSource.range(of: "guard Clerk.shared.session?.status == .active")).lowerBound
+        let loginFromCacheOffset = try XCTUnwrap(startupSource.range(of: "await convexClient.loginFromCache()")).lowerBound
         XCTAssertLessThan(
-            appSource.distance(from: appSource.startIndex, to: waitForClerkOffset),
-            appSource.distance(from: appSource.startIndex, to: activeSessionOffset),
+            startupSource.distance(from: startupSource.startIndex, to: waitForClerkOffset),
+            startupSource.distance(from: startupSource.startIndex, to: activeSessionOffset),
             "Startup retry must wait for Clerk to load before deciding whether a restored active session exists."
         )
         XCTAssertLessThan(
-            appSource.distance(from: appSource.startIndex, to: activeSessionOffset),
-            appSource.distance(from: appSource.startIndex, to: loginFromCacheOffset),
+            startupSource.distance(from: startupSource.startIndex, to: activeSessionOffset),
+            startupSource.distance(from: startupSource.startIndex, to: loginFromCacheOffset),
             "Convex cache login should run only after Clerk has loaded an active restored session."
         )
         XCTAssertTrue(
@@ -251,8 +261,70 @@ final class AppInitializationOrderTests: XCTestCase {
             "Only foreground activation should trigger the lifecycle sync request."
         )
         XCTAssertTrue(
-            appSource.contains("syncScheduler.requestSyncOnAppForeground()"),
-            "Foreground activation should use the guarded scheduler trigger for signed-in, non-deletion-mode sync."
+            appSource.contains("requestSyncRecovery(for: .appForeground)"),
+            "Foreground activation should refresh Convex authentication before using the guarded scheduler trigger."
+        )
+    }
+
+    func testForegroundAndManualRetryUseSharedAuthenticationRecovery() throws {
+        let appSource = try sourceFileContents("LiftingLog/App/LiftingLogApp.swift")
+        let shellSource = try sourceFileContents("LiftingLog/App/AppShellView.swift")
+        let settingsSource = try sourceFileContents("LiftingLog/Features/Profile/SettingsAccountSection.swift")
+
+        XCTAssertTrue(
+            appSource.contains("recoverAuthenticationAndRequestSync(for: trigger)"),
+            "The app-level recovery action should refresh authentication before scheduling sync."
+        )
+        XCTAssertTrue(
+            appSource.contains("expectedOwnerTokenIdentifier: { Self.currentExpectedClerkOwnerTokenIdentifier }"),
+            "Auth recovery must validate the recovered Convex owner against the active Clerk user."
+        )
+        XCTAssertTrue(
+            shellSource.contains("syncRecoveryAction(.manualRetry)"),
+            "The global failure banner should use the shared authentication recovery path."
+        )
+        XCTAssertTrue(
+            settingsSource.contains("syncRecoveryAction(.manualRetry)"),
+            "The Settings Retry button should use the shared authentication recovery path."
+        )
+        XCTAssertFalse(
+            shellSource.contains("syncScheduler.retrySync()") || settingsSource.contains("syncScheduler.retrySync()"),
+            "Production Retry surfaces must not bypass authentication recovery."
+        )
+    }
+
+    func testAuthenticatedConvexOwnerMismatchHidesLocalDataAndClearsAuth() throws {
+        let appSource = try sourceFileContents("LiftingLog/App/LiftingLogApp.swift")
+        let coordinatorSource = try sourceFileContents("LiftingLog/Core/Sync/SyncRecoveryCoordinator.swift")
+
+        XCTAssertTrue(
+            appSource.contains("await syncRecoveryCoordinator.shouldActivateAuthenticatedState("),
+            "Authenticated Convex state must pass through the coordinator's owner validation gate."
+        )
+        XCTAssertFalse(
+            appSource.contains("rejectMismatchedConvexAuthentication"),
+            "The app should not duplicate the coordinator's owner mismatch cleanup."
+        )
+
+        let handlerOffset = try XCTUnwrap(
+            coordinatorSource.range(of: "private func rejectInstalledAuthentication() async")
+        ).lowerBound
+        let clearOwnerOffset = try XCTUnwrap(
+            coordinatorSource.range(
+                of: "syncScheduler.currentOwnerTokenIdentifier = nil",
+                range: handlerOffset..<coordinatorSource.endIndex
+            )
+        ).lowerBound
+        let logoutOffset = try XCTUnwrap(
+            coordinatorSource.range(
+                of: "await authenticationClient.logout()",
+                range: handlerOffset..<coordinatorSource.endIndex
+            )
+        ).lowerBound
+        XCTAssertLessThan(
+            coordinatorSource.distance(from: coordinatorSource.startIndex, to: clearOwnerOffset),
+            coordinatorSource.distance(from: coordinatorSource.startIndex, to: logoutOffset),
+            "Stale owner data must be hidden synchronously before clearing Convex auth can suspend."
         )
     }
 

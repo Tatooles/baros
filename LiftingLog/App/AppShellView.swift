@@ -4,6 +4,7 @@ import SwiftUI
 struct AppShellView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(\.syncRecoveryAction) private var syncRecoveryAction
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     private let firstRunStore = FirstRunExperienceStore()
@@ -115,7 +116,7 @@ struct AppShellView: View {
                 GlobalSyncFailureBanner(
                     title: syncDisplayState.failureNoticeTitle ?? "Cloud sync failed",
                     message: syncDisplayState.failureNoticeMessage ?? "Your data is saved on this iPhone.",
-                    retry: { syncScheduler.retrySync() },
+                    retry: { syncRecoveryAction(.manualRetry) },
                     details: { navigationState.openSyncSettings() },
                     dismiss: { dismissGlobalSyncFailureBanner() }
                 )

@@ -14,12 +14,25 @@ struct LiftingLogApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var navigationState = AppNavigationState()
     @State private var activeWorkoutEngine = ActiveWorkoutEngine()
-    @State private var syncScheduler = SyncScheduler()
+    @State private var syncScheduler: SyncScheduler
+    @State private var syncRecoveryCoordinator: SyncRecoveryCoordinator
     @State private var syncAuthTask: Task<Void, Never>?
 
     init() {
         Clerk.configure(publishableKey: ClerkConfiguration.publishableKey)
-        convexClient = ConvexClientFactory.makeAuthenticatedClient()
+        let convexClient = ConvexClientFactory.makeAuthenticatedClient()
+        self.convexClient = convexClient
+        let syncScheduler = SyncScheduler()
+        _syncScheduler = State(initialValue: syncScheduler)
+        _syncRecoveryCoordinator = State(
+            initialValue: SyncRecoveryCoordinator(
+                authenticationClient: ConvexSyncAuthenticationClient(client: convexClient),
+                syncScheduler: syncScheduler,
+                hasActiveSession: { Clerk.shared.session?.status == .active },
+                currentSessionIdentifier: { Clerk.shared.session?.id },
+                expectedOwnerTokenIdentifier: { Self.currentExpectedClerkOwnerTokenIdentifier }
+            )
+        )
         let arguments = ProcessInfo.processInfo.arguments
         FirstRunExperienceStore.resetForUITestingIfRequested(arguments: arguments)
         FirstRunExperienceStore.markSeenForUITestingIfRequested(arguments: arguments)
@@ -70,6 +83,12 @@ struct LiftingLogApp: App {
             .environment(Clerk.shared)
             .environment(syncScheduler)
             .environment(
+                \.syncRecoveryAction,
+                SyncRecoveryAction { trigger in
+                    requestSyncRecovery(for: trigger)
+                }
+            )
+            .environment(
                 \.accountDeletionFactory,
                 AccountDeletionFactory.live(syncClient: ConvexSyncClient(client: convexClient))
             )
@@ -108,8 +127,24 @@ struct LiftingLogApp: App {
             }
             .onChange(of: scenePhase) { _, newScenePhase in
                 guard newScenePhase == .active else { return }
-                syncScheduler.requestSyncOnAppForeground()
+                requestSyncRecovery(for: .appForeground)
             }
+        }
+    }
+
+    private func requestSyncRecovery(for trigger: SyncRecoveryCoordinator.Trigger) {
+        if uiTestSyncOwner != nil {
+            switch trigger {
+            case .appForeground:
+                syncScheduler.requestSyncOnAppForeground()
+            case .manualRetry:
+                syncScheduler.retrySync()
+            }
+            return
+        }
+
+        Task { @MainActor in
+            await syncRecoveryCoordinator.recoverAuthenticationAndRequestSync(for: trigger)
         }
     }
 
@@ -137,6 +172,12 @@ struct LiftingLogApp: App {
                     syncScheduler.enterSignedOutMode()
                 case .authenticated(let token):
                     guard let ownerTokenIdentifier = ClerkJWTIdentityResolver.ownerTokenIdentifier(from: token) else {
+                        break
+                    }
+                    guard await syncRecoveryCoordinator.shouldActivateAuthenticatedState(
+                        ownerTokenIdentifier: ownerTokenIdentifier,
+                        sessionIdentifier: Clerk.shared.session?.id
+                    ) else {
                         break
                     }
                     authenticateSyncOwner(ownerTokenIdentifier)
@@ -200,10 +241,19 @@ struct LiftingLogApp: App {
     }
 
     private var activeClerkUserID: String? {
-        Clerk.shared.user?.id ?? Clerk.shared.session?.publicUserData?.userId
+        Self.currentActiveClerkUserID
     }
 
     private var expectedClerkOwnerTokenIdentifier: String? {
+        Self.currentExpectedClerkOwnerTokenIdentifier
+    }
+
+    private static var currentActiveClerkUserID: String? {
+        Clerk.shared.user?.id ?? Clerk.shared.session?.publicUserData?.userId
+    }
+
+    private static var currentExpectedClerkOwnerTokenIdentifier: String? {
+        let activeClerkUserID = currentActiveClerkUserID
         guard let activeClerkUserID,
               let expectedClerkIssuer = ClerkJWTIdentityResolver.issuer(
                   fromPublishableKey: ClerkConfiguration.publishableKey
