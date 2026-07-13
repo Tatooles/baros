@@ -110,4 +110,4 @@ Before submitting to App Review:
 7. Export workout history.
 8. Confirm account deletion is present in Settings.
 
-If any step fails, document the blocker in issue 14 and do not submit to App Review.
+If any step fails, document the blocker in issue 15 and do not submit to App Review.

@@ -30,7 +30,12 @@ struct WorkoutSessionView: View {
     @FocusState private var focusedField: WorkoutField?
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
-    private let contentBottomPadding: CGFloat = 120
+
+    private var contentBottomPadding: CGFloat {
+        // Extra scroll room is only needed while revealing a focused field or
+        // positioning a newly added exercise near the top of the viewport.
+        focusedField == nil && recentlyAddedExerciseID == nil ? 24 : 120
+    }
 
     private var weightUnit: MeasurementUnit {
         UserSettings.visibleSettingsRecords(
