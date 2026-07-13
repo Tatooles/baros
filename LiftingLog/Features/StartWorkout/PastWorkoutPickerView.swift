@@ -12,7 +12,7 @@ struct PastWorkoutPickerView: View {
             )
         } else {
             VStack(spacing: 10) {
-                ForEach(Array(sessions.prefix(6).enumerated()), id: \.element.id) { index, session in
+                ForEach(Array(sessions.prefix(10).enumerated()), id: \.element.id) { index, session in
                     Button {
                         onSelect(session)
                     } label: {
