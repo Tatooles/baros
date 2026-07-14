@@ -1,6 +1,7 @@
 # AGENTS.md
 
 - If using XcodeBuildMCP, use the installed XcodeBuildMCP skill before calling XcodeBuildMCP tools.
+- Never open a draft pull request unless the user explicitly asks for one; otherwise, open a regular, ready-for-review pull request.
 
 <!-- convex-ai-start -->
 
