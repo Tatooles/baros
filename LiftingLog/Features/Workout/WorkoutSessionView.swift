@@ -32,16 +32,18 @@ struct WorkoutSessionView: View {
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
     private var contentBottomPadding: CGFloat {
-        // Extra scroll room is only needed while positioning a newly added
+        // Full scroll room is only needed while positioning a newly added
         // exercise near the top of the viewport or revealing a focused
-        // mid-list field. The workout notes card is the last element, so
-        // keyboard avoidance alone reveals it; extra room would let it float
-        // above the keyboard.
+        // mid-list field. The workout notes card is the last element, so it
+        // only needs enough room to clear the floating keyboard accessory
+        // buttons, which sit ~48pt above the keyboard's safe-area inset.
         if recentlyAddedExerciseID != nil { return 120 }
         switch focusedField {
         case .exerciseNotes, .setWeight, .setReps:
             return 120
-        case .workoutTitle, .workoutNotes, nil:
+        case .workoutTitle, .workoutNotes:
+            return 64
+        case nil:
             return 24
         }
     }
@@ -193,10 +195,15 @@ struct WorkoutSessionView: View {
                 } else if Self.isSetField(previousField), let recentlyAddedExerciseID {
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(300))
+                        // Collapse the reveal padding before the scroll so
+                        // the target is computed against the final layout;
+                        // scrolling first lands on extent that then shrinks
+                        // out from under the offset, producing a second
+                        // settle.
+                        self.recentlyAddedExerciseID = nil
                         withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
                             scrollProxy.scrollTo(recentlyAddedExerciseID, anchor: .top)
                         }
-                        self.recentlyAddedExerciseID = nil
                     }
                 }
             }
@@ -262,10 +269,12 @@ struct WorkoutSessionView: View {
                             if let scrollTarget {
                                 Task { @MainActor in
                                     try? await Task.sleep(for: .milliseconds(500))
+                                    // Same ordering contract as the focus
+                                    // onChange reveal: collapse before scroll.
+                                    self.recentlyAddedExerciseID = nil
                                     withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
                                         scrollProxy.scrollTo(scrollTarget, anchor: .top)
                                     }
-                                    self.recentlyAddedExerciseID = nil
                                 }
                             }
                         }

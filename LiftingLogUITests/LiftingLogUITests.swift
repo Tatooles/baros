@@ -315,7 +315,10 @@ final class LiftingLogUITests: XCTestCase {
 
         let doneButton = app.buttons["DismissKeyboardButton"]
         XCTAssertTrue(doneButton.waitForExistence(timeout: 3))
-        XCTAssertLessThan(notesField.frame.maxY, doneButton.frame.minY - 8)
+        // 24 = the card's 16pt inner inset below the field + 8pt clearance,
+        // so the card edge (not just the field) clears the floating
+        // keyboard accessory buttons.
+        XCTAssertLessThan(notesField.frame.maxY, doneButton.frame.minY - 24)
     }
 
     @MainActor
