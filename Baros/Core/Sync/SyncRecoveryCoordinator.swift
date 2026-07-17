@@ -1,27 +1,9 @@
 import Foundation
-@preconcurrency import ConvexMobile
 
 @MainActor
 protocol SyncAuthenticationClient: AnyObject {
     func loginFromCache() async -> Result<String, Error>
     func logout() async
-}
-
-@MainActor
-final class ConvexSyncAuthenticationClient: SyncAuthenticationClient {
-    private let client: ConvexClientWithAuth<String>
-
-    init(client: ConvexClientWithAuth<String>) {
-        self.client = client
-    }
-
-    func loginFromCache() async -> Result<String, Error> {
-        await client.loginFromCache()
-    }
-
-    func logout() async {
-        await client.logout()
-    }
 }
 
 private struct AuthenticatedStateCorrelation {
@@ -127,6 +109,7 @@ private struct AuthenticatedStateCorrelation {
 @MainActor
 final class SyncRecoveryCoordinator {
     enum Trigger {
+        case startup
         case appForeground
         case manualRetry
     }
@@ -153,6 +136,7 @@ final class SyncRecoveryCoordinator {
     private let hasActiveSession: @MainActor () -> Bool
     private let currentSessionIdentifier: @MainActor () -> String?
     private let expectedOwnerTokenIdentifier: @MainActor () -> String?
+    private let onRecoveredOwner: @MainActor (String, Trigger) -> Void
     private let now: @MainActor () -> Date
     private var activeRecovery: ActiveRecovery?
     private var inFlightRecoveries: [UUID: RecoveryMetadata] = [:]
@@ -172,6 +156,7 @@ final class SyncRecoveryCoordinator {
         hasActiveSession: @MainActor @escaping () -> Bool,
         currentSessionIdentifier: @MainActor @escaping () -> String? = { nil },
         expectedOwnerTokenIdentifier: @MainActor @escaping () -> String?,
+        onRecoveredOwner: @MainActor @escaping (String, Trigger) -> Void,
         pendingAuthenticatedStateLifetime: TimeInterval = 5,
         now: @MainActor @escaping () -> Date = Date.init
     ) {
@@ -180,6 +165,7 @@ final class SyncRecoveryCoordinator {
         self.hasActiveSession = hasActiveSession
         self.currentSessionIdentifier = currentSessionIdentifier
         self.expectedOwnerTokenIdentifier = expectedOwnerTokenIdentifier
+        self.onRecoveredOwner = onRecoveredOwner
         self.now = now
         self.authenticatedStateCorrelation = AuthenticatedStateCorrelation(
             pendingLifetime: pendingAuthenticatedStateLifetime
@@ -198,7 +184,6 @@ final class SyncRecoveryCoordinator {
         case .current:
             break
         case .unavailable:
-            syncScheduler.currentOwnerTokenIdentifier = nil
             return false
         case .mismatch:
             await rejectInstalledAuthentication()
@@ -275,14 +260,7 @@ final class SyncRecoveryCoordinator {
                 return
             }
 
-            syncScheduler.currentOwnerTokenIdentifier = ownerTokenIdentifier
-            syncScheduler.seedDefaultsForCurrentOwner()
-            switch trigger {
-            case .appForeground:
-                syncScheduler.requestSyncOnAppForeground()
-            case .manualRetry:
-                syncScheduler.retrySync()
-            }
+            onRecoveredOwner(ownerTokenIdentifier, trigger)
         }
 
         activeRecovery = ActiveRecovery(
@@ -353,7 +331,6 @@ final class SyncRecoveryCoordinator {
     }
 
     private func rejectInstalledAuthentication() async {
-        syncScheduler.currentOwnerTokenIdentifier = nil
         await authenticationClient.logout()
     }
 }

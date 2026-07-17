@@ -55,6 +55,16 @@ final class ConvexConfigurationTests: XCTestCase {
         XCTAssertTrue(firstClient === secondClient)
     }
 
+    @MainActor
+    func testConvexLogoutWrapperDoesNotSignOutItsClerkProvider() async throws {
+        let clerkProvider = StubClerkConvexAuthProvider()
+        let provider = ClerkRetainingConvexAuthProvider(clerkProvider: clerkProvider)
+
+        try await provider.logout()
+
+        XCTAssertEqual(clerkProvider.logoutCallCount, 0)
+    }
+
     func testAuthenticatedClientFactoryUsesClerkConvexProvider() throws {
         let factorySource = try sourceFileContents("Baros/Core/Sync/ConvexClientFactory.swift")
 
@@ -87,5 +97,26 @@ final class ConvexConfigurationTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         return try String(contentsOf: projectRootURL.appending(path: relativePath), encoding: .utf8)
+    }
+}
+
+@MainActor
+private final class StubClerkConvexAuthProvider: ClerkConvexAuthenticating {
+    private(set) var logoutCallCount = 0
+
+    func login(
+        onIdToken: @Sendable @escaping (String?) -> Void
+    ) async throws -> String {
+        "token"
+    }
+
+    func loginFromCache(
+        onIdToken: @Sendable @escaping (String?) -> Void
+    ) async throws -> String {
+        "token"
+    }
+
+    func logout() async throws {
+        logoutCallCount += 1
     }
 }

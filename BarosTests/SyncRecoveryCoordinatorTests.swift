@@ -71,7 +71,7 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         )
         XCTAssertFalse(shouldActivateMismatchedState)
         XCTAssertEqual(authenticationClient.logoutCallCount, 1)
-        XCTAssertNil(scheduler.currentOwnerTokenIdentifier)
+        XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, currentOwnerTokenIdentifier)
         let shouldActivateRecoveryState = await coordinator.shouldActivateAuthenticatedState(
             ownerTokenIdentifier: currentOwnerTokenIdentifier,
             sessionIdentifier: "session_b"
@@ -196,7 +196,7 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(authenticationClient.loginFromCacheCallCount, 1)
         XCTAssertEqual(authenticationClient.logoutCallCount, 1)
-        XCTAssertNil(scheduler.currentOwnerTokenIdentifier)
+        XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, "issuer|owner_b")
         XCTAssertEqual(scheduler.requestCount, 0)
         XCTAssertTrue(client.fetchRequests.isEmpty)
     }
@@ -579,6 +579,18 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
             hasActiveSession: hasActiveSession,
             currentSessionIdentifier: currentSessionIdentifier,
             expectedOwnerTokenIdentifier: expectedOwnerTokenIdentifier,
+            onRecoveredOwner: { ownerTokenIdentifier, trigger in
+                syncScheduler.authorizeCloudSync()
+                _ = syncScheduler.activateValidatedOwnerTokenIdentifier(ownerTokenIdentifier)
+                switch trigger {
+                case .startup:
+                    syncScheduler.requestSync()
+                case .appForeground:
+                    syncScheduler.requestSyncOnAppForeground()
+                case .manualRetry:
+                    syncScheduler.retrySync()
+                }
+            },
             pendingAuthenticatedStateLifetime: pendingAuthenticatedStateLifetime,
             now: now
         )
