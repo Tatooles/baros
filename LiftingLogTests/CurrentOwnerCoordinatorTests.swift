@@ -351,6 +351,24 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.finish()
     }
 
+    func testRestoreCachedOwnerUITestModeWithoutSubjectDoesNotRestoreAnOwner() throws {
+        let harness = try CurrentOwnerCoordinatorHarness(
+            clerkOwner: nil,
+            cachedOwner: ownerA,
+            schedulerMode: .unconfigured,
+            startupMode: .restoreCachedOwner(matchingSubject: nil)
+        )
+
+        harness.coordinator.start()
+
+        XCTAssertEqual(
+            harness.coordinator.state,
+            .resolving(ownerTokenIdentifier: nil)
+        )
+        XCTAssertNil(harness.syncScheduler.currentOwnerTokenIdentifier)
+        harness.finish()
+    }
+
     func testEarlyConvexUnauthenticatedStateWaitsForClerkBeforeTreatingItAsSignOut() async throws {
         let harness = try CurrentOwnerCoordinatorHarness(
             clerkOwner: nil,
@@ -439,11 +457,14 @@ private final class CurrentOwnerCoordinatorHarness {
     init(
         clerkOwner: String? = ownerA,
         sessionIdentifier: String = "session_a",
+        cachedOwner: String? = nil,
         schedulerMode: TestSchedulerMode = .configured,
         clerkWaitsUntilResumed: Bool = false,
         startupMode: CurrentOwnerCoordinator.StartupMode = .live
     ) throws {
         syncClient = FakeSyncClient()
+        let ownerStore = Self.makeOwnerStore()
+        ownerStore.ownerTokenIdentifier = cachedOwner
         switch schedulerMode {
         case .configured:
             let container = try SwiftDataTestSupport.makeInMemoryContainer()
@@ -451,11 +472,11 @@ private final class CurrentOwnerCoordinatorHarness {
             syncScheduler = SyncScheduler(
                 coordinator: SyncCoordinator(client: syncClient),
                 modelContext: container.mainContext,
-                lastKnownOwnerTokenStore: Self.makeOwnerStore()
+                lastKnownOwnerTokenStore: ownerStore
             )
         case .unconfigured:
             container = nil
-            syncScheduler = SyncScheduler(lastKnownOwnerTokenStore: Self.makeOwnerStore())
+            syncScheduler = SyncScheduler(lastKnownOwnerTokenStore: ownerStore)
         }
 
         clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
