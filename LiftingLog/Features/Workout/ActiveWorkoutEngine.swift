@@ -290,55 +290,44 @@ final class ActiveWorkoutEngine {
     func finishWorkout(
         _ session: WorkoutSession,
         ownerTokenIdentifier: String? = nil,
-        syncScheduler: SyncScheduler? = nil,
+        syncOutboxTransaction: SyncOutboxTransaction? = nil,
         context: ModelContext,
         now: Date = .now
     ) throws {
         let effectiveOwnerTokenIdentifier = session.syncOwnerTokenIdentifier ?? ownerTokenIdentifier
-        applyFinalWorkoutTitle(to: session)
-        session.syncOwnerTokenIdentifier = effectiveOwnerTokenIdentifier
-        session.status = .completed
-        session.endedAt = now
-        session.durationSeconds = max(0, Int(now.timeIntervalSince(session.startedAt)))
-        session.touch(now: now)
-        do {
-            let recorder = SyncOutboxRecorder()
-            try recorder.recordCreate(
-                entityKind: .workoutSession,
-                entityID: session.id,
-                ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
-                context: context,
-                now: now
-            )
-            for loggedExercise in session.sortedLoggedExercises {
-                try recorder.recordCreate(
-                    entityKind: .loggedExercise,
-                    entityID: loggedExercise.id,
-                    ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
-                    context: context,
-                    now: now
-                )
-                for set in loggedExercise.sortedSets {
-                    try recorder.recordCreate(
-                        entityKind: .loggedSet,
-                        entityID: set.id,
+        if let effectiveOwnerTokenIdentifier {
+            guard let syncOutboxTransaction else {
+                throw SyncOutboxTransactionError.currentOwnerMismatch
+            }
+            try syncOutboxTransaction.perform(
+                ownerTokenIdentifier: effectiveOwnerTokenIdentifier
+            ) { actions in
+                try actions.create(.loggedWorkout(session), now: now) { _ in
+                    applyWorkoutCompletion(
+                        to: session,
                         ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
-                        context: context,
                         now: now
                     )
                 }
+                // The children already exist locally; completing their parent makes them sync-eligible.
+                for loggedExercise in session.sortedLoggedExercises {
+                    try actions.create(.loggedExercise(loggedExercise), now: now) { _ in }
+                    for set in loggedExercise.sortedSets {
+                        try actions.create(.loggedSet(set), now: now) { _ in }
+                    }
+                }
             }
-            try context.save()
-        } catch {
-            context.rollback()
-            throw error
+        } else {
+            applyWorkoutCompletion(to: session, ownerTokenIdentifier: nil, now: now)
+            do {
+                try context.save()
+            } catch {
+                context.rollback()
+                throw error
+            }
         }
         if activeSessionID == session.id {
             activeSessionID = nil
-        }
-        if syncScheduler?.currentOwnerTokenIdentifier == effectiveOwnerTokenIdentifier,
-           effectiveOwnerTokenIdentifier != nil {
-            syncScheduler?.requestSync()
         }
     }
 
@@ -402,5 +391,18 @@ final class ActiveWorkoutEngine {
     private func applyFinalWorkoutTitle(to session: WorkoutSession) {
         let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
         session.title = trimmed.isEmpty ? "Workout" : trimmed
+    }
+
+    private func applyWorkoutCompletion(
+        to session: WorkoutSession,
+        ownerTokenIdentifier: String?,
+        now: Date
+    ) {
+        applyFinalWorkoutTitle(to: session)
+        session.syncOwnerTokenIdentifier = ownerTokenIdentifier
+        session.status = .completed
+        session.endedAt = now
+        session.durationSeconds = max(0, Int(now.timeIntervalSince(session.startedAt)))
+        session.touch(now: now)
     }
 }

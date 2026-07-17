@@ -5,6 +5,7 @@ struct CompletedWorkoutEditView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(SyncOutboxTransaction.self) private var syncOutboxTransaction
 
     let session: WorkoutSession
     let weightUnit: MeasurementUnit
@@ -447,13 +448,14 @@ struct CompletedWorkoutEditView: View {
         }
 
         do {
-            try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+            try WorkoutHistoryMutationService(
+                syncOutboxTransaction: syncOutboxTransaction
+            ).saveCompletedWorkoutEdit(
                 draft,
                 for: session,
                 ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
                 context: modelContext
             )
-            syncScheduler.requestSync()
             errorMessage = nil
             dismiss()
         } catch {

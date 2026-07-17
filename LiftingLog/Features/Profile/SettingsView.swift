@@ -5,6 +5,7 @@ import UIKit
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(SyncOutboxTransaction.self) private var syncOutboxTransaction
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     let settings: UserSettings
@@ -207,7 +208,11 @@ struct SettingsView: View {
             get: { settings.weightUnit },
             set: { unit in
                 do {
-                    try SettingsMutationService(syncScheduler: syncScheduler).updateWeightUnit(unit, settings: settings, context: modelContext)
+                    try SettingsMutationService(syncOutboxTransaction: syncOutboxTransaction).updateWeightUnit(
+                        unit,
+                        settings: settings,
+                        context: modelContext
+                    )
                     alert = nil
                 } catch {
                     modelContext.rollback()
@@ -222,7 +227,7 @@ struct SettingsView: View {
             get: { settings.defaultRestTimerSeconds },
             set: { seconds in
                 do {
-                    try SettingsMutationService(syncScheduler: syncScheduler).updateDefaultRestTimerSeconds(
+                    try SettingsMutationService(syncOutboxTransaction: syncOutboxTransaction).updateDefaultRestTimerSeconds(
                         seconds,
                         settings: settings,
                         context: modelContext

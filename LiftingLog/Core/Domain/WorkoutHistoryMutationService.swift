@@ -129,7 +129,11 @@ struct CompletedWorkoutEditSetDraft: Identifiable {
 
 @MainActor
 struct WorkoutHistoryMutationService {
-    private let recorder = SyncOutboxRecorder()
+    private let syncOutboxTransaction: SyncOutboxTransaction?
+
+    init(syncOutboxTransaction: SyncOutboxTransaction? = nil) {
+        self.syncOutboxTransaction = syncOutboxTransaction
+    }
 
     func saveCompletedWorkoutEdit(
         _ draft: CompletedWorkoutEditDraft,
@@ -138,16 +142,47 @@ struct WorkoutHistoryMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws {
-        try validateEditable(session, ownerTokenIdentifier: ownerTokenIdentifier)
+        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
+        try validateEditable(session, ownerTokenIdentifier: requestedOwner)
+
+        if let requestedOwner {
+            guard let syncOutboxTransaction else {
+                throw SyncOutboxTransactionError.currentOwnerMismatch
+            }
+            try syncOutboxTransaction.perform(ownerTokenIdentifier: requestedOwner) { actions in
+                _ = try applyCompletedWorkoutEdit(
+                    draft,
+                    to: session,
+                    ownerTokenIdentifier: requestedOwner,
+                    actions: actions,
+                    context: context,
+                    now: now
+                )
+            }
+        } else if try applyCompletedWorkoutEdit(
+            draft,
+            to: session,
+            ownerTokenIdentifier: nil,
+            actions: nil,
+            context: context,
+            now: now
+        ) {
+            try context.save()
+        }
+    }
+
+    private func applyCompletedWorkoutEdit(
+        _ draft: CompletedWorkoutEditDraft,
+        to session: WorkoutSession,
+        ownerTokenIdentifier: String?,
+        actions: SyncOutboxTransaction.Actions?,
+        context: ModelContext,
+        now: Date
+    ) throws -> Bool {
 
         var didChange = false
         var didChangeSessionFields = false
         var didChangeChildRecords = false
-        let shouldRecordOwnerlessOutbox = try shouldRecordOwnerlessOutbox(
-            for: session,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context
-        )
 
         let normalizedDurationSeconds = max(0, draft.durationSeconds)
         let willChangeSessionFields = session.title != draft.title ||
@@ -158,37 +193,27 @@ struct WorkoutHistoryMutationService {
             try claimOwnerlessWorkoutGraphIfNeeded(
                 session,
                 ownerTokenIdentifier: ownerTokenIdentifier,
+                actions: actions,
                 context: context,
                 now: now
             )
         }
 
-        if session.title != draft.title {
-            session.title = draft.title
+        if willChangeSessionFields {
+            try applyUpdate(.loggedWorkout(session), actions: actions, now: now) {
+                if session.title != draft.title {
+                    session.title = draft.title
+                }
+                if session.notes != draft.notes {
+                    session.notes = draft.notes
+                }
+                if session.effectiveDurationSeconds() != normalizedDurationSeconds {
+                    session.durationSeconds = normalizedDurationSeconds
+                    session.endedAt = session.startedAt.addingTimeInterval(TimeInterval(normalizedDurationSeconds))
+                }
+                session.updatedAt = now
+            }
             didChangeSessionFields = true
-        }
-
-        if session.notes != draft.notes {
-            session.notes = draft.notes
-            didChangeSessionFields = true
-        }
-
-        if session.effectiveDurationSeconds() != normalizedDurationSeconds {
-            session.durationSeconds = normalizedDurationSeconds
-            session.endedAt = session.startedAt.addingTimeInterval(TimeInterval(normalizedDurationSeconds))
-            didChangeSessionFields = true
-        }
-
-        if didChangeSessionFields {
-            session.updatedAt = now
-            try recordUpdateIfNeeded(
-                entityKind: .workoutSession,
-                entityID: session.id,
-                ownerTokenIdentifier: ownerTokenIdentifier,
-                shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
-                context: context,
-                now: now
-            )
             didChange = true
         }
 
@@ -219,36 +244,26 @@ struct WorkoutHistoryMutationService {
                     try claimOwnerlessWorkoutGraphIfNeeded(
                         session,
                         ownerTokenIdentifier: ownerTokenIdentifier,
+                        actions: actions,
                         context: context,
                         now: now
                     )
-                    set.markDeleted(now: now)
-                    try recordDeleteIfNeeded(
-                        entityKind: .loggedSet,
-                        entityID: set.id,
-                        ownerTokenIdentifier: ownerTokenIdentifier,
-                        shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
-                        context: context,
-                        now: now
-                    )
+                    try applyDelete(.loggedSet(set), actions: actions, now: now) {
+                        set.markDeleted(now: now)
+                    }
                     didChange = true
                     didChangeChildRecords = true
                 } else if hasChanges(setDraft, for: set) {
                     try claimOwnerlessWorkoutGraphIfNeeded(
                         session,
                         ownerTokenIdentifier: ownerTokenIdentifier,
+                        actions: actions,
                         context: context,
                         now: now
                     )
-                    _ = apply(setDraft, to: set, now: now)
-                    try recordUpdateIfNeeded(
-                        entityKind: .loggedSet,
-                        entityID: set.id,
-                        ownerTokenIdentifier: ownerTokenIdentifier,
-                        shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
-                        context: context,
-                        now: now
-                    )
+                    try applyUpdate(.loggedSet(set), actions: actions, now: now) {
+                        _ = apply(setDraft, to: set, now: now)
+                    }
                     didChange = true
                     didChangeChildRecords = true
                 }
@@ -258,14 +273,13 @@ struct WorkoutHistoryMutationService {
                 try claimOwnerlessWorkoutGraphIfNeeded(
                     session,
                     ownerTokenIdentifier: ownerTokenIdentifier,
+                    actions: actions,
                     context: context,
                     now: now
                 )
                 _ = try reindexVisibleSets(
                     for: loggedExercise,
-                    ownerTokenIdentifier: ownerTokenIdentifier,
-                    shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
-                    context: context,
+                    actions: actions,
                     now: now
                 )
                 didChange = true
@@ -277,6 +291,7 @@ struct WorkoutHistoryMutationService {
                 try claimOwnerlessWorkoutGraphIfNeeded(
                     session,
                     ownerTokenIdentifier: ownerTokenIdentifier,
+                    actions: actions,
                     context: context,
                     now: now
                 )
@@ -294,35 +309,22 @@ struct WorkoutHistoryMutationService {
                     updatedAt: now
                 )
                 set.loggedExercise = loggedExercise
-                context.insert(set)
-                loggedExercise.sets.append(set)
-                try recordCreateIfNeeded(
-                    entityKind: .loggedSet,
-                    entityID: set.id,
-                    ownerTokenIdentifier: ownerTokenIdentifier,
-                    shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
-                    context: context,
-                    now: now
-                )
+                try applyCreate(.loggedSet(set), actions: actions, now: now) {
+                    context.insert(set)
+                    loggedExercise.sets.append(set)
+                }
                 didChange = true
                 didChangeChildRecords = true
             }
         }
 
         if didChangeChildRecords && !didChangeSessionFields {
-            session.updatedAt = now
-            try recordUpdateIfNeeded(
-                entityKind: .workoutSession,
-                entityID: session.id,
-                ownerTokenIdentifier: ownerTokenIdentifier,
-                shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
-                context: context,
-                now: now
-            )
+            try applyUpdate(.loggedWorkout(session), actions: actions, now: now) {
+                session.updatedAt = now
+            }
         }
 
-        guard didChange else { return }
-        try context.save()
+        return didChange
     }
 
     func deleteWorkoutHistory(
@@ -331,39 +333,40 @@ struct WorkoutHistoryMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws {
-        try validateEditable(session, ownerTokenIdentifier: ownerTokenIdentifier)
+        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
+        try validateEditable(session, ownerTokenIdentifier: requestedOwner)
 
-        session.syncOwnerTokenIdentifier = ownerTokenIdentifier ?? session.syncOwnerTokenIdentifier
-        session.markDeletedCascade(now: now)
-        try recorder.recordDelete(
-            entityKind: .workoutSession,
-            entityID: session.id,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context,
-            now: now
-        )
+        guard let requestedOwner else {
+            session.markDeletedCascade(now: now)
+            try context.save()
+            return
+        }
 
-        for loggedExercise in session.loggedExercises {
-            try recorder.recordDelete(
-                entityKind: .loggedExercise,
-                entityID: loggedExercise.id,
-                ownerTokenIdentifier: ownerTokenIdentifier,
+        guard let syncOutboxTransaction else {
+            throw SyncOutboxTransactionError.currentOwnerMismatch
+        }
+        try syncOutboxTransaction.perform(ownerTokenIdentifier: requestedOwner) { actions in
+            try claimOwnerlessWorkoutGraphIfNeeded(
+                session,
+                ownerTokenIdentifier: requestedOwner,
+                actions: actions,
                 context: context,
                 now: now
             )
-
-            for set in loggedExercise.sets {
-                try recorder.recordDelete(
-                    entityKind: .loggedSet,
-                    entityID: set.id,
-                    ownerTokenIdentifier: ownerTokenIdentifier,
-                    context: context,
-                    now: now
-                )
+            try actions.delete(.loggedWorkout(session), now: now) { _ in
+                session.markDeleted(now: now)
+            }
+            for loggedExercise in session.loggedExercises {
+                try actions.delete(.loggedExercise(loggedExercise), now: now) { _ in
+                    loggedExercise.markDeleted(now: now)
+                }
+                for set in loggedExercise.sets {
+                    try actions.delete(.loggedSet(set), now: now) { _ in
+                        set.markDeleted(now: now)
+                    }
+                }
             }
         }
-
-        try context.save()
     }
 
     private func validateEditable(_ session: WorkoutSession, ownerTokenIdentifier: String?) throws {
@@ -379,10 +382,14 @@ struct WorkoutHistoryMutationService {
     private func claimOwnerlessWorkoutGraphIfNeeded(
         _ session: WorkoutSession,
         ownerTokenIdentifier: String?,
+        actions: SyncOutboxTransaction.Actions?,
         context: ModelContext,
         now: Date
     ) throws {
         guard let ownerTokenIdentifier, session.syncOwnerTokenIdentifier == nil else { return }
+        guard let actions else {
+            throw SyncOutboxTransactionError.currentOwnerMismatch
+        }
         guard try OwnerlessWorkoutGraphBootstrapPolicy.canBootstrap(
             ownerTokenIdentifier: ownerTokenIdentifier,
             context: context
@@ -390,30 +397,14 @@ struct WorkoutHistoryMutationService {
             throw WorkoutHistoryMutationError.ownerlessBootstrapBlocked
         }
 
-        session.syncOwnerTokenIdentifier = ownerTokenIdentifier
-        try recorder.recordCreate(
-            entityKind: .workoutSession,
-            entityID: session.id,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context,
-            now: now
-        )
+        try actions.create(.loggedWorkout(session), now: now) { _ in
+            session.syncOwnerTokenIdentifier = ownerTokenIdentifier
+        }
+        // Child ownership is inherited from the parent, so claiming the parent is their eligibility change.
         for loggedExercise in session.sortedLoggedExercises where !loggedExercise.isDeleted {
-            try recorder.recordCreate(
-                entityKind: .loggedExercise,
-                entityID: loggedExercise.id,
-                ownerTokenIdentifier: ownerTokenIdentifier,
-                context: context,
-                now: now
-            )
+            try actions.create(.loggedExercise(loggedExercise), now: now) { _ in }
             for set in loggedExercise.sortedSets where !set.isDeleted {
-                try recorder.recordCreate(
-                    entityKind: .loggedSet,
-                    entityID: set.id,
-                    ownerTokenIdentifier: ownerTokenIdentifier,
-                    context: context,
-                    now: now
-                )
+                try actions.create(.loggedSet(set), now: now) { _ in }
             }
         }
     }
@@ -474,115 +465,63 @@ struct WorkoutHistoryMutationService {
 
     private func reindexVisibleSets(
         for loggedExercise: LoggedExercise,
-        ownerTokenIdentifier: String?,
-        shouldRecordOwnerlessOutbox: Bool,
-        context: ModelContext,
+        actions: SyncOutboxTransaction.Actions?,
         now: Date
     ) throws -> Bool {
         var didChange = false
         for (index, set) in loggedExercise.sortedSets.enumerated() where set.orderIndex != index {
-            set.orderIndex = index
-            set.updatedAt = now
-            try recordUpdateIfNeeded(
-                entityKind: .loggedSet,
-                entityID: set.id,
-                ownerTokenIdentifier: ownerTokenIdentifier,
-                shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
-                context: context,
-                now: now
-            )
+            try applyUpdate(.loggedSet(set), actions: actions, now: now) {
+                set.orderIndex = index
+                set.updatedAt = now
+            }
             didChange = true
         }
         return didChange
     }
 
-    private func shouldRecordOwnerlessOutbox(
-        for session: WorkoutSession,
-        ownerTokenIdentifier: String?,
-        context: ModelContext
-    ) throws -> Bool {
-        guard ownerTokenIdentifier == nil, session.syncOwnerTokenIdentifier == nil else {
-            return false
-        }
-
-        return try hasActiveOwnerlessOutboxEntry(
-            entityKind: .workoutSession,
-            entityID: session.id,
-            context: context
-        )
-    }
-
-    private func hasActiveOwnerlessOutboxEntry(
-        entityKind: SyncEntityKind,
-        entityID: UUID,
-        context: ModelContext
-    ) throws -> Bool {
-        let entityKindRaw = entityKind.rawValue
-        let completedStatus = SyncOutboxStatus.completed.rawValue
-        return try context.fetch(FetchDescriptor<SyncOutboxEntry>(
-            predicate: #Predicate { entry in
-                entry.entityKindRaw == entityKindRaw
-                    && entry.entityID == entityID
-                    && entry.ownerTokenIdentifier == nil
-                    && entry.statusRaw != completedStatus
-                    && entry.operationRaw != ""
+    private func applyCreate(
+        _ target: SyncOutboxTransaction.Target,
+        actions: SyncOutboxTransaction.Actions?,
+        now: Date,
+        mutation: () throws -> Void
+    ) throws {
+        if let actions {
+            try actions.create(target, now: now) { _ in
+                try mutation()
             }
-        ))
-        .contains { $0.isActive && $0.operation != nil }
+        } else {
+            try mutation()
+        }
     }
 
-    private func recordCreateIfNeeded(
-        entityKind: SyncEntityKind,
-        entityID: UUID,
-        ownerTokenIdentifier: String?,
-        shouldRecordOwnerlessOutbox: Bool,
-        context: ModelContext,
-        now: Date
+    private func applyUpdate(
+        _ target: SyncOutboxTransaction.Target,
+        actions: SyncOutboxTransaction.Actions?,
+        now: Date,
+        mutation: () throws -> Void
     ) throws {
-        guard ownerTokenIdentifier != nil || shouldRecordOwnerlessOutbox else { return }
-        try recorder.recordCreate(
-            entityKind: entityKind,
-            entityID: entityID,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context,
-            now: now
-        )
+        if let actions {
+            try actions.update(target, now: now) { _ in
+                try mutation()
+            }
+        } else {
+            try mutation()
+        }
     }
 
-    private func recordUpdateIfNeeded(
-        entityKind: SyncEntityKind,
-        entityID: UUID,
-        ownerTokenIdentifier: String?,
-        shouldRecordOwnerlessOutbox: Bool,
-        context: ModelContext,
-        now: Date
+    private func applyDelete(
+        _ target: SyncOutboxTransaction.Target,
+        actions: SyncOutboxTransaction.Actions?,
+        now: Date,
+        mutation: () throws -> Void
     ) throws {
-        guard ownerTokenIdentifier != nil || shouldRecordOwnerlessOutbox else { return }
-        try recorder.recordUpdate(
-            entityKind: entityKind,
-            entityID: entityID,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context,
-            now: now
-        )
-    }
-
-    private func recordDeleteIfNeeded(
-        entityKind: SyncEntityKind,
-        entityID: UUID,
-        ownerTokenIdentifier: String?,
-        shouldRecordOwnerlessOutbox: Bool,
-        context: ModelContext,
-        now: Date
-    ) throws {
-        guard ownerTokenIdentifier != nil || shouldRecordOwnerlessOutbox else { return }
-        try recorder.recordDelete(
-            entityKind: entityKind,
-            entityID: entityID,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context,
-            now: now
-        )
+        if let actions {
+            try actions.delete(target, now: now) { _ in
+                try mutation()
+            }
+        } else {
+            try mutation()
+        }
     }
 
     private func isEmptyNewSet(_ draft: CompletedWorkoutEditSetDraft) -> Bool {

@@ -3,11 +3,10 @@ import SwiftData
 
 @MainActor
 struct SettingsMutationService {
-    private let recorder = SyncOutboxRecorder()
-    private let syncScheduler: SyncScheduler?
+    private let syncOutboxTransaction: SyncOutboxTransaction?
 
-    init(syncScheduler: SyncScheduler? = nil) {
-        self.syncScheduler = syncScheduler
+    init(syncOutboxTransaction: SyncOutboxTransaction? = nil) {
+        self.syncOutboxTransaction = syncOutboxTransaction
     }
 
     func updateWeightUnit(
@@ -18,23 +17,15 @@ struct SettingsMutationService {
         now: Date = .now
     ) throws {
         guard settings.weightUnit != newUnit else { return }
-        let effectiveOwner = try mutationOwner(
-            currentOwner: settings.syncOwnerTokenIdentifier,
-            requestedOwner: ownerTokenIdentifier ?? syncScheduler?.currentOwnerTokenIdentifier
-        )
-
-        settings.syncOwnerTokenIdentifier = effectiveOwner ?? settings.syncOwnerTokenIdentifier
-        settings.weightUnitRaw = newUnit.rawValue
-        settings.touch(now: now)
-        try recorder.recordUpdate(
-            entityKind: .userSettings,
-            entityID: settings.id,
-            ownerTokenIdentifier: effectiveOwner,
+        try performUpdate(
+            settings: settings,
+            ownerTokenIdentifier: ownerTokenIdentifier,
             context: context,
             now: now
-        )
-        try context.save()
-        syncScheduler?.requestSync()
+        ) {
+            settings.weightUnitRaw = newUnit.rawValue
+            settings.touch(now: now)
+        }
     }
 
     func updateDefaultRestTimerSeconds(
@@ -45,23 +36,49 @@ struct SettingsMutationService {
         now: Date = .now
     ) throws {
         guard settings.defaultRestTimerSeconds != seconds else { return }
-        let effectiveOwner = try mutationOwner(
-            currentOwner: settings.syncOwnerTokenIdentifier,
-            requestedOwner: ownerTokenIdentifier ?? syncScheduler?.currentOwnerTokenIdentifier
-        )
-
-        settings.syncOwnerTokenIdentifier = effectiveOwner ?? settings.syncOwnerTokenIdentifier
-        settings.defaultRestTimerSeconds = seconds
-        settings.touch(now: now)
-        try recorder.recordUpdate(
-            entityKind: .userSettings,
-            entityID: settings.id,
-            ownerTokenIdentifier: effectiveOwner,
+        try performUpdate(
+            settings: settings,
+            ownerTokenIdentifier: ownerTokenIdentifier,
             context: context,
             now: now
-        )
-        try context.save()
-        syncScheduler?.requestSync()
+        ) {
+            settings.defaultRestTimerSeconds = seconds
+            settings.touch(now: now)
+        }
+    }
+
+    private func performUpdate(
+        settings: UserSettings,
+        ownerTokenIdentifier: String?,
+        context: ModelContext,
+        now: Date,
+        mutation: () -> Void
+    ) throws {
+        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
+
+        guard let requestedOwner else {
+            guard settings.syncOwnerTokenIdentifier == nil else {
+                throw SyncMutationOwnershipError.ownerMismatch
+            }
+            mutation()
+            try context.save()
+            return
+        }
+
+        guard let syncOutboxTransaction else {
+            throw SyncOutboxTransactionError.currentOwnerMismatch
+        }
+
+        try syncOutboxTransaction.perform(ownerTokenIdentifier: requestedOwner) { actions in
+            try actions.update(.userSettings(settings), now: now) { _ in
+                let effectiveOwner = try mutationOwner(
+                    currentOwner: settings.syncOwnerTokenIdentifier,
+                    requestedOwner: requestedOwner
+                )
+                settings.syncOwnerTokenIdentifier = effectiveOwner
+                mutation()
+            }
+        }
     }
 
     private func mutationOwner(currentOwner: String?, requestedOwner: String?) throws -> String? {

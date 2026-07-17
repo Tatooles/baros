@@ -199,16 +199,29 @@ final class Exercise: Identifiable {
 
     @discardableResult
     func archiveOrDelete(context: ModelContext, now: Date = .now) throws -> ExerciseRemovalOutcome {
+        let outcome = try removalOutcome(context: context)
+        applyRemoval(outcome, now: now)
+        return outcome
+    }
+
+    func removalOutcome(context: ModelContext) throws -> ExerciseRemovalOutcome {
         let exerciseID = id
         let hasLoggedHistory = try context.fetch(FetchDescriptor<LoggedExercise>())
             .contains { $0.exercise?.id == exerciseID }
 
-        if isSeeded || hasLoggedHistory {
-            archive(now: now)
-            return .archived
+        return if isSeeded || hasLoggedHistory {
+            .archived
         } else {
+            .deleted
+        }
+    }
+
+    func applyRemoval(_ outcome: ExerciseRemovalOutcome, now: Date = .now) {
+        switch outcome {
+        case .archived:
+            archive(now: now)
+        case .deleted:
             markDeleted(now: now)
-            return .deleted
         }
     }
 

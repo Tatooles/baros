@@ -2,6 +2,20 @@ import XCTest
 @testable import LiftingLog
 
 final class AppInitializationOrderTests: XCTestCase {
+    func testAppCreatesAndInjectsOneSyncOutboxTransaction() throws {
+        let appSource = try sourceFileContents("LiftingLog/App/LiftingLogApp.swift")
+
+        XCTAssertEqual(
+            appSource.components(separatedBy: "SyncOutboxTransaction(").count - 1,
+            1,
+            "The app should construct one shared SyncOutboxTransaction."
+        )
+        XCTAssertTrue(
+            appSource.contains("@State private var syncOutboxTransaction: SyncOutboxTransaction")
+        )
+        XCTAssertTrue(appSource.contains(".environment(syncOutboxTransaction)"))
+    }
+
     func testConvexClientIsInitializedAfterClerkConfiguration() throws {
         let appSource = try sourceFileContents("LiftingLog/App/LiftingLogApp.swift")
 

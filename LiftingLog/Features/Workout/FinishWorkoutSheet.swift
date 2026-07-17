@@ -5,6 +5,7 @@ struct FinishWorkoutSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(SyncOutboxTransaction.self) private var syncOutboxTransaction
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
     @State private var showsDiscardConfirmation = false
@@ -75,7 +76,7 @@ struct FinishWorkoutSheet: View {
                     try engine.finishWorkout(
                         session,
                         ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
-                        syncScheduler: syncScheduler,
+                        syncOutboxTransaction: syncOutboxTransaction,
                         context: modelContext
                     )
                     actionError = nil

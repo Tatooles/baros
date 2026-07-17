@@ -13,6 +13,7 @@ struct LiftingLogApp: App {
     @State private var navigationState = AppNavigationState()
     @State private var activeWorkoutEngine = ActiveWorkoutEngine()
     @State private var syncScheduler: SyncScheduler
+    @State private var syncOutboxTransaction: SyncOutboxTransaction
     @State private var currentOwnerCoordinator: CurrentOwnerCoordinator
 
     init() {
@@ -75,6 +76,12 @@ struct LiftingLogApp: App {
                 break
             }
             _syncScheduler = State(initialValue: syncScheduler)
+            _syncOutboxTransaction = State(
+                initialValue: SyncOutboxTransaction(
+                    modelContext: container.mainContext,
+                    syncScheduler: syncScheduler
+                )
+            )
             _currentOwnerCoordinator = State(
                 initialValue: CurrentOwnerCoordinator(
                     authenticationClient: ConvexCurrentOwnerAuthenticationClient(
@@ -99,6 +106,7 @@ struct LiftingLogApp: App {
             .modelContainer(modelContainer)
             .environment(Clerk.shared)
             .environment(syncScheduler)
+            .environment(syncOutboxTransaction)
             .environment(
                 \.syncRecoveryAction,
                 SyncRecoveryAction { trigger in

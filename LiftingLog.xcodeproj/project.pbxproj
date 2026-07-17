@@ -14,11 +14,13 @@
 		066E9CB4123D81368ECC56E3 /* ExerciseHistoryRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = D09A3AC7FFA503914D1529BC /* ExerciseHistoryRoute.swift */; };
 		0A16BCEA0918ECF4F2E63705 /* MeasurementUnit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AE73DED854FC564CB038119 /* MeasurementUnit.swift */; };
 		0A987D0FF2EE82CC20EBF47A /* UserSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC20AF64287C9C9AE3ED361 /* UserSettings.swift */; };
+		0AD8982F7054389B43DC1215 /* SyncOutboxTransactionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CF127604BC2A8101DEC31C9 /* SyncOutboxTransactionTests.swift */; };
 		0BDAE5E66F3B7D5272C4EE37 /* PrivacyDataSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A61D51390C57E55CBDD3FFB /* PrivacyDataSection.swift */; };
 		0C661C6A22B2CAC892CD88C3 /* ClerkJWTIdentityResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E308754BFB49270FFC0B2A2 /* ClerkJWTIdentityResolver.swift */; };
 		0D8CF8607D07F185271C052B /* UITestFixtureSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C731DA20E3AFDB50E247AD /* UITestFixtureSeeder.swift */; };
 		0E9D2FFCD204871A65B6F442 /* SetKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = E36708D5B6F831FF8F358CD1 /* SetKind.swift */; };
 		0FA5C398E41A7B2F65956D13 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF5FB0831E995AE3CE166AC /* ActivityView.swift */; };
+		158F99B4660A1E3E9686952B /* SyncOutboxTransaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = B899B86AAFFE998C8478FC32 /* SyncOutboxTransaction.swift */; };
 		187EDF4150FC85F6F3ADA8B1 /* ProfileAccountCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6177A9A295ACCC9BDC5560A6 /* ProfileAccountCard.swift */; };
 		1AAC39D84C5C40FD6A380A06 /* RPEChipRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECCEC90E77EA3890CA779E25 /* RPEChipRow.swift */; };
 		1E77041F190062BF15A351DE /* ClerkKit in Frameworks */ = {isa = PBXBuildFile; productRef = D2A34A4495B8AADE381320A4 /* ClerkKit */; };
@@ -260,6 +262,7 @@
 		893947730151ABA8C00DCFEF /* SyncConflictResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncConflictResolverTests.swift; sourceTree = "<group>"; };
 		8B8805837A29F53CAFABF4B1 /* WorkoutTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutTemplate.swift; sourceTree = "<group>"; };
 		8B9C984D9C69EC48ACC1EE19 /* ExerciseMutationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseMutationService.swift; sourceTree = "<group>"; };
+		8CF127604BC2A8101DEC31C9 /* SyncOutboxTransactionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxTransactionTests.swift; sourceTree = "<group>"; };
 		8E5333E76D8ABFABF0E8FB2D /* SyncOutboxRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxRecorder.swift; sourceTree = "<group>"; };
 		8F3A4C97B8DD77B49241EA51 /* ReorderExercisesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorderExercisesSheet.swift; sourceTree = "<group>"; };
 		907D701D12B60C22962A18E0 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
@@ -289,6 +292,7 @@
 		B1685B10552EB34C72044415 /* SyncStatusDisplayStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStatusDisplayStateTests.swift; sourceTree = "<group>"; };
 		B21471B3B90BF0ED3B223ECE /* SyncRecoveryCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncRecoveryCoordinatorTests.swift; sourceTree = "<group>"; };
 		B56F2E9441085CD8E6678F46 /* ExerciseHistorySessionGroupCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistorySessionGroupCard.swift; sourceTree = "<group>"; };
+		B899B86AAFFE998C8478FC32 /* SyncOutboxTransaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxTransaction.swift; sourceTree = "<group>"; };
 		BAF6EA77302603FC120740B7 /* SyncDiagnosticsSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncDiagnosticsSnapshotTests.swift; sourceTree = "<group>"; };
 		C01C01CDEA607FF076F78219 /* SwipeToDeleteRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDeleteRow.swift; sourceTree = "<group>"; };
 		C37735BFE84A31020F06E74E /* WorkoutDataExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutDataExportService.swift; sourceTree = "<group>"; };
@@ -473,6 +477,7 @@
 				E8C3106AF3F418992CD41685 /* SyncOutboxEntryTests.swift */,
 				A7F732960ACFFD3709931AFB /* SyncOutboxIntegrationTests.swift */,
 				006C4ECFE2CEF0CE360E0CF9 /* SyncOutboxRecorderTests.swift */,
+				8CF127604BC2A8101DEC31C9 /* SyncOutboxTransactionTests.swift */,
 				3CEDAD24A41C0E4B07814F5F /* SyncPayloadMappingTests.swift */,
 				B21471B3B90BF0ED3B223ECE /* SyncRecoveryCoordinatorTests.swift */,
 				08A4A2A84733A535346B2A19 /* SyncSchedulerStatusTests.swift */,
@@ -501,6 +506,7 @@
 				556B8CEDBF71BD51E38F3B96 /* SyncOutboxEntry.swift */,
 				8E5333E76D8ABFABF0E8FB2D /* SyncOutboxRecorder.swift */,
 				0ABC5EBEFD6E880FE05FFB40 /* SyncOutboxStatus.swift */,
+				B899B86AAFFE998C8478FC32 /* SyncOutboxTransaction.swift */,
 				C70713610688DB76FC59D749 /* SyncPayloads.swift */,
 				24462ABE971A47B842E7D813 /* SyncRecoveryAction.swift */,
 				DC0F355CFF5A846357040398 /* SyncRecoveryCoordinator.swift */,
@@ -879,6 +885,7 @@
 				8EC876F7FFE3C1BC17803281 /* SyncOutboxEntryTests.swift in Sources */,
 				AB4F2E874EF076CD6CD30A77 /* SyncOutboxIntegrationTests.swift in Sources */,
 				238A99BF71A6F50B11B3A122 /* SyncOutboxRecorderTests.swift in Sources */,
+				0AD8982F7054389B43DC1215 /* SyncOutboxTransactionTests.swift in Sources */,
 				2F4A7358434D553A710DD94E /* SyncPayloadMappingTests.swift in Sources */,
 				20B27CA3A3760A6F0136D0ED /* SyncRecoveryCoordinatorTests.swift in Sources */,
 				F3CFE0CC24C8FBEDBDF2AD27 /* SyncSchedulerStatusTests.swift in Sources */,
@@ -975,6 +982,7 @@
 				9F1ACF18D163FF02449FCFFC /* SyncOutboxEntry.swift in Sources */,
 				000DE952D00F45696FC2F332 /* SyncOutboxRecorder.swift in Sources */,
 				3636CE56994A77E23A759B50 /* SyncOutboxStatus.swift in Sources */,
+				158F99B4660A1E3E9686952B /* SyncOutboxTransaction.swift in Sources */,
 				4DE5CFCB935600A512E5944D /* SyncPayloads.swift in Sources */,
 				D02304EA47DF979A9EAB5EE1 /* SyncRecoveryAction.swift in Sources */,
 				BFB94C9288391B9072590C8B /* SyncRecoveryCoordinator.swift in Sources */,
