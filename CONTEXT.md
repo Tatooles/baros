@@ -21,3 +21,19 @@ _Avoid_: Unowned data, hidden owner data
 **Active Workout**:
 A workout in progress whose exercises and sets remain editable until the workout is finished or discarded.
 _Avoid_: Workout draft, live session
+
+**Exercise Library Entry**:
+A reusable exercise definition available when building or recording a workout.
+_Avoid_: Exercise, exercise library
+
+**Logged Workout**:
+A finished workout that forms part of the user's training history.
+_Avoid_: Completed workout, workout session, past session
+
+**Logged Exercise**:
+An exercise performed as part of a Logged Workout, including its workout-specific order and details.
+_Avoid_: Exercise, exercise entry
+
+**Logged Set**:
+An individual set recorded as part of a Logged Exercise.
+_Avoid_: Set, exercise set
