@@ -2,243 +2,129 @@ import SwiftData
 import XCTest
 @testable import LiftingLog
 
+private let ownerA = "issuer|owner_a"
+private let ownerB = "issuer|owner_b"
+
 @MainActor
 final class CurrentOwnerCoordinatorTests: XCTestCase {
     func testStartWithoutActiveClerkSessionEntersLocalOnlyMode() async throws {
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(hasActiveSession: false)
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let syncScheduler = SyncScheduler(lastKnownOwnerTokenStore: makeOwnerStore())
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
+        let harness = try CurrentOwnerCoordinatorHarness(
+            clerkOwner: nil,
+            schedulerMode: .unconfigured
         )
 
-        coordinator.start()
-        try await waitUntil { coordinator.state == .localOnly }
+        harness.coordinator.start()
+        try await waitUntil { harness.coordinator.state == .localOnly }
 
-        XCTAssertNil(syncScheduler.currentOwnerTokenIdentifier)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertNil(harness.syncScheduler.currentOwnerTokenIdentifier)
+        harness.finish()
     }
 
     func testRepeatedStartOnlyObservesAndRecoversAuthenticationOnce() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(
-                hasActiveSession: true,
-                sessionIdentifier: "session_a",
-                ownerTokenIdentifier: ownerTokenIdentifier
-            )
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: SyncScheduler(lastKnownOwnerTokenStore: makeOwnerStore()),
-            clerkSessionProvider: clerkSessionProvider
+        let harness = try CurrentOwnerCoordinatorHarness(
+            schedulerMode: .unconfigured
         )
 
-        coordinator.start()
-        coordinator.start()
-        coordinator.start()
+        harness.coordinator.start()
+        harness.coordinator.start()
+        harness.coordinator.start()
         try await waitUntil {
-            authenticationClient.observeAuthenticationStatesCallCount == 1
-                && authenticationClient.loginFromCacheCallCount == 1
+            harness.authenticationClient.observeAuthenticationStatesCallCount == 1
+                && harness.authenticationClient.loginFromCacheCallCount == 1
         }
 
-        XCTAssertEqual(authenticationClient.observeAuthenticationStatesCallCount, 1)
-        XCTAssertEqual(authenticationClient.loginFromCacheCallCount, 1)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertEqual(harness.authenticationClient.observeAuthenticationStatesCallCount, 1)
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 1)
+        harness.finish()
     }
 
     func testStartWithActiveClerkSessionShowsOwnerDataWhileConvexAuthenticationResolves() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let syncClient = FakeSyncClient()
-        let syncScheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: syncClient),
-            modelContext: container.mainContext,
-            lastKnownOwnerTokenStore: makeOwnerStore()
-        )
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(
-                hasActiveSession: true,
-                sessionIdentifier: "session_a",
-                ownerTokenIdentifier: ownerTokenIdentifier
-            )
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
-        )
+        let harness = try CurrentOwnerCoordinatorHarness()
 
-        coordinator.start()
+        harness.coordinator.start()
         try await waitUntil {
-            coordinator.state == .resolving(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
         }
-        syncScheduler.requestSync()
+        harness.syncScheduler.requestSync()
         try await Task.sleep(nanoseconds: 50_000_000)
 
-        XCTAssertEqual(syncScheduler.currentOwnerTokenIdentifier, ownerTokenIdentifier)
+        XCTAssertEqual(harness.syncScheduler.currentOwnerTokenIdentifier, ownerA)
         XCTAssertTrue(
-            syncClient.fetchRequests.isEmpty,
+            harness.syncClient.fetchRequests.isEmpty,
             "Local owner access must not authorize cloud sync while Convex authentication is unresolved."
         )
-        authenticationClient.finishAuthenticationStates()
+        harness.finish()
     }
 
     func testMatchingConvexAuthenticationActivatesCloudSyncForTheClerkOwner() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let syncClient = FakeSyncClient()
-        let syncScheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: syncClient),
-            modelContext: container.mainContext,
-            lastKnownOwnerTokenStore: makeOwnerStore()
-        )
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(
-                hasActiveSession: true,
-                sessionIdentifier: "session_a",
-                ownerTokenIdentifier: ownerTokenIdentifier
-            )
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
-        )
+        let harness = try CurrentOwnerCoordinatorHarness()
 
-        coordinator.start()
+        harness.coordinator.start()
         try await waitUntil {
-            coordinator.state == .resolving(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
         }
-        authenticationClient.sendAuthenticationState(
-            .authenticated(token: makeJWT(issuer: "issuer", subject: "owner_a"))
-        )
+        harness.sendAuthenticated(as: ownerA)
         try await waitUntil {
-            coordinator.state == .active(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
         }
-        try await waitUntil { syncScheduler.lastSyncedAt != nil }
+        try await waitUntil { harness.syncScheduler.lastSyncedAt != nil }
 
-        XCTAssertEqual(syncScheduler.currentOwnerTokenIdentifier, ownerTokenIdentifier)
-        XCTAssertEqual(syncScheduler.requestCount, 1)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertEqual(harness.syncScheduler.currentOwnerTokenIdentifier, ownerA)
+        XCTAssertEqual(harness.syncScheduler.requestCount, 1)
+        harness.finish()
     }
 
     func testMismatchedConvexAuthenticationKeepsClerkOwnerVisibleAndPausesSync() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let syncClient = FakeSyncClient()
-        let syncScheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: syncClient),
-            modelContext: container.mainContext,
-            lastKnownOwnerTokenStore: makeOwnerStore()
-        )
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(
-                hasActiveSession: true,
-                sessionIdentifier: "session_a",
-                ownerTokenIdentifier: ownerTokenIdentifier
-            )
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
-        )
+        let harness = try CurrentOwnerCoordinatorHarness()
 
-        coordinator.start()
+        harness.coordinator.start()
         try await waitUntil {
-            coordinator.state == .resolving(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
         }
-        authenticationClient.sendAuthenticationState(
-            .authenticated(token: makeJWT(issuer: "issuer", subject: "owner_b"))
-        )
-        try await waitUntil { authenticationClient.logoutCallCount == 1 }
-        syncScheduler.requestSync()
+        harness.sendAuthenticated(as: ownerB)
+        try await waitUntil { harness.authenticationClient.logoutCallCount == 1 }
+        harness.syncScheduler.requestSync()
         try await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(
-            coordinator.state,
-            .resolving(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state,
+            .resolving(ownerTokenIdentifier: ownerA)
         )
-        XCTAssertEqual(syncScheduler.currentOwnerTokenIdentifier, ownerTokenIdentifier)
-        XCTAssertTrue(syncClient.fetchRequests.isEmpty)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertEqual(harness.syncScheduler.currentOwnerTokenIdentifier, ownerA)
+        XCTAssertTrue(harness.syncClient.fetchRequests.isEmpty)
+        harness.finish()
     }
 
     func testMismatchedConvexAuthenticationMovesAnActiveOwnerBackToResolving() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let syncScheduler = SyncScheduler(lastKnownOwnerTokenStore: makeOwnerStore())
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(
-                hasActiveSession: true,
-                sessionIdentifier: "session_a",
-                ownerTokenIdentifier: ownerTokenIdentifier
-            )
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
+        let harness = try CurrentOwnerCoordinatorHarness(
+            schedulerMode: .unconfigured
         )
 
-        coordinator.start()
-        try await waitUntil { authenticationClient.loginFromCacheCallCount == 1 }
-        authenticationClient.sendAuthenticationState(
-            .authenticated(token: makeJWT(issuer: "issuer", subject: "owner_a"))
-        )
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
         try await waitUntil {
-            coordinator.state == .active(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
         }
 
-        authenticationClient.sendAuthenticationState(
-            .authenticated(token: makeJWT(issuer: "issuer", subject: "owner_b"))
-        )
-        try await waitUntil { authenticationClient.logoutCallCount == 1 }
+        harness.sendAuthenticated(as: ownerB)
+        try await waitUntil { harness.authenticationClient.logoutCallCount == 1 }
 
         XCTAssertEqual(
-            coordinator.state,
-            .resolving(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state,
+            .resolving(ownerTokenIdentifier: ownerA)
         )
-        XCTAssertEqual(syncScheduler.currentOwnerTokenIdentifier, ownerTokenIdentifier)
-        XCTAssertFalse(syncScheduler.isCloudSyncAuthorized)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertEqual(harness.syncScheduler.currentOwnerTokenIdentifier, ownerA)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
     }
 
     func testOfflineOwnerEditStaysOwnedAndQueuedWhileConvexAuthenticationIsUnresolved() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let syncClient = FakeSyncClient()
-        let syncScheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: syncClient),
-            modelContext: context,
-            lastKnownOwnerTokenStore: makeOwnerStore()
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: TestCurrentOwnerClerkSessionProvider(
-                state: .init(
-                    hasActiveSession: true,
-                    sessionIdentifier: "session_a",
-                    ownerTokenIdentifier: ownerTokenIdentifier
-                )
-            )
-        )
+        let harness = try CurrentOwnerCoordinatorHarness()
 
-        coordinator.start()
+        harness.coordinator.start()
         try await waitUntil {
-            coordinator.state == .resolving(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
         }
         let workout = WorkoutSession(
             title: "Edited offline",
@@ -246,86 +132,61 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
             endedAt: Date(timeIntervalSince1970: 200),
             status: .completed,
             source: .blank,
-            syncOwnerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            syncOwnerTokenIdentifier: harness.syncScheduler.currentOwnerTokenIdentifier
         )
-        context.insert(workout)
+        harness.context.insert(workout)
         try SyncOutboxRecorder().recordCreate(
             entityKind: .workoutSession,
             entityID: workout.id,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
-            context: context,
+            ownerTokenIdentifier: harness.syncScheduler.currentOwnerTokenIdentifier,
+            context: harness.context,
             now: Date(timeIntervalSince1970: 300)
         )
-        try context.save()
-        syncScheduler.requestSync()
+        try harness.context.save()
+        harness.syncScheduler.requestSync()
         try await Task.sleep(nanoseconds: 50_000_000)
 
         let outboxEntry = try XCTUnwrap(
-            context.fetch(FetchDescriptor<SyncOutboxEntry>()).first {
+            harness.context.fetch(FetchDescriptor<SyncOutboxEntry>()).first {
                 $0.entityID == workout.id
             }
         )
-        XCTAssertEqual(workout.syncOwnerTokenIdentifier, ownerTokenIdentifier)
-        XCTAssertEqual(outboxEntry.ownerTokenIdentifier, ownerTokenIdentifier)
+        XCTAssertEqual(workout.syncOwnerTokenIdentifier, ownerA)
+        XCTAssertEqual(outboxEntry.ownerTokenIdentifier, ownerA)
         XCTAssertEqual(outboxEntry.status, .pending)
-        XCTAssertTrue(syncClient.fetchRequests.isEmpty)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertTrue(harness.syncClient.fetchRequests.isEmpty)
+        harness.finish()
     }
 
     func testClerkAccountSwitchHidesThePreviousOwnerBeforeConvexAuthenticationResolves() async throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let syncClient = FakeSyncClient()
-        let syncScheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: syncClient),
-            modelContext: container.mainContext,
-            lastKnownOwnerTokenStore: makeOwnerStore()
-        )
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(
-                hasActiveSession: true,
-                sessionIdentifier: "session_a",
-                ownerTokenIdentifier: "issuer|owner_a"
-            )
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
-        )
+        let harness = try CurrentOwnerCoordinatorHarness()
 
-        coordinator.start()
+        harness.coordinator.start()
         try await waitUntil {
-            coordinator.state == .resolving(ownerTokenIdentifier: "issuer|owner_a")
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
         }
-        clerkSessionProvider.state = .init(
-            hasActiveSession: true,
-            sessionIdentifier: "session_b",
-            ownerTokenIdentifier: "issuer|owner_b"
-        )
-        authenticationClient.sendAuthenticationState(.loading)
+        harness.setClerkOwner(ownerB, sessionIdentifier: "session_b")
+        harness.authenticationClient.sendAuthenticationState(.loading)
         try await waitUntil {
-            coordinator.state == .resolving(ownerTokenIdentifier: "issuer|owner_b")
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerB)
         }
-        syncScheduler.requestSync()
+        harness.syncScheduler.requestSync()
         try await Task.sleep(nanoseconds: 50_000_000)
 
-        XCTAssertEqual(syncScheduler.currentOwnerTokenIdentifier, "issuer|owner_b")
-        XCTAssertTrue(syncClient.fetchRequests.isEmpty)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertEqual(harness.syncScheduler.currentOwnerTokenIdentifier, ownerB)
+        XCTAssertTrue(harness.syncClient.fetchRequests.isEmpty)
+        harness.finish()
     }
 
     func testConfirmedSignOutHidesOwnedDataWithoutDeletingIt() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
+        let harness = try CurrentOwnerCoordinatorHarness()
         let workout = WorkoutSession(
             title: "Kept on device",
             startedAt: Date(timeIntervalSince1970: 100),
             endedAt: Date(timeIntervalSince1970: 200),
             status: .completed,
             source: .blank,
-            syncOwnerTokenIdentifier: ownerTokenIdentifier
+            syncOwnerTokenIdentifier: ownerA
         )
         let unclaimedWorkout = WorkoutSession(
             title: "Still available locally",
@@ -334,220 +195,117 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
             status: .completed,
             source: .blank
         )
-        context.insert(workout)
-        context.insert(unclaimedWorkout)
-        try context.save()
-        let syncClient = FakeSyncClient()
-        let syncScheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: syncClient),
-            modelContext: context,
-            lastKnownOwnerTokenStore: makeOwnerStore()
-        )
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(
-                hasActiveSession: true,
-                sessionIdentifier: "session_a",
-                ownerTokenIdentifier: ownerTokenIdentifier
-            )
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
-        )
+        harness.context.insert(workout)
+        harness.context.insert(unclaimedWorkout)
+        try harness.context.save()
 
-        coordinator.start()
+        harness.coordinator.start()
         try await waitUntil {
-            coordinator.state == .resolving(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
         }
-        clerkSessionProvider.state = .init(hasActiveSession: false)
-        authenticationClient.sendAuthenticationState(.unauthenticated)
-        try await waitUntil { coordinator.state == .localOnly }
-        syncScheduler.requestSync()
+        harness.setClerkOwner(nil)
+        harness.authenticationClient.sendAuthenticationState(.unauthenticated)
+        try await waitUntil { harness.coordinator.state == .localOnly }
+        harness.syncScheduler.requestSync()
         try await Task.sleep(nanoseconds: 50_000_000)
 
-        XCTAssertNil(syncScheduler.currentOwnerTokenIdentifier)
-        XCTAssertFalse(syncScheduler.isCloudSyncAuthorized)
+        XCTAssertNil(harness.syncScheduler.currentOwnerTokenIdentifier)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
         XCTAssertNotNil(
-            try context.fetch(FetchDescriptor<WorkoutSession>()).first { $0.id == workout.id },
+            try harness.context.fetch(FetchDescriptor<WorkoutSession>()).first { $0.id == workout.id },
             "Signing out changes visibility; account deletion is the only flow that removes stored owner data."
         )
         let retainedUnclaimedWorkout = try XCTUnwrap(
-            context.fetch(FetchDescriptor<WorkoutSession>()).first {
+            harness.context.fetch(FetchDescriptor<WorkoutSession>()).first {
                 $0.id == unclaimedWorkout.id
             }
         )
         XCTAssertNil(retainedUnclaimedWorkout.syncOwnerTokenIdentifier)
-        XCTAssertTrue(syncClient.fetchRequests.isEmpty)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertTrue(harness.syncClient.fetchRequests.isEmpty)
+        harness.finish()
     }
 
     func testStartupRecoversConvexAuthenticationForARestoredClerkSession() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let syncClient = FakeSyncClient()
-        let syncScheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: syncClient),
-            modelContext: container.mainContext,
-            lastKnownOwnerTokenStore: makeOwnerStore()
-        )
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(
-                hasActiveSession: true,
-                sessionIdentifier: "session_a",
-                ownerTokenIdentifier: ownerTokenIdentifier
-            )
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient(
-            loginResult: .success(makeJWT(issuer: "issuer", subject: "owner_a"))
-        )
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
-        )
+        let harness = try CurrentOwnerCoordinatorHarness()
+        harness.succeedLogin(as: ownerA)
 
-        coordinator.start()
+        harness.coordinator.start()
         try await waitUntil {
-            coordinator.state == .active(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
         }
-        try await waitUntil { syncScheduler.lastSyncedAt != nil }
+        try await waitUntil { harness.syncScheduler.lastSyncedAt != nil }
 
-        XCTAssertEqual(authenticationClient.loginFromCacheCallCount, 1)
-        XCTAssertEqual(syncScheduler.requestCount, 1)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 1)
+        XCTAssertEqual(harness.syncScheduler.requestCount, 1)
+        harness.finish()
     }
 
     func testManualRetryRecoversAfterStartupAuthenticationFails() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let syncScheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: FakeSyncClient()),
-            modelContext: container.mainContext,
-            lastKnownOwnerTokenStore: makeOwnerStore()
-        )
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(
-                hasActiveSession: true,
-                sessionIdentifier: "session_a",
-                ownerTokenIdentifier: ownerTokenIdentifier
-            )
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
-        )
+        let harness = try CurrentOwnerCoordinatorHarness()
 
-        coordinator.start()
-        try await waitUntil { authenticationClient.loginFromCacheCallCount == 1 }
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
         XCTAssertEqual(
-            coordinator.state,
-            .resolving(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state,
+            .resolving(ownerTokenIdentifier: ownerA)
         )
 
-        authenticationClient.loginResult = .success(
-            makeJWT(issuer: "issuer", subject: "owner_a")
-        )
-        coordinator.retrySync()
+        harness.succeedLogin(as: ownerA)
+        harness.coordinator.retrySync()
         try await waitUntil {
-            coordinator.state == .active(ownerTokenIdentifier: ownerTokenIdentifier)
-                && syncScheduler.lastSyncedAt != nil
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && harness.syncScheduler.lastSyncedAt != nil
         }
 
-        XCTAssertEqual(authenticationClient.loginFromCacheCallCount, 2)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 2)
+        harness.finish()
     }
 
     func testForegroundRecoversAfterStartupAuthenticationFails() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let syncScheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: FakeSyncClient()),
-            modelContext: container.mainContext,
-            lastKnownOwnerTokenStore: makeOwnerStore()
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: TestCurrentOwnerClerkSessionProvider(
-                state: .init(
-                    hasActiveSession: true,
-                    sessionIdentifier: "session_a",
-                    ownerTokenIdentifier: ownerTokenIdentifier
-                )
-            )
-        )
+        let harness = try CurrentOwnerCoordinatorHarness()
 
-        coordinator.start()
-        try await waitUntil { authenticationClient.loginFromCacheCallCount == 1 }
-        authenticationClient.loginResult = .success(
-            makeJWT(issuer: "issuer", subject: "owner_a")
-        )
-        coordinator.appDidEnterForeground()
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.succeedLogin(as: ownerA)
+        harness.coordinator.appDidEnterForeground()
         try await waitUntil {
-            coordinator.state == .active(ownerTokenIdentifier: ownerTokenIdentifier)
-                && syncScheduler.lastSyncedAt != nil
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && harness.syncScheduler.lastSyncedAt != nil
         }
 
-        XCTAssertEqual(authenticationClient.loginFromCacheCallCount, 2)
-        XCTAssertEqual(syncScheduler.requestCount, 1)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 2)
+        XCTAssertEqual(harness.syncScheduler.requestCount, 1)
+        harness.finish()
     }
 
     func testOverlappingForegroundAndManualRetryShareOneRecoveryAndSync() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let syncScheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: FakeSyncClient()),
-            modelContext: container.mainContext,
-            lastKnownOwnerTokenStore: makeOwnerStore()
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: TestCurrentOwnerClerkSessionProvider(
-                state: .init(
-                    hasActiveSession: true,
-                    sessionIdentifier: "session_a",
-                    ownerTokenIdentifier: ownerTokenIdentifier
-                )
-            )
-        )
+        let harness = try CurrentOwnerCoordinatorHarness()
 
-        coordinator.start()
-        try await waitUntil { authenticationClient.loginFromCacheCallCount == 1 }
-        authenticationClient.loginResult = .success(
-            makeJWT(issuer: "issuer", subject: "owner_a")
-        )
-        authenticationClient.waitsForLoginResume = true
-        coordinator.appDidEnterForeground()
-        try await waitUntil { authenticationClient.hasPendingLogin }
-        coordinator.retrySync()
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.succeedLogin(as: ownerA)
+        harness.authenticationClient.waitsForLoginResume = true
+        harness.coordinator.appDidEnterForeground()
+        try await waitUntil { harness.authenticationClient.hasPendingLogin }
+        harness.coordinator.retrySync()
         await Task.yield()
 
-        XCTAssertEqual(authenticationClient.loginFromCacheCallCount, 2)
-        XCTAssertEqual(syncScheduler.requestCount, 0)
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 2)
+        XCTAssertEqual(harness.syncScheduler.requestCount, 0)
 
-        authenticationClient.resumeLogin()
+        harness.authenticationClient.resumeLogin()
         try await waitUntil {
-            coordinator.state == .active(ownerTokenIdentifier: ownerTokenIdentifier)
-                && syncScheduler.lastSyncedAt != nil
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && harness.syncScheduler.lastSyncedAt != nil
         }
 
-        XCTAssertEqual(authenticationClient.loginFromCacheCallCount, 2)
-        XCTAssertEqual(syncScheduler.requestCount, 1)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 2)
+        XCTAssertEqual(harness.syncScheduler.requestCount, 1)
+        harness.finish()
     }
 
     func testFirstSignInAdoptsAndUploadsAnUnclaimedLocalWorkout() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
+        let harness = try CurrentOwnerCoordinatorHarness(clerkOwner: nil)
         let workout = WorkoutSession(
             title: "Made before sign in",
             startedAt: Date(timeIntervalSince1970: 100),
@@ -555,143 +313,92 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
             status: .completed,
             source: .blank
         )
-        context.insert(workout)
-        try context.save()
-        let syncClient = FakeSyncClient()
-        let syncScheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: syncClient),
-            modelContext: context,
-            lastKnownOwnerTokenStore: makeOwnerStore()
-        )
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(hasActiveSession: false)
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
-        )
+        harness.context.insert(workout)
+        try harness.context.save()
 
-        coordinator.start()
-        try await waitUntil { coordinator.state == .localOnly }
-        clerkSessionProvider.state = .init(
-            hasActiveSession: true,
-            sessionIdentifier: "session_a",
-            ownerTokenIdentifier: ownerTokenIdentifier
-        )
-        authenticationClient.sendAuthenticationState(
-            .authenticated(token: makeJWT(issuer: "issuer", subject: "owner_a"))
-        )
-        try await waitUntil { syncScheduler.lastSyncedAt != nil }
+        harness.coordinator.start()
+        try await waitUntil { harness.coordinator.state == .localOnly }
+        harness.setClerkOwner(ownerA)
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.syncScheduler.lastSyncedAt != nil }
 
-        XCTAssertEqual(workout.syncOwnerTokenIdentifier, ownerTokenIdentifier)
+        XCTAssertEqual(workout.syncOwnerTokenIdentifier, ownerA)
         XCTAssertTrue(
-            syncClient.upsertedWorkoutSessions.contains(where: { payload in
+            harness.syncClient.upsertedWorkoutSessions.contains(where: { payload in
                 payload.clientId == workout.id.uuidString.lowercased()
             })
         )
-        authenticationClient.finishAuthenticationStates()
+        harness.finish()
     }
 
     func testFixedOwnerUITestModeKeepsItsOwnerAndRoutesRetryDirectlyToTheScheduler() async throws {
-        let syncScheduler = SyncScheduler(lastKnownOwnerTokenStore: makeOwnerStore())
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: TestCurrentOwnerClerkSessionProvider(
-                state: .init(hasActiveSession: false)
-            ),
+        let harness = try CurrentOwnerCoordinatorHarness(
+            clerkOwner: nil,
+            schedulerMode: .unconfigured,
             startupMode: .fixedOwner("issuer|ui_owner")
         )
 
-        coordinator.start()
-        coordinator.retrySync()
-        try await waitUntil { syncScheduler.requestCount == 1 }
+        harness.coordinator.start()
+        harness.coordinator.retrySync()
+        try await waitUntil { harness.syncScheduler.requestCount == 1 }
 
         XCTAssertEqual(
-            coordinator.state,
+            harness.coordinator.state,
             .active(ownerTokenIdentifier: "issuer|ui_owner")
         )
-        XCTAssertEqual(syncScheduler.currentOwnerTokenIdentifier, "issuer|ui_owner")
-        XCTAssertEqual(authenticationClient.loginFromCacheCallCount, 0)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertEqual(harness.syncScheduler.currentOwnerTokenIdentifier, "issuer|ui_owner")
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 0)
+        harness.finish()
     }
 
     func testEarlyConvexUnauthenticatedStateWaitsForClerkBeforeTreatingItAsSignOut() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let syncScheduler = SyncScheduler(lastKnownOwnerTokenStore: makeOwnerStore())
-        syncScheduler.currentOwnerTokenIdentifier = ownerTokenIdentifier
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(hasActiveSession: false),
-            waitsUntilResumed: true
+        let harness = try CurrentOwnerCoordinatorHarness(
+            clerkOwner: nil,
+            schedulerMode: .unconfigured,
+            clerkWaitsUntilResumed: true
         )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
-        )
+        harness.syncScheduler.currentOwnerTokenIdentifier = ownerA
 
-        coordinator.start()
-        authenticationClient.sendAuthenticationState(.unauthenticated)
+        harness.coordinator.start()
+        harness.authenticationClient.sendAuthenticationState(.unauthenticated)
         try await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(
-            syncScheduler.currentOwnerTokenIdentifier,
-            ownerTokenIdentifier,
+            harness.syncScheduler.currentOwnerTokenIdentifier,
+            ownerA,
             "Convex must not clear local owner access while Clerk is still restoring its session."
         )
 
-        clerkSessionProvider.state = .init(
-            hasActiveSession: true,
-            sessionIdentifier: "session_a",
-            ownerTokenIdentifier: ownerTokenIdentifier
-        )
-        clerkSessionProvider.resumeLoading()
+        harness.setClerkOwner(ownerA)
+        harness.clerkSessionProvider.resumeLoading()
         try await waitUntil {
-            coordinator.state == .resolving(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
         }
-        authenticationClient.finishAuthenticationStates()
+        harness.finish()
     }
 
     func testMalformedConvexAuthenticationFailsClosedWithoutHidingClerkOwnerData() async throws {
-        let ownerTokenIdentifier = "issuer|owner_a"
-        let syncScheduler = SyncScheduler(lastKnownOwnerTokenStore: makeOwnerStore())
-        let clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
-            state: .init(
-                hasActiveSession: true,
-                sessionIdentifier: "session_a",
-                ownerTokenIdentifier: ownerTokenIdentifier
-            )
-        )
-        let authenticationClient = TestCurrentOwnerAuthenticationClient()
-        let coordinator = CurrentOwnerCoordinator(
-            authenticationClient: authenticationClient,
-            syncScheduler: syncScheduler,
-            clerkSessionProvider: clerkSessionProvider
+        let harness = try CurrentOwnerCoordinatorHarness(
+            schedulerMode: .unconfigured
         )
 
-        coordinator.start()
-        try await waitUntil { authenticationClient.loginFromCacheCallCount == 1 }
-        authenticationClient.sendAuthenticationState(
-            .authenticated(token: makeJWT(issuer: "issuer", subject: "owner_a"))
-        )
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
         try await waitUntil {
-            coordinator.state == .active(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
         }
 
-        authenticationClient.sendAuthenticationState(.authenticated(token: "not-a-jwt"))
-        try await waitUntil { authenticationClient.logoutCallCount == 1 }
+        harness.authenticationClient.sendAuthenticationState(.authenticated(token: "not-a-jwt"))
+        try await waitUntil { harness.authenticationClient.logoutCallCount == 1 }
 
         XCTAssertEqual(
-            coordinator.state,
-            .resolving(ownerTokenIdentifier: ownerTokenIdentifier)
+            harness.coordinator.state,
+            .resolving(ownerTokenIdentifier: ownerA)
         )
-        XCTAssertEqual(syncScheduler.currentOwnerTokenIdentifier, ownerTokenIdentifier)
-        XCTAssertFalse(syncScheduler.isCloudSyncAuthorized)
-        authenticationClient.finishAuthenticationStates()
+        XCTAssertEqual(harness.syncScheduler.currentOwnerTokenIdentifier, ownerA)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
     }
 
     private func waitUntil(
@@ -706,16 +413,111 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         XCTFail("Condition was not met before timeout")
     }
 
-    private func makeOwnerStore() -> LastKnownSyncOwnerTokenStore {
+}
+
+private enum TestSchedulerMode {
+    case configured
+    case unconfigured
+}
+
+@MainActor
+private final class CurrentOwnerCoordinatorHarness {
+    let container: ModelContainer?
+    let syncClient: FakeSyncClient
+    let syncScheduler: SyncScheduler
+    let clerkSessionProvider: TestCurrentOwnerClerkSessionProvider
+    let authenticationClient: TestCurrentOwnerAuthenticationClient
+    let coordinator: CurrentOwnerCoordinator
+
+    var context: ModelContext {
+        guard let container else {
+            preconditionFailure("This scenario requires a configured scheduler")
+        }
+        return container.mainContext
+    }
+
+    init(
+        clerkOwner: String? = ownerA,
+        sessionIdentifier: String = "session_a",
+        schedulerMode: TestSchedulerMode = .configured,
+        clerkWaitsUntilResumed: Bool = false,
+        startupMode: CurrentOwnerCoordinator.StartupMode = .live
+    ) throws {
+        syncClient = FakeSyncClient()
+        switch schedulerMode {
+        case .configured:
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            self.container = container
+            syncScheduler = SyncScheduler(
+                coordinator: SyncCoordinator(client: syncClient),
+                modelContext: container.mainContext,
+                lastKnownOwnerTokenStore: Self.makeOwnerStore()
+            )
+        case .unconfigured:
+            container = nil
+            syncScheduler = SyncScheduler(lastKnownOwnerTokenStore: Self.makeOwnerStore())
+        }
+
+        clerkSessionProvider = TestCurrentOwnerClerkSessionProvider(
+            state: Self.clerkState(owner: clerkOwner, sessionIdentifier: sessionIdentifier),
+            waitsUntilResumed: clerkWaitsUntilResumed
+        )
+        authenticationClient = TestCurrentOwnerAuthenticationClient()
+        coordinator = CurrentOwnerCoordinator(
+            authenticationClient: authenticationClient,
+            syncScheduler: syncScheduler,
+            clerkSessionProvider: clerkSessionProvider,
+            startupMode: startupMode
+        )
+    }
+
+    func setClerkOwner(_ owner: String?, sessionIdentifier: String = "session_a") {
+        clerkSessionProvider.state = Self.clerkState(
+            owner: owner,
+            sessionIdentifier: sessionIdentifier
+        )
+    }
+
+    func sendAuthenticated(as owner: String) {
+        authenticationClient.sendAuthenticationState(
+            .authenticated(token: Self.makeJWT(ownerTokenIdentifier: owner))
+        )
+    }
+
+    func succeedLogin(as owner: String) {
+        authenticationClient.loginResult = .success(
+            Self.makeJWT(ownerTokenIdentifier: owner)
+        )
+    }
+
+    func finish() {
+        authenticationClient.finishAuthenticationStates()
+    }
+
+    private static func clerkState(
+        owner: String?,
+        sessionIdentifier: String
+    ) -> CurrentOwnerClerkSessionState {
+        CurrentOwnerClerkSessionState(
+            hasActiveSession: owner != nil,
+            sessionIdentifier: owner == nil ? nil : sessionIdentifier,
+            ownerTokenIdentifier: owner
+        )
+    }
+
+    private static func makeOwnerStore() -> LastKnownSyncOwnerTokenStore {
         let suiteName = "CurrentOwnerCoordinatorTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         return LastKnownSyncOwnerTokenStore(userDefaults: defaults)
     }
 
-    private func makeJWT(issuer: String, subject: String) -> String {
+    private static func makeJWT(ownerTokenIdentifier: String) -> String {
+        let parts = ownerTokenIdentifier.split(separator: "|", maxSplits: 1).map(String.init)
+        precondition(parts.count == 2, "Test owners must use the issuer|subject format")
         let header = Data("{}".utf8).base64URLEncodedString()
-        let payload = Data(#"{"iss":"\#(issuer)","sub":"\#(subject)"}"#.utf8).base64URLEncodedString()
+        let payload = Data(#"{"iss":"\#(parts[0])","sub":"\#(parts[1])"}"#.utf8)
+            .base64URLEncodedString()
         return "\(header).\(payload).signature"
     }
 }
