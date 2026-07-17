@@ -132,7 +132,8 @@ final class CurrentOwnerCoordinator {
                     matchingOwnerSubject: matchingSubject
                 )
             } else {
-                didRestoreOwner = syncScheduler.restoreLastKnownOwnerTokenIdentifier()
+                syncScheduler.currentOwnerTokenIdentifier = nil
+                didRestoreOwner = false
             }
             state = .resolving(
                 ownerTokenIdentifier: didRestoreOwner
