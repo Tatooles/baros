@@ -5,6 +5,7 @@ struct ExerciseEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(SyncOutboxTransaction.self) private var syncOutboxTransaction
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
 
     let exercise: Exercise?
@@ -95,7 +96,7 @@ struct ExerciseEditorView: View {
 
         let savedExercise: Exercise
         do {
-            let service = ExerciseMutationService(syncScheduler: syncScheduler)
+            let service = ExerciseMutationService(syncOutboxTransaction: syncOutboxTransaction)
             if let exercise {
                 try service.updateExercise(
                     exercise,

@@ -3,12 +3,10 @@ import SwiftData
 
 @MainActor
 struct ExerciseMutationService {
-    private let recorder = SyncOutboxRecorder()
+    private let syncOutboxTransaction: SyncOutboxTransaction?
 
-    private let syncScheduler: SyncScheduler?
-
-    init(syncScheduler: SyncScheduler? = nil) {
-        self.syncScheduler = syncScheduler
+    init(syncOutboxTransaction: SyncOutboxTransaction? = nil) {
+        self.syncOutboxTransaction = syncOutboxTransaction
     }
 
     @discardableResult
@@ -22,7 +20,7 @@ struct ExerciseMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws -> Exercise {
-        let effectiveOwner = ownerTokenIdentifier ?? syncScheduler?.currentOwnerTokenIdentifier
+        let effectiveOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
         let exercise = Exercise(
             name: name,
             category: category,
@@ -33,16 +31,19 @@ struct ExerciseMutationService {
             createdAt: now,
             updatedAt: now
         )
-        context.insert(exercise)
-        try recorder.recordCreate(
-            entityKind: .exercise,
-            entityID: exercise.id,
-            ownerTokenIdentifier: effectiveOwner,
-            context: context,
-            now: now
-        )
-        try context.save()
-        syncScheduler?.requestSync()
+        if let effectiveOwner {
+            guard let syncOutboxTransaction else {
+                throw SyncOutboxTransactionError.currentOwnerMismatch
+            }
+            try syncOutboxTransaction.perform(ownerTokenIdentifier: effectiveOwner) { actions in
+                try actions.create(.exerciseLibraryEntry(exercise), now: now) { context in
+                    context.insert(exercise)
+                }
+            }
+        } else {
+            context.insert(exercise)
+            try context.save()
+        }
         return exercise
     }
 
@@ -65,28 +66,40 @@ struct ExerciseMutationService {
             return
         }
 
-        let effectiveOwner = try mutationOwner(
-            currentOwner: exercise.syncOwnerTokenIdentifier,
-            requestedOwner: ownerTokenIdentifier ?? syncScheduler?.currentOwnerTokenIdentifier
-        )
-        exercise.syncOwnerTokenIdentifier = effectiveOwner ?? exercise.syncOwnerTokenIdentifier
-        exercise.update(
-            name: name,
-            category: category,
-            equipment: equipment,
-            primaryMuscle: primaryMuscle,
-            notes: notes
-        )
-        exercise.touch(now: now)
-        try recorder.recordUpdate(
-            entityKind: .exercise,
-            entityID: exercise.id,
-            ownerTokenIdentifier: effectiveOwner,
-            context: context,
-            now: now
-        )
-        try context.save()
-        syncScheduler?.requestSync()
+        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
+        let mutation = {
+            exercise.update(
+                name: name,
+                category: category,
+                equipment: equipment,
+                primaryMuscle: primaryMuscle,
+                notes: notes
+            )
+            exercise.touch(now: now)
+        }
+
+        guard let requestedOwner else {
+            guard exercise.syncOwnerTokenIdentifier == nil else {
+                throw SyncMutationOwnershipError.ownerMismatch
+            }
+            mutation()
+            try context.save()
+            return
+        }
+
+        guard let syncOutboxTransaction else {
+            throw SyncOutboxTransactionError.currentOwnerMismatch
+        }
+        try syncOutboxTransaction.perform(ownerTokenIdentifier: requestedOwner) { actions in
+            try actions.update(.exerciseLibraryEntry(exercise), now: now) { _ in
+                let effectiveOwner = try mutationOwner(
+                    currentOwner: exercise.syncOwnerTokenIdentifier,
+                    requestedOwner: requestedOwner
+                )
+                exercise.syncOwnerTokenIdentifier = effectiveOwner
+                mutation()
+            }
+        }
     }
 
     func removeExercise(
@@ -95,32 +108,44 @@ struct ExerciseMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws {
-        let effectiveOwner = try mutationOwner(
-            currentOwner: exercise.syncOwnerTokenIdentifier,
-            requestedOwner: ownerTokenIdentifier ?? syncScheduler?.currentOwnerTokenIdentifier
-        )
-        exercise.syncOwnerTokenIdentifier = effectiveOwner ?? exercise.syncOwnerTokenIdentifier
-        let outcome = try exercise.archiveOrDelete(context: context, now: now)
+        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
+        guard let requestedOwner else {
+            guard exercise.syncOwnerTokenIdentifier == nil else {
+                throw SyncMutationOwnershipError.ownerMismatch
+            }
+            _ = try exercise.archiveOrDelete(context: context, now: now)
+            try context.save()
+            return
+        }
+
+        guard let syncOutboxTransaction else {
+            throw SyncOutboxTransactionError.currentOwnerMismatch
+        }
+        let outcome = try exercise.removalOutcome(context: context)
         switch outcome {
         case .archived:
-            try recorder.recordUpdate(
-                entityKind: .exercise,
-                entityID: exercise.id,
-                ownerTokenIdentifier: effectiveOwner,
-                context: context,
-                now: now
-            )
+            try syncOutboxTransaction.perform(ownerTokenIdentifier: requestedOwner) { actions in
+                try actions.update(.exerciseLibraryEntry(exercise), now: now) { _ in
+                    let effectiveOwner = try mutationOwner(
+                        currentOwner: exercise.syncOwnerTokenIdentifier,
+                        requestedOwner: requestedOwner
+                    )
+                    exercise.syncOwnerTokenIdentifier = effectiveOwner
+                    exercise.applyRemoval(outcome, now: now)
+                }
+            }
         case .deleted:
-            try recorder.recordDelete(
-                entityKind: .exercise,
-                entityID: exercise.id,
-                ownerTokenIdentifier: effectiveOwner,
-                context: context,
-                now: now
-            )
+            try syncOutboxTransaction.perform(ownerTokenIdentifier: requestedOwner) { actions in
+                try actions.delete(.exerciseLibraryEntry(exercise), now: now) { _ in
+                    let effectiveOwner = try mutationOwner(
+                        currentOwner: exercise.syncOwnerTokenIdentifier,
+                        requestedOwner: requestedOwner
+                    )
+                    exercise.syncOwnerTokenIdentifier = effectiveOwner
+                    exercise.applyRemoval(outcome, now: now)
+                }
+            }
         }
-        try context.save()
-        syncScheduler?.requestSync()
     }
 
     private func mutationOwner(currentOwner: String?, requestedOwner: String?) throws -> String? {

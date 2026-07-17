@@ -573,6 +573,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(session.durationSeconds, 120)
         XCTAssertEqual(try activeSessions(in: context).count, 0)
         XCTAssertEqual(try completedSessions(in: context).count, 1)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
     }
 
     func testFinishingAuthenticatedWorkoutRequestsSync() throws {
@@ -589,7 +590,10 @@ final class ActiveWorkoutEngineTests: XCTestCase {
 
         try engine.finishWorkout(
             session,
-            syncScheduler: scheduler,
+            syncOutboxTransaction: SyncOutboxTransaction(
+                modelContext: context,
+                syncScheduler: scheduler
+            ),
             context: context,
             now: Date(timeIntervalSince1970: 220)
         )
@@ -600,7 +604,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(scheduler.requestCount, 1)
     }
 
-    func testFinishingWorkoutPreservesOwnerCapturedWhenStarted() throws {
+    func testFinishingWorkoutRejectsOwnerCapturedUnderDifferentCurrentOwner() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
@@ -614,20 +618,26 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         )
 
         scheduler.currentOwnerTokenIdentifier = "issuer|owner_b"
-        try engine.finishWorkout(
+        XCTAssertThrowsError(try engine.finishWorkout(
             session,
-            syncScheduler: scheduler,
+            syncOutboxTransaction: SyncOutboxTransaction(
+                modelContext: context,
+                syncScheduler: scheduler
+            ),
             context: context,
             now: Date(timeIntervalSince1970: 220)
-        )
+        )) { error in
+            XCTAssertEqual(error as? SyncOutboxTransactionError, .currentOwnerMismatch)
+        }
 
         let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
         XCTAssertEqual(session.syncOwnerTokenIdentifier, startedOwner)
-        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == startedOwner })
+        XCTAssertEqual(session.status, .active)
+        XCTAssertTrue(entries.isEmpty)
         XCTAssertEqual(scheduler.requestCount, 0)
     }
 
-    func testFinishingSignedOutWorkoutAfterSignInKeepsOwnerlessIntent() throws {
+    func testFinishingSignedOutWorkoutWithoutExplicitClaimKeepsOutboxEmpty() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
@@ -637,14 +647,17 @@ final class ActiveWorkoutEngineTests: XCTestCase {
 
         try engine.finishWorkout(
             session,
-            syncScheduler: scheduler,
+            syncOutboxTransaction: SyncOutboxTransaction(
+                modelContext: context,
+                syncScheduler: scheduler
+            ),
             context: context,
             now: Date(timeIntervalSince1970: 220)
         )
 
         let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
         XCTAssertNil(session.syncOwnerTokenIdentifier)
-        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == nil })
+        XCTAssertTrue(entries.isEmpty)
         XCTAssertEqual(scheduler.requestCount, 0)
     }
 
@@ -660,7 +673,10 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         try engine.finishWorkout(
             session,
             ownerTokenIdentifier: scheduler.currentOwnerTokenIdentifier,
-            syncScheduler: scheduler,
+            syncOutboxTransaction: SyncOutboxTransaction(
+                modelContext: context,
+                syncScheduler: scheduler
+            ),
             context: context,
             now: Date(timeIntervalSince1970: 220)
         )

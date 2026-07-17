@@ -5,6 +5,7 @@ struct WorkoutHistoryDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(SyncOutboxTransaction.self) private var syncOutboxTransaction
     let session: WorkoutSession
     @State private var deleteErrorMessage: String?
     @State private var showsDeleteConfirmation = false
@@ -154,12 +155,13 @@ struct WorkoutHistoryDetailView: View {
 
     private func deleteWorkout() {
         do {
-            try WorkoutHistoryMutationService().deleteWorkoutHistory(
+            try WorkoutHistoryMutationService(
+                syncOutboxTransaction: syncOutboxTransaction
+            ).deleteWorkoutHistory(
                 session,
                 ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
                 context: modelContext
             )
-            syncScheduler.requestSync()
             deleteErrorMessage = nil
             dismiss()
         } catch {
