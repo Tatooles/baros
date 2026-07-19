@@ -92,6 +92,7 @@ Stop if any tester cannot reach Up to date or the backup is unavailable.
 - [ ] Mint a fresh token and record its exact `iss` value.
 - [ ] Confirm existing users retain the same Clerk `sub` values.
 - [ ] Update the Release Clerk publishable key and associated domain in `project.yml`.
+- [ ] Run `xcodegen generate`, verify the regenerated `Baros.xcodeproj` contains the new Release Clerk values, and include the project file in the configuration PR.
 - [ ] Change production Convex `CLERK_JWT_ISSUER_DOMAIN` to the exact new issuer and deploy the updated auth configuration plus the temporary migration function.
 - [ ] Confirm new-issuer authentication works and old-issuer authentication is rejected.
 - [ ] On a physical iPhone, confirm native Sign in with Apple completes with the new Clerk publishable key. The bundle ID is unchanged; only alter Apple Services ID return URLs if the Clerk production instance is actually configured to use the web-based Apple flow.
