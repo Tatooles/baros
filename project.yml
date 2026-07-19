@@ -1,4 +1,4 @@
-name: LiftingLog
+name: Baros
 options:
   bundleIdPrefix: com.kevintatooles
 settings:
@@ -19,18 +19,18 @@ packages:
     url: https://github.com/get-convex/convex-swift
     from: 0.8.1
 schemes:
-  LiftingLogUnitTests:
+  BarosUnitTests:
     build:
       targets:
-        LiftingLog: all
+        Baros: all
     test:
       config: Debug
       targets:
-        - LiftingLogTests
+        - BarosTests
     run:
       config: Debug
 targets:
-  LiftingLog:
+  Baros:
     type: application
     platform: iOS
     deploymentTarget: "26.0"
@@ -38,7 +38,7 @@ targets:
       DevelopmentTeam: RJGJJ38RV9
       ProvisioningStyle: Automatic
     sources:
-      - path: LiftingLog
+      - path: Baros
     dependencies:
       - package: Clerk
         product: ClerkKit
@@ -100,54 +100,54 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         # dSYMs in Debug too, so Instruments can symbolicate profiling traces.
         DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
-        PRODUCT_NAME: LiftingLog
+        PRODUCT_NAME: Baros
         PRODUCT_BUNDLE_IDENTIFIER: com.kevintatooles.LiftingLog.dev
-        CODE_SIGN_ENTITLEMENTS: LiftingLog/LiftingLog.entitlements
+        CODE_SIGN_ENTITLEMENTS: Baros/Baros.entitlements
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: RJGJJ38RV9
-        APP_DISPLAY_NAME: Lifting Log Dev
-        LIFTING_LOG_ENVIRONMENT: Development
+        APP_DISPLAY_NAME: Baros Dev
+        BAROS_ENVIRONMENT: Development
         CLERK_PUBLISHABLE_KEY: pk_test_Z2xhZC1rcmlsbC0yMi5jbGVyay5hY2NvdW50cy5kZXYk
         CLERK_ASSOCIATED_DOMAIN: webcredentials:glad-krill-22.clerk.accounts.dev
         CONVEX_DEPLOYMENT_URL: https://glad-cow-603.convex.cloud
-        INFOPLIST_FILE: LiftingLog/Info.plist
+        INFOPLIST_FILE: Baros/Info.plist
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SUPPORTS_MACCATALYST: NO
         TARGETED_DEVICE_FAMILY: 1
       configs:
         Release:
           PRODUCT_BUNDLE_IDENTIFIER: com.kevintatooles.LiftingLog
-          APP_DISPLAY_NAME: Lifting Log
-          LIFTING_LOG_ENVIRONMENT: Production
+          APP_DISPLAY_NAME: Baros
+          BAROS_ENVIRONMENT: Production
           CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuYXV0aC5saWZ0aW5nbG9nLmFwcCQ
           CLERK_ASSOCIATED_DOMAIN: webcredentials:clerk.auth.liftinglog.app
           CONVEX_DEPLOYMENT_URL: https://sensible-reindeer-16.convex.cloud
           EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     scheme:
       testTargets:
-        - LiftingLogTests
-        - LiftingLogUITests
-  LiftingLogTests:
+        - BarosTests
+        - BarosUITests
+  BarosTests:
     type: bundle.unit-test
     platform: iOS
     deploymentTarget: "26.0"
     sources:
-      - path: LiftingLogTests
+      - path: BarosTests
     dependencies:
-      - target: LiftingLog
+      - target: Baros
     settings:
       base:
-        PRODUCT_NAME: LiftingLogTests
+        PRODUCT_NAME: BarosTests
         GENERATE_INFOPLIST_FILE: YES
-  LiftingLogUITests:
+  BarosUITests:
     type: bundle.ui-testing
     platform: iOS
     deploymentTarget: "26.0"
     sources:
-      - path: LiftingLogUITests
+      - path: BarosUITests
     dependencies:
-      - target: LiftingLog
+      - target: Baros
     settings:
       base:
-        PRODUCT_NAME: LiftingLogUITests
+        PRODUCT_NAME: BarosUITests
         GENERATE_INFOPLIST_FILE: YES

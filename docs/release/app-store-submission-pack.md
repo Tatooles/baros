@@ -1,21 +1,21 @@
 # App Store Submission Pack
 
-This document is the operator source of truth for submitting Lifting Log 1.0 to App Store Connect.
+This document is the operator source of truth for submitting Baros 1.0 to App Store Connect.
 
 ## App Metadata
 
-- App name: Lifting Log
+- App name: Baros: Workout Tracker
 - Subtitle: Simple workout logging
 - Primary category: Health & Fitness
 - Pricing: Free
-- Support URL: https://support.liftinglog.app/
-- Privacy Policy URL: https://support.liftinglog.app/privacy
+- Support URL: https://baros.fit/support
+- Privacy Policy URL: https://baros.fit/privacy
 - Support contact: support@tatooles.dev
 - Copyright: 2026 Kevin Tatooles
 
 ## Description Draft
 
-Lifting Log is a private workout logger for iPhone. Record exercises, sets, weights, reps, notes, and completed workouts without needing an account. Sign in when you want account-backed sync across devices.
+Baros is a private workout tracker for iPhone. Record exercises, sets, weights, reps, notes, and completed workouts without needing an account. Sign in when you want account-backed sync across devices.
 
 The app focuses on fast workout entry, offline-first local logging, workout history, exercise management, data export, and clear privacy controls.
 
@@ -25,7 +25,7 @@ workout, lifting, gym, strength, log, tracker, fitness, exercise, sets, reps
 
 ## Age Rating Notes
 
-Lifting Log does not include user-generated public content, commerce, gambling, medical diagnosis, or regulated medical-device functionality. It is a workout logging utility and does not provide medical advice.
+Baros does not include user-generated public content, commerce, gambling, medical diagnosis, or regulated medical-device functionality. It is a workout logging utility and does not provide medical advice.
 
 ## App Privacy Worksheet
 
@@ -35,7 +35,7 @@ Local workout data can remain only on the user's device when the user is signed 
 
 ### Data Linked to an Account
 
-When a user signs in, Lifting Log uses Clerk for authentication and Convex for account-scoped sync. Account-linked data can include:
+When a user signs in, Baros uses Clerk for authentication and Convex for account-scoped sync. Account-linked data can include:
 
 - Email address or Apple private relay email used for authentication.
 - Name, display name, and any Clerk profile metadata if enabled or provided.
@@ -44,15 +44,15 @@ When a user signs in, Lifting Log uses Clerk for authentication and Convex for a
 
 ### Tracking
 
-Lifting Log does not use third-party advertising, cross-app tracking, or product analytics in the v1 release.
+Baros does not use third-party advertising, cross-app tracking, or product analytics in the v1 release.
 
 ### Diagnostics
 
-Apple, Clerk, Convex, Vercel, and platform providers may process standard service diagnostics needed to operate, secure, and troubleshoot their services. Lifting Log does not add a custom analytics SDK in v1.
+Apple, Clerk, Convex, Vercel, and platform providers may process standard service diagnostics needed to operate, secure, and troubleshoot their services. Baros does not add a custom analytics SDK in v1.
 
 ## Review Notes Draft
 
-Lifting Log supports signed-out local workout logging. Account creation is optional and enables account-backed sync.
+Baros supports signed-out local workout logging. Account creation is optional and enables account-backed sync.
 
 Reviewers can test the app by creating an account with email/password or Sign in with Apple. A disposable reviewer account can be created in production before submission; do not commit that password to the repo.
 
@@ -83,11 +83,11 @@ Capture final screenshots after UI stabilizes:
 
 ## Release Checklist
 
-- Support site is deployed at https://support.liftinglog.app/.
-- Privacy policy is deployed at https://support.liftinglog.app/privacy.
+- Support site is deployed at https://baros.fit/support and remains available at https://support.liftinglog.app/support during the transition.
+- Privacy policy is deployed at https://baros.fit/privacy and remains available at https://support.liftinglog.app/privacy during the transition.
 - App Settings opens both URLs.
 - Release bundle identifier is com.kevintatooles.LiftingLog.
-- Release display name is Lifting Log.
+- Release display name is Baros.
 - Release build uses production Clerk publishable key.
 - Release build uses webcredentials:clerk.auth.liftinglog.app.
 - Release build uses https://sensible-reindeer-16.convex.cloud.

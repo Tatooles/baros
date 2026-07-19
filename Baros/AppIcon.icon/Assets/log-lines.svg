@@ -1,0 +1,10 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Baros Icon Log Lines Layer</title>
+  <desc>Transparent full-canvas muted slate log-row line layer.</desc>
+
+  <g id="log-lines" fill="#565C63">
+    <rect id="log-line-1" x="251" y="564" width="638" height="24" rx="4"/>
+    <rect id="log-line-2" x="251" y="654" width="638" height="24" rx="4"/>
+    <rect id="log-line-3" x="251" y="744" width="638" height="24" rx="4"/>
+  </g>
+</svg>

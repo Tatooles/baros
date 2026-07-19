@@ -1,6 +1,6 @@
 # Initial Release Roadmap
 
-This roadmap defines the baseline needed to ship LiftingLog as a trustworthy v1 product. The goal is not to maximize feature count before release; the goal is to make the existing workout logging experience stable, recoverable, syncable, and ready for App Store review.
+This roadmap defines the baseline needed to ship Baros as a trustworthy v1 product. The goal is not to maximize feature count before release; the goal is to make the existing workout logging experience stable, recoverable, syncable, and ready for App Store review.
 
 ## Release Goal
 

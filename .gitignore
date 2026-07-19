@@ -18,7 +18,7 @@ DerivedData/
 .build/
 Packages/
 Package.resolved
-!LiftingLog.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+!Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 # Fastlane
 fastlane/report.xml

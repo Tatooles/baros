@@ -33,29 +33,29 @@ jobs:
       - name: Resolve Swift packages
         run: |
           xcodebuild -resolvePackageDependencies \
-            -project LiftingLog.xcodeproj \
-            -scheme LiftingLogUnitTests \
-            -derivedDataPath "${RUNNER_TEMP}/LiftingLogDerivedData"
+            -project Baros.xcodeproj \
+            -scheme BarosUnitTests \
+            -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData"
 
-      - name: Run LiftingLog unit tests
+      - name: Run Baros unit tests
         run: |
           set -o pipefail
           xcodebuild test \
-            -project LiftingLog.xcodeproj \
-            -scheme LiftingLogUnitTests \
+            -project Baros.xcodeproj \
+            -scheme BarosUnitTests \
             -destination "${IOS_TEST_DESTINATION}" \
-            -derivedDataPath "${RUNNER_TEMP}/LiftingLogDerivedData" \
-            -resultBundlePath "${RUNNER_TEMP}/LiftingLogTests.xcresult" \
-            2>&1 | tee "${RUNNER_TEMP}/LiftingLogTests.log"
+            -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData" \
+            -resultBundlePath "${RUNNER_TEMP}/BarosTests.xcresult" \
+            2>&1 | tee "${RUNNER_TEMP}/BarosTests.log"
 
       - name: Upload iOS failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LiftingLogTests-xcresult
+          name: BarosTests-xcresult
           path: |
-            ${{ runner.temp }}/LiftingLogTests.xcresult
-            ${{ runner.temp }}/LiftingLogTests.log
+            ${{ runner.temp }}/BarosTests.xcresult
+            ${{ runner.temp }}/BarosTests.log
           if-no-files-found: warn
           retention-days: 14
 

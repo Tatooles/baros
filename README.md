@@ -1,6 +1,6 @@
-# Lifting Log
+# Baros
 
-Native SwiftUI workout logging app for iPhone with a SwiftData-backed offline workout log.
+Native SwiftUI workout tracker for iPhone with a SwiftData-backed offline workout log.
 
 ## Requirements
 
@@ -11,26 +11,26 @@ Native SwiftUI workout logging app for iPhone with a SwiftData-backed offline wo
 ## Commands
 
 - Generate project: `xcodegen generate`
-- Build simulator app: `xcodebuild build -project LiftingLog.xcodeproj -scheme LiftingLog -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/codex-ios-app-derived-data`
-- Run full XCTest suite: `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
-- Run unit tests only: `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLogUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
-- Run UI tests only: `xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLog -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -only-testing:LiftingLogUITests -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Build simulator app: `xcodebuild build -project Baros.xcodeproj -scheme Baros -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Run full XCTest suite: `xcodebuild test -project Baros.xcodeproj -scheme Baros -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Run unit tests only: `xcodebuild test -project Baros.xcodeproj -scheme BarosUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Run UI tests only: `xcodebuild test -project Baros.xcodeproj -scheme Baros -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -only-testing:BarosUITests -derivedDataPath /private/tmp/codex-ios-app-derived-data`
 
 ## CI
 
 Pull requests and pushes to `main` run two GitHub Actions checks:
 
-- `ios-unit-tests`: builds the `LiftingLogUnitTests` scheme and runs `LiftingLogTests`.
+- `ios-unit-tests`: builds the `BarosUnitTests` scheme and runs `BarosTests`.
 - `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
 
-The iOS job intentionally excludes `LiftingLogUITests` from the required PR gate. If `ios-unit-tests` fails, first inspect the GitHub Actions log. The failed workflow run also uploads a `LiftingLogTests-xcresult` artifact containing the `.xcresult` bundle and test log for local Xcode inspection.
+The iOS job intentionally excludes `BarosUITests` from the required PR gate. If `ios-unit-tests` fails, first inspect the GitHub Actions log. The failed workflow run also uploads a `BarosTests-xcresult` artifact containing the `.xcresult` bundle and test log for local Xcode inspection.
 
 The canonical local UI-suite command is the `Run UI tests only` command above. As of issue #63, the expected UI target discovery count is 29 tests; treat a run with fewer discovered or executed tests as partial coverage, not a clean full-suite result. Keep the full UI target out of the required PR gate until it can pass repeated local full-suite runs without known flakes.
 
 Local equivalents:
 
 ```sh
-xcodebuild test -project LiftingLog.xcodeproj -scheme LiftingLogUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.5 -derivedDataPath /private/tmp/codex-ios-app-derived-data
+xcodebuild test -project Baros.xcodeproj -scheme BarosUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.5 -derivedDataPath /private/tmp/codex-ios-app-derived-data
 pnpm install --frozen-lockfile
 pnpm run convex:test
 pnpm run convex:typecheck
