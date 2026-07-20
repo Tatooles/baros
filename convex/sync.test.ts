@@ -348,7 +348,54 @@ describe("temporary owner issuer migration", () => {
         dryRun: false,
       }),
     ).rejects.toThrow(
-      "Owner has an account deletion marker; resolve it separately before migration",
+      "Legacy owner has an account deletion marker; resolve it separately before migration",
+    );
+
+    await expect(
+      t.run(async (ctx) =>
+        ctx.db
+          .query("exercises")
+          .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
+            q.eq("ownerTokenIdentifier", oldIdentity.tokenIdentifier),
+          )
+          .take(2),
+      ),
+    ).resolves.toHaveLength(1);
+    await expect(
+      t.run(async (ctx) =>
+        ctx.db
+          .query("exercises")
+          .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
+            q.eq("ownerTokenIdentifier", newIdentity.tokenIdentifier),
+          )
+          .take(2),
+      ),
+    ).resolves.toHaveLength(0);
+  });
+
+  test("refuses to migrate retained data into a deletion marker", async () => {
+    const t = testDb();
+    await t.withIdentity(oldIdentity).mutation(api.sync.upsertExercise, {
+      record: exerciseRecord({ clientId: "destination-blocked-exercise" }),
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("accountDeletionMarkers", {
+        ownerTokenIdentifier: newIdentity.tokenIdentifier,
+        cancellationToken: "destination-migration-cancellation",
+        createdAt: 1,
+        phaseRaw: "deletionIncomplete",
+      });
+    });
+
+    await expect(
+      t.mutation(internal.ownerIssuerMigration.migrateOwnerTable, {
+        subject,
+        newIssuer,
+        table: "exercises",
+        dryRun: false,
+      }),
+    ).rejects.toThrow(
+      "Destination owner has an account deletion marker; resolve it separately before migration",
     );
 
     await expect(

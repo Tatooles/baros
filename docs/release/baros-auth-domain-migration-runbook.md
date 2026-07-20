@@ -31,7 +31,7 @@ Deleting and reinstalling is intentional here. The current client refuses to mer
 - Hard-codes the exact legacy issuer.
 - Requires the exact new HTTPS issuer obtained from a post-flip Clerk token.
 - Defaults to dry-run mode.
-- Refuses to migrate retained data while the old owner has an account-deletion marker.
+- Refuses to migrate retained data while either the old or destination owner has an account-deletion marker.
 - Refuses to mix old-issuer rows into a table where that subject already has new-issuer rows.
 - Refuses owner/table pairs at or above 1,000 rows.
 - Updates the selected table atomically in one Convex mutation.
@@ -46,7 +46,7 @@ loggedExercises
 loggedSets
 ```
 
-Account-deletion markers are not migration targets. Inspect and resolve them separately before migrating any retained data for the same subject. A completed marker for an owner with no retained data can remain under the old issuer for its normal cleanup path.
+Account-deletion markers are not migration targets. Inspect both owner identifiers and resolve markers separately before migrating any retained data for the same subject. A completed marker for an owner with no retained data can remain under the old issuer for its normal cleanup path.
 
 Dry-run command template:
 

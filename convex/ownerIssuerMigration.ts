@@ -65,15 +65,28 @@ export const migrateOwnerTable = internalMutation({
     );
     const dryRun = args.dryRun ?? true;
 
-    const deletionMarkers = await ctx.db
-      .query("accountDeletionMarkers")
-      .withIndex("by_ownerTokenIdentifier", (q) =>
-        q.eq("ownerTokenIdentifier", oldOwner),
-      )
-      .take(1);
-    if (deletionMarkers.length > 0) {
+    const hasDeletionMarker = async (ownerTokenIdentifier: string) => {
+      const markers = await ctx.db
+        .query("accountDeletionMarkers")
+        .withIndex("by_ownerTokenIdentifier", (q) =>
+          q.eq("ownerTokenIdentifier", ownerTokenIdentifier),
+        )
+        .take(1);
+      return markers.length > 0;
+    };
+    const [oldOwnerHasDeletionMarker, newOwnerHasDeletionMarker] =
+      await Promise.all([
+        hasDeletionMarker(oldOwner),
+        hasDeletionMarker(newOwner),
+      ]);
+    if (oldOwnerHasDeletionMarker) {
       throw new Error(
-        "Owner has an account deletion marker; resolve it separately before migration",
+        "Legacy owner has an account deletion marker; resolve it separately before migration",
+      );
+    }
+    if (newOwnerHasDeletionMarker) {
+      throw new Error(
+        "Destination owner has an account deletion marker; resolve it separately before migration",
       );
     }
 
