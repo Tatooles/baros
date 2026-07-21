@@ -1241,8 +1241,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				BAROS_ENVIRONMENT = Production;
-				CLERK_ASSOCIATED_DOMAIN = "webcredentials:clerk.auth.liftinglog.app";
-				CLERK_PUBLISHABLE_KEY = pk_live_Y2xlcmsuYXV0aC5saWZ0aW5nbG9nLmFwcCQ;
+				CLERK_ASSOCIATED_DOMAIN = "webcredentials:clerk.baros.fit";
+				CLERK_PUBLISHABLE_KEY = pk_live_Y2xlcmsuYmFyb3MuZml0JA;
 				CODE_SIGN_ENTITLEMENTS = Baros/Baros.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
