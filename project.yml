@@ -119,8 +119,8 @@ targets:
           PRODUCT_BUNDLE_IDENTIFIER: com.kevintatooles.LiftingLog
           APP_DISPLAY_NAME: Baros
           BAROS_ENVIRONMENT: Production
-          CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuYXV0aC5saWZ0aW5nbG9nLmFwcCQ
-          CLERK_ASSOCIATED_DOMAIN: webcredentials:clerk.auth.liftinglog.app
+          CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuYmFyb3MuZml0JA
+          CLERK_ASSOCIATED_DOMAIN: webcredentials:clerk.baros.fit
           CONVEX_DEPLOYMENT_URL: https://sensible-reindeer-16.convex.cloud
           EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     scheme:
