@@ -92,6 +92,7 @@ jobs:
             -project Baros.xcodeproj \
             -scheme Baros \
             -destination "${IOS_TEST_DESTINATION}" \
+            -only-testing:BarosUITests/BarosUITests/testLogWorkoutSmoke \
             -only-testing:BarosUITests/BarosUITests/testTabNavigationAndFinishSheetSmoke \
             -only-testing:BarosUITests/BarosUITests/testSettingsEditRequestsSyncInUITestMode \
             -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToProfileAfterReset \

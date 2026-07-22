@@ -21,10 +21,10 @@ Native SwiftUI workout tracker for iPhone with a SwiftData-backed offline workou
 Pull requests and pushes to `main` run three GitHub Actions checks:
 
 - `ios-unit-tests`: builds the `BarosUnitTests` scheme and runs `BarosTests`.
-- `ios-ui-smoke`: runs three deterministic UI tests covering workout/tab navigation, a settings-triggered sync request, and signed-out local-data reset.
+- `ios-ui-smoke`: runs four deterministic UI tests covering completed workout logging, workout/tab navigation, a settings-triggered sync request, and signed-out local-data reset.
 - `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
 
-The UI smoke job intentionally selects only the three tests below instead of making the full `BarosUITests` target part of the required PR gate. Each selected test uses the UI suite's deterministic reset and in-memory launch helper. If either iOS job fails, first inspect the GitHub Actions log. The failed workflow run also uploads its `.xcresult` bundle and test log for local Xcode inspection.
+The UI smoke job intentionally selects only the four tests below instead of making the full `BarosUITests` target part of the required PR gate. Each selected test uses the UI suite's deterministic reset and in-memory launch helper. If either iOS job fails, first inspect the GitHub Actions log. The failed workflow run also uploads its `.xcresult` bundle and test log for local Xcode inspection.
 
 Run the exact UI smoke shard locally with:
 
@@ -33,6 +33,7 @@ xcodebuild test \
   -project Baros.xcodeproj \
   -scheme Baros \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
+  -only-testing:BarosUITests/BarosUITests/testLogWorkoutSmoke \
   -only-testing:BarosUITests/BarosUITests/testTabNavigationAndFinishSheetSmoke \
   -only-testing:BarosUITests/BarosUITests/testSettingsEditRequestsSyncInUITestMode \
   -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToProfileAfterReset \
@@ -40,7 +41,7 @@ xcodebuild test \
   -resultBundlePath /private/tmp/BarosUISmoke.xcresult
 ```
 
-The command must execute exactly 3 tests with no failures. Treat a result with fewer than 3 executed tests as partial smoke coverage, not a passing gate.
+The command must execute exactly 4 tests with no failures. Treat a result with fewer than 4 executed tests as partial smoke coverage, not a passing gate.
 
 The canonical local UI-suite command is the `Run UI tests only` command above. As of issue #63, the expected UI target discovery count is 29 tests; treat a run with fewer discovered or executed tests as partial coverage, not a clean full-suite result. Keep the full UI target out of the required PR gate until it can pass repeated local full-suite runs without known flakes.
 

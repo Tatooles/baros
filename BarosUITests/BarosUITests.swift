@@ -139,6 +139,23 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testLogWorkoutSmoke() {
+        let app = makeApp()
+        app.launch()
+
+        createCompletedBenchWorkout(in: app)
+
+        app.buttons["HistoryTab"].tap()
+        let completedWorkout = app.buttons["WorkoutHistoryButton-0"]
+        XCTAssertTrue(completedWorkout.waitForExistence(timeout: 3))
+        completedWorkout.tap()
+
+        XCTAssertTrue(app.navigationBars["Workout"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Bench Press"].exists)
+        XCTAssertTrue(app.staticTexts["185 x 5 @ 8 · Done"].exists)
+    }
+
+    @MainActor
     func testFirstRunWelcomeAppearsOnce() {
         let firstLaunch = makeDiskBackedResetApp(extraArguments: ["--uitest-reset-first-run-experience"])
         firstLaunch.launch()
@@ -1178,10 +1195,12 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    private func createCompletedBenchWorkout(in app: XCUIApplication, title: String) {
+    private func createCompletedBenchWorkout(in app: XCUIApplication, title: String? = nil) {
         app.buttons["StartBlankWorkoutButton"].tap()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
-        replaceText(in: app.textFields["WorkoutTitle"], with: title)
+        if let title {
+            replaceText(in: app.textFields["WorkoutTitle"], with: title)
+        }
         addBenchPress(in: app)
         fillFirstBenchSet(in: app)
         enterRPEViaChips("8", in: app)
