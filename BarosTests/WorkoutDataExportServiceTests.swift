@@ -415,7 +415,7 @@ final class WorkoutDataExportServiceTests: XCTestCase {
         let loggedSet = LoggedSet(
             id: uuid("00000000-0000-0000-0000-000000000201"),
             orderIndex: 0,
-            weight: -25,
+            weight: 25,
             reps: 5,
             rpe: 8,
             kind: .working,
@@ -432,7 +432,7 @@ final class WorkoutDataExportServiceTests: XCTestCase {
         XCTAssertEqual(rows[1][2], "'+SUM(1,1)")
         XCTAssertEqual(rows[1][4], "'-HYPERLINK(\"https://example.com\")")
         XCTAssertEqual(rows[1][5], "'@metadata")
-        XCTAssertEqual(rows[1][9], "-25")
+        XCTAssertEqual(rows[1][9], "25")
         XCTAssertEqual(rows[1][13], "'=cmd")
     }
 

@@ -34,6 +34,23 @@ final class SetCompletionPreviousFillPolicyTests: XCTestCase {
         ))
     }
 
+    func testRejectedActiveInputStaysBlankInsteadOfFillingFromPrevious() {
+        let rejectedWeight = WorkoutNumericInputPolicy.parseWeight(
+            "10001",
+            unit: .pounds,
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+
+        XCTAssertNil(rejectedWeight)
+        XCTAssertFalse(SetCompletionPreviousFillPolicy.shouldFillBeforeCompletion(
+            isCompleted: false,
+            weight: rejectedWeight,
+            reps: 5,
+            previous: PreviousSetPerformance(weight: 185, reps: 5),
+            hasRejectedInput: true
+        ))
+    }
+
     func testIgnoresEmptyWriteWhenFieldIsNotFocused() {
         // A spurious commit-on-resign (e.g. after auto-filling from Previous on
         // completion) arrives while the field is no longer focused and must be dropped.

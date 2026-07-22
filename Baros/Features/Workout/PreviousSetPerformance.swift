@@ -5,9 +5,11 @@ struct PreviousSetPerformance: Equatable {
     let reps: Int?
 
     func displayText(weightUnit: MeasurementUnit) -> String {
-        let displayWeight = weightUnit.displayWeight(fromCanonicalPounds: weight)
+        let displayWeight = weightUnit.displayWeight(
+            fromCanonicalPounds: WorkoutNumericInputPolicy.validatedWeight(weight)
+        )
         let weightText = displayWeight.map(WorkoutFormatters.number)
-        let repsText = reps.map { WorkoutFormatters.number(Double($0)) }
+        let repsText = WorkoutNumericInputPolicy.validatedReps(reps).map { WorkoutFormatters.number(Double($0)) }
 
         switch (weightText, repsText) {
         case let (.some(weightText), .some(repsText)):

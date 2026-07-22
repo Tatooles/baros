@@ -920,6 +920,29 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         }
     }
 
+    func testSavingCompletedWorkoutEditRejectsOutOfPolicyNumericValues() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = makeCompletedWorkout(context: context)
+        let set = try XCTUnwrap(session.sortedLoggedExercises.first?.sortedSets.first)
+        try context.save()
+
+        var draft = CompletedWorkoutEditDraft(session: session)
+        draft.exercises[0].sets[0].weight = 10_001
+        draft.exercises[0].sets[0].reps = 1_001
+        draft.exercises[0].sets[0].rpe = 10.1
+
+        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+            draft,
+            for: session,
+            context: context
+        )
+
+        XCTAssertNil(set.weight)
+        XCTAssertNil(set.reps)
+        XCTAssertNil(set.rpe)
+    }
+
     func testEditingOwnedCompletedWorkoutSetRecordsSetAndSessionUpdates() throws {
         let owner = "issuer|owner_a"
         let container = try SwiftDataTestSupport.makeInMemoryContainer()

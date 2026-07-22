@@ -119,9 +119,9 @@ struct CompletedWorkoutEditView: View {
                 guard let previousField, previousField != newField else { return }
 
                 switch previousField {
-                case .setWeight, .setRPE:
+                case .setWeight, .setReps, .setRPE:
                     numberInputTexts[previousField]?.endEditing()
-                case .title, .notes, .setReps:
+                case .title, .notes:
                     break
                 }
             }
@@ -332,22 +332,30 @@ struct CompletedWorkoutEditView: View {
             set: { value in
                 updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in
                     numberInputTexts[focusTarget, default: WorkoutNumberInputText()].updateDraft(value)
-                    let displayWeight = WorkoutFormatters.parseNumber(value)
-                    set.weight = weightUnit.canonicalWeight(fromDisplayWeight: displayWeight)
+                    set.weight = WorkoutNumericInputPolicy.parseWeight(value, unit: weightUnit)
                 }
             }
         )
     }
 
     private func repsBinding(exerciseIndex: Int, setIndex: Int) -> Binding<String> {
-        Binding(
+        let focusTarget = CompletedWorkoutEditFocusedField.setReps(exerciseIndex, setIndex)
+
+        return Binding(
             get: {
-                guard draftSetExists(exerciseIndex: exerciseIndex, setIndex: setIndex) else { return "" }
-                return draft.exercises[exerciseIndex].sets[setIndex].reps.map(String.init) ?? ""
+                guard draftSetExists(exerciseIndex: exerciseIndex, setIndex: setIndex) else {
+                    return numberInputTexts[focusTarget]?.displayText(for: nil) ?? ""
+                }
+                let reps = WorkoutNumericInputPolicy.validatedReps(
+                    draft.exercises[exerciseIndex].sets[setIndex].reps
+                )
+                return numberInputTexts[focusTarget, default: WorkoutNumberInputText()]
+                    .displayText(for: reps.map(Double.init))
             },
             set: { value in
                 updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in
-                    set.reps = Int(value)
+                    numberInputTexts[focusTarget, default: WorkoutNumberInputText()].updateDraft(value)
+                    set.reps = WorkoutNumericInputPolicy.parseReps(value)
                 }
             }
         )
@@ -367,7 +375,7 @@ struct CompletedWorkoutEditView: View {
             set: { value in
                 updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in
                     numberInputTexts[focusTarget, default: WorkoutNumberInputText()].updateDraft(value)
-                    set.rpe = WorkoutFormatters.parseNumber(value)
+                    set.rpe = WorkoutNumericInputPolicy.parseRPE(value)
                 }
             }
         )

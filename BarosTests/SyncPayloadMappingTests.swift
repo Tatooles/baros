@@ -217,4 +217,14 @@ final class SyncPayloadMappingTests: XCTestCase {
 
         XCTAssertEqual(payload.weight ?? 0, 220.462262185, accuracy: 0.000_001)
     }
+
+    func testLoggedSetPayloadDoesNotSyncOutOfPolicyNumericValues() {
+        let set = LoggedSet(orderIndex: 0, weight: 10_001, reps: 1_001, rpe: 10.1)
+
+        let payload = SyncPayloadMapper.loggedSetPayload(from: set)
+
+        XCTAssertNil(payload.weight)
+        XCTAssertNil(payload.reps)
+        XCTAssertNil(payload.rpe)
+    }
 }

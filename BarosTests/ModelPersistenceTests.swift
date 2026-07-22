@@ -220,6 +220,14 @@ final class ModelPersistenceTests: XCTestCase {
         XCTAssertEqual(incomplete.completedVolume, 0)
     }
 
+    func testCompletedSetVolumeIgnoresOutOfPolicyNumericValues() {
+        let invalidWeight = LoggedSet(orderIndex: 0, weight: 10_001, reps: 5, isCompleted: true)
+        let invalidReps = LoggedSet(orderIndex: 1, weight: 100, reps: 1_001, isCompleted: true)
+
+        XCTAssertEqual(invalidWeight.completedVolume, 0)
+        XCTAssertEqual(invalidReps.completedVolume, 0)
+    }
+
     func testSyncedModelsDefaultToNotDeleted() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

@@ -74,26 +74,36 @@ struct SetRowView: View {
     /// Typing stages values in view-local drafts; this is the single point that
     /// writes them to the model and saves. Runs on focus leave, completion, and
     /// row disappearance — never per keystroke.
-    private func commitDraftsIfNeeded() {
-        guard weightInputText.draftText != nil || repsDraft != nil else { return }
+    @discardableResult
+    private func commitDraftsIfNeeded() -> Bool {
+        guard weightInputText.draftText != nil || repsDraft != nil else { return false }
 
         let weight: Double?
+        let rejectedWeightDraft: Bool
         if let draft = weightInputText.draftText {
-            weight = weightUnit.canonicalWeight(fromDisplayWeight: WorkoutFormatters.parseNumber(draft))
+            weight = WorkoutNumericInputPolicy.parseWeight(draft, unit: weightUnit)
+            rejectedWeightDraft = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && weight == nil
         } else {
-            weight = set.weight
+            weight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
+            rejectedWeightDraft = false
         }
 
         let reps: Int?
+        let rejectedRepsDraft: Bool
         if let repsDraft {
-            reps = Int(repsDraft)
+            reps = WorkoutNumericInputPolicy.parseReps(repsDraft)
+            rejectedRepsDraft = !repsDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && reps == nil
         } else {
-            reps = set.reps
+            reps = WorkoutNumericInputPolicy.validatedReps(set.reps)
+            rejectedRepsDraft = false
         }
 
         weightInputText.endEditing()
         repsDraft = nil
         try? engine.updateSet(set, weight: weight, reps: reps, rpe: set.rpe, context: modelContext)
+        return rejectedWeightDraft || rejectedRepsDraft
     }
 
     private var previousColumn: some View {
@@ -138,7 +148,7 @@ struct SetRowView: View {
 
     @ViewBuilder
     private var rpeBadge: some View {
-        if let rpe = set.rpe {
+        if let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe) {
             Button {
                 onEditRPE(set)
             } label: {
@@ -175,7 +185,12 @@ struct SetRowView: View {
 
     private var weightBinding: Binding<String> {
         Binding(
-            get: { weightInputText.displayText(for: weightUnit.displayWeight(fromCanonicalPounds: set.weight)) },
+            get: {
+                let validWeight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
+                return weightInputText.displayText(
+                    for: weightUnit.displayWeight(fromCanonicalPounds: validWeight)
+                )
+            },
             set: { value in
                 if CompletionEmptyWriteGuard.shouldIgnoreEmptyWrite(
                     value: value,
@@ -192,7 +207,7 @@ struct SetRowView: View {
 
     private var repsBinding: Binding<String> {
         Binding(
-            get: { repsDraft ?? set.reps.map(String.init) ?? "" },
+            get: { repsDraft ?? WorkoutNumericInputPolicy.validatedReps(set.reps).map(String.init) ?? "" },
             set: { value in
                 if CompletionEmptyWriteGuard.shouldIgnoreEmptyWrite(
                     value: value,
@@ -209,13 +224,14 @@ struct SetRowView: View {
     private func completeButtonTapped() {
         // The fill policy below reads committed model values, so pending drafts
         // must land first (the focus-change commit only fires on a later update).
-        commitDraftsIfNeeded()
+        let hasRejectedInput = commitDraftsIfNeeded()
         clearFocusedFieldForThisSet()
         if SetCompletionPreviousFillPolicy.shouldFillBeforeCompletion(
             isCompleted: set.isCompleted,
-            weight: set.weight,
-            reps: set.reps,
-            previous: previous
+            weight: WorkoutNumericInputPolicy.validatedWeight(set.weight),
+            reps: WorkoutNumericInputPolicy.validatedReps(set.reps),
+            previous: previous,
+            hasRejectedInput: hasRejectedInput
         ), let previous {
             fillFromPrevious(previous)
         }
@@ -244,9 +260,10 @@ enum SetCompletionPreviousFillPolicy {
         isCompleted: Bool,
         weight: Double?,
         reps: Int?,
-        previous: PreviousSetPerformance?
+        previous: PreviousSetPerformance?,
+        hasRejectedInput: Bool = false
     ) -> Bool {
-        !isCompleted && (weight == nil || reps == nil) && previous != nil
+        !hasRejectedInput && !isCompleted && (weight == nil || reps == nil) && previous != nil
     }
 }
 
