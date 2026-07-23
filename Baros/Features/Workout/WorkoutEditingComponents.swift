@@ -86,7 +86,9 @@ struct WorkoutTitleField<Focus: Hashable>: View {
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous))
             .onTapGesture {
-                focusedField.wrappedValue = focusTarget
+                if focusedField.wrappedValue != focusTarget {
+                    focusedField.wrappedValue = focusTarget
+                }
             }
             .background(
                 isFocused ? AnyShapeStyle(AppTheme.fieldFill) : AnyShapeStyle(Color.clear),
@@ -154,7 +156,9 @@ struct LabeledWorkoutTitleField<Focus: Hashable>: View {
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous))
             .onTapGesture {
-                focusedField.wrappedValue = focusTarget
+                if focusedField.wrappedValue != focusTarget {
+                    focusedField.wrappedValue = focusTarget
+                }
             }
             .background(
                 AppTheme.fieldFill,
@@ -193,6 +197,12 @@ struct WorkoutNumericTextField<Focus: Hashable>: View {
             .focused(focusedField, equals: focusTarget)
             .padding(.vertical, verticalPadding)
             .frame(maxWidth: .infinity)
+            .contentShape(RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous))
+            .onTapGesture {
+                if focusedField.wrappedValue != focusTarget {
+                    focusedField.wrappedValue = focusTarget
+                }
+            }
             .background(
                 AppTheme.fieldFill,
                 in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
@@ -231,6 +241,14 @@ struct WorkoutNotesField<Focus: Hashable>: View {
                     .lineLimit(4...6)
                     .focused(focusedField, equals: focusTarget)
                     .padding(12)
+                    .contentShape(
+                        RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                    )
+                    .onTapGesture {
+                        if focusedField.wrappedValue != focusTarget {
+                            focusedField.wrappedValue = focusTarget
+                        }
+                    }
                     .background(
                         AppTheme.fieldFill,
                         in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)

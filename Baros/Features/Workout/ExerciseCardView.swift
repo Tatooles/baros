@@ -226,6 +226,12 @@ private struct ExerciseNotesDraftField: View {
         .focused(focusedField, equals: focusTarget)
         .padding(14)
         .frame(minHeight: 88, alignment: .topLeading)
+        .contentShape(RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous))
+        .onTapGesture {
+            if focusedField.wrappedValue != focusTarget {
+                focusedField.wrappedValue = focusTarget
+            }
+        }
         .background(
             AppTheme.fieldFill,
             in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)

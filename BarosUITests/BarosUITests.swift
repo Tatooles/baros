@@ -225,7 +225,10 @@ final class BarosUITests: XCTestCase {
         app.buttons["DismissKeyboardButton"].tap()
         XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
 
-        firstWeightField.tap()
+        // Tap inside the visible rounded field, but outside its centered text.
+        // The entire field surface should focus the input, not just the glyphs.
+        firstWeightField.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         firstWeightField.typeText("185")
         app.buttons["AddSetButton-0"].tap()
 
@@ -330,7 +333,8 @@ final class BarosUITests: XCTestCase {
         }
 
         XCTAssertTrue(notesField.waitForExistence(timeout: 3))
-        notesField.tap()
+        // Tap the lower trailing padding, away from the placeholder glyphs.
+        notesField.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.9)).tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
 
         let doneButton = app.buttons["DismissKeyboardButton"]
@@ -357,7 +361,9 @@ final class BarosUITests: XCTestCase {
         }
 
         XCTAssertTrue(notesField.waitForExistence(timeout: 3))
-        notesField.tap()
+        // Tap the lower trailing area created by the field's minimum-height frame,
+        // outside the placeholder glyphs but inside the visible rounded border.
+        notesField.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.9)).tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
 
         let doneButton = app.buttons["DismissKeyboardButton"]
@@ -424,7 +430,11 @@ final class BarosUITests: XCTestCase {
 
         replaceText(in: app.textFields["CompletedWorkoutTitleField"], with: "Edited Push")
         setCompletedWorkoutDuration(minutes: 45, in: app)
-        replaceText(in: app.textFields["CompletedWorkoutNotesField"], with: "Post edit notes")
+        let completedNotesField = app.textFields["CompletedWorkoutNotesField"]
+        // Exercise the lower trailing padding inside the visible field border.
+        completedNotesField.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.9)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        completedNotesField.typeText("Post edit notes")
         dismissKeyboardIfNeeded(in: app)
         replaceText(in: app.textFields["HistorySetWeightField-0-0"], with: "205.")
         XCTAssertEqual(app.textFields["HistorySetWeightField-0-0"].value as? String, "205.")
