@@ -439,14 +439,7 @@ private struct WorkoutNotesDraftCard: View {
                 .lineLimit(4...6)
                 .focused(focusedField, equals: .workoutNotes)
                 .padding(12)
-                .contentShape(
-                    RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                )
-                .onTapGesture {
-                    if focusedField.wrappedValue != .workoutNotes {
-                        focusedField.wrappedValue = .workoutNotes
-                    }
-                }
+                .workoutInputTapTarget(focusedField, equals: .workoutNotes)
                 .background(
                     AppTheme.fieldFill,
                     in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
