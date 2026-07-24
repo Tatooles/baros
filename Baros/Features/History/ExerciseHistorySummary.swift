@@ -135,6 +135,9 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
         in grouped: [ExerciseHistoryIdentity: ExerciseHistorySummary],
         linkedExerciseIDsBySnapshotIdentity: [ExerciseHistorySnapshotIdentity: Set<UUID>]
     ) -> [ExerciseHistoryIdentity: ExerciseHistorySummary] {
+        // This data-driven stage folds snapshot-only history into a linked summary
+        // only when that snapshot maps to exactly one historical exercise ID.
+        // Ambiguous snapshots remain separate, and session IDs deduplicate workouts.
         var reconciled = grouped
 
         for (identity, snapshotSummary) in grouped {
@@ -175,6 +178,9 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
         in summaries: [ExerciseHistorySummary],
         matching exercise: Exercise
     ) -> ExerciseHistorySummary? {
+        // This live-exercise stage combines the linked and snapshot identities that
+        // belong to the picker row, then prefers the current exercise metadata.
+        // Session IDs remain the source of truth when the two stages overlap.
         let matchingIdentities = ExerciseHistoryIdentity.matching(exercise)
         let matchingSummaries = summaries.filter {
             matchingIdentities.contains(ExerciseHistoryIdentity(summary: $0))
@@ -208,6 +214,10 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
 struct ExerciseHistorySnapshotIdentity: Hashable {
     let name: String
     let equipmentRaw: String?
+
+    var id: String {
+        "snapshot-\(name)-\(equipmentRaw ?? "unknown")"
+    }
 
     init(name: String, equipmentRaw: String?) {
         self.name = name.lowercased()
@@ -264,7 +274,7 @@ private enum ExerciseHistoryIdentity: Hashable {
         case let .exercise(exerciseID):
             "exercise-\(exerciseID.uuidString)"
         case let .snapshot(snapshotIdentity):
-            "snapshot-\(snapshotIdentity.name)-\(snapshotIdentity.equipmentRaw ?? "unknown")"
+            snapshotIdentity.id
         }
     }
 }

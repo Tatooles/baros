@@ -10,7 +10,10 @@ struct ExerciseHistoryRoute: Hashable, Identifiable {
             return "exercise-\(exerciseID.uuidString)"
         }
 
-        return "snapshot-\(name.lowercased())-\((equipmentRaw ?? "unknown").lowercased())"
+        return ExerciseHistorySnapshotIdentity(
+            name: name,
+            equipmentRaw: equipmentRaw
+        ).id
     }
 
     init(exerciseID: UUID?, name: String, equipmentRaw: String? = nil) {
