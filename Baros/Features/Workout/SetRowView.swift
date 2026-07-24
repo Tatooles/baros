@@ -13,6 +13,7 @@ struct SetRowView: View {
     let onEditRPE: (LoggedSet) -> Void
     @State private var weightInputText = WorkoutNumberInputText()
     @State private var repsDraft: String?
+    @State private var rejectedInput = ActiveWorkoutRejectedInputState()
 
     var body: some View {
         SwipeToDeleteRow(
@@ -76,34 +77,30 @@ struct SetRowView: View {
     /// row disappearance — never per keystroke.
     @discardableResult
     private func commitDraftsIfNeeded() -> Bool {
-        guard weightInputText.draftText != nil || repsDraft != nil else { return false }
+        guard weightInputText.draftText != nil || repsDraft != nil else {
+            return rejectedInput.hasRejectedInput
+        }
 
         let weight: Double?
-        let rejectedWeightDraft: Bool
         if let draft = weightInputText.draftText {
             weight = WorkoutNumericInputPolicy.parseWeight(draft, unit: weightUnit)
-            rejectedWeightDraft = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && weight == nil
+            rejectedInput.commitWeightDraft(draft, acceptedValue: weight)
         } else {
             weight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
-            rejectedWeightDraft = false
         }
 
         let reps: Int?
-        let rejectedRepsDraft: Bool
         if let repsDraft {
             reps = WorkoutNumericInputPolicy.parseReps(repsDraft)
-            rejectedRepsDraft = !repsDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && reps == nil
+            rejectedInput.commitRepsDraft(repsDraft, acceptedValue: reps)
         } else {
             reps = WorkoutNumericInputPolicy.validatedReps(set.reps)
-            rejectedRepsDraft = false
         }
 
         weightInputText.endEditing()
         repsDraft = nil
         try? engine.updateSet(set, weight: weight, reps: reps, rpe: set.rpe, context: modelContext)
-        return rejectedWeightDraft || rejectedRepsDraft
+        return rejectedInput.hasRejectedInput
     }
 
     private var previousColumn: some View {
@@ -245,6 +242,7 @@ struct SetRowView: View {
         // that are still nil, so a typed-but-uncommitted value must win.
         commitDraftsIfNeeded()
         try? engine.fillSetFromPrevious(set, previous: previous, context: modelContext)
+        rejectedInput.acceptPreviousFill(weight: set.weight, reps: set.reps)
     }
 
     private func clearFocusedFieldForThisSet() {
@@ -264,6 +262,37 @@ enum SetCompletionPreviousFillPolicy {
         hasRejectedInput: Bool = false
     ) -> Bool {
         !hasRejectedInput && !isCompleted && (weight == nil || reps == nil) && previous != nil
+    }
+}
+
+struct ActiveWorkoutRejectedInputState {
+    private(set) var rejectedWeight = false
+    private(set) var rejectedReps = false
+
+    var hasRejectedInput: Bool {
+        rejectedWeight || rejectedReps
+    }
+
+    mutating func commitWeightDraft(_ draft: String, acceptedValue: Double?) {
+        rejectedWeight = Self.isRejected(draft, acceptedValue: acceptedValue)
+    }
+
+    mutating func commitRepsDraft(_ draft: String, acceptedValue: Int?) {
+        rejectedReps = Self.isRejected(draft, acceptedValue: acceptedValue)
+    }
+
+    mutating func acceptPreviousFill(weight: Double?, reps: Int?) {
+        if weight != nil {
+            rejectedWeight = false
+        }
+        if reps != nil {
+            rejectedReps = false
+        }
+    }
+
+    private static func isRejected<T>(_ draft: String, acceptedValue: T?) -> Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && acceptedValue == nil
     }
 }
 
