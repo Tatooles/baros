@@ -237,12 +237,14 @@ final class ActiveWorkoutEngine {
     func fillSetFromPrevious(_ set: LoggedSet, previous: PreviousSetPerformance, context: ModelContext) throws {
         var didChange = false
 
-        if set.weight == nil, let weight = WorkoutNumericInputPolicy.validatedWeight(previous.weight) {
+        if WorkoutNumericInputPolicy.validatedWeight(set.weight) == nil,
+           let weight = WorkoutNumericInputPolicy.validatedWeight(previous.weight) {
             set.weight = weight
             didChange = true
         }
 
-        if set.reps == nil, let reps = WorkoutNumericInputPolicy.validatedReps(previous.reps) {
+        if WorkoutNumericInputPolicy.validatedReps(set.reps) == nil,
+           let reps = WorkoutNumericInputPolicy.validatedReps(previous.reps) {
             set.reps = reps
             didChange = true
         }
