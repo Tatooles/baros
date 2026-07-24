@@ -8,9 +8,12 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
     var primaryMuscleGroupRaw: String?
     var lastPerformedAt: Date
     var completedSetCount: Int
-    var performanceCount: Int = 1
-    var performanceSessionIDs: Set<UUID> = []
+    var performanceSessionIDs: Set<UUID>
     var snapshotFallbackIdentities: Set<ExerciseHistorySnapshotIdentity> = []
+
+    var performanceCount: Int {
+        performanceSessionIDs.count
+    }
 
     var lastPerformedLabel: String {
         WorkoutFormatters.compactDate(lastPerformedAt)
@@ -92,7 +95,6 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
                 if var existing = grouped[key] {
                     existing.completedSetCount += completedSetCount
                     existing.performanceSessionIDs.insert(session.id)
-                    existing.performanceCount = existing.performanceSessionIDs.count
                     existing.snapshotFallbackIdentities.insert(snapshotIdentity)
                     if session.startedAt > existing.lastPerformedAt {
                         existing.lastPerformedAt = session.startedAt
@@ -110,7 +112,6 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
                         primaryMuscleGroupRaw: loggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw,
                         lastPerformedAt: session.startedAt,
                         completedSetCount: completedSetCount,
-                        performanceCount: 1,
                         performanceSessionIDs: [session.id],
                         snapshotFallbackIdentities: [snapshotIdentity]
                     )
@@ -158,12 +159,8 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
     }
 
     private mutating func merge(_ other: ExerciseHistorySummary) {
-        let summedPerformanceCount = performanceCount + other.performanceCount
         completedSetCount += other.completedSetCount
         performanceSessionIDs.formUnion(other.performanceSessionIDs)
-        performanceCount = performanceSessionIDs.isEmpty
-            ? summedPerformanceCount
-            : performanceSessionIDs.count
         snapshotFallbackIdentities.formUnion(other.snapshotFallbackIdentities)
 
         if other.lastPerformedAt > lastPerformedAt {
@@ -200,9 +197,6 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
         combined.performanceSessionIDs = matchingSummaries.reduce(into: []) {
             $0.formUnion($1.performanceSessionIDs)
         }
-        combined.performanceCount = combined.performanceSessionIDs.isEmpty
-            ? matchingSummaries.reduce(0) { $0 + $1.performanceCount }
-            : combined.performanceSessionIDs.count
         return combined
     }
 

@@ -421,7 +421,8 @@ final class HistoryPersistenceTests: XCTestCase {
             equipmentRaw: ExerciseEquipment.other.rawValue,
             primaryMuscleGroupRaw: ExerciseMuscleGroup.other.rawValue,
             lastPerformedAt: session.startedAt,
-            completedSetCount: 1
+            completedSetCount: 1,
+            performanceSessionIDs: [session.id]
         )
         let groups = ExerciseHistorySessionGroup.makeGroups(from: [session], matching: summary)
 
@@ -498,15 +499,6 @@ final class HistoryPersistenceTests: XCTestCase {
     }
 
     func testExerciseHistoryGroupsFallbackByNameAndEquipment() throws {
-        let summary = ExerciseHistorySummary(
-            id: "snapshot-bench press-barbell",
-            exerciseID: nil,
-            name: "Bench Press",
-            equipmentRaw: ExerciseEquipment.barbell.rawValue,
-            primaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
-            lastPerformedAt: .now,
-            completedSetCount: 1
-        )
         let matchingLoggedExercise = LoggedExercise(
             orderIndex: 0,
             exerciseSnapshotName: "Bench Press",
@@ -527,6 +519,16 @@ final class HistoryPersistenceTests: XCTestCase {
             status: .completed,
             source: .blank,
             loggedExercises: [matchingLoggedExercise, nonMatchingLoggedExercise]
+        )
+        let summary = ExerciseHistorySummary(
+            id: "snapshot-bench press-barbell",
+            exerciseID: nil,
+            name: "Bench Press",
+            equipmentRaw: ExerciseEquipment.barbell.rawValue,
+            primaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
+            lastPerformedAt: session.startedAt,
+            completedSetCount: 1,
+            performanceSessionIDs: [session.id]
         )
 
         let groups = ExerciseHistorySessionGroup.makeGroups(from: [session], matching: summary)

@@ -361,7 +361,7 @@ final class ExercisePickerContentTests: XCTestCase {
             primaryMuscleGroupRaw: benchPress.primaryMuscleGroupRaw,
             lastPerformedAt: performedAt,
             completedSetCount: 12,
-            performanceCount: 1
+            performanceSessionIDs: [UUID()]
         )
 
         let performedRow = ExercisePickerRowContent(
@@ -380,7 +380,7 @@ final class ExercisePickerContentTests: XCTestCase {
         XCTAssertEqual(neverPerformedRow.performanceSummaryText, "Never performed")
 
         var repeatedSummary = summary
-        repeatedSummary.performanceCount = 8
+        repeatedSummary.performanceSessionIDs = Set((0..<8).map { _ in UUID() })
         XCTAssertEqual(
             ExercisePickerRowContent(
                 exercise: benchPress,
