@@ -212,6 +212,43 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(summaries.first?.completedSetCount, 1)
     }
 
+    func testExerciseHistoryCountsOnePerformancePerCompletedWorkoutWithDuplicateExerciseRows() throws {
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscleGroup: .chest
+        )
+        let firstLoggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: exercise,
+            exerciseSnapshotName: exercise.name
+        )
+        firstLoggedExercise.sets = [
+            LoggedSet(orderIndex: 0, weight: 185, reps: 5, isCompleted: true)
+        ]
+        let secondLoggedExercise = LoggedExercise(
+            orderIndex: 1,
+            exercise: exercise,
+            exerciseSnapshotName: exercise.name
+        )
+        secondLoggedExercise.sets = [
+            LoggedSet(orderIndex: 0, weight: 195, reps: 3, isCompleted: true)
+        ]
+        let session = WorkoutSession(
+            title: "Duplicate Bench",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .completed,
+            source: .blank
+        )
+        session.loggedExercises = [firstLoggedExercise, secondLoggedExercise]
+
+        let summary = try XCTUnwrap(ExerciseHistorySummary.makeSummaries(from: [session]).first)
+
+        XCTAssertEqual(summary.performanceCount, 1)
+        XCTAssertEqual(summary.completedSetCount, 2)
+    }
+
     func testExerciseHistorySummaryIgnoresTombstonedWorkoutGraphRecords() throws {
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         let visibleSession = WorkoutSession(title: "Visible Push", startedAt: Date(timeIntervalSince1970: 100), status: .completed, source: .blank)
@@ -240,6 +277,7 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(summary.name, "Bench Press")
         XCTAssertEqual(summary.lastPerformedAt, visibleSession.startedAt)
         XCTAssertEqual(summary.completedSetCount, 1)
+        XCTAssertEqual(summary.performanceCount, 1)
     }
 
     func testExerciseHistorySummaryUsesSnapshotNameAfterExerciseRename() throws {

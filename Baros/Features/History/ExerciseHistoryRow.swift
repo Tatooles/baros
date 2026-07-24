@@ -4,6 +4,13 @@ struct ExerciseHistoryRow: View {
     let summary: ExerciseHistorySummary
     let showsDivider: Bool
 
+    private var performanceAccessibilityIdentifier: String {
+        let equipmentName = summary.equipmentRaw
+            .flatMap(ExerciseEquipment.init(rawValue:))?
+            .displayName ?? "Unknown"
+        return "ExerciseHistoryPerformance-\(summary.name)-\(equipmentName)"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -26,20 +33,13 @@ struct ExerciseHistoryRow: View {
                             .foregroundStyle(AppTheme.textSecondary)
                             .lineLimit(1)
                     }
-                    Text("Last: \(summary.lastPerformedLabel)")
+                    Text(summary.performanceSummaryLabel)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)
+                        .accessibilityIdentifier(performanceAccessibilityIdentifier)
                 }
 
                 Spacer()
-
-                Text("x\(summary.completedSetCount)")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(AppTheme.surfaceMuted)
-                    .clipShape(Capsule())
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 15, weight: .medium))
