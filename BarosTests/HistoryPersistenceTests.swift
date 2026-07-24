@@ -249,6 +249,28 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(summary.completedSetCount, 2)
     }
 
+    func testExerciseHistoryReconcilesLinkedAndSnapshotPerformancesIntoOneSummary() throws {
+        let fixture = try makeReconciledHistoryFixture()
+
+        let summaries = ExerciseHistorySummary.makeSummaries(
+            from: [fixture.linkedSession, fixture.snapshotSession]
+        )
+
+        let summary = try XCTUnwrap(summaries.first)
+        XCTAssertEqual(summaries.count, 1)
+        XCTAssertEqual(summary.exerciseID, fixture.exercise.id)
+        XCTAssertEqual(summary.performanceCount, 2)
+        XCTAssertEqual(summary.completedSetCount, 2)
+        XCTAssertEqual(summary.lastPerformedAt, fixture.snapshotSession.startedAt)
+        XCTAssertEqual(
+            ExerciseHistorySummary.find(
+                in: summaries,
+                matching: ExerciseHistoryRoute(loggedExercise: fixture.snapshotExercise)
+            )?.id,
+            summary.id
+        )
+    }
+
     func testExerciseHistorySummaryIgnoresTombstonedWorkoutGraphRecords() throws {
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         let visibleSession = WorkoutSession(title: "Visible Push", startedAt: Date(timeIntervalSince1970: 100), status: .completed, source: .blank)
@@ -356,6 +378,23 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(groups.map(\.completedSetCount), [2, 1])
         XCTAssertEqual(groups.first?.setEntries.map { $0.displaySetNumber }, [1, 2])
         XCTAssertEqual(groups.last?.setEntries.map { $0.displaySetNumber }, [1])
+    }
+
+    func testReconciledExerciseHistoryGroupsIncludeLinkedAndSnapshotSessions() throws {
+        let fixture = try makeReconciledHistoryFixture()
+        let summary = try XCTUnwrap(
+            ExerciseHistorySummary.makeSummaries(
+                from: [fixture.linkedSession, fixture.snapshotSession]
+            ).first
+        )
+
+        let groups = ExerciseHistorySessionGroup.makeGroups(
+            from: [fixture.linkedSession, fixture.snapshotSession],
+            matching: summary
+        )
+
+        XCTAssertEqual(groups.map(\.title), ["Snapshot Push", "Linked Push"])
+        XCTAssertEqual(groups.map(\.completedSetCount), [1, 1])
     }
 
     func testExerciseHistoryGroupingMatchesSnapshotNameWhenExerciseIDIsMissing() throws {
@@ -674,6 +713,63 @@ final class HistoryPersistenceTests: XCTestCase {
         let group = try XCTUnwrap(ExerciseHistorySessionGroup.makeGroups(from: [session], matching: summary).first)
 
         XCTAssertEqual(group.exerciseNotes, "Felt strong")
+    }
+
+    private func makeReconciledHistoryFixture() throws -> (
+        container: ModelContainer,
+        exercise: Exercise,
+        snapshotExercise: LoggedExercise,
+        linkedSession: WorkoutSession,
+        snapshotSession: WorkoutSession
+    ) {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscleGroup: .chest
+        )
+        let linkedExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: exercise,
+            exerciseSnapshotName: exercise.name,
+            sets: [LoggedSet(orderIndex: 0, weight: 185, reps: 5, isCompleted: true)]
+        )
+        let linkedSession = WorkoutSession(
+            title: "Linked Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .completed,
+            source: .blank,
+            loggedExercises: [linkedExercise]
+        )
+        let snapshotExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: nil,
+            exerciseSnapshotName: exercise.name,
+            exerciseSnapshotEquipmentRaw: exercise.equipmentRaw,
+            exerciseSnapshotPrimaryMuscleGroupRaw: exercise.primaryMuscleGroupRaw,
+            sets: [LoggedSet(orderIndex: 0, weight: 195, reps: 3, isCompleted: true)]
+        )
+        let snapshotSession = WorkoutSession(
+            title: "Snapshot Push",
+            startedAt: Date(timeIntervalSince1970: 200),
+            status: .completed,
+            source: .blank,
+            loggedExercises: [snapshotExercise]
+        )
+        context.insert(exercise)
+        context.insert(linkedSession)
+        context.insert(snapshotSession)
+        try context.save()
+
+        return (
+            container,
+            exercise,
+            snapshotExercise,
+            linkedSession,
+            snapshotSession
+        )
     }
 
     private func completedSessions(in context: ModelContext) throws -> [WorkoutSession] {
