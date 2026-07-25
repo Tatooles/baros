@@ -222,6 +222,22 @@ final class FormattingTests: XCTestCase {
         )
     }
 
+    func testWorkoutNumericPolicyRejectsPartiallyParsedWeightAndRPEInput() {
+        XCTAssertNil(
+            WorkoutNumericInputPolicy.parseWeight(
+                "185kg",
+                unit: .pounds,
+                locale: Locale(identifier: "en_US_POSIX")
+            )
+        )
+        XCTAssertNil(
+            WorkoutNumericInputPolicy.parseRPE(
+                "8abc",
+                locale: Locale(identifier: "en_US_POSIX")
+            )
+        )
+    }
+
     func testWorkoutNumericPolicyParsesLocaleRPEInput() {
         XCTAssertEqual(
             WorkoutNumericInputPolicy.parseRPE(
