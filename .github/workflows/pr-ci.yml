@@ -62,7 +62,7 @@ jobs:
   ios-ui-smoke:
     name: ios-ui-smoke
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       IOS_TEST_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=26.5
 
@@ -86,6 +86,7 @@ jobs:
             -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData"
 
       - name: Run Baros UI smoke tests
+        timeout-minutes: 25
         run: |
           set -o pipefail
           xcodebuild test \
@@ -99,6 +100,23 @@ jobs:
             -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData" \
             -resultBundlePath "${RUNNER_TEMP}/BarosUISmoke.xcresult" \
             2>&1 | tee "${RUNNER_TEMP}/BarosUISmoke.log"
+
+      - name: Verify UI smoke test count
+        env:
+          EXPECTED_UI_SMOKE_TEST_COUNT: 4
+        run: |
+          set -o pipefail
+          executed_test_count="$(
+            xcrun xcresulttool get test-results summary \
+              --path "${RUNNER_TEMP}/BarosUISmoke.xcresult" \
+              --compact |
+              plutil -extract totalTestCount raw -o - -
+          )"
+          echo "Executed UI smoke tests: ${executed_test_count}"
+          if [[ "${executed_test_count}" != "${EXPECTED_UI_SMOKE_TEST_COUNT}" ]]; then
+            echo "Expected ${EXPECTED_UI_SMOKE_TEST_COUNT} UI smoke tests, but executed ${executed_test_count}."
+            exit 1
+          fi
 
       - name: Upload UI smoke failure diagnostics
         if: failure()

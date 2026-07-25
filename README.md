@@ -29,6 +29,7 @@ The UI smoke job intentionally selects only the four tests below instead of maki
 Run the exact UI smoke shard locally with:
 
 ```sh
+rm -rf /private/tmp/BarosUISmoke.xcresult
 xcodebuild test \
   -project Baros.xcodeproj \
   -scheme Baros \
@@ -41,9 +42,9 @@ xcodebuild test \
   -resultBundlePath /private/tmp/BarosUISmoke.xcresult
 ```
 
-The command must execute exactly 4 tests with no failures. Treat a result with fewer than 4 executed tests as partial smoke coverage, not a passing gate.
+The command must execute exactly 4 tests with no failures. CI reads the result bundle and fails the smoke gate unless `totalTestCount` is exactly 4, so a stale selector cannot silently reduce coverage.
 
-The canonical local UI-suite command is the `Run UI tests only` command above. As of issue #63, the expected UI target discovery count is 29 tests; treat a run with fewer discovered or executed tests as partial coverage, not a clean full-suite result. Keep the full UI target out of the required PR gate until it can pass repeated local full-suite runs without known flakes.
+The canonical local UI-suite command is the `Run UI tests only` command above. Xcode 26.5 currently discovers 42 tests in `BarosUITests`; treat a run with fewer discovered or executed tests as partial coverage, not a clean full-suite result. Keep the full UI target out of the required PR gate until issue #63 establishes repeated full-suite stability.
 
 Local equivalents:
 

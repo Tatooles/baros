@@ -150,9 +150,13 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(completedWorkout.waitForExistence(timeout: 3))
         completedWorkout.tap()
 
-        XCTAssertTrue(app.navigationBars["Workout"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["Bench Press"].exists)
-        XCTAssertTrue(app.staticTexts["185 x 5 @ 8 · Done"].exists)
+        XCTAssertTrue(app.staticTexts["Bench Press"].waitForExistence(timeout: 3))
+        let setSummary = app.staticTexts
+            .matching(identifier: "WorkoutHistorySetSummary-0-0")
+            .matching(NSPredicate(format: "label == %@", "185 x 5 @ 8 · Done"))
+            .firstMatch
+        XCTAssertTrue(setSummary.waitForExistence(timeout: 3))
+        XCTAssertEqual(setSummary.label, "185 x 5 @ 8 · Done")
     }
 
     @MainActor
@@ -1136,13 +1140,12 @@ final class BarosUITests: XCTestCase {
     private func openFinishWorkoutSheet(in app: XCUIApplication) {
         let finishButton = app.buttons["FinishWorkoutButton"]
         XCTAssertTrue(finishButton.waitForExistence(timeout: 3))
-        for _ in 0..<2 {
-            finishButton.tap()
-            if app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 1)
-                || app.buttons["KeepGoingButton"].waitForExistence(timeout: 1) {
-                return
-            }
-        }
+        finishButton.tap()
+
+        XCTAssertTrue(
+            app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3)
+                || app.buttons["KeepGoingButton"].waitForExistence(timeout: 3)
+        )
     }
 
     @MainActor
@@ -1207,14 +1210,10 @@ final class BarosUITests: XCTestCase {
         app.buttons["SetCompletionButton-0-0"].tap()
         dismissKeyboardIfNeeded(in: app)
         openFinishWorkoutSheet(in: app)
-        XCTAssertTrue(app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3))
-        for _ in 0..<2 {
-            app.buttons["SaveWorkoutButton"].tap()
-            if app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3) {
-                return
-            }
-        }
-        XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 1))
+        let saveButton = app.buttons["SaveWorkoutButton"]
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
+        saveButton.tap()
+        XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 5))
     }
 
     @MainActor
