@@ -24,6 +24,24 @@ struct WorkoutExerciseProgress {
     }
 }
 
+/// Keeps focus-driven chrome invalidation in a tiny leaf instead of rebuilding
+/// the field's surrounding row/card hierarchy.
+private struct WorkoutFocusChrome<Focus: Hashable>: View {
+    let focusTarget: Focus
+    var focusedField: FocusState<Focus?>.Binding
+
+    var body: some View {
+        let isFocused = focusedField.wrappedValue == focusTarget
+
+        RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+            .strokeBorder(
+                isFocused ? AppTheme.accentBright.opacity(0.7) : .clear,
+                lineWidth: 1.5
+            )
+            .animation(.easeOut(duration: 0.15), value: isFocused)
+    }
+}
+
 struct WorkoutExerciseHeaderContent: View {
     let title: String
     let metadata: String?
@@ -104,11 +122,9 @@ struct WorkoutTitleField<Focus: Hashable>: View {
                 isFocused ? AnyShapeStyle(AppTheme.fieldFill) : AnyShapeStyle(Color.clear),
                 in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                    .strokeBorder(isFocused ? AppTheme.accentBright.opacity(0.7) : .clear, lineWidth: 1.5)
-            )
-            .animation(.easeOut(duration: 0.15), value: isFocused)
+            .overlay {
+                WorkoutFocusChrome(focusTarget: focusTarget, focusedField: focusedField)
+            }
             .id(focusTarget)
     }
 
@@ -169,11 +185,9 @@ struct LabeledWorkoutTitleField<Focus: Hashable>: View {
                 AppTheme.fieldFill,
                 in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                    .strokeBorder(isFocused ? AppTheme.accentBright.opacity(0.7) : .clear, lineWidth: 1.5)
-            )
-            .animation(.easeOut(duration: 0.15), value: isFocused)
+            .overlay {
+                WorkoutFocusChrome(focusTarget: focusTarget, focusedField: focusedField)
+            }
             .id(focusTarget)
         }
     }
@@ -207,14 +221,9 @@ struct WorkoutNumericTextField<Focus: Hashable>: View {
                 AppTheme.fieldFill,
                 in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                    .strokeBorder(
-                        focusedField.wrappedValue == focusTarget ? AppTheme.accentBright.opacity(0.7) : .clear,
-                        lineWidth: 1.5
-                    )
-            )
-            .animation(.easeOut(duration: 0.15), value: focusedField.wrappedValue == focusTarget)
+            .overlay {
+                WorkoutFocusChrome(focusTarget: focusTarget, focusedField: focusedField)
+            }
             .accessibilityIdentifier(accessibilityIdentifier)
             .id(focusTarget)
     }
@@ -246,14 +255,9 @@ struct WorkoutNotesField<Focus: Hashable>: View {
                         AppTheme.fieldFill,
                         in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                            .strokeBorder(
-                                focusedField.wrappedValue == focusTarget ? AppTheme.accentBright.opacity(0.7) : .clear,
-                                lineWidth: 1.5
-                            )
-                    )
-                    .animation(.easeOut(duration: 0.15), value: focusedField.wrappedValue == focusTarget)
+                    .overlay {
+                        WorkoutFocusChrome(focusTarget: focusTarget, focusedField: focusedField)
+                    }
                     .accessibilityIdentifier(accessibilityIdentifier)
                     .id(focusTarget)
             }

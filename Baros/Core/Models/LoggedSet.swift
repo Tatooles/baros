@@ -76,6 +76,13 @@ final class LoggedSet: Identifiable {
         loggedExercise?.touch(now: now)
     }
 
+    /// Marks a value-only edit in an active workout. Active field drafts are
+    /// local checkpoints, not graph-level mutations, so parent timestamps
+    /// deliberately stay unchanged.
+    func touchActiveDraft(now: Date = .now) {
+        updatedAt = now
+    }
+
     func markDeleted(now: Date = .now) {
         deletedAt = now
         updatedAt = now

@@ -260,6 +260,46 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(set.updatedAt, originalUpdatedAt)
     }
 
+    func testFillSetFromPreviousUpdatesOnlyTheSetTimestamp() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let baseline = Date(timeIntervalSince1970: 100)
+        let commitDate = Date(timeIntervalSince1970: 200)
+        let session = WorkoutSession(
+            title: "Workout",
+            startedAt: baseline,
+            status: .active,
+            source: .blank,
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press",
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        let set = LoggedSet(orderIndex: 0, createdAt: baseline, updatedAt: baseline)
+        session.loggedExercises = [loggedExercise]
+        loggedExercise.sets = [set]
+        context.insert(session)
+        try context.save()
+
+        try engine.fillSetFromPrevious(
+            set,
+            previous: PreviousSetPerformance(weight: 185, reps: 5),
+            context: context,
+            now: commitDate
+        )
+
+        XCTAssertEqual(set.weight, 185)
+        XCTAssertEqual(set.reps, 5)
+        XCTAssertEqual(set.updatedAt, commitDate)
+        XCTAssertEqual(loggedExercise.updatedAt, baseline)
+        XCTAssertEqual(session.updatedAt, baseline)
+    }
+
     func testRemovingSetReindexesRemainingSets() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -444,6 +484,115 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertNil(set.rpe)
     }
 
+    func testCommittingActiveSetDraftUpdatesOnlyChangedLeafValuesAndTimestamp() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let baseline = Date(timeIntervalSince1970: 100)
+        let commitDate = Date(timeIntervalSince1970: 200)
+        let session = WorkoutSession(
+            title: "Workout",
+            startedAt: baseline,
+            status: .active,
+            source: .blank,
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press",
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        let set = LoggedSet(
+            orderIndex: 0,
+            weight: 185,
+            reps: 5,
+            rpe: 8,
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        session.loggedExercises = [loggedExercise]
+        loggedExercise.sets = [set]
+        context.insert(session)
+        try context.save()
+
+        let didPersist = try engine.commitActiveSetDraft(
+            set,
+            values: .init(weight: 195, reps: 5),
+            context: context,
+            now: commitDate
+        )
+
+        XCTAssertTrue(didPersist)
+        XCTAssertEqual(set.weight, 195)
+        XCTAssertEqual(set.reps, 5)
+        XCTAssertEqual(set.rpe, 8)
+        XCTAssertEqual(set.updatedAt, commitDate)
+        XCTAssertEqual(loggedExercise.updatedAt, baseline)
+        XCTAssertEqual(session.updatedAt, baseline)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testCommittingUnchangedActiveSetDraftDoesNotDirtyTimestampsOrContext() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let baseline = Date(timeIntervalSince1970: 100)
+        let set = LoggedSet(
+            orderIndex: 0,
+            weight: 185,
+            reps: 5,
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        context.insert(set)
+        try context.save()
+
+        let didPersist = try engine.commitActiveSetDraft(
+            set,
+            values: .init(weight: 185, reps: 5),
+            context: context,
+            now: Date(timeIntervalSince1970: 200)
+        )
+
+        XCTAssertFalse(didPersist)
+        XCTAssertEqual(set.updatedAt, baseline)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testGraphTouchStillCascadesFromSetToExerciseAndSession() {
+        let baseline = Date(timeIntervalSince1970: 100)
+        let touchDate = Date(timeIntervalSince1970: 200)
+        let session = WorkoutSession(
+            title: "Workout",
+            startedAt: baseline,
+            status: .active,
+            source: .blank,
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press",
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        let set = LoggedSet(
+            orderIndex: 0,
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        session.loggedExercises = [loggedExercise]
+        loggedExercise.sets = [set]
+
+        set.touch(now: touchDate)
+
+        XCTAssertEqual(set.updatedAt, touchDate)
+        XCTAssertEqual(loggedExercise.updatedAt, touchDate)
+        XCTAssertEqual(session.updatedAt, touchDate)
+    }
+
     func testFillingFromPreviousRejectsOutOfPolicyNumericValues() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -492,12 +641,27 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = loggedExercise.sets[0]
         try engine.updateSet(set, weight: 185, reps: 5, rpe: nil, context: context)
+        let baseline = Date(timeIntervalSince1970: 100)
+        let commitDate = Date(timeIntervalSince1970: 200)
+        session.updatedAt = baseline
+        loggedExercise.updatedAt = baseline
+        set.updatedAt = baseline
+        try context.save()
 
-        try RPEChipSelectionAction.apply(value: 8.5, to: set, engine: engine, context: context)
+        try RPEChipSelectionAction.apply(
+            value: 8.5,
+            to: set,
+            engine: engine,
+            context: context,
+            now: commitDate
+        )
 
         XCTAssertEqual(set.weight, 185)
         XCTAssertEqual(set.reps, 5)
         XCTAssertEqual(set.rpe, 8.5)
+        XCTAssertEqual(set.updatedAt, commitDate)
+        XCTAssertEqual(loggedExercise.updatedAt, baseline)
+        XCTAssertEqual(session.updatedAt, baseline)
     }
 
     func testUncheckingCompletedSetClearsCompletedAtAndPreservesValues() throws {

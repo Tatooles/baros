@@ -233,4 +233,29 @@ final class SeedDataServiceTests: XCTestCase {
         XCTAssertEqual(set.rpe, 8)
         XCTAssertTrue(set.isCompleted)
     }
+
+    func testUITestLargeActiveWorkoutFixtureCreatesFiftySetsAndOneHundredHistorySessions() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+
+        try UITestFixtureSeeder.seedLargeActiveWorkout(context: context)
+
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let activeSessions = sessions.filter { $0.status == .active && !$0.isDeleted }
+        let completedSessions = sessions.filter { $0.status == .completed && !$0.isDeleted }
+        let activeSession = try XCTUnwrap(activeSessions.first)
+
+        XCTAssertEqual(activeSessions.count, 1)
+        XCTAssertEqual(activeSession.title, "Performance Workout 10x5")
+        XCTAssertEqual(activeSession.sortedLoggedExercises.count, 10)
+        XCTAssertEqual(
+            activeSession.sortedLoggedExercises.flatMap(\.sortedSets).count,
+            50
+        )
+        XCTAssertEqual(completedSessions.count, 100)
+        XCTAssertTrue(completedSessions.allSatisfy {
+            $0.sortedLoggedExercises.count == 10
+                && $0.sortedLoggedExercises.allSatisfy { $0.sortedSets.count == 5 }
+        })
+    }
 }

@@ -262,6 +262,61 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testLargeActiveWorkoutRapidNextNavigationKeepsLatestTarget() {
+        let app = makeApp(extraArguments: [
+            "--uitest-seed-large-active-workout",
+            "--uitest-disable-animations",
+        ])
+        app.launch()
+
+        let titleField = app.textFields["WorkoutTitle"]
+        XCTAssertTrue(titleField.waitForExistence(timeout: 8))
+        XCTAssertEqual(titleField.value as? String, "Performance Workout 10x5")
+        titleField.tap()
+
+        let nextButton = app.buttons["NextWorkoutFieldButton"]
+        XCTAssertTrue(nextButton.waitForExistence(timeout: 3))
+        for _ in 0..<10 {
+            nextButton.tap()
+        }
+
+        let expectedField = app.textFields["SetRepsField-0-4"]
+        XCTAssertTrue(expectedField.waitForExistence(timeout: 3))
+        let focusExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: expectedField
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [focusExpectation], timeout: 3),
+            .completed,
+            "Ten rapid moves from the workout title should land on the fifth set's reps field."
+        )
+    }
+
+    @MainActor
+    func testCollapsingFocusedSetCommitsPendingDraft() {
+        let app = makeApp(extraArguments: ["--uitest-disable-animations"])
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        addBenchPress(in: app)
+
+        let weightField = app.textFields["SetWeightField-0-0"]
+        weightField.tap()
+        weightField.typeText("185")
+
+        let exerciseHeader = app.buttons["ExerciseHeader-0"]
+        XCTAssertTrue(exerciseHeader.waitForExistence(timeout: 3))
+        exerciseHeader.tap()
+        XCTAssertFalse(weightField.waitForExistence(timeout: 2))
+
+        exerciseHeader.tap()
+        XCTAssertTrue(weightField.waitForExistence(timeout: 3))
+        XCTAssertEqual(weightField.value as? String, "185")
+    }
+
+    @MainActor
     func testAddingExerciseScrollsNewExerciseToTopWhileEditing() {
         let app = makeApp()
         app.launch()
@@ -1018,6 +1073,32 @@ final class BarosUITests: XCTestCase {
         relaunchedApp.buttons["WorkoutHistoryButton-0"].tap()
         XCTAssertTrue(relaunchedApp.staticTexts["Relaunch Push"].waitForExistence(timeout: 3))
         XCTAssertTrue(relaunchedApp.staticTexts["Bench Press"].exists)
+    }
+
+    @MainActor
+    func testDiskBackedActiveSetDraftSurvivesAppRelaunch() {
+        let app = makeDiskBackedResetApp()
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        addBenchPress(in: app)
+
+        let weightField = app.textFields["SetWeightField-0-0"]
+        weightField.tap()
+        weightField.typeText("185")
+        let repsField = app.textFields["SetRepsField-0-0"]
+        repsField.tap()
+        repsField.typeText("5")
+        app.buttons["DismissKeyboardButton"].tap()
+        app.terminate()
+
+        let relaunchedApp = makeDiskBackedApp()
+        relaunchedApp.launch()
+
+        XCTAssertTrue(relaunchedApp.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertEqual(relaunchedApp.textFields["SetWeightField-0-0"].value as? String, "185")
+        XCTAssertEqual(relaunchedApp.textFields["SetRepsField-0-0"].value as? String, "5")
     }
 
     @MainActor

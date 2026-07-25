@@ -43,14 +43,13 @@ struct ActiveWorkoutSetInput {
     }
 
     mutating func commit(current: Values, weightUnit: MeasurementUnit) -> Commit {
+        let storedValues = Values(
+            weight: WorkoutNumericInputPolicy.validatedWeight(current.weight),
+            reps: WorkoutNumericInputPolicy.validatedReps(current.reps)
+        )
+
         guard weightInput.draftText != nil || repsInput.draftText != nil else {
-            return Commit(
-                values: Values(
-                    weight: WorkoutNumericInputPolicy.validatedWeight(current.weight),
-                    reps: WorkoutNumericInputPolicy.validatedReps(current.reps)
-                ),
-                shouldPersist: false
-            )
+            return Commit(values: storedValues, shouldPersist: false)
         }
 
         let weight: Double?
@@ -76,7 +75,7 @@ struct ActiveWorkoutSetInput {
 
         return Commit(
             values: Values(weight: weight, reps: reps),
-            shouldPersist: true
+            shouldPersist: Values(weight: weight, reps: reps) != storedValues
         )
     }
 
