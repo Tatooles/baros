@@ -29,7 +29,7 @@ struct HistoryView: View {
     }
 
     private var exerciseSummaries: [ExerciseHistorySummary] {
-        exerciseHistoryIndex.summaries
+        exerciseHistoryIndex.summaries(reconciledFor: exerciseVisibility)
     }
 
     var body: some View {

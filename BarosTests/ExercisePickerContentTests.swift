@@ -342,9 +342,10 @@ final class ExercisePickerContentTests: XCTestCase {
             exercises: [benchPress],
             ownerTokenIdentifier: nil
         )
-        let routeSummary = try XCTUnwrap(ExerciseHistorySummary.makeIndex(
+        let historyIndex = ExerciseHistorySummary.makeIndex(
             from: [linkedSession, snapshotSession, mixedSession]
-        ).summary(
+        )
+        let routeSummary = try XCTUnwrap(historyIndex.summary(
             matching: ExerciseHistoryRoute(
                 exerciseID: benchPress.id,
                 name: benchPress.name,
@@ -361,6 +362,14 @@ final class ExercisePickerContentTests: XCTestCase {
             ).map(\.title),
             ["Mixed Name Push", "Current Name Push", "Original Name Push"]
         )
+
+        let displayedSummaries = historyIndex.summaries(
+            reconciledFor: visibility
+        )
+        XCTAssertEqual(displayedSummaries.count, 1)
+        XCTAssertEqual(displayedSummaries.first?.name, benchPress.name)
+        XCTAssertEqual(displayedSummaries.first?.performanceCount, 3)
+        XCTAssertEqual(displayedSummaries.first?.completedSetCount, 4)
     }
 
     func testVisibleHistoricalClaimPreventsAnotherExerciseFromInheritingSnapshotHistory() {
@@ -409,6 +418,49 @@ final class ExercisePickerContentTests: XCTestCase {
         XCTAssertNil(routeSummary)
     }
 
+    func testReconciledHistoryDoesNotDuplicateSnapshotConsumedFromHiddenLinkedOwner() {
+        let historicalClaimant = exercise(named: "Bench Press")
+        let linkedSession = completedSession(
+            title: "Linked Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: historicalClaimant
+        )
+        historicalClaimant.name = "Competition Bench Press"
+        historicalClaimant.isArchived = true
+
+        let currentNameMatch = exercise(named: "Bench Press")
+        let snapshotSession = completedSnapshotSession(
+            title: "Snapshot Push",
+            startedAt: Date(timeIntervalSince1970: 200),
+            name: currentNameMatch.name,
+            equipment: currentNameMatch.equipment,
+            muscleGroup: currentNameMatch.primaryMuscleGroup
+        )
+        let visibility = ExerciseHistoryVisibilityScope(
+            exercises: [historicalClaimant, currentNameMatch],
+            ownerTokenIdentifier: nil
+        )
+
+        let displayedSummaries = ExerciseHistorySummary.makeIndex(
+            from: [linkedSession, snapshotSession]
+        ).summaries(reconciledFor: visibility)
+
+        XCTAssertEqual(displayedSummaries.count, 2)
+        XCTAssertEqual(displayedSummaries.reduce(0) { $0 + $1.performanceCount }, 2)
+        XCTAssertEqual(
+            Set(displayedSummaries.flatMap(\.performanceSessionIDs)),
+            Set([linkedSession.id, snapshotSession.id])
+        )
+        XCTAssertEqual(
+            displayedSummaries.first { $0.exerciseID == historicalClaimant.id }?.performanceCount,
+            1
+        )
+        XCTAssertEqual(
+            displayedSummaries.first { $0.exerciseID == nil }?.performanceCount,
+            1
+        )
+    }
+
     func testAmbiguousSnapshotHistoryIsNotAttributedToDuplicateExerciseRows() {
         let firstExercise = exercise(named: "Bench Press")
         let secondExercise = exercise(named: "Bench Press")
@@ -443,6 +495,17 @@ final class ExercisePickerContentTests: XCTestCase {
         XCTAssertEqual(rowsByExerciseID[secondExercise.id]?.performanceCount, 1)
         XCTAssertEqual(rowsByExerciseID[firstExercise.id]?.lastPerformedAt, firstLinkedSession.startedAt)
         XCTAssertEqual(rowsByExerciseID[secondExercise.id]?.lastPerformedAt, secondLinkedSession.startedAt)
+
+        let visibility = ExerciseHistoryVisibilityScope(
+            exercises: [firstExercise, secondExercise],
+            ownerTokenIdentifier: nil
+        )
+        XCTAssertEqual(
+            ExerciseHistorySummary.makeIndex(
+                from: [firstLinkedSession, secondLinkedSession, snapshotSession]
+            ).summaries(reconciledFor: visibility).count,
+            3
+        )
     }
 
     func testContentExcludesArchivedDeletedAndOtherOwnerExercises() {
