@@ -196,12 +196,12 @@ struct SetRowView: View {
         // must land first (the focus-change commit only fires on a later update).
         let commit = commitDraftsIfNeeded()
         clearFocusedFieldForThisSet()
-        if input.shouldFillBeforeCompletion(
+        if let previousFill = input.previousFillBeforeCompletion(
             isCompleted: set.isCompleted,
             values: commit.values,
             previous: previous
-        ), let previous {
-            fillFromPrevious(previous)
+        ) {
+            fillFromPrevious(previousFill)
         }
         withAnimation(.easeInOut(duration: 0.2)) {
             try? engine.toggleSetCompletion(set, context: modelContext)

@@ -34,8 +34,15 @@ enum WorkoutNumericInputPolicy {
         return value
     }
 
-    static func parseReps(_ text: String) -> Int? {
-        validatedReps(Int(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+    static func parseReps(_ text: String, locale: Locale = .current) -> Int? {
+        guard let parsed = WorkoutFormatters.parseNumber(text, locale: locale),
+              parsed.rounded() == parsed,
+              (Double(repsRange.lowerBound)...Double(repsRange.upperBound)).contains(parsed)
+        else {
+            return nil
+        }
+
+        return Int(parsed)
     }
 
     static func validatedRPE(_ value: Double?) -> Double? {

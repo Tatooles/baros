@@ -350,7 +350,7 @@ struct CompletedWorkoutEditView: View {
                     draft.exercises[exerciseIndex].sets[setIndex].reps
                 )
                 return numberInputTexts[focusTarget, default: WorkoutNumberInputText()]
-                    .displayText(for: reps.map(Double.init))
+                    .displayText(fallback: reps.map(String.init) ?? "")
             },
             set: { value in
                 updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in

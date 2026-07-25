@@ -60,6 +60,29 @@ final class FormattingTests: XCTestCase {
         XCTAssertNil(input.draftText)
     }
 
+    func testWorkoutNumberInputIgnoresEmptyWriteWhenFieldIsNotFocused() {
+        var input = WorkoutNumberInputText()
+
+        input.updateDraft("", isFocused: false)
+
+        XCTAssertNil(input.draftText)
+    }
+
+    func testWorkoutNumberInputRepsFallbackRoundTripsThroughPolicy() {
+        let input = WorkoutNumberInputText()
+
+        let text = input.displayText(fallback: String(1_000))
+
+        XCTAssertEqual(text, "1000")
+        XCTAssertEqual(
+            WorkoutNumericInputPolicy.parseReps(
+                text,
+                locale: Locale(identifier: "en_US_POSIX")
+            ),
+            1_000
+        )
+    }
+
     func testDecimalWorkoutInputUsesFormattedModelValueAfterEditingEnds() {
         var input = WorkoutNumberInputText()
 
@@ -156,6 +179,25 @@ final class FormattingTests: XCTestCase {
 
     func testWorkoutNumericPolicyRejectsRepsAboveUpperBoundary() {
         XCTAssertNil(WorkoutNumericInputPolicy.parseReps("1001"))
+    }
+
+    func testWorkoutNumericPolicyParsesLocaleRepsInput() {
+        XCTAssertEqual(
+            WorkoutNumericInputPolicy.parseReps(
+                "٥",
+                locale: Locale(identifier: "ar_EG")
+            ),
+            5
+        )
+    }
+
+    func testWorkoutNumericPolicyRejectsFractionalRepsInput() {
+        XCTAssertNil(
+            WorkoutNumericInputPolicy.parseReps(
+                "5.5",
+                locale: Locale(identifier: "en_US_POSIX")
+            )
+        )
     }
 
     func testWorkoutNumericPolicyParsesLocaleRPEInput() {

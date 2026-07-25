@@ -16,18 +16,17 @@ struct ActiveWorkoutSetInput {
         let shouldPersist: Bool
     }
 
-    private var weightDraft: String?
-    private var repsDraft: String?
+    private var weightInput = WorkoutNumberInputText()
+    private var repsInput = WorkoutNumberInputText()
     private var rejectedWeight = false
     private var rejectedReps = false
 
     mutating func update(_ text: String, for field: Field, isFocused: Bool) {
-        guard !(text.isEmpty && !isFocused) else { return }
         switch field {
         case .weight:
-            weightDraft = text
+            weightInput.updateDraft(text, isFocused: isFocused)
         case .reps:
-            repsDraft = text
+            repsInput.updateDraft(text, isFocused: isFocused)
         }
     }
 
@@ -36,15 +35,15 @@ struct ActiveWorkoutSetInput {
         case .weight:
             let validWeight = WorkoutNumericInputPolicy.validatedWeight(values.weight)
             let displayWeight = weightUnit.displayWeight(fromCanonicalPounds: validWeight)
-            return weightDraft ?? displayWeight.map(WorkoutFormatters.number) ?? ""
+            return weightInput.displayText(for: displayWeight)
         case .reps:
             let validReps = WorkoutNumericInputPolicy.validatedReps(values.reps)
-            return repsDraft ?? validReps.map(String.init) ?? ""
+            return repsInput.displayText(fallback: validReps.map(String.init) ?? "")
         }
     }
 
     mutating func commit(current: Values, weightUnit: MeasurementUnit) -> Commit {
-        guard weightDraft != nil || repsDraft != nil else {
+        guard weightInput.draftText != nil || repsInput.draftText != nil else {
             return Commit(
                 values: Values(
                     weight: WorkoutNumericInputPolicy.validatedWeight(current.weight),
@@ -55,7 +54,7 @@ struct ActiveWorkoutSetInput {
         }
 
         let weight: Double?
-        if let weightDraft {
+        if let weightDraft = weightInput.draftText {
             weight = WorkoutNumericInputPolicy.parseWeight(weightDraft, unit: weightUnit)
             rejectedWeight = !weightDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 && weight == nil
@@ -64,7 +63,7 @@ struct ActiveWorkoutSetInput {
         }
 
         let reps: Int?
-        if let repsDraft {
+        if let repsDraft = repsInput.draftText {
             reps = WorkoutNumericInputPolicy.parseReps(repsDraft)
             rejectedReps = !repsDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 && reps == nil
@@ -72,8 +71,8 @@ struct ActiveWorkoutSetInput {
             reps = WorkoutNumericInputPolicy.validatedReps(current.reps)
         }
 
-        self.weightDraft = nil
-        self.repsDraft = nil
+        weightInput.endEditing()
+        repsInput.endEditing()
 
         return Commit(
             values: Values(weight: weight, reps: reps),
@@ -81,16 +80,24 @@ struct ActiveWorkoutSetInput {
         )
     }
 
-    func shouldFillBeforeCompletion(
+    func previousFillBeforeCompletion(
         isCompleted: Bool,
         values: Values,
         previous: PreviousSetPerformance?
-    ) -> Bool {
-        !rejectedWeight
-            && !rejectedReps
-            && !isCompleted
-            && (values.weight == nil || values.reps == nil)
-            && previous != nil
+    ) -> PreviousSetPerformance? {
+        guard !isCompleted, let previous else { return nil }
+
+        let weight = !rejectedWeight
+            && WorkoutNumericInputPolicy.validatedWeight(values.weight) == nil
+            ? WorkoutNumericInputPolicy.validatedWeight(previous.weight)
+            : nil
+        let reps = !rejectedReps
+            && WorkoutNumericInputPolicy.validatedReps(values.reps) == nil
+            ? WorkoutNumericInputPolicy.validatedReps(previous.reps)
+            : nil
+
+        guard weight != nil || reps != nil else { return nil }
+        return PreviousSetPerformance(weight: weight, reps: reps)
     }
 
     mutating func clearRejectionsSatisfiedByPreviousFill(_ values: Values) {

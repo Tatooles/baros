@@ -2,31 +2,37 @@ import XCTest
 @testable import Baros
 
 final class ActiveWorkoutSetInputTests: XCTestCase {
-    func testFillsBeforeCompletionWhenEitherWeightOrRepsIsMissing() {
+    func testReturnsOnlyMissingPreviousValueBeforeCompletion() {
         let input = ActiveWorkoutSetInput()
         let previous = PreviousSetPerformance(weight: 185, reps: 5)
 
-        XCTAssertTrue(input.shouldFillBeforeCompletion(
-            isCompleted: false,
-            values: .init(weight: 200, reps: nil),
-            previous: previous
-        ))
-        XCTAssertTrue(input.shouldFillBeforeCompletion(
-            isCompleted: false,
-            values: .init(weight: nil, reps: 8),
-            previous: previous
-        ))
+        XCTAssertEqual(
+            input.previousFillBeforeCompletion(
+                isCompleted: false,
+                values: .init(weight: 200, reps: nil),
+                previous: previous
+            ),
+            PreviousSetPerformance(weight: nil, reps: 5)
+        )
+        XCTAssertEqual(
+            input.previousFillBeforeCompletion(
+                isCompleted: false,
+                values: .init(weight: nil, reps: 8),
+                previous: previous
+            ),
+            PreviousSetPerformance(weight: 185, reps: nil)
+        )
     }
 
-    func testDoesNotFillBeforeCompletionWithoutPreviousOrAfterCompletion() {
+    func testDoesNotReturnPreviousFillWithoutPreviousOrAfterCompletion() {
         let input = ActiveWorkoutSetInput()
 
-        XCTAssertFalse(input.shouldFillBeforeCompletion(
+        XCTAssertNil(input.previousFillBeforeCompletion(
             isCompleted: false,
             values: .init(weight: nil, reps: nil),
             previous: nil
         ))
-        XCTAssertFalse(input.shouldFillBeforeCompletion(
+        XCTAssertNil(input.previousFillBeforeCompletion(
             isCompleted: true,
             values: .init(weight: nil, reps: nil),
             previous: PreviousSetPerformance(weight: 185, reps: 5)
@@ -44,11 +50,30 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
 
         XCTAssertEqual(commit.values, .init(weight: nil, reps: 5))
         XCTAssertTrue(commit.shouldPersist)
-        XCTAssertFalse(input.shouldFillBeforeCompletion(
+        XCTAssertNil(input.previousFillBeforeCompletion(
             isCompleted: false,
             values: commit.values,
             previous: PreviousSetPerformance(weight: 185, reps: 5)
         ))
+    }
+
+    func testRejectedWeightDoesNotSuppressPreviousRepsFill() {
+        var input = ActiveWorkoutSetInput()
+        input.update("10001", for: .weight, isFocused: true)
+
+        let commit = input.commit(
+            current: .init(weight: nil, reps: nil),
+            weightUnit: .pounds
+        )
+
+        XCTAssertEqual(
+            input.previousFillBeforeCompletion(
+                isCompleted: false,
+                values: commit.values,
+                previous: PreviousSetPerformance(weight: 185, reps: 5)
+            ),
+            PreviousSetPerformance(weight: nil, reps: 5)
+        )
     }
 
     func testRejectedRepsStillBlocksPreviousFillAfterEditingEnds() {
@@ -62,11 +87,30 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
 
         XCTAssertEqual(commit.values, .init(weight: 185, reps: nil))
         XCTAssertTrue(commit.shouldPersist)
-        XCTAssertFalse(input.shouldFillBeforeCompletion(
+        XCTAssertNil(input.previousFillBeforeCompletion(
             isCompleted: false,
             values: commit.values,
             previous: PreviousSetPerformance(weight: 185, reps: 5)
         ))
+    }
+
+    func testRejectedRepsDoesNotSuppressPreviousWeightFill() {
+        var input = ActiveWorkoutSetInput()
+        input.update("1001", for: .reps, isFocused: true)
+
+        let commit = input.commit(
+            current: .init(weight: nil, reps: nil),
+            weightUnit: .pounds
+        )
+
+        XCTAssertEqual(
+            input.previousFillBeforeCompletion(
+                isCompleted: false,
+                values: commit.values,
+                previous: PreviousSetPerformance(weight: 185, reps: 5)
+            ),
+            PreviousSetPerformance(weight: 185, reps: nil)
+        )
     }
 
     func testExplicitPreviousFillClearsRejectionForTheFieldItFills() {
@@ -80,11 +124,14 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
         let values = ActiveWorkoutSetInput.Values(weight: 185, reps: nil)
         input.clearRejectionsSatisfiedByPreviousFill(values)
 
-        XCTAssertTrue(input.shouldFillBeforeCompletion(
-            isCompleted: false,
-            values: values,
-            previous: PreviousSetPerformance(weight: 185, reps: 5)
-        ))
+        XCTAssertEqual(
+            input.previousFillBeforeCompletion(
+                isCompleted: false,
+                values: values,
+                previous: PreviousSetPerformance(weight: 185, reps: 5)
+            ),
+            PreviousSetPerformance(weight: nil, reps: 5)
+        )
     }
 
     func testRejectedFieldStaysRejectedWhenPreviousFillIsInvalid() {
@@ -98,7 +145,7 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
         let invalidFill = ActiveWorkoutSetInput.Values(weight: 10_001, reps: 5)
         input.clearRejectionsSatisfiedByPreviousFill(invalidFill)
 
-        XCTAssertFalse(input.shouldFillBeforeCompletion(
+        XCTAssertNil(input.previousFillBeforeCompletion(
             isCompleted: false,
             values: .init(weight: nil, reps: 5),
             previous: PreviousSetPerformance(weight: 185, reps: 5)
