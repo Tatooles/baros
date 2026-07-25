@@ -9,7 +9,7 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
     var lastPerformedAt: Date
     var completedSetCount: Int
     var performanceSessionIDs: Set<UUID>
-    var snapshotFallbackIdentities: Set<ExerciseHistorySnapshotIdentity> = []
+    var snapshotFallbackIdentities: Set<ExerciseHistorySnapshotIdentity>
 
     var performanceCount: Int {
         performanceSessionIDs.count
@@ -39,7 +39,7 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
             return exerciseID == loggedExerciseID
         }
 
-        return effectiveSnapshotFallbackIdentities.contains(
+        return snapshotFallbackIdentities.contains(
             ExerciseHistorySnapshotIdentity(loggedExercise: loggedExercise)
         )
     }
@@ -49,7 +49,7 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
             return exerciseID == routeExerciseID
         }
 
-        return effectiveSnapshotFallbackIdentities.contains(
+        return snapshotFallbackIdentities.contains(
             ExerciseHistorySnapshotIdentity(
                 name: route.name,
                 equipmentRaw: route.equipmentRaw
@@ -57,151 +57,262 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
         )
     }
 
-    private var effectiveSnapshotFallbackIdentities: Set<ExerciseHistorySnapshotIdentity> {
-        guard snapshotFallbackIdentities.isEmpty else {
-            return snapshotFallbackIdentities
-        }
-
-        return [
-            ExerciseHistorySnapshotIdentity(
-                name: name,
-                equipmentRaw: equipmentRaw
-            ),
-        ]
-    }
-
     static func makeSummaries(
         from sessions: [WorkoutSession],
         ownerTokenIdentifier: String? = nil
     ) -> [ExerciseHistorySummary] {
-        var grouped: [ExerciseHistoryIdentity: ExerciseHistorySummary] = [:]
-        var linkedExerciseIDsBySnapshotIdentity: [ExerciseHistorySnapshotIdentity: Set<UUID>] = [:]
+        makeIndex(
+            from: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        ).summaries
+    }
 
-        for session in WorkoutSession.visibleCompletedSessions(from: sessions, ownerTokenIdentifier: ownerTokenIdentifier) {
-            for loggedExercise in session.sortedLoggedExercises {
+    static func makeIndex(
+        from sessions: [WorkoutSession],
+        ownerTokenIdentifier: String? = nil
+    ) -> ExerciseHistoryIndex {
+        let entries = WorkoutSession.visibleCompletedSessions(
+            from: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        ).flatMap { session -> [ExerciseHistoryAggregationEntry] in
+            session.sortedLoggedExercises.compactMap { loggedExercise -> ExerciseHistoryAggregationEntry? in
                 let completedSetCount = loggedExercise.sortedSets.filter(\.isCompleted).count
-                guard completedSetCount > 0 else { continue }
+                guard completedSetCount > 0 else { return nil }
 
-                let snapshotIdentity = ExerciseHistorySnapshotIdentity(
-                    loggedExercise: loggedExercise
+                return ExerciseHistoryAggregationEntry(
+                    session: session,
+                    loggedExercise: loggedExercise,
+                    completedSetCount: completedSetCount
                 )
-                let key = ExerciseHistoryIdentity(loggedExercise: loggedExercise)
-                let exerciseID = loggedExercise.exercise?.id
-                if let exerciseID {
-                    linkedExerciseIDsBySnapshotIdentity[snapshotIdentity, default: []]
-                        .insert(exerciseID)
-                }
-
-                if var existing = grouped[key] {
-                    existing.completedSetCount += completedSetCount
-                    existing.performanceSessionIDs.insert(session.id)
-                    existing.snapshotFallbackIdentities.insert(snapshotIdentity)
-                    if session.startedAt > existing.lastPerformedAt {
-                        existing.lastPerformedAt = session.startedAt
-                        existing.name = loggedExercise.exerciseSnapshotName
-                        existing.equipmentRaw = loggedExercise.resolvedSnapshotEquipmentRaw
-                        existing.primaryMuscleGroupRaw = loggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw
-                    }
-                    grouped[key] = existing
-                } else {
-                    grouped[key] = ExerciseHistorySummary(
-                        id: key.id,
-                        exerciseID: exerciseID,
-                        name: loggedExercise.exerciseSnapshotName,
-                        equipmentRaw: loggedExercise.resolvedSnapshotEquipmentRaw,
-                        primaryMuscleGroupRaw: loggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw,
-                        lastPerformedAt: session.startedAt,
-                        completedSetCount: completedSetCount,
-                        performanceSessionIDs: [session.id],
-                        snapshotFallbackIdentities: [snapshotIdentity]
-                    )
-                }
             }
         }
 
-        let reconciled = reconcileSnapshotFallbacks(
-            in: grouped,
+        var linkedExerciseIDsBySnapshotIdentity: [ExerciseHistorySnapshotIdentity: Set<UUID>] = [:]
+        for entry in entries {
+            if let exerciseID = entry.linkedExerciseID {
+                linkedExerciseIDsBySnapshotIdentity[entry.snapshotIdentity, default: []]
+                    .insert(exerciseID)
+            }
+        }
+        // Resolve ownership before grouping so counts, routes, and detail sessions all
+        // use the same conservative snapshot-attribution decision.
+        let snapshotOwners = linkedExerciseIDsBySnapshotIdentity.compactMapValues { exerciseIDs in
+            exerciseIDs.count == 1 ? exerciseIDs.first : nil
+        }
+
+        var grouped: [ExerciseHistoryIdentity: ExerciseHistorySummary] = [:]
+        var snapshotOnlyGrouped: [ExerciseHistorySnapshotIdentity: ExerciseHistorySummary] = [:]
+        for entry in entries {
+            let attributedExerciseID = entry.linkedExerciseID
+                ?? snapshotOwners[entry.snapshotIdentity]
+            let key = attributedExerciseID.map(ExerciseHistoryIdentity.exercise)
+                ?? .snapshot(entry.snapshotIdentity)
+            let recordsSnapshotFallback = entry.linkedExerciseID == nil
+                || snapshotOwners[entry.snapshotIdentity] == attributedExerciseID
+
+            accumulate(
+                entry,
+                key: key,
+                historyID: key.id,
+                exerciseID: attributedExerciseID,
+                recordsSnapshotFallback: recordsSnapshotFallback,
+                in: &grouped
+            )
+
+            if entry.linkedExerciseID == nil {
+                accumulate(
+                    entry,
+                    key: entry.snapshotIdentity,
+                    historyID: entry.snapshotIdentity.id,
+                    exerciseID: nil,
+                    recordsSnapshotFallback: true,
+                    in: &snapshotOnlyGrouped
+                )
+            }
+        }
+
+        return ExerciseHistoryIndex(
+            summariesByIdentity: grouped,
+            snapshotOnlySummariesByIdentity: snapshotOnlyGrouped,
             linkedExerciseIDsBySnapshotIdentity: linkedExerciseIDsBySnapshotIdentity
         )
+    }
 
-        return reconciled.values.sorted {
-            if $0.lastPerformedAt == $1.lastPerformedAt {
-                return $0.name < $1.name
+    private static func accumulate<Key: Hashable>(
+        _ entry: ExerciseHistoryAggregationEntry,
+        key: Key,
+        historyID: String,
+        exerciseID: UUID?,
+        recordsSnapshotFallback: Bool,
+        in grouped: inout [Key: ExerciseHistorySummary]
+    ) {
+        if var existing = grouped[key] {
+            existing.completedSetCount += entry.completedSetCount
+            existing.performanceSessionIDs.insert(entry.session.id)
+            if recordsSnapshotFallback {
+                existing.snapshotFallbackIdentities.insert(entry.snapshotIdentity)
             }
-            return $0.lastPerformedAt > $1.lastPerformedAt
-        }
-    }
-
-    private static func reconcileSnapshotFallbacks(
-        in grouped: [ExerciseHistoryIdentity: ExerciseHistorySummary],
-        linkedExerciseIDsBySnapshotIdentity: [ExerciseHistorySnapshotIdentity: Set<UUID>]
-    ) -> [ExerciseHistoryIdentity: ExerciseHistorySummary] {
-        // This data-driven stage folds snapshot-only history into a linked summary
-        // only when that snapshot maps to exactly one historical exercise ID.
-        // Ambiguous snapshots remain separate, and session IDs deduplicate workouts.
-        var reconciled = grouped
-
-        for (identity, snapshotSummary) in grouped {
-            guard case let .snapshot(snapshotIdentity) = identity,
-                  let linkedExerciseIDs = linkedExerciseIDsBySnapshotIdentity[snapshotIdentity],
-                  linkedExerciseIDs.count == 1,
-                  let exerciseID = linkedExerciseIDs.first,
-                  var linkedSummary = reconciled[.exercise(exerciseID)] else {
-                continue
+            if entry.session.startedAt > existing.lastPerformedAt {
+                existing.lastPerformedAt = entry.session.startedAt
+                existing.name = entry.loggedExercise.exerciseSnapshotName
+                existing.equipmentRaw = entry.loggedExercise.resolvedSnapshotEquipmentRaw
+                existing.primaryMuscleGroupRaw = entry.loggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw
             }
-
-            linkedSummary.merge(snapshotSummary)
-            reconciled[.exercise(exerciseID)] = linkedSummary
-            reconciled.removeValue(forKey: identity)
+            grouped[key] = existing
+        } else {
+            grouped[key] = ExerciseHistorySummary(
+                id: historyID,
+                exerciseID: exerciseID,
+                name: entry.loggedExercise.exerciseSnapshotName,
+                equipmentRaw: entry.loggedExercise.resolvedSnapshotEquipmentRaw,
+                primaryMuscleGroupRaw: entry.loggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw,
+                lastPerformedAt: entry.session.startedAt,
+                completedSetCount: entry.completedSetCount,
+                performanceSessionIDs: [entry.session.id],
+                snapshotFallbackIdentities: recordsSnapshotFallback
+                    ? [entry.snapshotIdentity]
+                    : []
+            )
         }
-
-        return reconciled
-    }
-
-    private mutating func merge(_ other: ExerciseHistorySummary) {
-        completedSetCount += other.completedSetCount
-        performanceSessionIDs.formUnion(other.performanceSessionIDs)
-        snapshotFallbackIdentities.formUnion(other.snapshotFallbackIdentities)
-
-        if other.lastPerformedAt > lastPerformedAt {
-            lastPerformedAt = other.lastPerformedAt
-            name = other.name
-            equipmentRaw = other.equipmentRaw
-            primaryMuscleGroupRaw = other.primaryMuscleGroupRaw
-        }
-    }
-
-    static func makePerformanceSummary(
-        in summaries: [ExerciseHistorySummary],
-        matching exercise: Exercise
-    ) -> ExerciseHistorySummary? {
-        // This live-exercise stage combines the linked and snapshot identities that
-        // belong to the picker row, then prefers the current exercise metadata.
-        // Session IDs remain the source of truth when the two stages overlap.
-        let matchingIdentities = ExerciseHistoryIdentity.matching(exercise)
-        let matchingSummaries = summaries.filter {
-            matchingIdentities.contains(ExerciseHistoryIdentity(summary: $0))
-        }
-        guard var combined = matchingSummaries.first else { return nil }
-
-        combined.id = ExerciseHistoryIdentity.exercise(exercise.id).id
-        combined.exerciseID = exercise.id
-        combined.name = exercise.name
-        combined.equipmentRaw = exercise.equipmentRaw
-        combined.primaryMuscleGroupRaw = exercise.primaryMuscleGroupRaw
-        combined.lastPerformedAt = matchingSummaries.map(\.lastPerformedAt).max()
-            ?? combined.lastPerformedAt
-        combined.completedSetCount = matchingSummaries.reduce(0) {
-            $0 + $1.completedSetCount
-        }
-        combined.performanceSessionIDs = matchingSummaries.reduce(into: []) {
-            $0.formUnion($1.performanceSessionIDs)
-        }
-        return combined
     }
 
     static func find(in summaries: [ExerciseHistorySummary], matching route: ExerciseHistoryRoute) -> ExerciseHistorySummary? {
         summaries.first { $0.matches(route) }
+    }
+}
+
+struct ExerciseHistoryIndex {
+    let summaries: [ExerciseHistorySummary]
+
+    private let summariesByIdentity: [ExerciseHistoryIdentity: ExerciseHistorySummary]
+    private let snapshotOnlySummariesByIdentity: [ExerciseHistorySnapshotIdentity: ExerciseHistorySummary]
+    private let linkedExerciseIDsBySnapshotIdentity: [ExerciseHistorySnapshotIdentity: Set<UUID>]
+
+    fileprivate init(
+        summariesByIdentity: [ExerciseHistoryIdentity: ExerciseHistorySummary],
+        snapshotOnlySummariesByIdentity: [ExerciseHistorySnapshotIdentity: ExerciseHistorySummary],
+        linkedExerciseIDsBySnapshotIdentity: [ExerciseHistorySnapshotIdentity: Set<UUID>]
+    ) {
+        self.summariesByIdentity = summariesByIdentity
+        self.snapshotOnlySummariesByIdentity = snapshotOnlySummariesByIdentity
+        self.linkedExerciseIDsBySnapshotIdentity = linkedExerciseIDsBySnapshotIdentity
+        self.summaries = summariesByIdentity.values.sorted { lhs, rhs in
+            if lhs.lastPerformedAt != rhs.lastPerformedAt {
+                return lhs.lastPerformedAt > rhs.lastPerformedAt
+            }
+
+            let nameComparison = lhs.name.localizedStandardCompare(rhs.name)
+            if nameComparison != .orderedSame {
+                return nameComparison == .orderedAscending
+            }
+
+            return lhs.id < rhs.id
+        }
+    }
+
+    func summary(
+        matching exercise: Exercise,
+        visibility: ExerciseHistoryVisibilityScope
+    ) -> ExerciseHistorySummary? {
+        let exactSummary = summariesByIdentity[.exercise(exercise.id)]
+        let snapshotIdentity = ExerciseHistorySnapshotIdentity(exercise: exercise)
+        let hasVisibleLinkedClaim = linkedExerciseIDsBySnapshotIdentity[snapshotIdentity]?
+            .contains { visibility.containsExercise(withID: $0) } == true
+        // A visible linked claim means this raw snapshot copy was either folded into
+        // that exercise already or belongs to another visible exercise.
+        guard visibility.allowsSnapshotFallback(for: snapshotIdentity),
+              !hasVisibleLinkedClaim,
+              let snapshotSummary = snapshotOnlySummariesByIdentity[snapshotIdentity] else {
+            return exactSummary
+        }
+
+        guard var combined = exactSummary else {
+            return snapshotSummary
+        }
+
+        combined.completedSetCount += snapshotSummary.completedSetCount
+        combined.performanceSessionIDs.formUnion(snapshotSummary.performanceSessionIDs)
+        combined.snapshotFallbackIdentities.formUnion(snapshotSummary.snapshotFallbackIdentities)
+        if snapshotSummary.lastPerformedAt > combined.lastPerformedAt {
+            combined.lastPerformedAt = snapshotSummary.lastPerformedAt
+        }
+        return combined
+    }
+
+    func summary(
+        matching route: ExerciseHistoryRoute,
+        visibility: ExerciseHistoryVisibilityScope
+    ) -> ExerciseHistorySummary? {
+        let snapshotIdentity = ExerciseHistorySnapshotIdentity(
+            name: route.name,
+            equipmentRaw: route.equipmentRaw
+        )
+        guard let exerciseID = route.exerciseID else {
+            return summariesByIdentity[.snapshot(snapshotIdentity)]
+                ?? summaries.first {
+                    $0.snapshotFallbackIdentities.contains(snapshotIdentity)
+                }
+        }
+        guard let exercise = visibility.exercise(withID: exerciseID) else {
+            return summariesByIdentity[.exercise(exerciseID)]
+        }
+
+        return summary(matching: exercise, visibility: visibility)
+    }
+}
+
+struct ExerciseHistoryVisibilityScope {
+    let exercises: [Exercise]
+
+    private let exerciseIDs: Set<UUID>
+    private let exercisesByID: [UUID: Exercise]
+    private let exerciseCountBySnapshotIdentity: [ExerciseHistorySnapshotIdentity: Int]
+
+    init(
+        exercises: [Exercise],
+        ownerTokenIdentifier: String?
+    ) {
+        let visibleExercises = Exercise.visibleActiveExercises(
+            from: exercises,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
+        self.exercises = visibleExercises
+        self.exerciseIDs = Set(visibleExercises.map(\.id))
+        self.exercisesByID = Dictionary(
+            uniqueKeysWithValues: visibleExercises.map { ($0.id, $0) }
+        )
+        self.exerciseCountBySnapshotIdentity = Dictionary(
+            grouping: visibleExercises,
+            by: ExerciseHistorySnapshotIdentity.init(exercise:)
+        ).mapValues(\.count)
+    }
+
+    fileprivate func exercise(withID exerciseID: UUID) -> Exercise? {
+        exercisesByID[exerciseID]
+    }
+
+    fileprivate func containsExercise(withID exerciseID: UUID) -> Bool {
+        exerciseIDs.contains(exerciseID)
+    }
+
+    fileprivate func allowsSnapshotFallback(
+        for snapshotIdentity: ExerciseHistorySnapshotIdentity
+    ) -> Bool {
+        exerciseCountBySnapshotIdentity[snapshotIdentity] == 1
+    }
+}
+
+private struct ExerciseHistoryAggregationEntry {
+    let session: WorkoutSession
+    let loggedExercise: LoggedExercise
+    let completedSetCount: Int
+
+    var linkedExerciseID: UUID? {
+        loggedExercise.exercise?.id
+    }
+
+    var snapshotIdentity: ExerciseHistorySnapshotIdentity {
+        ExerciseHistorySnapshotIdentity(loggedExercise: loggedExercise)
     }
 }
 
@@ -224,44 +335,18 @@ struct ExerciseHistorySnapshotIdentity: Hashable {
             equipmentRaw: loggedExercise.resolvedSnapshotEquipmentRaw
         )
     }
+
+    init(exercise: Exercise) {
+        self.init(
+            name: exercise.name,
+            equipmentRaw: exercise.equipmentRaw
+        )
+    }
 }
 
 private enum ExerciseHistoryIdentity: Hashable {
     case exercise(UUID)
     case snapshot(ExerciseHistorySnapshotIdentity)
-
-    init(loggedExercise: LoggedExercise) {
-        if let exerciseID = loggedExercise.exercise?.id {
-            self = .exercise(exerciseID)
-        } else {
-            self = .snapshot(ExerciseHistorySnapshotIdentity(loggedExercise: loggedExercise))
-        }
-    }
-
-    init(summary: ExerciseHistorySummary) {
-        if let exerciseID = summary.exerciseID {
-            self = .exercise(exerciseID)
-        } else {
-            self = .snapshot(
-                ExerciseHistorySnapshotIdentity(
-                    name: summary.name,
-                    equipmentRaw: summary.equipmentRaw
-                )
-            )
-        }
-    }
-
-    static func matching(_ exercise: Exercise) -> Set<ExerciseHistoryIdentity> {
-        [
-            .exercise(exercise.id),
-            .snapshot(
-                ExerciseHistorySnapshotIdentity(
-                    name: exercise.name,
-                    equipmentRaw: exercise.equipmentRaw
-                )
-            ),
-        ]
-    }
 
     var id: String {
         switch self {

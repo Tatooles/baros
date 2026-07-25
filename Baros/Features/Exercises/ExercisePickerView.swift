@@ -2,14 +2,10 @@ import SwiftData
 import SwiftUI
 
 struct ExercisePickerView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(SyncScheduler.self) private var syncScheduler
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
-    @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
+    @Query private var sessions: [WorkoutSession]
     let onSelect: (Exercise) -> Void
-    @State private var searchText = ""
-    @State private var isCreatingExercise = false
-    @State private var sortOrder: ExercisePickerSortOrder
     private let sortPreferenceStore: ExercisePickerSortPreferenceStore
 
     init(
@@ -18,14 +14,44 @@ struct ExercisePickerView: View {
     ) {
         self.sortPreferenceStore = sortPreferenceStore
         self.onSelect = onSelect
+    }
+
+    var body: some View {
+        ExercisePickerList(
+            baseRows: ExercisePickerContent.makeBaseRows(
+                exercises: exercises,
+                sessions: sessions,
+                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ),
+            sortPreferenceStore: sortPreferenceStore,
+            onSelect: onSelect
+        )
+    }
+}
+
+private struct ExercisePickerList: View {
+    @Environment(\.dismiss) private var dismiss
+    let baseRows: [ExercisePickerRowContent]
+    let onSelect: (Exercise) -> Void
+    @State private var searchText = ""
+    @State private var isCreatingExercise = false
+    @State private var sortOrder: ExercisePickerSortOrder
+    private let sortPreferenceStore: ExercisePickerSortPreferenceStore
+
+    init(
+        baseRows: [ExercisePickerRowContent],
+        sortPreferenceStore: ExercisePickerSortPreferenceStore,
+        onSelect: @escaping (Exercise) -> Void
+    ) {
+        self.baseRows = baseRows
+        self.sortPreferenceStore = sortPreferenceStore
+        self.onSelect = onSelect
         _sortOrder = State(initialValue: sortPreferenceStore.sortOrder)
     }
 
     private var rows: [ExercisePickerRowContent] {
-        ExercisePickerContent.makeRows(
-            exercises: exercises,
-            sessions: sessions,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+        ExercisePickerContent.filterAndSort(
+            rows: baseRows,
             query: searchText,
             sortOrder: sortOrder
         )
@@ -119,9 +145,6 @@ struct ExercisePickerView: View {
             Text(row.performanceSummaryText)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppTheme.textTertiary)
-                .accessibilityIdentifier(
-                    "ExercisePickerPerformance-\(row.exercise.name)-\(row.exercise.equipment.displayName)"
-                )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)

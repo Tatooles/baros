@@ -271,6 +271,103 @@ final class HistoryPersistenceTests: XCTestCase {
         )
     }
 
+    func testAmbiguousSnapshotHistoryRemainsSeparateFromLinkedExerciseDetails() throws {
+        let firstExercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscleGroup: .chest
+        )
+        let secondExercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscleGroup: .chest
+        )
+        let firstSession = WorkoutSession(
+            title: "First Linked Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .completed,
+            source: .blank,
+            loggedExercises: [
+                LoggedExercise(
+                    orderIndex: 0,
+                    exercise: firstExercise,
+                    exerciseSnapshotName: "Bench Press",
+                    sets: [LoggedSet(orderIndex: 0, weight: 185, reps: 5, isCompleted: true)]
+                ),
+            ]
+        )
+        let secondSession = WorkoutSession(
+            title: "Second Linked Push",
+            startedAt: Date(timeIntervalSince1970: 200),
+            status: .completed,
+            source: .blank,
+            loggedExercises: [
+                LoggedExercise(
+                    orderIndex: 0,
+                    exercise: secondExercise,
+                    exerciseSnapshotName: "Bench Press",
+                    sets: [LoggedSet(orderIndex: 0, weight: 195, reps: 5, isCompleted: true)]
+                ),
+            ]
+        )
+        let snapshotExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: nil,
+            exerciseSnapshotName: "Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
+            sets: [LoggedSet(orderIndex: 0, weight: 205, reps: 3, isCompleted: true)]
+        )
+        let snapshotSession = WorkoutSession(
+            title: "Ambiguous Snapshot Push",
+            startedAt: Date(timeIntervalSince1970: 300),
+            status: .completed,
+            source: .blank,
+            loggedExercises: [snapshotExercise]
+        )
+        let sessions = [firstSession, secondSession, snapshotSession]
+
+        let summaries = ExerciseHistorySummary.makeSummaries(from: sessions)
+
+        let firstSummary = try XCTUnwrap(summaries.first { $0.exerciseID == firstExercise.id })
+        let secondSummary = try XCTUnwrap(summaries.first { $0.exerciseID == secondExercise.id })
+        let snapshotSummary = try XCTUnwrap(summaries.first { $0.exerciseID == nil })
+        XCTAssertEqual(summaries.count, 3)
+        XCTAssertEqual(firstSummary.performanceCount, 1)
+        XCTAssertEqual(secondSummary.performanceCount, 1)
+        XCTAssertEqual(snapshotSummary.performanceCount, 1)
+        XCTAssertEqual(
+            ExerciseHistorySessionGroup.makeGroups(
+                from: sessions,
+                matching: firstSummary
+            ).map(\.title),
+            ["First Linked Push"]
+        )
+        XCTAssertEqual(
+            ExerciseHistorySessionGroup.makeGroups(
+                from: sessions,
+                matching: secondSummary
+            ).map(\.title),
+            ["Second Linked Push"]
+        )
+        XCTAssertEqual(
+            ExerciseHistorySessionGroup.makeGroups(
+                from: sessions,
+                matching: snapshotSummary
+            ).map(\.title),
+            ["Ambiguous Snapshot Push"]
+        )
+        XCTAssertEqual(
+            ExerciseHistorySummary.find(
+                in: summaries,
+                matching: ExerciseHistoryRoute(loggedExercise: snapshotExercise)
+            )?.id,
+            snapshotSummary.id
+        )
+    }
+
     func testExerciseHistorySummaryIgnoresTombstonedWorkoutGraphRecords() throws {
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         let visibleSession = WorkoutSession(title: "Visible Push", startedAt: Date(timeIntervalSince1970: 100), status: .completed, source: .blank)
@@ -422,7 +519,13 @@ final class HistoryPersistenceTests: XCTestCase {
             primaryMuscleGroupRaw: ExerciseMuscleGroup.other.rawValue,
             lastPerformedAt: session.startedAt,
             completedSetCount: 1,
-            performanceSessionIDs: [session.id]
+            performanceSessionIDs: [session.id],
+            snapshotFallbackIdentities: [
+                ExerciseHistorySnapshotIdentity(
+                    name: "incline db press",
+                    equipmentRaw: ExerciseEquipment.other.rawValue
+                ),
+            ]
         )
         let groups = ExerciseHistorySessionGroup.makeGroups(from: [session], matching: summary)
 
@@ -528,7 +631,13 @@ final class HistoryPersistenceTests: XCTestCase {
             primaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
             lastPerformedAt: session.startedAt,
             completedSetCount: 1,
-            performanceSessionIDs: [session.id]
+            performanceSessionIDs: [session.id],
+            snapshotFallbackIdentities: [
+                ExerciseHistorySnapshotIdentity(
+                    name: "Bench Press",
+                    equipmentRaw: ExerciseEquipment.barbell.rawValue
+                ),
+            ]
         )
 
         let groups = ExerciseHistorySessionGroup.makeGroups(from: [session], matching: summary)
@@ -681,6 +790,23 @@ final class HistoryPersistenceTests: XCTestCase {
         let summaries = ExerciseHistorySummary.makeSummaries(from: [session])
 
         XCTAssertEqual(ExerciseHistorySummary.find(in: summaries, matching: route)?.name, "Bench Press")
+
+        let visibility = ExerciseHistoryVisibilityScope(
+            exercises: [exercise],
+            ownerTokenIdentifier: nil
+        )
+        let snapshotRoute = ExerciseHistoryRoute(
+            exerciseID: nil,
+            name: loggedExercise.exerciseSnapshotName,
+            equipmentRaw: loggedExercise.resolvedSnapshotEquipmentRaw
+        )
+        XCTAssertEqual(
+            ExerciseHistorySummary.makeIndex(from: [session]).summary(
+                matching: snapshotRoute,
+                visibility: visibility
+            )?.exerciseID,
+            exercise.id
+        )
     }
 
     func testRecentExerciseHistoryGroupsCapToThreeNewestSessions() throws {

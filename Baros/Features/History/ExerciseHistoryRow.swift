@@ -4,13 +4,6 @@ struct ExerciseHistoryRow: View {
     let summary: ExerciseHistorySummary
     let showsDivider: Bool
 
-    private var performanceAccessibilityIdentifier: String {
-        let equipmentName = summary.equipmentRaw
-            .flatMap(ExerciseEquipment.init(rawValue:))?
-            .displayName ?? "Unknown"
-        return "ExerciseHistoryPerformance-\(summary.name)-\(equipmentName)"
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -36,7 +29,6 @@ struct ExerciseHistoryRow: View {
                     Text(summary.performanceSummaryLabel)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)
-                        .accessibilityIdentifier(performanceAccessibilityIdentifier)
                 }
 
                 Spacer()

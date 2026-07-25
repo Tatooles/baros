@@ -300,6 +300,149 @@ final class ExercisePickerContentTests: XCTestCase {
 
         XCTAssertEqual(rows.first?.performanceCount, 3)
         XCTAssertEqual(rows.first?.lastPerformedAt, Date(timeIntervalSince1970: 300))
+        XCTAssertEqual(rows.first?.historySummary?.completedSetCount, 4)
+    }
+
+    func testRenamedExerciseCombinesExactHistoryWithEligibleCurrentSnapshotHistory() throws {
+        let benchPress = exercise(named: "Bench Press")
+        let linkedSession = completedSession(
+            title: "Original Name Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: benchPress
+        )
+        benchPress.name = "Competition Bench Press"
+        let snapshotSession = completedSnapshotSession(
+            title: "Current Name Push",
+            startedAt: Date(timeIntervalSince1970: 200),
+            name: benchPress.name,
+            equipment: benchPress.equipment,
+            muscleGroup: benchPress.primaryMuscleGroup
+        )
+        let mixedSession = completedMixedIdentitySession(
+            title: "Mixed Name Push",
+            startedAt: Date(timeIntervalSince1970: 300),
+            exercise: benchPress,
+            linkedSnapshotName: "Bench Press",
+            snapshotName: benchPress.name
+        )
+
+        let rows = ExercisePickerContent.makeRows(
+            exercises: [benchPress],
+            sessions: [linkedSession, snapshotSession, mixedSession],
+            ownerTokenIdentifier: nil,
+            query: "",
+            sortOrder: .recent
+        )
+
+        XCTAssertEqual(rows.first?.performanceCount, 3)
+        XCTAssertEqual(rows.first?.lastPerformedAt, mixedSession.startedAt)
+        XCTAssertEqual(rows.first?.historySummary?.completedSetCount, 4)
+
+        let visibility = ExerciseHistoryVisibilityScope(
+            exercises: [benchPress],
+            ownerTokenIdentifier: nil
+        )
+        let routeSummary = try XCTUnwrap(ExerciseHistorySummary.makeIndex(
+            from: [linkedSession, snapshotSession, mixedSession]
+        ).summary(
+            matching: ExerciseHistoryRoute(
+                exerciseID: benchPress.id,
+                name: benchPress.name,
+                equipmentRaw: benchPress.equipmentRaw
+            ),
+            visibility: visibility
+        ))
+
+        XCTAssertEqual(routeSummary.performanceCount, rows.first?.performanceCount)
+        XCTAssertEqual(
+            ExerciseHistorySessionGroup.makeGroups(
+                from: [linkedSession, snapshotSession, mixedSession],
+                matching: routeSummary
+            ).map(\.title),
+            ["Mixed Name Push", "Current Name Push", "Original Name Push"]
+        )
+    }
+
+    func testVisibleHistoricalClaimPreventsAnotherExerciseFromInheritingSnapshotHistory() {
+        let historicalClaimant = exercise(named: "Bench Press")
+        let linkedSession = completedSession(
+            title: "Linked Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: historicalClaimant
+        )
+        historicalClaimant.name = "Competition Bench Press"
+        let currentNameMatch = exercise(named: "Bench Press")
+        let snapshotSession = completedSnapshotSession(
+            title: "Snapshot Push",
+            startedAt: Date(timeIntervalSince1970: 200),
+            name: currentNameMatch.name,
+            equipment: currentNameMatch.equipment,
+            muscleGroup: currentNameMatch.primaryMuscleGroup
+        )
+
+        let rows = ExercisePickerContent.makeRows(
+            exercises: [historicalClaimant, currentNameMatch],
+            sessions: [linkedSession, snapshotSession],
+            ownerTokenIdentifier: nil,
+            query: "",
+            sortOrder: .name
+        )
+
+        let rowsByExerciseID = Dictionary(uniqueKeysWithValues: rows.map { ($0.exercise.id, $0) })
+        XCTAssertEqual(rowsByExerciseID[historicalClaimant.id]?.performanceCount, 2)
+        XCTAssertEqual(rowsByExerciseID[currentNameMatch.id]?.performanceCount, 0)
+
+        let visibility = ExerciseHistoryVisibilityScope(
+            exercises: [historicalClaimant, currentNameMatch],
+            ownerTokenIdentifier: nil
+        )
+        let routeSummary = ExerciseHistorySummary.makeIndex(
+            from: [linkedSession, snapshotSession]
+        ).summary(
+            matching: ExerciseHistoryRoute(
+                exerciseID: currentNameMatch.id,
+                name: currentNameMatch.name,
+                equipmentRaw: currentNameMatch.equipmentRaw
+            ),
+            visibility: visibility
+        )
+        XCTAssertNil(routeSummary)
+    }
+
+    func testAmbiguousSnapshotHistoryIsNotAttributedToDuplicateExerciseRows() {
+        let firstExercise = exercise(named: "Bench Press")
+        let secondExercise = exercise(named: "Bench Press")
+        let firstLinkedSession = completedSession(
+            title: "First Linked Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: firstExercise
+        )
+        let secondLinkedSession = completedSession(
+            title: "Second Linked Push",
+            startedAt: Date(timeIntervalSince1970: 200),
+            exercise: secondExercise
+        )
+        let snapshotSession = completedSnapshotSession(
+            title: "Ambiguous Snapshot Push",
+            startedAt: Date(timeIntervalSince1970: 300),
+            name: "Bench Press",
+            equipment: .barbell,
+            muscleGroup: .chest
+        )
+
+        let rows = ExercisePickerContent.makeRows(
+            exercises: [firstExercise, secondExercise],
+            sessions: [firstLinkedSession, secondLinkedSession, snapshotSession],
+            ownerTokenIdentifier: nil,
+            query: "",
+            sortOrder: .name
+        )
+
+        let rowsByExerciseID = Dictionary(uniqueKeysWithValues: rows.map { ($0.exercise.id, $0) })
+        XCTAssertEqual(rowsByExerciseID[firstExercise.id]?.performanceCount, 1)
+        XCTAssertEqual(rowsByExerciseID[secondExercise.id]?.performanceCount, 1)
+        XCTAssertEqual(rowsByExerciseID[firstExercise.id]?.lastPerformedAt, firstLinkedSession.startedAt)
+        XCTAssertEqual(rowsByExerciseID[secondExercise.id]?.lastPerformedAt, secondLinkedSession.startedAt)
     }
 
     func testContentExcludesArchivedDeletedAndOtherOwnerExercises() {
@@ -345,6 +488,60 @@ final class ExercisePickerContentTests: XCTestCase {
         XCTAssertEqual(rows.map(\.exercise.name), ["Bench Press"])
     }
 
+    func testIneligibleAndInvisibleWorkoutHistoryDoesNotAffectPickerRows() {
+        let benchPress = exercise(named: "Bench Press")
+        let activeSession = completedSession(
+            title: "Active Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: benchPress
+        )
+        activeSession.status = .active
+        let deletedSession = completedSession(
+            title: "Deleted Push",
+            startedAt: Date(timeIntervalSince1970: 200),
+            exercise: benchPress
+        )
+        deletedSession.markDeletedCascade(now: Date(timeIntervalSince1970: 400))
+        let otherOwnerSession = completedSession(
+            title: "Other Owner Push",
+            startedAt: Date(timeIntervalSince1970: 300),
+            exercise: benchPress
+        )
+        otherOwnerSession.syncOwnerTokenIdentifier = "owner-b"
+        let incompleteSession = completedSession(
+            title: "Incomplete Push",
+            startedAt: Date(timeIntervalSince1970: 400),
+            exercise: benchPress
+        )
+        incompleteSession.loggedExercises[0].sets[0].isCompleted = false
+
+        let rows = ExercisePickerContent.makeRows(
+            exercises: [benchPress],
+            sessions: [activeSession, deletedSession, otherOwnerSession, incompleteSession],
+            ownerTokenIdentifier: nil,
+            query: "",
+            sortOrder: .recent
+        )
+
+        XCTAssertEqual(rows.first?.performanceCount, 0)
+        XCTAssertEqual(rows.first?.performanceSummaryText, "Never performed")
+    }
+
+    func testNameSortUsesEquipmentToOrderSameNameVariants() {
+        let dumbbellBench = exercise(named: "Bench Press", equipment: .dumbbell)
+        let barbellBench = exercise(named: "Bench Press", equipment: .barbell)
+
+        let rows = ExercisePickerContent.makeRows(
+            exercises: [dumbbellBench, barbellBench],
+            sessions: [],
+            ownerTokenIdentifier: nil,
+            query: "",
+            sortOrder: .name
+        )
+
+        XCTAssertEqual(rows.map { $0.exercise.equipment }, [.barbell, .dumbbell])
+    }
+
     func testRowPerformanceSummaryFormatsPerformanceCountAndNeverPerformedState() {
         let benchPress = Exercise(
             name: "Bench Press",
@@ -361,7 +558,13 @@ final class ExercisePickerContentTests: XCTestCase {
             primaryMuscleGroupRaw: benchPress.primaryMuscleGroupRaw,
             lastPerformedAt: performedAt,
             completedSetCount: 12,
-            performanceSessionIDs: [UUID()]
+            performanceSessionIDs: [UUID()],
+            snapshotFallbackIdentities: [
+                ExerciseHistorySnapshotIdentity(
+                    name: benchPress.name,
+                    equipmentRaw: benchPress.equipmentRaw
+                ),
+            ]
         )
 
         let performedRow = ExercisePickerRowContent(
@@ -443,12 +646,14 @@ final class ExercisePickerContentTests: XCTestCase {
     private func completedMixedIdentitySession(
         title: String,
         startedAt: Date,
-        exercise: Exercise
+        exercise: Exercise,
+        linkedSnapshotName: String? = nil,
+        snapshotName: String? = nil
     ) -> WorkoutSession {
         let linkedExercise = LoggedExercise(
             orderIndex: 0,
             exercise: exercise,
-            exerciseSnapshotName: exercise.name
+            exerciseSnapshotName: linkedSnapshotName ?? exercise.name
         )
         linkedExercise.sets = [
             LoggedSet(orderIndex: 0, weight: 100, reps: 5, isCompleted: true)
@@ -456,7 +661,7 @@ final class ExercisePickerContentTests: XCTestCase {
         let snapshotExercise = LoggedExercise(
             orderIndex: 1,
             exercise: nil,
-            exerciseSnapshotName: exercise.name,
+            exerciseSnapshotName: snapshotName ?? exercise.name,
             exerciseSnapshotEquipmentRaw: exercise.equipmentRaw,
             exerciseSnapshotPrimaryMuscleGroupRaw: exercise.primaryMuscleGroupRaw
         )

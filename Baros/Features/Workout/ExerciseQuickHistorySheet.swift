@@ -7,6 +7,7 @@ struct ExerciseQuickHistorySheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(SyncScheduler.self) private var syncScheduler
+    @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
@@ -29,12 +30,18 @@ struct ExerciseQuickHistorySheet: View {
     }
 
     private var summary: ExerciseHistorySummary? {
-        ExerciseHistorySummary.find(
-            in: ExerciseHistorySummary.makeSummaries(
-                from: sessions,
-                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
-            ),
-            matching: route
+        let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
+        let historyIndex = ExerciseHistorySummary.makeIndex(
+            from: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
+        let visibility = ExerciseHistoryVisibilityScope(
+            exercises: exercises,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
+        return historyIndex.summary(
+            matching: route,
+            visibility: visibility
         )
     }
 

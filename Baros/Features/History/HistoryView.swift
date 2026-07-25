@@ -4,6 +4,7 @@ import SwiftUI
 struct HistoryView: View {
     @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
+    @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     private var completedSessions: [WorkoutSession] {
@@ -13,11 +14,22 @@ struct HistoryView: View {
         )
     }
 
-    private var exerciseSummaries: [ExerciseHistorySummary] {
-        ExerciseHistorySummary.makeSummaries(
+    private var exerciseHistoryIndex: ExerciseHistoryIndex {
+        ExerciseHistorySummary.makeIndex(
             from: sessions,
             ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
         )
+    }
+
+    private var exerciseVisibility: ExerciseHistoryVisibilityScope {
+        ExerciseHistoryVisibilityScope(
+            exercises: exercises,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        )
+    }
+
+    private var exerciseSummaries: [ExerciseHistorySummary] {
+        exerciseHistoryIndex.summaries
     }
 
     var body: some View {
@@ -50,7 +62,10 @@ struct HistoryView: View {
         .navigationDestination(for: HistoryRoute.self) { route in
             switch route {
             case .exercise(let exerciseRoute):
-                if let summary = ExerciseHistorySummary.find(in: exerciseSummaries, matching: exerciseRoute) {
+                if let summary = exerciseHistoryIndex.summary(
+                    matching: exerciseRoute,
+                    visibility: exerciseVisibility
+                ) {
                     ExerciseHistoryDetailView(summary: summary)
                 } else {
                     EmptyStateView(

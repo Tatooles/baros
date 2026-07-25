@@ -39,25 +39,47 @@ enum ExercisePickerContent {
         query: String,
         sortOrder: ExercisePickerSortOrder
     ) -> [ExercisePickerRowContent] {
-        let historySummaries = ExerciseHistorySummary.makeSummaries(
+        filterAndSort(
+            rows: makeBaseRows(
+                exercises: exercises,
+                sessions: sessions,
+                ownerTokenIdentifier: ownerTokenIdentifier
+            ),
+            query: query,
+            sortOrder: sortOrder
+        )
+    }
+
+    static func makeBaseRows(
+        exercises: [Exercise],
+        sessions: [WorkoutSession],
+        ownerTokenIdentifier: String?
+    ) -> [ExercisePickerRowContent] {
+        let historyIndex = ExerciseHistorySummary.makeIndex(
             from: sessions,
             ownerTokenIdentifier: ownerTokenIdentifier
         )
-
-        let rows = Exercise.visibleActiveExercises(
-            from: exercises,
+        let visibility = ExerciseHistoryVisibilityScope(
+            exercises: exercises,
             ownerTokenIdentifier: ownerTokenIdentifier
         )
-        .map { exercise in
+
+        return visibility.exercises.map { exercise in
             ExercisePickerRowContent(
                 exercise: exercise,
-                historySummary: ExerciseHistorySummary.makePerformanceSummary(
-                    in: historySummaries,
-                    matching: exercise
+                historySummary: historyIndex.summary(
+                    matching: exercise,
+                    visibility: visibility
                 )
             )
         }
+    }
 
+    static func filterAndSort(
+        rows: [ExercisePickerRowContent],
+        query: String,
+        sortOrder: ExercisePickerSortOrder
+    ) -> [ExercisePickerRowContent] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedQuery.isEmpty else {
             return rows.sorted { sorts($0, before: $1, using: sortOrder) }
