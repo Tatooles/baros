@@ -4,6 +4,24 @@ import XCTest
 
 @MainActor
 final class HistoryPersistenceTests: XCTestCase {
+    func testCompletedWorkoutEditDraftRecoversOutOfPolicyNumericValues() throws {
+        let set = LoggedSet(orderIndex: 0, weight: 10_001, reps: 1_001, rpe: 10.1, isCompleted: true)
+        let exercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press", sets: [set])
+        let session = WorkoutSession(
+            title: "Push",
+            startedAt: .now,
+            status: .completed,
+            source: .blank,
+            loggedExercises: [exercise]
+        )
+
+        let draftSet = try XCTUnwrap(CompletedWorkoutEditDraft(session: session).exercises.first?.sets.first)
+
+        XCTAssertNil(draftSet.weight)
+        XCTAssertNil(draftSet.reps)
+        XCTAssertNil(draftSet.rpe)
+    }
+
     func testFinishedWorkoutAppearsInCompletedHistoryFetch() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

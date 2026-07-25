@@ -85,10 +85,11 @@ struct ExerciseHistorySessionGroupCard: View {
     }
 
     private func setSummary(for set: LoggedSet) -> String {
-        let weight = weightUnit.displayWeight(fromCanonicalPounds: set.weight).map(WorkoutFormatters.number) ?? "-"
-        let reps = set.reps.map(String.init) ?? "-"
+        let validWeight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
+        let weight = weightUnit.displayWeight(fromCanonicalPounds: validWeight).map(WorkoutFormatters.number) ?? "-"
+        let reps = WorkoutNumericInputPolicy.validatedReps(set.reps).map(String.init) ?? "-"
 
-        if let rpe = set.rpe {
+        if let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe) {
             return "\(weight) x \(reps) @ \(WorkoutFormatters.number(rpe))"
         }
 

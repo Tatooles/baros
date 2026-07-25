@@ -1117,7 +1117,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
     }
 
-    func testRunPullsFullWorkoutGraphIntoEmptyStore() async throws {
+    func testRunPullsFullWorkoutGraphAndRecoversInvalidSetNumbers() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let owner = "issuer|owner_a"
@@ -1125,6 +1125,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let sessionID = UUID(uuidString: "00000000-0000-0000-0000-000000006002")!
         let loggedExerciseID = UUID(uuidString: "00000000-0000-0000-0000-000000006003")!
         let setID = UUID(uuidString: "00000000-0000-0000-0000-000000006004")!
+        let invalidSetID = UUID(uuidString: "00000000-0000-0000-0000-000000006005")!
         let client = FakeSyncClient()
         client.fetchResponses = [
             SyncFetchChangesResponse(
@@ -1203,6 +1204,24 @@ final class SyncCoordinatorTests: XCTestCase {
                         notes: "",
                         healthLinkID: nil,
                         sourceLoggedSetID: nil
+                    ),
+                    LoggedSetSyncRecord(
+                        clientId: invalidSetID.uuidString.lowercased(),
+                        createdAt: 14,
+                        updatedAt: 24,
+                        deletedAt: nil,
+                        serverUpdatedAt: 34,
+                        loggedExerciseClientId: loggedExerciseID.uuidString.lowercased(),
+                        orderIndex: 1,
+                        weight: 10_001,
+                        reps: 1_001,
+                        rpe: 10.1,
+                        kindRaw: "working",
+                        isCompleted: true,
+                        completedAt: 191,
+                        notes: "",
+                        healthLinkID: nil,
+                        sourceLoggedSetID: nil
                     )
                 ],
                 cursors: SyncChangeCursors(
@@ -1210,7 +1229,7 @@ final class SyncCoordinatorTests: XCTestCase {
                     exercises: 30,
                     workoutSessions: 31,
                     loggedExercises: 32,
-                    loggedSets: 33
+                    loggedSets: 34
                 ),
                 hasMore: SyncHasMore(userSettings: false, exercises: false)
             )
@@ -1229,14 +1248,18 @@ final class SyncCoordinatorTests: XCTestCase {
         let loggedExercise = try XCTUnwrap(session.sortedLoggedExercises.first)
         XCTAssertEqual(loggedExercise.id, loggedExerciseID)
         XCTAssertEqual(loggedExercise.exercise?.id, exerciseID)
-        XCTAssertEqual(loggedExercise.sortedSets.map(\.id), [setID])
+        XCTAssertEqual(loggedExercise.sortedSets.map(\.id), [setID, invalidSetID])
         XCTAssertEqual(loggedExercise.sortedSets.first?.weight, 185)
+        let recoveredSet = try XCTUnwrap(loggedExercise.sortedSets.last)
+        XCTAssertNil(recoveredSet.weight)
+        XCTAssertNil(recoveredSet.reps)
+        XCTAssertNil(recoveredSet.rpe)
 
         let state = try XCTUnwrap(context.fetch(FetchDescriptor<SyncCursorState>()).first)
         XCTAssertEqual(state.exercisesCursor, 30)
         XCTAssertEqual(state.workoutSessionsCursor, 31)
         XCTAssertEqual(state.loggedExercisesCursor, 32)
-        XCTAssertEqual(state.loggedSetsCursor, 33)
+        XCTAssertEqual(state.loggedSetsCursor, 34)
     }
 
     func testRunPullsWorkoutGraphWhenRemoteHasDuplicateSeedExercises() async throws {

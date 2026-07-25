@@ -60,7 +60,10 @@ final class LoggedSet: Identifiable {
     }
 
     var completedVolume: Double {
-        guard isCompleted, let weight, let reps else { return 0 }
+        guard isCompleted,
+              let weight = WorkoutNumericInputPolicy.validatedWeight(weight),
+              let reps = WorkoutNumericInputPolicy.validatedReps(reps)
+        else { return 0 }
         return weight * Double(reps)
     }
 

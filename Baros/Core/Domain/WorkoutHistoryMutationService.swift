@@ -93,9 +93,9 @@ struct CompletedWorkoutEditSetDraft: Identifiable {
     init(set: LoggedSet) {
         id = set.id
         orderIndex = set.orderIndex
-        weight = set.weight
-        reps = set.reps
-        rpe = set.rpe
+        weight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
+        reps = WorkoutNumericInputPolicy.validatedReps(set.reps)
+        rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe)
         kind = set.kind
         isCompleted = set.isCompleted
         completedAt = set.completedAt
@@ -209,7 +209,8 @@ struct WorkoutHistoryMutationService {
                 visibleSetsByID[set.id] = set
             }
 
-            for setDraft in exerciseDraft.sets {
+            for rawSetDraft in exerciseDraft.sets {
+                let setDraft = normalizedNumericValues(in: rawSetDraft)
                 guard let setID = setDraft.id else { continue }
                 guard let set = visibleSetsByID[setID] else {
                     throw WorkoutHistoryMutationError.missingLoggedSet
@@ -272,7 +273,9 @@ struct WorkoutHistoryMutationService {
                 didChangeChildRecords = true
             }
 
-            let newSetDrafts = exerciseDraft.sets.filter { $0.id == nil && !$0.isRemoved && !isEmptyNewSet($0) }
+            let newSetDrafts = exerciseDraft.sets
+                .map(normalizedNumericValues(in:))
+                .filter { $0.id == nil && !$0.isRemoved && !isEmptyNewSet($0) }
             for setDraft in newSetDrafts {
                 try claimOwnerlessWorkoutGraphIfNeeded(
                     session,
@@ -592,6 +595,16 @@ struct WorkoutHistoryMutationService {
             draft.kind == .working &&
             !draft.isCompleted &&
             draft.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func normalizedNumericValues(
+        in draft: CompletedWorkoutEditSetDraft
+    ) -> CompletedWorkoutEditSetDraft {
+        var normalized = draft
+        normalized.weight = WorkoutNumericInputPolicy.validatedWeight(draft.weight)
+        normalized.reps = WorkoutNumericInputPolicy.validatedReps(draft.reps)
+        normalized.rpe = WorkoutNumericInputPolicy.validatedRPE(draft.rpe)
+        return normalized
     }
 
     private static func weightsAreEqual(_ lhs: Double?, _ rhs: Double?) -> Bool {

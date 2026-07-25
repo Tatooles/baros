@@ -227,9 +227,9 @@ final class ActiveWorkoutEngine {
     }
 
     func updateSet(_ set: LoggedSet, weight: Double?, reps: Int?, rpe: Double?, context: ModelContext) throws {
-        set.weight = weight
-        set.reps = reps
-        set.rpe = rpe
+        set.weight = WorkoutNumericInputPolicy.validatedWeight(weight)
+        set.reps = WorkoutNumericInputPolicy.validatedReps(reps)
+        set.rpe = WorkoutNumericInputPolicy.validatedRPE(rpe)
         set.touch()
         try context.save()
     }
@@ -237,12 +237,14 @@ final class ActiveWorkoutEngine {
     func fillSetFromPrevious(_ set: LoggedSet, previous: PreviousSetPerformance, context: ModelContext) throws {
         var didChange = false
 
-        if set.weight == nil, let weight = previous.weight {
+        if WorkoutNumericInputPolicy.validatedWeight(set.weight) == nil,
+           let weight = WorkoutNumericInputPolicy.validatedWeight(previous.weight) {
             set.weight = weight
             didChange = true
         }
 
-        if set.reps == nil, let reps = previous.reps {
+        if WorkoutNumericInputPolicy.validatedReps(set.reps) == nil,
+           let reps = WorkoutNumericInputPolicy.validatedReps(previous.reps) {
             set.reps = reps
             didChange = true
         }

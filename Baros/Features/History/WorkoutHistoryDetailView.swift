@@ -211,14 +211,15 @@ struct WorkoutHistoryDetailView: View {
 
     private func setSummary(for set: LoggedSet) -> String {
         let weight = weightText(for: set)
-        let reps = set.reps.map(String.init) ?? "-"
-        let rpe = set.rpe.map { " @ \(WorkoutFormatters.number($0))" } ?? ""
+        let reps = WorkoutNumericInputPolicy.validatedReps(set.reps).map(String.init) ?? "-"
+        let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe).map { " @ \(WorkoutFormatters.number($0))" } ?? ""
         let status = set.isCompleted ? "Done" : "Open"
         return "\(weight) x \(reps)\(rpe) · \(status)"
     }
 
     private func weightText(for set: LoggedSet) -> String {
-        guard let displayWeight = weightUnit.displayWeight(fromCanonicalPounds: set.weight) else {
+        let validWeight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
+        guard let displayWeight = weightUnit.displayWeight(fromCanonicalPounds: validWeight) else {
             return "-"
         }
 

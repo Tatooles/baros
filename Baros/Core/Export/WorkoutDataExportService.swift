@@ -103,7 +103,11 @@ struct WorkoutDataExportService {
         session: WorkoutSession,
         unit: MeasurementUnit
     ) -> [String] {
-        [
+        let validWeight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
+        let validReps = WorkoutNumericInputPolicy.validatedReps(set.reps)
+        let validRPE = WorkoutNumericInputPolicy.validatedRPE(set.rpe)
+
+        return [
             formatDate(session.startedAt),
             Self.neutralizedText(session.title),
             Self.neutralizedText(session.notes),
@@ -113,10 +117,10 @@ struct WorkoutDataExportService {
             String(set.orderIndex + 1),
             set.kind.rawValue,
             String(set.isCompleted),
-            unit.displayWeight(fromCanonicalPounds: set.weight).map(Self.formatDouble) ?? "",
-            set.reps.map(String.init) ?? "",
+            unit.displayWeight(fromCanonicalPounds: validWeight).map(Self.formatDouble) ?? "",
+            validReps.map(String.init) ?? "",
             unit.rawValue,
-            set.rpe.map(Self.formatDouble) ?? "",
+            validRPE.map(Self.formatDouble) ?? "",
             Self.neutralizedText(set.notes),
             set.completedAt.map(formatDate) ?? "",
             session.id.uuidString,

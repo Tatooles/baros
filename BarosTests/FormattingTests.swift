@@ -60,6 +60,29 @@ final class FormattingTests: XCTestCase {
         XCTAssertNil(input.draftText)
     }
 
+    func testWorkoutNumberInputIgnoresEmptyWriteWhenFieldIsNotFocused() {
+        var input = WorkoutNumberInputText()
+
+        input.updateDraft("", isFocused: false)
+
+        XCTAssertNil(input.draftText)
+    }
+
+    func testWorkoutNumberInputRepsFallbackRoundTripsThroughPolicy() {
+        let input = WorkoutNumberInputText()
+
+        let text = input.displayText(fallback: String(1_000))
+
+        XCTAssertEqual(text, "1000")
+        XCTAssertEqual(
+            WorkoutNumericInputPolicy.parseReps(
+                text,
+                locale: Locale(identifier: "en_US_POSIX")
+            ),
+            1_000
+        )
+    }
+
     func testDecimalWorkoutInputUsesFormattedModelValueAfterEditingEnds() {
         var input = WorkoutNumberInputText()
 
@@ -89,6 +112,140 @@ final class FormattingTests: XCTestCase {
         let overflowingInput = String(repeating: "9", count: 400)
 
         XCTAssertNil(WorkoutFormatters.parseNumber(overflowingInput, locale: Locale(identifier: "en_US_POSIX")))
+    }
+
+    func testWorkoutNumericPolicyAcceptsWeightAtUpperBoundary() {
+        XCTAssertEqual(WorkoutNumericInputPolicy.validatedWeight(10_000), 10_000)
+    }
+
+    func testWorkoutNumericPolicyAcceptsZeroWeightAtLowerBoundary() {
+        XCTAssertEqual(WorkoutNumericInputPolicy.validatedWeight(0), 0)
+    }
+
+    func testWorkoutNumericPolicyRejectsOutOfPolicyWeights() {
+        XCTAssertNil(WorkoutNumericInputPolicy.validatedWeight(-0.1))
+        XCTAssertNil(WorkoutNumericInputPolicy.validatedWeight(10_000.1))
+        XCTAssertNil(WorkoutNumericInputPolicy.validatedWeight(.infinity))
+    }
+
+    func testWorkoutNumericPolicyAcceptsRepsAtUpperBoundary() {
+        XCTAssertEqual(WorkoutNumericInputPolicy.validatedReps(1_000), 1_000)
+    }
+
+    func testWorkoutNumericPolicyAcceptsOneRepAtLowerBoundary() {
+        XCTAssertEqual(WorkoutNumericInputPolicy.validatedReps(1), 1)
+    }
+
+    func testWorkoutNumericPolicyRejectsOutOfPolicyReps() {
+        XCTAssertNil(WorkoutNumericInputPolicy.validatedReps(0))
+        XCTAssertNil(WorkoutNumericInputPolicy.validatedReps(1_001))
+    }
+
+    func testWorkoutNumericPolicyAcceptsRPEAtUpperBoundary() {
+        XCTAssertEqual(WorkoutNumericInputPolicy.validatedRPE(10), 10)
+    }
+
+    func testWorkoutNumericPolicyAcceptsRPEAtLowerBoundary() {
+        XCTAssertEqual(WorkoutNumericInputPolicy.validatedRPE(1), 1)
+    }
+
+    func testWorkoutNumericPolicyRejectsOutOfPolicyRPE() {
+        XCTAssertNil(WorkoutNumericInputPolicy.validatedRPE(0.9))
+        XCTAssertNil(WorkoutNumericInputPolicy.validatedRPE(10.1))
+        XCTAssertNil(WorkoutNumericInputPolicy.validatedRPE(.nan))
+    }
+
+    func testWorkoutNumericPolicyParsesLocaleWeightInput() {
+        XCTAssertEqual(
+            WorkoutNumericInputPolicy.parseWeight(
+                "8,5",
+                unit: .pounds,
+                locale: Locale(identifier: "fr_FR")
+            ),
+            8.5
+        )
+    }
+
+    func testWorkoutNumericPolicyParsesLeadingDecimalWeightInput() {
+        XCTAssertEqual(
+            WorkoutNumericInputPolicy.parseWeight(
+                ".5",
+                unit: .pounds,
+                locale: Locale(identifier: "en_US_POSIX")
+            ),
+            0.5
+        )
+    }
+
+    func testWorkoutNumericPolicyRejectsRepsAboveUpperBoundary() {
+        XCTAssertNil(WorkoutNumericInputPolicy.parseReps("1001"))
+    }
+
+    func testWorkoutNumericPolicyParsesLocaleRepsInput() {
+        XCTAssertEqual(
+            WorkoutNumericInputPolicy.parseReps(
+                "٥",
+                locale: Locale(identifier: "ar_EG")
+            ),
+            5
+        )
+    }
+
+    func testWorkoutNumericPolicyRejectsFractionalRepsInput() {
+        XCTAssertNil(
+            WorkoutNumericInputPolicy.parseReps(
+                "5.5",
+                locale: Locale(identifier: "en_US_POSIX")
+            )
+        )
+    }
+
+    func testWorkoutNumericPolicyRejectsPartiallyParsedRepsInput() {
+        let malformedInputs = ["5abc", "5 abc", "5kg", "5.0abc"]
+
+        for input in malformedInputs {
+            XCTAssertNil(
+                WorkoutNumericInputPolicy.parseReps(
+                    input,
+                    locale: Locale(identifier: "en_US_POSIX")
+                ),
+                input
+            )
+        }
+
+        XCTAssertNil(
+            WorkoutNumericInputPolicy.parseReps(
+                "٥abc",
+                locale: Locale(identifier: "ar_EG")
+            ),
+            "٥abc"
+        )
+    }
+
+    func testWorkoutNumericPolicyRejectsPartiallyParsedWeightAndRPEInput() {
+        XCTAssertNil(
+            WorkoutNumericInputPolicy.parseWeight(
+                "185kg",
+                unit: .pounds,
+                locale: Locale(identifier: "en_US_POSIX")
+            )
+        )
+        XCTAssertNil(
+            WorkoutNumericInputPolicy.parseRPE(
+                "8abc",
+                locale: Locale(identifier: "en_US_POSIX")
+            )
+        )
+    }
+
+    func testWorkoutNumericPolicyParsesLocaleRPEInput() {
+        XCTAssertEqual(
+            WorkoutNumericInputPolicy.parseRPE(
+                "8,5",
+                locale: Locale(identifier: "fr_FR")
+            ),
+            8.5
+        )
     }
 
     func testVolumeFormatterDisplaysCanonicalPoundVolumeInSelectedUnit() {

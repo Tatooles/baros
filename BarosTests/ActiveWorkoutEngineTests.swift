@@ -430,6 +430,54 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(set.completedAt, Date(timeIntervalSince1970: 300))
     }
 
+    func testUpdatingActiveSetRejectsOutOfPolicyNumericValues() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let set = LoggedSet(orderIndex: 0)
+        context.insert(set)
+
+        try engine.updateSet(set, weight: 10_001, reps: 1_001, rpe: 10.1, context: context)
+
+        XCTAssertNil(set.weight)
+        XCTAssertNil(set.reps)
+        XCTAssertNil(set.rpe)
+    }
+
+    func testFillingFromPreviousRejectsOutOfPolicyNumericValues() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let set = LoggedSet(orderIndex: 0)
+        context.insert(set)
+
+        try engine.fillSetFromPrevious(
+            set,
+            previous: PreviousSetPerformance(weight: 10_001, reps: 1_001),
+            context: context
+        )
+
+        XCTAssertNil(set.weight)
+        XCTAssertNil(set.reps)
+    }
+
+    func testFillingFromPreviousReplacesOutOfPolicyCurrentValues() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let set = LoggedSet(orderIndex: 0, weight: 10_001, reps: 1_001)
+        context.insert(set)
+
+        try engine.fillSetFromPrevious(
+            set,
+            previous: PreviousSetPerformance(weight: 185, reps: 5),
+            context: context
+        )
+
+        XCTAssertEqual(set.weight, 185)
+        XCTAssertEqual(set.reps, 5)
+    }
+
     func testRPEChipsIncludeHalfStepsFromSixThroughTen() {
         XCTAssertEqual(RPEChipRow.values, [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10])
     }

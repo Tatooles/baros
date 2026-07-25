@@ -1281,9 +1281,9 @@ final class SyncCoordinator {
                 let set = LoggedSet(
                     id: id,
                     orderIndex: record.orderIndex,
-                    weight: record.weight,
-                    reps: record.reps,
-                    rpe: record.rpe,
+                    weight: WorkoutNumericInputPolicy.validatedWeight(record.weight),
+                    reps: WorkoutNumericInputPolicy.validatedReps(record.reps),
+                    rpe: WorkoutNumericInputPolicy.validatedRPE(record.rpe),
                     kind: SetKind(rawValue: record.kindRaw) ?? .working,
                     isCompleted: record.isCompleted,
                     completedAt: record.completedAt.map(Date.init(timeIntervalSince1970:)),
@@ -1310,9 +1310,9 @@ final class SyncCoordinator {
 
     private func apply(_ record: LoggedSetSyncRecord, to set: LoggedSet, loggedExercise: LoggedExercise) {
         set.orderIndex = record.orderIndex
-        set.weight = record.weight
-        set.reps = record.reps
-        set.rpe = record.rpe
+        set.weight = WorkoutNumericInputPolicy.validatedWeight(record.weight)
+        set.reps = WorkoutNumericInputPolicy.validatedReps(record.reps)
+        set.rpe = WorkoutNumericInputPolicy.validatedRPE(record.rpe)
         set.kindRaw = record.kindRaw
         set.isCompleted = record.isCompleted
         set.completedAt = record.completedAt.map(Date.init(timeIntervalSince1970:))

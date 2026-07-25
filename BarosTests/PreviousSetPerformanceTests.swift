@@ -4,6 +4,12 @@ import XCTest
 
 @MainActor
 final class PreviousSetPerformanceTests: XCTestCase {
+    func testOutOfPolicyPreviousSetValuesDisplayAsRecoverableBlank() {
+        let previous = PreviousSetPerformance(weight: 10_001, reps: 1_001)
+
+        XCTAssertEqual(previous.displayText(weightUnit: .pounds), "—")
+    }
+
     func testReturnsLastCompletedSessionSetsByIndex() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
