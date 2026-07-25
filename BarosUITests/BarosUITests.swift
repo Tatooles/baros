@@ -139,6 +139,27 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testLogWorkoutSmoke() {
+        let app = makeApp(extraArguments: ["--uitest-disable-animations"])
+        app.launch()
+
+        createCompletedBenchWorkout(in: app)
+
+        app.buttons["HistoryTab"].tap()
+        let completedWorkout = app.buttons["WorkoutHistoryButton-0"]
+        XCTAssertTrue(completedWorkout.waitForExistence(timeout: 3))
+        completedWorkout.tap()
+
+        XCTAssertTrue(app.staticTexts["Bench Press"].waitForExistence(timeout: 3))
+        let setSummary = app.staticTexts
+            .matching(identifier: "WorkoutHistorySetSummary-0-0")
+            .matching(NSPredicate(format: "label == %@", "185 x 5 @ 8 · Done"))
+            .firstMatch
+        XCTAssertTrue(setSummary.waitForExistence(timeout: 3))
+        XCTAssertEqual(setSummary.label, "185 x 5 @ 8 · Done")
+    }
+
+    @MainActor
     func testFirstRunWelcomeAppearsOnce() {
         let firstLaunch = makeDiskBackedResetApp(extraArguments: ["--uitest-reset-first-run-experience"])
         firstLaunch.launch()
@@ -1129,13 +1150,12 @@ final class BarosUITests: XCTestCase {
     private func openFinishWorkoutSheet(in app: XCUIApplication) {
         let finishButton = app.buttons["FinishWorkoutButton"]
         XCTAssertTrue(finishButton.waitForExistence(timeout: 3))
-        for _ in 0..<2 {
-            finishButton.tap()
-            if app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 1)
-                || app.buttons["KeepGoingButton"].waitForExistence(timeout: 1) {
-                return
-            }
-        }
+        finishButton.tap()
+
+        XCTAssertTrue(
+            app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3)
+                || app.buttons["KeepGoingButton"].waitForExistence(timeout: 3)
+        )
     }
 
     @MainActor
@@ -1188,24 +1208,22 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    private func createCompletedBenchWorkout(in app: XCUIApplication, title: String) {
+    private func createCompletedBenchWorkout(in app: XCUIApplication, title: String? = nil) {
         app.buttons["StartBlankWorkoutButton"].tap()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
-        replaceText(in: app.textFields["WorkoutTitle"], with: title)
+        if let title {
+            replaceText(in: app.textFields["WorkoutTitle"], with: title)
+        }
         addBenchPress(in: app)
         fillFirstBenchSet(in: app)
         enterRPEViaChips("8", in: app)
         app.buttons["SetCompletionButton-0-0"].tap()
         dismissKeyboardIfNeeded(in: app)
         openFinishWorkoutSheet(in: app)
-        XCTAssertTrue(app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3))
-        for _ in 0..<2 {
-            app.buttons["SaveWorkoutButton"].tap()
-            if app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3) {
-                return
-            }
-        }
-        XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 1))
+        let saveButton = app.buttons["SaveWorkoutButton"]
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
+        saveButton.tap()
+        XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 5))
     }
 
     @MainActor

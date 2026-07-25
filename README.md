@@ -18,14 +18,33 @@ Native SwiftUI workout tracker for iPhone with a SwiftData-backed offline workou
 
 ## CI
 
-Pull requests and pushes to `main` run two GitHub Actions checks:
+Pull requests and pushes to `main` run three GitHub Actions checks:
 
 - `ios-unit-tests`: builds the `BarosUnitTests` scheme and runs `BarosTests`.
+- `ios-ui-smoke`: runs four deterministic UI tests covering completed workout logging, workout/tab navigation, a settings-triggered sync request, and signed-out local-data reset.
 - `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
 
-The iOS job intentionally excludes `BarosUITests` from the required PR gate. If `ios-unit-tests` fails, first inspect the GitHub Actions log. The failed workflow run also uploads a `BarosTests-xcresult` artifact containing the `.xcresult` bundle and test log for local Xcode inspection.
+The UI smoke job intentionally selects only the four tests below instead of making the full `BarosUITests` target part of the required PR gate. Each selected test uses the UI suite's deterministic reset and in-memory launch helper. If either iOS job fails, first inspect the GitHub Actions log. The failed workflow run also uploads its `.xcresult` bundle and test log for local Xcode inspection.
 
-The canonical local UI-suite command is the `Run UI tests only` command above. As of issue #63, the expected UI target discovery count is 29 tests; treat a run with fewer discovered or executed tests as partial coverage, not a clean full-suite result. Keep the full UI target out of the required PR gate until it can pass repeated local full-suite runs without known flakes.
+Run the exact UI smoke shard locally with:
+
+```sh
+rm -rf /private/tmp/BarosUISmoke.xcresult
+xcodebuild test \
+  -project Baros.xcodeproj \
+  -scheme Baros \
+  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
+  -only-testing:BarosUITests/BarosUITests/testLogWorkoutSmoke \
+  -only-testing:BarosUITests/BarosUITests/testTabNavigationAndFinishSheetSmoke \
+  -only-testing:BarosUITests/BarosUITests/testSettingsEditRequestsSyncInUITestMode \
+  -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToProfileAfterReset \
+  -derivedDataPath /private/tmp/baros-ui-smoke-derived-data \
+  -resultBundlePath /private/tmp/BarosUISmoke.xcresult
+```
+
+The command must execute exactly 4 tests with no failures. CI reads the result bundle and fails the smoke gate unless `totalTestCount` is exactly 4, so a stale selector cannot silently reduce coverage.
+
+The canonical local UI-suite command is the `Run UI tests only` command above. Xcode 26.5 currently discovers 42 tests in `BarosUITests`; treat a run with fewer discovered or executed tests as partial coverage, not a clean full-suite result. Keep the full UI target out of the required PR gate until issue #63 establishes repeated full-suite stability.
 
 Local equivalents:
 

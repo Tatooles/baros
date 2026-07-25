@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 import ClerkKit
 @preconcurrency import ConvexMobile
 
@@ -34,6 +35,11 @@ struct BarosApp: App {
             )
         )
         let arguments = ProcessInfo.processInfo.arguments
+        #if DEBUG
+        if arguments.contains("--uitest-disable-animations") {
+            UIView.setAnimationsEnabled(false)
+        }
+        #endif
         FirstRunExperienceStore.resetForUITestingIfRequested(arguments: arguments)
         FirstRunExperienceStore.markSeenForUITestingIfRequested(arguments: arguments)
         uiTestForcesSignedOutAuth = arguments.contains("--uitest-force-signed-out-auth")

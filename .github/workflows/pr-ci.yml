@@ -59,6 +59,76 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  ios-ui-smoke:
+    name: ios-ui-smoke
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      IOS_TEST_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=26.5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.5
+        run: sudo xcode-select -s /Applications/Xcode_26.5.app
+
+      - name: Show Xcode and simulator environment
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available | grep -E "iPhone 17" || true
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Baros.xcodeproj \
+            -scheme Baros \
+            -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData"
+
+      - name: Run Baros UI smoke tests
+        timeout-minutes: 25
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Baros.xcodeproj \
+            -scheme Baros \
+            -destination "${IOS_TEST_DESTINATION}" \
+            -only-testing:BarosUITests/BarosUITests/testLogWorkoutSmoke \
+            -only-testing:BarosUITests/BarosUITests/testTabNavigationAndFinishSheetSmoke \
+            -only-testing:BarosUITests/BarosUITests/testSettingsEditRequestsSyncInUITestMode \
+            -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToProfileAfterReset \
+            -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData" \
+            -resultBundlePath "${RUNNER_TEMP}/BarosUISmoke.xcresult" \
+            2>&1 | tee "${RUNNER_TEMP}/BarosUISmoke.log"
+
+      - name: Verify UI smoke test count
+        env:
+          EXPECTED_UI_SMOKE_TEST_COUNT: 4
+        run: |
+          set -o pipefail
+          executed_test_count="$(
+            xcrun xcresulttool get test-results summary \
+              --path "${RUNNER_TEMP}/BarosUISmoke.xcresult" \
+              --compact |
+              plutil -extract totalTestCount raw -o - -
+          )"
+          echo "Executed UI smoke tests: ${executed_test_count}"
+          if [[ "${executed_test_count}" != "${EXPECTED_UI_SMOKE_TEST_COUNT}" ]]; then
+            echo "Expected ${EXPECTED_UI_SMOKE_TEST_COUNT} UI smoke tests, but executed ${executed_test_count}."
+            exit 1
+          fi
+
+      - name: Upload UI smoke failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BarosUISmoke-xcresult
+          path: |
+            ${{ runner.temp }}/BarosUISmoke.xcresult
+            ${{ runner.temp }}/BarosUISmoke.log
+          if-no-files-found: warn
+          retention-days: 14
+
   convex-checks:
     name: convex-checks
     runs-on: ubuntu-latest
