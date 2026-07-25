@@ -140,7 +140,7 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testLogWorkoutSmoke() {
-        let app = makeApp()
+        let app = makeApp(extraArguments: ["--uitest-disable-animations"])
         app.launch()
 
         createCompletedBenchWorkout(in: app)
