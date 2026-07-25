@@ -200,6 +200,28 @@ final class FormattingTests: XCTestCase {
         )
     }
 
+    func testWorkoutNumericPolicyRejectsPartiallyParsedRepsInput() {
+        let malformedInputs = ["5abc", "5 abc", "5kg", "5.0abc"]
+
+        for input in malformedInputs {
+            XCTAssertNil(
+                WorkoutNumericInputPolicy.parseReps(
+                    input,
+                    locale: Locale(identifier: "en_US_POSIX")
+                ),
+                input
+            )
+        }
+
+        XCTAssertNil(
+            WorkoutNumericInputPolicy.parseReps(
+                "٥abc",
+                locale: Locale(identifier: "ar_EG")
+            ),
+            "٥abc"
+        )
+    }
+
     func testWorkoutNumericPolicyParsesLocaleRPEInput() {
         XCTAssertEqual(
             WorkoutNumericInputPolicy.parseRPE(
