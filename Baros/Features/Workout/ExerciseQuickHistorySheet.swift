@@ -39,10 +39,7 @@ struct ExerciseQuickHistorySheet: View {
             exercises: exercises,
             ownerTokenIdentifier: ownerTokenIdentifier
         )
-        return historyIndex.summary(
-            matching: route,
-            visibility: visibility
-        )
+        return historyIndex.resolved(for: visibility).summary(for: route)
     }
 
     private var recentGroups: [ExerciseHistorySessionGroup] {

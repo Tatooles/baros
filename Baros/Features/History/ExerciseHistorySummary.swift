@@ -64,7 +64,7 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
         makeIndex(
             from: sessions,
             ownerTokenIdentifier: ownerTokenIdentifier
-        ).summaries
+        ).rawSummaries
     }
 
     static func makeIndex(
@@ -195,7 +195,7 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
 }
 
 struct ExerciseHistoryIndex {
-    let summaries: [ExerciseHistorySummary]
+    fileprivate let rawSummaries: [ExerciseHistorySummary]
 
     private let summariesByIdentity: [ExerciseHistoryIdentity: ExerciseHistorySummary]
     private let linkedOnlySummariesByExerciseID: [UUID: ExerciseHistorySummary]
@@ -216,22 +216,19 @@ struct ExerciseHistoryIndex {
         self.snapshotOwners = linkedExerciseIDsBySnapshotIdentity.compactMapValues { exerciseIDs in
             exerciseIDs.count == 1 ? exerciseIDs.first : nil
         }
-        self.summaries = Self.sortedSummaries(summariesByIdentity.values)
+        self.rawSummaries = Self.sortedSummaries(summariesByIdentity.values)
     }
 
-    func summary(
-        matching exercise: Exercise,
-        visibility: ExerciseHistoryVisibilityScope
-    ) -> ExerciseHistorySummary? {
-        resolution(matching: exercise, visibility: visibility).summary
-    }
-
-    func summaries(
-        reconciledFor visibility: ExerciseHistoryVisibilityScope
-    ) -> [ExerciseHistorySummary] {
+    func resolved(
+        for visibility: ExerciseHistoryVisibilityScope
+    ) -> ResolvedExerciseHistory {
         var consumedIdentities: Set<ExerciseHistoryIdentity> = []
         var consumedSnapshotIdentities: Set<ExerciseHistorySnapshotIdentity> = []
         var reconciledByID: [String: ExerciseHistorySummary] = [:]
+        var summariesByExerciseID: [UUID: ExerciseHistorySummary] = [:]
+        var summariesByVisibleSnapshotIdentity: [
+            ExerciseHistorySnapshotIdentity: ExerciseHistorySummary
+        ] = [:]
 
         for exercise in visibility.exercises {
             let resolution = resolution(
@@ -242,6 +239,14 @@ struct ExerciseHistoryIndex {
             consumedSnapshotIdentities.formUnion(resolution.consumedSnapshotIdentities)
             if let summary = resolution.summary {
                 reconciledByID[summary.id] = summary
+                summariesByExerciseID[exercise.id] = summary
+                if visibility.allowsSnapshotFallback(
+                    for: ExerciseHistorySnapshotIdentity(exercise: exercise)
+                ) {
+                    summariesByVisibleSnapshotIdentity[
+                        ExerciseHistorySnapshotIdentity(exercise: exercise)
+                    ] = summary
+                }
             }
         }
 
@@ -257,6 +262,7 @@ struct ExerciseHistoryIndex {
                 result = Self.merging(result, with: snapshotSummary)
             }
             reconciledByID[summary.id] = summary
+            summariesByExerciseID[exerciseID] = summary
         }
 
         for (snapshotIdentity, summary) in snapshotOnlySummariesByIdentity
@@ -265,7 +271,17 @@ struct ExerciseHistoryIndex {
             reconciledByID[summary.id] = summary
         }
 
-        return Self.sortedSummaries(reconciledByID.values)
+        let summaries = Self.sortedSummaries(reconciledByID.values)
+        return ResolvedExerciseHistory(
+            summaries: summaries,
+            summariesByExerciseID: summariesByExerciseID,
+            summariesBySnapshotIdentity: Self.makeSnapshotRouteSummaries(
+                summaries: summaries,
+                summariesByExerciseID: summariesByExerciseID,
+                summariesByVisibleSnapshotIdentity: summariesByVisibleSnapshotIdentity,
+                linkedExerciseIDsBySnapshotIdentity: linkedExerciseIDsBySnapshotIdentity
+            )
+        )
     }
 
     private func resolution(
@@ -313,32 +329,6 @@ struct ExerciseHistoryIndex {
         )
     }
 
-    func summary(
-        matching route: ExerciseHistoryRoute,
-        visibility: ExerciseHistoryVisibilityScope
-    ) -> ExerciseHistorySummary? {
-        let snapshotIdentity = ExerciseHistorySnapshotIdentity(
-            name: route.name,
-            equipmentRaw: route.equipmentRaw
-        )
-        guard let exerciseID = route.exerciseID else {
-            if let exercise = visibility.exercise(matching: snapshotIdentity),
-               let resolvedSummary = summary(matching: exercise, visibility: visibility) {
-                return resolvedSummary
-            }
-
-            return summariesByIdentity[.snapshot(snapshotIdentity)]
-                ?? summaries.first {
-                    $0.snapshotFallbackIdentities.contains(snapshotIdentity)
-                }
-        }
-        guard let exercise = visibility.exercise(withID: exerciseID) else {
-            return summariesByIdentity[.exercise(exerciseID)]
-        }
-
-        return summary(matching: exercise, visibility: visibility)
-    }
-
     private static func merging(
         _ summary: ExerciseHistorySummary,
         with snapshotSummary: ExerciseHistorySummary
@@ -354,6 +344,54 @@ struct ExerciseHistoryIndex {
             combined.primaryMuscleGroupRaw = snapshotSummary.primaryMuscleGroupRaw
         }
         return combined
+    }
+
+    private static func makeSnapshotRouteSummaries(
+        summaries: [ExerciseHistorySummary],
+        summariesByExerciseID: [UUID: ExerciseHistorySummary],
+        summariesByVisibleSnapshotIdentity: [
+            ExerciseHistorySnapshotIdentity: ExerciseHistorySummary
+        ],
+        linkedExerciseIDsBySnapshotIdentity: [
+            ExerciseHistorySnapshotIdentity: Set<UUID>
+        ]
+    ) -> [ExerciseHistorySnapshotIdentity: ExerciseHistorySummary] {
+        var candidatesBySnapshotIdentity: [
+            ExerciseHistorySnapshotIdentity: [ExerciseHistorySummary]
+        ] = [:]
+        for summary in summaries {
+            for snapshotIdentity in summary.snapshotFallbackIdentities {
+                candidatesBySnapshotIdentity[snapshotIdentity, default: []].append(summary)
+            }
+        }
+
+        let ambiguousSnapshotIdentities = Set(
+            candidatesBySnapshotIdentity.compactMap { snapshotIdentity, candidates in
+                candidates.count > 1 ? snapshotIdentity : nil
+            }
+        )
+        var routeSummaries = candidatesBySnapshotIdentity.compactMapValues {
+            $0.count == 1 ? $0.first : nil
+        }
+
+        for (snapshotIdentity, summary) in summariesByVisibleSnapshotIdentity
+            where routeSummaries[snapshotIdentity] == nil
+                && !ambiguousSnapshotIdentities.contains(snapshotIdentity) {
+            routeSummaries[snapshotIdentity] = summary
+        }
+
+        for (snapshotIdentity, exerciseIDs) in linkedExerciseIDsBySnapshotIdentity
+            where routeSummaries[snapshotIdentity] == nil
+                && !ambiguousSnapshotIdentities.contains(snapshotIdentity)
+                && exerciseIDs.count == 1 {
+            guard let exerciseID = exerciseIDs.first,
+                  let summary = summariesByExerciseID[exerciseID] else {
+                continue
+            }
+            routeSummaries[snapshotIdentity] = summary
+        }
+
+        return routeSummaries
     }
 
     private static func sortedSummaries<S: Sequence>(
@@ -374,6 +412,42 @@ struct ExerciseHistoryIndex {
     }
 }
 
+struct ResolvedExerciseHistory {
+    let summaries: [ExerciseHistorySummary]
+
+    private let summariesByExerciseID: [UUID: ExerciseHistorySummary]
+    private let summariesBySnapshotIdentity: [ExerciseHistorySnapshotIdentity: ExerciseHistorySummary]
+
+    fileprivate init(
+        summaries: [ExerciseHistorySummary],
+        summariesByExerciseID: [UUID: ExerciseHistorySummary],
+        summariesBySnapshotIdentity: [
+            ExerciseHistorySnapshotIdentity: ExerciseHistorySummary
+        ]
+    ) {
+        self.summaries = summaries
+        self.summariesByExerciseID = summariesByExerciseID
+        self.summariesBySnapshotIdentity = summariesBySnapshotIdentity
+    }
+
+    func summary(for exercise: Exercise) -> ExerciseHistorySummary? {
+        summariesByExerciseID[exercise.id]
+    }
+
+    func summary(for route: ExerciseHistoryRoute) -> ExerciseHistorySummary? {
+        if let exerciseID = route.exerciseID {
+            return summariesByExerciseID[exerciseID]
+        }
+
+        return summariesBySnapshotIdentity[
+            ExerciseHistorySnapshotIdentity(
+                name: route.name,
+                equipmentRaw: route.equipmentRaw
+            )
+        ]
+    }
+}
+
 private struct ExerciseHistoryResolution {
     let summary: ExerciseHistorySummary?
     let consumedIdentities: Set<ExerciseHistoryIdentity>
@@ -384,7 +458,6 @@ struct ExerciseHistoryVisibilityScope {
     let exercises: [Exercise]
 
     private let exerciseIDs: Set<UUID>
-    private let exercisesByID: [UUID: Exercise]
     private let exerciseCountBySnapshotIdentity: [ExerciseHistorySnapshotIdentity: Int]
 
     init(
@@ -397,29 +470,10 @@ struct ExerciseHistoryVisibilityScope {
         )
         self.exercises = visibleExercises
         self.exerciseIDs = Set(visibleExercises.map(\.id))
-        self.exercisesByID = Dictionary(
-            uniqueKeysWithValues: visibleExercises.map { ($0.id, $0) }
-        )
         self.exerciseCountBySnapshotIdentity = Dictionary(
             grouping: visibleExercises,
             by: ExerciseHistorySnapshotIdentity.init(exercise:)
         ).mapValues(\.count)
-    }
-
-    fileprivate func exercise(withID exerciseID: UUID) -> Exercise? {
-        exercisesByID[exerciseID]
-    }
-
-    fileprivate func exercise(
-        matching snapshotIdentity: ExerciseHistorySnapshotIdentity
-    ) -> Exercise? {
-        guard allowsSnapshotFallback(for: snapshotIdentity) else {
-            return nil
-        }
-
-        return exercises.first {
-            ExerciseHistorySnapshotIdentity(exercise: $0) == snapshotIdentity
-        }
     }
 
     fileprivate func containsExercise(withID exerciseID: UUID) -> Bool {

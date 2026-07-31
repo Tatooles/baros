@@ -14,22 +14,21 @@ struct HistoryView: View {
         )
     }
 
-    private var exerciseHistoryIndex: ExerciseHistoryIndex {
-        ExerciseHistorySummary.makeIndex(
+    private var resolvedExerciseHistory: ResolvedExerciseHistory {
+        let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
+        return ExerciseHistorySummary.makeIndex(
             from: sessions,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
-        )
-    }
-
-    private var exerciseVisibility: ExerciseHistoryVisibilityScope {
-        ExerciseHistoryVisibilityScope(
-            exercises: exercises,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: ownerTokenIdentifier
+        ).resolved(
+            for: ExerciseHistoryVisibilityScope(
+                exercises: exercises,
+                ownerTokenIdentifier: ownerTokenIdentifier
+            )
         )
     }
 
     private var exerciseSummaries: [ExerciseHistorySummary] {
-        exerciseHistoryIndex.summaries(reconciledFor: exerciseVisibility)
+        resolvedExerciseHistory.summaries
     }
 
     var body: some View {
@@ -62,10 +61,7 @@ struct HistoryView: View {
         .navigationDestination(for: HistoryRoute.self) { route in
             switch route {
             case .exercise(let exerciseRoute):
-                if let summary = exerciseHistoryIndex.summary(
-                    matching: exerciseRoute,
-                    visibility: exerciseVisibility
-                ) {
+                if let summary = resolvedExerciseHistory.summary(for: exerciseRoute) {
                     ExerciseHistoryDetailView(summary: summary)
                 } else {
                     EmptyStateView(

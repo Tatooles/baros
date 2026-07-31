@@ -801,10 +801,10 @@ final class HistoryPersistenceTests: XCTestCase {
             equipmentRaw: loggedExercise.resolvedSnapshotEquipmentRaw
         )
         XCTAssertEqual(
-            ExerciseHistorySummary.makeIndex(from: [session]).summary(
-                matching: snapshotRoute,
-                visibility: visibility
-            )?.exerciseID,
+            ExerciseHistorySummary.makeIndex(from: [session])
+                .resolved(for: visibility)
+                .summary(for: snapshotRoute)?
+                .exerciseID,
             exercise.id
         )
     }

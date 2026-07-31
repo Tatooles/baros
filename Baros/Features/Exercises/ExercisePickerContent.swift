@@ -63,14 +63,12 @@ enum ExercisePickerContent {
             exercises: exercises,
             ownerTokenIdentifier: ownerTokenIdentifier
         )
+        let resolvedHistory = historyIndex.resolved(for: visibility)
 
         return visibility.exercises.map { exercise in
             ExercisePickerRowContent(
                 exercise: exercise,
-                historySummary: historyIndex.summary(
-                    matching: exercise,
-                    visibility: visibility
-                )
+                historySummary: resolvedHistory.summary(for: exercise)
             )
         }
     }

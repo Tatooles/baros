@@ -345,13 +345,13 @@ final class ExercisePickerContentTests: XCTestCase {
         let historyIndex = ExerciseHistorySummary.makeIndex(
             from: [linkedSession, snapshotSession, mixedSession]
         )
-        let routeSummary = try XCTUnwrap(historyIndex.summary(
-            matching: ExerciseHistoryRoute(
+        let resolvedHistory = historyIndex.resolved(for: visibility)
+        let routeSummary = try XCTUnwrap(resolvedHistory.summary(
+            for: ExerciseHistoryRoute(
                 exerciseID: benchPress.id,
                 name: benchPress.name,
                 equipmentRaw: benchPress.equipmentRaw
-            ),
-            visibility: visibility
+            )
         ))
 
         XCTAssertEqual(routeSummary.performanceCount, rows.first?.performanceCount)
@@ -363,21 +363,18 @@ final class ExercisePickerContentTests: XCTestCase {
             ["Mixed Name Push", "Current Name Push", "Original Name Push"]
         )
 
-        let displayedSummaries = historyIndex.summaries(
-            reconciledFor: visibility
-        )
+        let displayedSummaries = resolvedHistory.summaries
         XCTAssertEqual(displayedSummaries.count, 1)
         XCTAssertEqual(displayedSummaries.first?.name, benchPress.name)
         XCTAssertEqual(displayedSummaries.first?.performanceCount, 3)
         XCTAssertEqual(displayedSummaries.first?.completedSetCount, 4)
 
-        let snapshotRouteSummary = try XCTUnwrap(historyIndex.summary(
-            matching: ExerciseHistoryRoute(
+        let snapshotRouteSummary = try XCTUnwrap(resolvedHistory.summary(
+            for: ExerciseHistoryRoute(
                 exerciseID: nil,
                 name: benchPress.name,
                 equipmentRaw: benchPress.equipmentRaw
-            ),
-            visibility: visibility
+            )
         ))
         XCTAssertEqual(snapshotRouteSummary.exerciseID, benchPress.id)
         XCTAssertEqual(snapshotRouteSummary.performanceCount, 3)
@@ -417,30 +414,57 @@ final class ExercisePickerContentTests: XCTestCase {
             exercises: [historicalClaimant, currentNameMatch],
             ownerTokenIdentifier: nil
         )
-        let routeSummary = ExerciseHistorySummary.makeIndex(
+        let resolvedHistory = ExerciseHistorySummary.makeIndex(
             from: [linkedSession, snapshotSession]
-        ).summary(
-            matching: ExerciseHistoryRoute(
+        ).resolved(for: visibility)
+        let routeSummary = resolvedHistory.summary(
+            for: ExerciseHistoryRoute(
                 exerciseID: currentNameMatch.id,
                 name: currentNameMatch.name,
                 equipmentRaw: currentNameMatch.equipmentRaw
-            ),
-            visibility: visibility
+            )
         )
         XCTAssertNil(routeSummary)
 
-        let snapshotRouteSummary = ExerciseHistorySummary.makeIndex(
-            from: [linkedSession, snapshotSession]
-        ).summary(
-            matching: ExerciseHistoryRoute(
+        let snapshotRouteSummary = resolvedHistory.summary(
+            for: ExerciseHistoryRoute(
                 exerciseID: nil,
                 name: currentNameMatch.name,
                 equipmentRaw: currentNameMatch.equipmentRaw
-            ),
-            visibility: visibility
+            )
         )
         XCTAssertEqual(snapshotRouteSummary?.exerciseID, historicalClaimant.id)
         XCTAssertEqual(snapshotRouteSummary?.performanceCount, 2)
+    }
+
+    func testResolvedHistoryMapsCurrentSnapshotRouteToRenamedVisibleExercise() {
+        let benchPress = exercise(named: "Bench Press")
+        let linkedSession = completedSession(
+            title: "Original Name Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: benchPress
+        )
+        benchPress.name = "Competition Bench Press"
+        let visibility = ExerciseHistoryVisibilityScope(
+            exercises: [benchPress],
+            ownerTokenIdentifier: nil
+        )
+        let resolvedHistory = ExerciseHistorySummary.makeIndex(
+            from: [linkedSession]
+        ).resolved(for: visibility)
+
+        let currentSnapshotRouteSummary = resolvedHistory.summary(
+            for: ExerciseHistoryRoute(
+                exerciseID: nil,
+                name: benchPress.name,
+                equipmentRaw: benchPress.equipmentRaw
+            )
+        )
+
+        XCTAssertEqual(
+            currentSnapshotRouteSummary?.performanceSessionIDs,
+            [linkedSession.id]
+        )
     }
 
     func testReconciledHistoryDoesNotDuplicateSnapshotConsumedFromHiddenLinkedOwner() {
@@ -466,9 +490,10 @@ final class ExercisePickerContentTests: XCTestCase {
             ownerTokenIdentifier: nil
         )
 
-        let displayedSummaries = ExerciseHistorySummary.makeIndex(
+        let resolvedHistory = ExerciseHistorySummary.makeIndex(
             from: [linkedSession, snapshotSession]
-        ).summaries(reconciledFor: visibility)
+        ).resolved(for: visibility)
+        let displayedSummaries = resolvedHistory.summaries
 
         XCTAssertEqual(displayedSummaries.count, 2)
         XCTAssertEqual(displayedSummaries.reduce(0) { $0 + $1.performanceCount }, 2)
@@ -484,6 +509,24 @@ final class ExercisePickerContentTests: XCTestCase {
             displayedSummaries.first { $0.exerciseID == nil }?.performanceCount,
             1
         )
+
+        let hiddenRouteSummary = resolvedHistory.summary(
+            for: ExerciseHistoryRoute(
+                exerciseID: historicalClaimant.id,
+                name: "Bench Press",
+                equipmentRaw: ExerciseEquipment.barbell.rawValue
+            )
+        )
+        XCTAssertEqual(hiddenRouteSummary?.performanceSessionIDs, [linkedSession.id])
+
+        let visibleRouteSummary = resolvedHistory.summary(
+            for: ExerciseHistoryRoute(
+                exerciseID: currentNameMatch.id,
+                name: currentNameMatch.name,
+                equipmentRaw: currentNameMatch.equipmentRaw
+            )
+        )
+        XCTAssertEqual(visibleRouteSummary?.performanceSessionIDs, [snapshotSession.id])
     }
 
     func testAmbiguousSnapshotHistoryIsNotAttributedToDuplicateExerciseRows() {
@@ -528,15 +571,15 @@ final class ExercisePickerContentTests: XCTestCase {
         let historyIndex = ExerciseHistorySummary.makeIndex(
             from: [firstLinkedSession, secondLinkedSession, snapshotSession]
         )
-        XCTAssertEqual(historyIndex.summaries(reconciledFor: visibility).count, 3)
+        let resolvedHistory = historyIndex.resolved(for: visibility)
+        XCTAssertEqual(resolvedHistory.summaries.count, 3)
 
-        let snapshotRouteSummary = historyIndex.summary(
-            matching: ExerciseHistoryRoute(
+        let snapshotRouteSummary = resolvedHistory.summary(
+            for: ExerciseHistoryRoute(
                 exerciseID: nil,
                 name: "Bench Press",
                 equipmentRaw: ExerciseEquipment.barbell.rawValue
-            ),
-            visibility: visibility
+            )
         )
         XCTAssertNil(snapshotRouteSummary?.exerciseID)
         XCTAssertEqual(snapshotRouteSummary?.performanceCount, 1)
