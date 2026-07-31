@@ -322,6 +322,11 @@ struct ExerciseHistoryIndex {
             equipmentRaw: route.equipmentRaw
         )
         guard let exerciseID = route.exerciseID else {
+            if let exercise = visibility.exercise(matching: snapshotIdentity),
+               let resolvedSummary = summary(matching: exercise, visibility: visibility) {
+                return resolvedSummary
+            }
+
             return summariesByIdentity[.snapshot(snapshotIdentity)]
                 ?? summaries.first {
                     $0.snapshotFallbackIdentities.contains(snapshotIdentity)
@@ -403,6 +408,18 @@ struct ExerciseHistoryVisibilityScope {
 
     fileprivate func exercise(withID exerciseID: UUID) -> Exercise? {
         exercisesByID[exerciseID]
+    }
+
+    fileprivate func exercise(
+        matching snapshotIdentity: ExerciseHistorySnapshotIdentity
+    ) -> Exercise? {
+        guard allowsSnapshotFallback(for: snapshotIdentity) else {
+            return nil
+        }
+
+        return exercises.first {
+            ExerciseHistorySnapshotIdentity(exercise: $0) == snapshotIdentity
+        }
     }
 
     fileprivate func containsExercise(withID exerciseID: UUID) -> Bool {
