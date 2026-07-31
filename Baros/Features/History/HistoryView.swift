@@ -16,14 +16,10 @@ struct HistoryView: View {
 
     private var resolvedExerciseHistory: ResolvedExerciseHistory {
         let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
-        return ExerciseHistorySummary.makeIndex(
+        return ExerciseHistorySummary.makeResolvedHistory(
             from: sessions,
+            exercises: exercises,
             ownerTokenIdentifier: ownerTokenIdentifier
-        ).resolved(
-            for: ExerciseHistoryVisibilityScope(
-                exercises: exercises,
-                ownerTokenIdentifier: ownerTokenIdentifier
-            )
         )
     }
 

@@ -31,15 +31,11 @@ struct ExerciseQuickHistorySheet: View {
 
     private var summary: ExerciseHistorySummary? {
         let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
-        let historyIndex = ExerciseHistorySummary.makeIndex(
+        return ExerciseHistorySummary.makeResolvedHistory(
             from: sessions,
-            ownerTokenIdentifier: ownerTokenIdentifier
-        )
-        let visibility = ExerciseHistoryVisibilityScope(
             exercises: exercises,
             ownerTokenIdentifier: ownerTokenIdentifier
-        )
-        return historyIndex.resolved(for: visibility).summary(for: route)
+        ).summary(for: route)
     }
 
     private var recentGroups: [ExerciseHistorySessionGroup] {

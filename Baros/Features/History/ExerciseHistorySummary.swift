@@ -67,6 +67,22 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
         ).rawSummaries
     }
 
+    static func makeResolvedHistory(
+        from sessions: [WorkoutSession],
+        exercises: [Exercise],
+        ownerTokenIdentifier: String? = nil
+    ) -> ResolvedExerciseHistory {
+        makeIndex(
+            from: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        ).resolved(
+            for: ExerciseHistoryVisibilityScope(
+                exercises: exercises,
+                ownerTokenIdentifier: ownerTokenIdentifier
+            )
+        )
+    }
+
     static func makeIndex(
         from sessions: [WorkoutSession],
         ownerTokenIdentifier: String? = nil
@@ -273,6 +289,7 @@ struct ExerciseHistoryIndex {
 
         let summaries = Self.sortedSummaries(reconciledByID.values)
         return ResolvedExerciseHistory(
+            exercises: visibility.exercises,
             summaries: summaries,
             summariesByExerciseID: summariesByExerciseID,
             summariesBySnapshotIdentity: Self.makeSnapshotRouteSummaries(
@@ -413,18 +430,21 @@ struct ExerciseHistoryIndex {
 }
 
 struct ResolvedExerciseHistory {
+    let exercises: [Exercise]
     let summaries: [ExerciseHistorySummary]
 
     private let summariesByExerciseID: [UUID: ExerciseHistorySummary]
     private let summariesBySnapshotIdentity: [ExerciseHistorySnapshotIdentity: ExerciseHistorySummary]
 
     fileprivate init(
+        exercises: [Exercise],
         summaries: [ExerciseHistorySummary],
         summariesByExerciseID: [UUID: ExerciseHistorySummary],
         summariesBySnapshotIdentity: [
             ExerciseHistorySnapshotIdentity: ExerciseHistorySummary
         ]
     ) {
+        self.exercises = exercises
         self.summaries = summaries
         self.summariesByExerciseID = summariesByExerciseID
         self.summariesBySnapshotIdentity = summariesBySnapshotIdentity

@@ -55,17 +55,13 @@ enum ExercisePickerContent {
         sessions: [WorkoutSession],
         ownerTokenIdentifier: String?
     ) -> [ExercisePickerRowContent] {
-        let historyIndex = ExerciseHistorySummary.makeIndex(
+        let resolvedHistory = ExerciseHistorySummary.makeResolvedHistory(
             from: sessions,
-            ownerTokenIdentifier: ownerTokenIdentifier
-        )
-        let visibility = ExerciseHistoryVisibilityScope(
             exercises: exercises,
             ownerTokenIdentifier: ownerTokenIdentifier
         )
-        let resolvedHistory = historyIndex.resolved(for: visibility)
 
-        return visibility.exercises.map { exercise in
+        return resolvedHistory.exercises.map { exercise in
             ExercisePickerRowContent(
                 exercise: exercise,
                 historySummary: resolvedHistory.summary(for: exercise)
