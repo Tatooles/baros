@@ -6,8 +6,11 @@
 - Mobile implementation: `/private/tmp/baros-site-qa/implementation-mobile-hero.jpg`
 - Mobile annotated implementation: `/private/tmp/baros-site-qa/implementation-annotations-mobile.jpg`
 - Mobile product story: `/private/tmp/baros-site-qa/implementation-mobile-story.jpg`
+- Mobile Privacy navigation: `/private/tmp/baros-site-qa/navigation-privacy-mobile-top.jpg`
+- Mobile Support navigation: `/private/tmp/baros-site-qa/navigation-support-mobile.jpg`
 - Desktop viewport: 1488 × 1058 CSS px
 - Mobile viewport: 390 × 844 CSS px
+- Navigation regression viewport: 409 × 863 CSS px
 - Source pixels: 1487 × 1058
 - Desktop implementation pixels: 1488 × 1058
 - Mobile implementation pixels: 390 × 844
@@ -45,6 +48,8 @@ The hero and product screen were large enough to inspect type, crop, image quali
 8. Fix: size the desktop trust pill to its contents, use Apple's official badge artwork, and retain a separate working `See how it works` link. Post-fix evidence: `/private/tmp/baros-site-qa/implementation-annotations.jpg` and `/private/tmp/baros-site-qa/implementation-annotations-desktop.jpg`.
 9. A mobile annotation identified excessive space and an inherited divider above `THE WORKOUT IS THE INTERFACE`; the hero's `QUIET NATIVE` label was also judged to be nonessential editorial copy.
 10. Fix: remove `QUIET NATIVE`, reduce only the mobile product-story top padding, and clear the story heading's generic top border and padding at the mobile breakpoint. Desktop product-story spacing remains unchanged.
+11. Navigation testing found one P2 consistency issue: the Privacy and Support links changed positions between the homepage and document pages.
+12. Fix: standardize all headers to `Privacy` then `Support`. Post-fix evidence: `/private/tmp/baros-site-qa/navigation-privacy-mobile-top.jpg` and `/private/tmp/baros-site-qa/navigation-support-mobile.jpg`; navigating in both directions preserves the order and current-page underline.
 
 ## Findings
 
@@ -57,6 +62,7 @@ The App Store badge is intentionally not clickable because the repository does n
 - `See how it works` scrolls to `#inside-the-app`.
 - `See how Baros handles your data` opens `/privacy`.
 - The Privacy header opens `/support`.
+- Privacy and Support retain the same header positions when navigating in either direction.
 - Both document routes expose Home, Support, and Privacy navigation on mobile.
 - Browser console errors checked: none.
 
