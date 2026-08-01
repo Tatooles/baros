@@ -85,12 +85,14 @@ struct SettingsView: View {
                     .accessibilityIdentifier("SettingsAppVersionValue")
             }
 
-            Button {
-                sheetPresentation = .appInfo(.whatsNew(WhatsNewContent.current()))
-            } label: {
-                Label("What's New", systemImage: "sparkles")
+            if let whatsNew = AppReleaseCatalog.latestWhatsNew(upTo: AppBuildInfo.current.version) {
+                Button {
+                    sheetPresentation = .appInfo(.whatsNew(whatsNew))
+                } label: {
+                    Label("What's New", systemImage: "sparkles")
+                }
+                .accessibilityIdentifier("SettingsWhatsNewButton")
             }
-            .accessibilityIdentifier("SettingsWhatsNewButton")
 
             Link(destination: AppLinks.githubRepositoryURL) {
                 Label("View on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")

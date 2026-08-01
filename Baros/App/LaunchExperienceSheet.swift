@@ -1,13 +1,13 @@
 import SwiftUI
 
 enum LaunchExperiencePresentation: Identifiable, Equatable {
-    case welcome
+    case onboarding
     case whatsNew(WhatsNewRelease)
 
     var id: String {
         switch self {
-        case .welcome:
-            "welcome"
+        case .onboarding:
+            "onboarding"
         case .whatsNew(let release):
             "whats-new-\(release.version)"
         }
@@ -18,66 +18,31 @@ struct LaunchExperienceSheet: View {
     let presentation: LaunchExperiencePresentation
     let primaryAction: () -> Void
 
-    private var title: String {
+    @ViewBuilder
+    var body: some View {
         switch presentation {
-        case .welcome:
-            "Welcome to Baros"
+        case .onboarding:
+            OnboardingFlow(onCompleted: primaryAction)
         case .whatsNew(let release):
-            release.title
+            LaunchExperienceContentSheet(
+                title: release.title,
+                summary: release.summary,
+                buttonTitle: "Got It",
+                items: release.items,
+                preventsInteractiveDismiss: false,
+                primaryAction: primaryAction
+            )
         }
     }
+}
 
-    private var summary: String {
-        switch presentation {
-        case .welcome:
-            "Log your lifts in seconds. Everything is saved on this iPhone, with optional cloud sync when you sign in."
-        case .whatsNew(let release):
-            release.summary
-        }
-    }
-
-    private var buttonTitle: String {
-        switch presentation {
-        case .welcome:
-            "Continue"
-        case .whatsNew:
-            "Got It"
-        }
-    }
-
-    private var items: [WhatsNewItem] {
-        switch presentation {
-        case .welcome:
-            [
-                WhatsNewItem(
-                    id: "logging",
-                    systemImage: "bolt.fill",
-                    title: "Fast workout logging",
-                    detail: "Start a workout and log sets in a couple of taps — no network needed."
-                ),
-                WhatsNewItem(
-                    id: "history",
-                    systemImage: "clock.arrow.circlepath",
-                    title: "Your history stays put",
-                    detail: "Every finished workout is saved on this iPhone, even offline."
-                ),
-                WhatsNewItem(
-                    id: "sync",
-                    systemImage: "icloud",
-                    title: "Optional cloud sync",
-                    detail: "Sign in to back up finished workouts, exercises, and settings."
-                ),
-                WhatsNewItem(
-                    id: "data",
-                    systemImage: "lock.shield",
-                    title: "Control your data",
-                    detail: "Export history and manage privacy from Settings."
-                ),
-            ]
-        case .whatsNew(let release):
-            release.items
-        }
-    }
+struct LaunchExperienceContentSheet: View {
+    let title: String
+    let summary: String
+    let buttonTitle: String
+    let items: [LaunchExperienceItem]
+    let preventsInteractiveDismiss: Bool
+    let primaryAction: () -> Void
 
     var body: some View {
         ScrollView {
@@ -127,12 +92,12 @@ struct LaunchExperienceSheet: View {
             .padding(.vertical, AppTheme.shellPadding)
             .accessibilityIdentifier("LaunchExperiencePrimaryButton")
         }
-        .interactiveDismissDisabled(presentation == .welcome)
+        .interactiveDismissDisabled(preventsInteractiveDismiss)
     }
 }
 
 private struct LaunchExperienceItemRow: View {
-    let item: WhatsNewItem
+    let item: LaunchExperienceItem
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {

@@ -127,7 +127,7 @@ struct AppShellView: View {
         .sheet(item: $launchPresentation) { presentation in
             LaunchExperienceSheet(presentation: presentation) {
                 switch presentation {
-                case .welcome:
+                case .onboarding:
                     completeLaunchPresentation(presentation)
                 case .whatsNew:
                     launchPresentation = nil
@@ -151,20 +151,28 @@ struct AppShellView: View {
             return
         }
 
-        let release = WhatsNewContent.current()
-        if firstRunStore.shouldShowWelcome() {
-            launchPresentation = .welcome
-        } else if firstRunStore.shouldShowWhatsNew(for: release) {
-            launchPresentation = .whatsNew(release)
+        let currentAppVersion = AppBuildInfo.current.version
+        let currentRelease = AppReleaseCatalog.definition(for: currentAppVersion)
+        let state = firstRunStore.state
+        launchPresentation = LaunchExperienceCoordinator.nextPresentation(
+            state: state,
+            currentRelease: currentRelease
+        )
+
+        if launchPresentation == nil, state.hasCompletedOnboarding {
+            firstRunStore.markAppVersionProcessed(currentAppVersion)
         }
     }
 
     private func completeLaunchPresentation(_ presentation: LaunchExperiencePresentation) {
         switch presentation {
-        case .welcome:
-            firstRunStore.markWelcomeSeen(currentWhatsNewVersion: WhatsNewContent.current().version)
+        case .onboarding:
+            firstRunStore.markOnboardingCompleted(
+                currentRelease: AppReleaseCatalog.definition(for: AppBuildInfo.current.version)
+            )
         case .whatsNew(let release):
             firstRunStore.markWhatsNewSeen(version: release.version)
+            firstRunStore.markAppVersionProcessed(AppBuildInfo.current.version)
         }
 
         launchPresentation = nil
@@ -176,6 +184,7 @@ struct AppShellView: View {
         }
 
         firstRunStore.markWhatsNewSeen(version: release.version)
+        firstRunStore.markAppVersionProcessed(AppBuildInfo.current.version)
     }
 
     private func dismissGlobalSyncFailureBanner() {
