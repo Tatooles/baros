@@ -41,7 +41,9 @@ enum WhatsNewContent {
                     detail: "Export workout history and manage privacy from Settings."
                 ),
             ],
-            shouldAutoShow: true
+            // 1.1 is intentionally incremental. Keep this content available
+            // from Settings without interrupting upgrading users.
+            shouldAutoShow: false
         )
     }
 }

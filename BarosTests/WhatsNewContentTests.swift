@@ -2,24 +2,24 @@ import XCTest
 @testable import Baros
 
 final class WhatsNewContentTests: XCTestCase {
-    func testCurrentReleaseUsesMarketingVersionAsReleaseKey() {
+    func testCurrentIncrementalReleaseUsesMarketingVersionWithoutAutoPresentation() {
         let buildInfo = AppBuildInfo(infoDictionary: [
             "CFBundleDisplayName": "Baros",
             "CFBundleIdentifier": "com.kevintatooles.LiftingLog",
-            "CFBundleShortVersionString": "1.0",
+            "CFBundleShortVersionString": "1.1",
             "CFBundleVersion": "42",
             "BarosEnvironment": "Production",
         ], sourceMetadata: nil)
 
         let release = WhatsNewContent.current(buildInfo: buildInfo)
 
-        XCTAssertEqual(release.version, "1.0")
+        XCTAssertEqual(release.version, "1.1")
         XCTAssertEqual(release.title, "What's new in Baros")
         XCTAssertEqual(
             release.summary,
             "The first release of Baros: fast workout logging, a safe local history, and optional cloud sync."
         )
-        XCTAssertTrue(release.shouldAutoShow)
+        XCTAssertFalse(release.shouldAutoShow)
     }
 
     func testCurrentReleaseContentHasCompleteRows() {
