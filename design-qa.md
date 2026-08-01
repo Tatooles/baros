@@ -8,6 +8,9 @@
 - Mobile product story: `/private/tmp/baros-site-qa/implementation-mobile-story.jpg`
 - Mobile Privacy navigation: `/private/tmp/baros-site-qa/navigation-privacy-mobile-top.jpg`
 - Mobile Support navigation: `/private/tmp/baros-site-qa/navigation-support-mobile.jpg`
+- Current homepage and Privacy comparison: `/private/tmp/baros-site-qa/home-vs-privacy-desktop-current.jpg`
+- Branded Privacy page, mobile: `/private/tmp/baros-site-qa/privacy-brand-mobile.jpg`
+- Branded Support page, mobile: `/private/tmp/baros-site-qa/support-brand-mobile.jpg`
 - Desktop viewport: 1488 × 1058 CSS px
 - Mobile viewport: 390 × 844 CSS px
 - Navigation regression viewport: 409 × 863 CSS px
@@ -50,6 +53,8 @@ The hero and product screen were large enough to inspect type, crop, image quali
 10. Fix: remove `QUIET NATIVE`, reduce only the mobile product-story top padding, and clear the story heading's generic top border and padding at the mobile breakpoint. Desktop product-story spacing remains unchanged.
 11. Navigation testing found one P2 consistency issue: the Privacy and Support links changed positions between the homepage and document pages.
 12. Fix: standardize all headers to `Privacy` then `Support`. Post-fix evidence: `/private/tmp/baros-site-qa/navigation-privacy-mobile-top.jpg` and `/private/tmp/baros-site-qa/navigation-support-mobile.jpg`; navigating in both directions preserves the order and current-page underline.
+13. A follow-up comparison found one P2 brand-consistency issue: Privacy and Support used a text-only wordmark on white while the homepage used the Baros icon and warm neutral canvas.
+14. Fix: reuse the homepage's real app-icon brand lockup and `#f7f5f1` background across both document pages, including their headers, content, footer, theme color, and favicon. Post-fix evidence: `/private/tmp/baros-site-qa/home-vs-privacy-desktop-current.jpg`, `/private/tmp/baros-site-qa/privacy-brand-mobile.jpg`, and `/private/tmp/baros-site-qa/support-brand-mobile.jpg`.
 
 ## Findings
 

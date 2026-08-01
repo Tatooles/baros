@@ -100,7 +100,16 @@ img {
   background: var(--marketing-background);
 }
 
+.document-page {
+  background: var(--marketing-background);
+}
+
 .marketing-header {
+  background: var(--marketing-background);
+  border-bottom: 0;
+}
+
+.document-header {
   background: var(--marketing-background);
   border-bottom: 0;
 }
@@ -401,6 +410,10 @@ img {
   background: var(--background);
 }
 
+.document-page .doc {
+  background: transparent;
+}
+
 h1 {
   margin: 0;
   color: var(--text);
@@ -466,6 +479,10 @@ a:focus-visible {
 .site-footer {
   background: var(--background);
   border-top: 1px solid var(--border);
+}
+
+.document-page .site-footer {
+  background: var(--marketing-background);
 }
 
 .marketing-footer {
