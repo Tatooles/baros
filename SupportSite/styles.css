@@ -6,8 +6,9 @@
   --text: #171717;
   --muted: #65635f;
   --border: #dedbd4;
-  --link: #d93934;
-  --accent: #ff514b;
+  --link: #b4231f;
+  --accent: #b8322d;
+  --accent-on-dark: #ff6b65;
   --dark: #101010;
   --measure: 680px;
   --wide: 1220px;
@@ -203,7 +204,7 @@ img {
 }
 
 .primary-action:hover {
-  background: #e9443f;
+  background: #9f211d;
   text-decoration: none;
   transform: translateY(-2px);
 }
@@ -382,6 +383,7 @@ img {
 
 .closing .eyebrow {
   margin-bottom: 20px;
+  color: var(--accent-on-dark);
 }
 
 .closing h2 {
