@@ -1,0 +1,27 @@
+---
+interface Props {
+  src: string;
+  alt: string;
+  hero?: boolean;
+  loading?: "eager" | "lazy";
+}
+
+const { src, alt, hero = false, loading = "lazy" } = Astro.props;
+---
+
+<div
+  class:list={[
+    "w-full max-w-[20.75rem] overflow-hidden rounded-[50px] border border-[#292929] bg-[#090909] p-2 shadow-[0_30px_72px_rgba(16,16,16,0.26),0_6px_18px_rgba(16,16,16,0.17)] max-[560px]:rounded-[42px] max-[560px]:p-1.5",
+    hero &&
+      "w-[min(82vw,21.5rem)] rotate-0 min-[761px]:w-[17.875rem] min-[941px]:w-[20.625rem] min-[941px]:rotate-1",
+  ]}
+>
+  <img
+    class="w-full rounded-[42px] max-[560px]:rounded-[36px]"
+    {src}
+    width="368"
+    height="800"
+    {alt}
+    {loading}
+  />
+</div>

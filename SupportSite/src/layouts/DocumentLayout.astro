@@ -1,0 +1,32 @@
+---
+import SiteFooter from "../components/SiteFooter.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import BaseLayout from "./BaseLayout.astro";
+
+interface Props {
+  page: "privacy" | "support";
+  title: string;
+  description: string;
+  heading: string;
+  intro: string;
+}
+
+const { page, title, description, heading, intro } = Astro.props;
+---
+
+<BaseLayout {title} {description}>
+  <SiteHeader {page} />
+  <main
+    class="mx-auto w-[calc(100%-2rem)] max-w-[42.5rem] pt-9 pb-16 min-[561px]:w-[calc(100%-2.5rem)] min-[561px]:pt-12 min-[561px]:pb-[88px]"
+  >
+    <h1
+      class="m-0 text-[26px] leading-tight font-semibold tracking-normal text-ink min-[561px]:text-[28px]"
+    >
+      {heading}
+    </h1>
+    <p class="mt-2 text-sm text-muted">Last updated July 17, 2026</p>
+    <p class="mt-6 text-ink">{intro}</p>
+    <slot />
+  </main>
+  <SiteFooter {page} />
+</BaseLayout>

@@ -1,0 +1,222 @@
+---
+import PhoneScreenshot from "../components/PhoneScreenshot.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const features = [
+  {
+    number: "01",
+    title: "Log with intent",
+    description:
+      "Weight, reps, and completion are always within reach. No dashboards to fight through mid-set.",
+  },
+  {
+    number: "02",
+    title: "Local by default",
+    description:
+      "Start training without an account. Your workout data stays useful even when your signal does not.",
+  },
+  {
+    number: "03",
+    title: "Sync on your terms",
+    description:
+      "Sign in when you want account-backed sync and access to your workout history across devices.",
+  },
+];
+---
+
+<BaseLayout
+  title="Baros — Log the lift. Keep the history."
+  description="Baros is a focused iPhone workout tracker. Log sets quickly, train offline, and sync when you choose."
+>
+  <SiteHeader page="marketing" />
+  <main>
+    <section
+      class="mx-auto grid min-h-0 w-[calc(100%-2.25rem)] max-w-[76.25rem] grid-cols-1 items-center gap-[66px] pt-14 pb-[82px] text-center min-[561px]:pt-[68px] min-[761px]:w-[calc(100%-3.5rem)] min-[761px]:grid-cols-[minmax(0,1fr)_300px] min-[761px]:gap-[54px] min-[761px]:py-[72px] min-[761px]:pb-[86px] min-[761px]:text-left min-[941px]:min-h-[805px] min-[941px]:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)] min-[941px]:gap-[clamp(72px,10vw,156px)] min-[941px]:pt-12 min-[941px]:pb-[76px]"
+      aria-labelledby="hero-title"
+    >
+      <div
+        class="flex flex-col items-center pb-[18px] min-[761px]:items-start min-[761px]:pl-[62px]"
+      >
+        <h1
+          id="hero-title"
+          class="m-0 max-w-[710px] text-[clamp(49px,14vw,64px)] leading-[0.96] font-[720] tracking-[-0.065em] min-[561px]:text-[clamp(54px,14vw,76px)] min-[761px]:text-[clamp(54px,7vw,70px)] min-[941px]:text-[clamp(58px,5.15vw,74px)]"
+        >
+          Log the lift.<br />Keep the history.
+        </h1>
+        <p
+          class="mt-[26px] max-w-[580px] text-[17px] leading-[1.52] text-[#565a62] min-[561px]:mt-8 min-[561px]:text-[clamp(18px,1.6vw,21px)] min-[941px]:max-w-[540px]"
+        >
+          Baros is a focused iPhone workout tracker built to stay out of your
+          way. Log sets in seconds, train without a connection, and sync when you
+          choose.
+        </p>
+        <div
+          class="mt-[34px] flex flex-col items-center gap-3.5 min-[561px]:flex-row min-[561px]:gap-[34px] min-[761px]:flex-col min-[761px]:items-start min-[761px]:gap-3.5 min-[941px]:flex-row min-[941px]:items-center min-[941px]:gap-[34px]"
+        >
+          <span class="inline-flex shrink-0 items-center gap-2.5">
+            <img
+              class="w-44 shrink-0"
+              src="/assets/download-on-the-app-store.svg"
+              width="120"
+              height="40"
+              alt="App Store"
+            />
+            <span
+              class="text-xs font-bold tracking-[0.08em] whitespace-nowrap text-[#565a62] uppercase"
+              >Coming soon</span
+            >
+          </span>
+          <a
+            class="text-[15px] font-[680] text-ink no-underline underline-offset-4 hover:decoration-2 hover:decoration-accent hover:underline"
+            href="#inside-the-app">See how it works</a
+          >
+        </div>
+        <div
+          class="mt-9 inline-flex w-auto max-w-80 flex-col overflow-hidden rounded-[18px] border border-black/8 bg-white/42 shadow-[0_12px_28px_rgba(57,52,46,0.035)] min-[561px]:mt-11 min-[941px]:w-fit min-[941px]:max-w-none min-[941px]:flex-row min-[941px]:rounded-full"
+          aria-label="Baros product principles"
+        >
+          <span
+            class="px-5 py-[11px] text-[13px] whitespace-nowrap text-[#55534f]"
+            >No account required</span
+          >
+          <span
+            class="border-t border-black/10 px-5 py-[11px] text-[13px] whitespace-nowrap text-[#55534f] min-[941px]:border-t-0 min-[941px]:border-l"
+            >Works offline</span
+          >
+          <span
+            class="border-t border-black/10 px-5 py-[11px] text-[13px] whitespace-nowrap text-[#55534f] min-[941px]:border-t-0 min-[941px]:border-l"
+            >Optional sync</span
+          >
+        </div>
+      </div>
+
+      <div class="justify-self-center text-center" aria-label="Baros active workout screen">
+        <PhoneScreenshot
+          src="/assets/baros-active-workout.jpg"
+          alt="The real Baros app showing a Push workout with a completed bench press set"
+          hero
+          loading="eager"
+        />
+        <p
+          class="mt-5 text-[11px] font-[650] tracking-[0.12em] text-[#706d68] uppercase"
+        >
+          Actual app screen
+        </p>
+      </div>
+    </section>
+
+    <section
+      class="mx-auto grid w-[calc(100%-2.25rem)] max-w-[76.25rem] grid-cols-1 border-y border-border min-[761px]:w-[calc(100%-3.5rem)] min-[761px]:grid-cols-3"
+      id="features"
+      aria-label="Baros features"
+    >
+      {
+        features.map((feature, index) => (
+          <article
+            class:list={[
+              "py-[34px] min-[761px]:py-[42px] min-[761px]:pr-[42px] min-[761px]:pb-[46px]",
+              index > 0 &&
+                "border-t border-border min-[761px]:border-t-0 min-[761px]:border-l min-[761px]:pl-[42px]",
+            ]}
+          >
+            <p class="text-xs font-[750] text-accent">{feature.number}</p>
+            <h2 class="mt-[21px] mb-2.5 text-[22px] font-semibold tracking-[-0.03em]">
+              {feature.title}
+            </h2>
+            <p class="max-w-[330px] text-[15px] leading-[1.55] text-[#5c6068]">
+              {feature.description}
+            </p>
+          </article>
+        ))
+      }
+    </section>
+
+    <section
+      class="mx-auto grid w-[calc(100%-2.25rem)] max-w-[76.25rem] grid-cols-1 items-center gap-[78px] py-[68px] pb-[118px] min-[761px]:w-[calc(100%-3.5rem)] min-[761px]:grid-cols-[0.82fr_1.18fr] min-[761px]:gap-[54px] min-[761px]:py-[140px] min-[761px]:pb-[152px] min-[941px]:grid-cols-[minmax(300px,0.76fr)_minmax(480px,1.24fr)] min-[941px]:gap-[clamp(64px,9vw,132px)]"
+      id="inside-the-app"
+      aria-labelledby="inside-title"
+    >
+      <div class="text-center min-[761px]:text-left">
+        <p
+          class="mb-[22px] text-xs leading-tight font-[750] tracking-[0.16em] text-accent"
+        >
+          THE WORKOUT IS THE INTERFACE
+        </p>
+        <h2
+          id="inside-title"
+          class="m-0 border-0 p-0 text-[clamp(42px,4.1vw,64px)] leading-none font-[710] tracking-[-0.055em]"
+        >
+          Everything you need.<br />Nothing shouting for attention.
+        </h2>
+        <p
+          class="mx-auto mt-7 max-w-[500px] text-lg leading-[1.58] text-[#5c6068] min-[761px]:mx-0"
+        >
+          Baros gives the set you are logging the space it deserves. Finish a
+          workout and the same clean record becomes part of a history you can
+          actually use.
+        </p>
+        <a
+          class="mt-[26px] inline-block text-[15px] font-[680] text-ink decoration-2 decoration-accent underline underline-offset-[5px]"
+          href="/privacy">See how Baros handles your data</a
+        >
+      </div>
+
+      <div
+        class="mx-auto grid w-[min(100%,330px)] grid-cols-1 items-end gap-[54px] min-[561px]:w-auto min-[561px]:grid-cols-2 min-[561px]:gap-7"
+        aria-label="Baros workout logging and history screens"
+      >
+        <figure class="m-0 min-[561px]:-translate-y-[38px]">
+          <PhoneScreenshot
+            src="/assets/baros-active-workout.jpg"
+            alt="Baros active workout screen"
+          />
+          <figcaption
+            class="mt-[18px] text-center text-xs font-[650] tracking-[0.1em] text-[#706d68] uppercase"
+            >Focused set logging</figcaption
+          >
+        </figure>
+        <figure class="m-0">
+          <PhoneScreenshot
+            src="/assets/baros-workout-history.jpg"
+            alt="Baros workout history detail screen"
+          />
+          <figcaption
+            class="mt-[18px] text-center text-xs font-[650] tracking-[0.1em] text-[#706d68] uppercase"
+            >A useful training record</figcaption
+          >
+        </figure>
+      </div>
+    </section>
+
+    <section class="bg-dark px-5 py-[88px] pb-24 text-center text-page min-[561px]:px-7 min-[561px]:py-[104px] min-[561px]:pb-28">
+      <img
+        class="mx-auto mb-7 rounded-[18px] shadow-[0_16px_38px_rgba(0,0,0,0.3)]"
+        src="/assets/baros-app-icon.png"
+        width="72"
+        height="72"
+        alt=""
+      />
+      <p
+        class="mb-5 text-xs leading-tight font-[750] tracking-[0.16em] text-accent-on-dark"
+      >
+        BAROS FOR IPHONE
+      </p>
+      <h2
+        class="m-0 text-[clamp(42px,5vw,68px)] font-semibold tracking-[-0.055em] text-white"
+      >
+        Lift now. Remember later.
+      </h2>
+      <p class="mt-[13px] text-lg text-[#9a9a9a]">
+        Fast enough for the gym. Thoughtful enough for the long run.
+      </p>
+      <a
+        class="motion-safe:hover:-translate-y-0.5 mt-8 inline-flex min-h-[52px] items-center justify-center rounded-[13px] bg-accent px-6 font-[680] text-white no-underline shadow-[0_10px_24px_rgba(215,57,52,0.18)] transition-[transform,background-color] duration-160 hover:bg-[#9f211d] hover:no-underline focus-visible:outline-accent-on-dark motion-reduce:transition-none"
+        href="mailto:support@tatooles.dev?subject=Baros%20release%20updates"
+        >Ask about Baros</a
+      >
+    </section>
+  </main>
+  <SiteFooter page="marketing" />
+</BaseLayout>
