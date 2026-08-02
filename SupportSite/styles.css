@@ -2,7 +2,6 @@
   color-scheme: light;
   --background: #ffffff;
   --marketing-background: #f7f5f1;
-  --marketing-surface: #efede8;
   --text: #171717;
   --muted: #65635f;
   --border: #dedbd4;
@@ -65,7 +64,6 @@ img {
   align-items: center;
 }
 
-.wordmark,
 .brand {
   color: var(--text);
   font-weight: 600;
