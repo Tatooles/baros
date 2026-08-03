@@ -61,9 +61,6 @@ struct SettingsView: View {
                 LaunchExperienceSheet(presentation: launchPresentation) {
                     sheetPresentation = nil
                 }
-                .onDisappear {
-                    completeAppInfoPresentation(launchPresentation)
-                }
             }
         }
         .onDisappear {
@@ -85,12 +82,14 @@ struct SettingsView: View {
                     .accessibilityIdentifier("SettingsAppVersionValue")
             }
 
-            Button {
-                sheetPresentation = .appInfo(.whatsNew(WhatsNewContent.current()))
-            } label: {
-                Label("What's New", systemImage: "sparkles")
+            if let whatsNew = AppReleaseCatalog.latestWhatsNew(upTo: AppBuildInfo.current.version) {
+                Button {
+                    sheetPresentation = .appInfo(.whatsNew(whatsNew))
+                } label: {
+                    Label("What's New", systemImage: "sparkles")
+                }
+                .accessibilityIdentifier("SettingsWhatsNewButton")
             }
-            .accessibilityIdentifier("SettingsWhatsNewButton")
 
             Link(destination: AppLinks.githubRepositoryURL) {
                 Label("View on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
@@ -135,12 +134,6 @@ struct SettingsView: View {
         UIPasteboard.general.string = AppBuildInfo.current.supportSummary(device: .current)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         showCopyConfirmation()
-    }
-
-    private func completeAppInfoPresentation(_ presentation: LaunchExperiencePresentation) {
-        if case .whatsNew(let release) = presentation {
-            FirstRunExperienceStore().markWhatsNewSeen(version: release.version)
-        }
     }
 
     private func showCopyConfirmation() {

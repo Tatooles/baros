@@ -20,92 +20,111 @@ final class FirstRunExperienceStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testFreshInstallShowsWelcomeOnly() {
+    func testStoreStartsWithIncompleteOnboardingAndNoSeenRelease() {
         let store = FirstRunExperienceStore(defaults: defaults)
-        let release = WhatsNewRelease(
-            version: "1.0",
-            title: "What's New in 1.0",
-            summary: "Initial release notes.",
-            items: [
-                WhatsNewItem(id: "sync", systemImage: "icloud", title: "Cloud sync", detail: "Completed workouts sync after sign in."),
-            ],
-            shouldAutoShow: true
-        )
 
-        XCTAssertTrue(store.shouldShowWelcome())
-        XCTAssertFalse(store.shouldShowWhatsNew(for: release))
+        XCTAssertEqual(
+            store.state,
+            LaunchExperienceState(
+                hasCompletedOnboarding: false,
+                lastProcessedAppVersion: nil,
+                lastSeenWhatsNewVersion: nil
+            )
+        )
     }
 
     @MainActor
-    func testMarkWelcomeSeenSuppressesCurrentWhatsNewVersion() {
+    func testCompletingOnboardingConsumesCurrentReleaseHighlights() throws {
         let store = FirstRunExperienceStore(defaults: defaults)
-        let release = WhatsNewRelease(
-            version: "1.0",
-            title: "What's New in 1.0",
-            summary: "Initial release notes.",
-            items: [
-                WhatsNewItem(id: "sync", systemImage: "icloud", title: "Cloud sync", detail: "Completed workouts sync after sign in."),
-            ],
-            shouldAutoShow: true
+        let release = try XCTUnwrap(AppReleaseCatalog.whatsNew(for: "1.0"))
+
+        store.markOnboardingCompleted(
+            currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: release.version))
         )
 
-        store.markWelcomeSeen(currentWhatsNewVersion: release.version)
-
-        XCTAssertFalse(store.shouldShowWelcome())
-        XCTAssertFalse(store.shouldShowWhatsNew(for: release))
-        XCTAssertEqual(store.lastSeenWhatsNewVersion, "1.0")
+        XCTAssertEqual(
+            store.state,
+            LaunchExperienceState(
+                hasCompletedOnboarding: true,
+                lastProcessedAppVersion: "1.0",
+                lastSeenWhatsNewVersion: "1.0"
+            )
+        )
+        XCTAssertNil(
+            LaunchExperienceCoordinator.nextPresentation(
+                state: store.state,
+                currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.0"))
+            )
+        )
     }
 
     @MainActor
-    func testExistingUserSeesAutoShownNewVersionOnce() {
+    func testExistingUserSeesNewReleaseHighlightsOnce() throws {
         let store = FirstRunExperienceStore(defaults: defaults)
-        store.markWelcomeSeen(currentWhatsNewVersion: "1.0")
-        let release = WhatsNewRelease(
-            version: "1.1",
-            title: "What's New in 1.1",
-            summary: "Update release notes.",
-            items: [
-                WhatsNewItem(id: "export", systemImage: "square.and.arrow.up", title: "Export", detail: "Workout export is easier to find."),
-            ],
-            shouldAutoShow: true
+        store.markOnboardingCompleted(
+            currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.0"))
+        )
+        let release = makeRelease(version: "1.2")
+        let whatsNew = try XCTUnwrap(release.whatsNew)
+
+        XCTAssertEqual(
+            LaunchExperienceCoordinator.nextPresentation(
+                state: store.state,
+                currentRelease: release
+            ),
+            .whatsNew(whatsNew)
         )
 
-        XCTAssertTrue(store.shouldShowWhatsNew(for: release))
+        store.markWhatsNewSeen(version: whatsNew.version)
+        store.markAppVersionProcessed("1.2")
 
-        store.markWhatsNewSeen(version: release.version)
-
-        XCTAssertFalse(store.shouldShowWhatsNew(for: release))
+        XCTAssertNil(
+            LaunchExperienceCoordinator.nextPresentation(
+                state: store.state,
+                currentRelease: release
+            )
+        )
     }
 
     @MainActor
-    func testReleaseCanOptOutOfAutomaticWhatsNewPresentation() {
+    func testExistingUserHasNoPresentationForReleaseWithoutHighlights() throws {
         let store = FirstRunExperienceStore(defaults: defaults)
-        store.markWelcomeSeen(currentWhatsNewVersion: "1.0")
-        let release = WhatsNewRelease(
-            version: "1.1",
-            title: "What's New in 1.1",
-            summary: "Small fixes.",
-            items: [
-                WhatsNewItem(id: "fixes", systemImage: "checkmark.circle", title: "Fixes", detail: "A few details work better."),
-            ],
-            shouldAutoShow: false
+        store.markOnboardingCompleted(
+            currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.0"))
         )
 
-        XCTAssertFalse(store.shouldShowWhatsNew(for: release))
+        XCTAssertNil(
+            LaunchExperienceCoordinator.nextPresentation(
+                state: store.state,
+                currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.1"))
+            )
+        )
+
+        store.markAppVersionProcessed("1.1")
+
+        XCTAssertEqual(store.state.lastProcessedAppVersion, "1.1")
     }
 
     @MainActor
-    func testResetForUITestingClearsStoredValues() {
+    func testResetForUITestingClearsStoredValues() throws {
         let store = FirstRunExperienceStore(defaults: defaults)
-        store.markWelcomeSeen(currentWhatsNewVersion: "1.0")
+        store.markOnboardingCompleted(
+            currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.0"))
+        )
 
         FirstRunExperienceStore.resetForUITestingIfRequested(
             arguments: ["--uitest-reset-first-run-experience"],
             defaults: defaults
         )
 
-        XCTAssertTrue(store.shouldShowWelcome())
-        XCTAssertNil(store.lastSeenWhatsNewVersion)
+        XCTAssertEqual(
+            store.state,
+            LaunchExperienceState(
+                hasCompletedOnboarding: false,
+                lastProcessedAppVersion: nil,
+                lastSeenWhatsNewVersion: nil
+            )
+        )
     }
 
     @MainActor
@@ -117,8 +136,14 @@ final class FirstRunExperienceStoreTests: XCTestCase {
             defaults: defaults
         )
 
-        XCTAssertFalse(store.shouldShowWelcome())
-        XCTAssertEqual(store.lastSeenWhatsNewVersion, WhatsNewContent.current().version)
+        XCTAssertEqual(
+            store.state,
+            LaunchExperienceState(
+                hasCompletedOnboarding: true,
+                lastProcessedAppVersion: AppBuildInfo.current.version,
+                lastSeenWhatsNewVersion: nil
+            )
+        )
     }
 
     @MainActor
@@ -134,7 +159,20 @@ final class FirstRunExperienceStoreTests: XCTestCase {
             defaults: defaults
         )
 
-        XCTAssertTrue(store.shouldShowWelcome())
-        XCTAssertNil(store.lastSeenWhatsNewVersion)
+        XCTAssertEqual(
+            store.state,
+            LaunchExperienceState(
+                hasCompletedOnboarding: false,
+                lastProcessedAppVersion: nil,
+                lastSeenWhatsNewVersion: nil
+            )
+        )
+    }
+
+    private func makeRelease(version: String) -> AppReleaseDefinition {
+        AppReleaseDefinition(
+            version: version,
+            whatsNewSheet: .version1_0
+        )
     }
 }
