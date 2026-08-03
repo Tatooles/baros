@@ -172,18 +172,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
     private func makeRelease(version: String) -> AppReleaseDefinition {
         AppReleaseDefinition(
             version: version,
-            whatsNewContent: WhatsNewContent(
-                title: "What's New in \(version)",
-                summary: "Release notes.",
-                items: [
-                    LaunchExperienceItem(
-                        id: "release-\(version)",
-                        systemImage: "sparkles",
-                        title: "Highlights",
-                        detail: "The latest improvements."
-                    ),
-                ]
-            )
+            whatsNewSheet: .version1_0
         )
     }
 }

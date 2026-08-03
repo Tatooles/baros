@@ -1,39 +1,26 @@
 import Foundation
 
+enum WhatsNewSheetID: Equatable {
+    case version1_0
+}
+
 struct WhatsNewRelease: Equatable {
     let version: String
-    let title: String
-    let summary: String
-    let items: [LaunchExperienceItem]
-}
-
-struct LaunchExperienceItem: Identifiable, Equatable {
-    let id: String
-    let systemImage: String
-    let title: String
-    let detail: String
-}
-
-struct WhatsNewContent: Equatable {
-    let title: String
-    let summary: String
-    let items: [LaunchExperienceItem]
+    let sheetID: WhatsNewSheetID
 }
 
 struct AppReleaseDefinition: Equatable {
     let version: String
-    let whatsNewContent: WhatsNewContent?
+    let whatsNewSheet: WhatsNewSheetID?
 
     var whatsNew: WhatsNewRelease? {
-        guard let whatsNewContent else {
+        guard let whatsNewSheet else {
             return nil
         }
 
         return WhatsNewRelease(
             version: version,
-            title: whatsNewContent.title,
-            summary: whatsNewContent.summary,
-            items: whatsNewContent.items
+            sheetID: whatsNewSheet
         )
     }
 }
@@ -42,32 +29,9 @@ enum AppReleaseCatalog {
     private static let releases = [
         AppReleaseDefinition(
             version: "1.0",
-            whatsNewContent: WhatsNewContent(
-                title: "What's new in Baros",
-                summary: "The first release of Baros: fast workout logging, a safe local history, and optional cloud sync.",
-                items: [
-                    LaunchExperienceItem(
-                        id: "offline-first",
-                        systemImage: "iphone",
-                        title: "Offline-first logging",
-                        detail: "Start and finish workouts even when the network is unavailable."
-                    ),
-                    LaunchExperienceItem(
-                        id: "cloud-sync",
-                        systemImage: "icloud",
-                        title: "Cloud sync",
-                        detail: "Sign in to sync completed workouts, exercises, and settings."
-                    ),
-                    LaunchExperienceItem(
-                        id: "data-controls",
-                        systemImage: "square.and.arrow.up",
-                        title: "Data controls",
-                        detail: "Export workout history and manage privacy from Settings."
-                    ),
-                ]
-            )
+            whatsNewSheet: .version1_0
         ),
-        AppReleaseDefinition(version: "1.1", whatsNewContent: nil),
+        AppReleaseDefinition(version: "1.1", whatsNewSheet: nil),
     ]
 
     static func release(for version: String) -> AppReleaseDefinition? {
@@ -76,7 +40,7 @@ enum AppReleaseCatalog {
 
     static func definition(for version: String) -> AppReleaseDefinition {
         release(for: version)
-            ?? AppReleaseDefinition(version: version, whatsNewContent: nil)
+            ?? AppReleaseDefinition(version: version, whatsNewSheet: nil)
     }
 
     static func whatsNew(for version: String) -> WhatsNewRelease? {

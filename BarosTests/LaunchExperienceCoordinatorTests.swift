@@ -54,7 +54,7 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
                 lastProcessedAppVersion: "1.0",
                 lastSeenWhatsNewVersion: "1.0"
             ),
-            currentRelease: AppReleaseDefinition(version: "1.1", whatsNewContent: nil)
+            currentRelease: AppReleaseDefinition(version: "1.1", whatsNewSheet: nil)
         )
 
         XCTAssertNil(presentation)
@@ -91,18 +91,7 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
     private func makeRelease(version: String) -> AppReleaseDefinition {
         AppReleaseDefinition(
             version: version,
-            whatsNewContent: WhatsNewContent(
-                title: "What's New in \(version)",
-                summary: "Release notes.",
-                items: [
-                    LaunchExperienceItem(
-                        id: "release-\(version)",
-                        systemImage: "sparkles",
-                        title: "Highlights",
-                        detail: "The latest improvements."
-                    ),
-                ]
-            )
+            whatsNewSheet: .version1_0
         )
     }
 }
