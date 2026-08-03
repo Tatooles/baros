@@ -776,7 +776,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp(extraArguments: ["--uitest-sync-owner", "issuer|ui_owner"])
         app.launch()
 
-        app.buttons["ProfileTab"].tap()
+        tapTab(identifier: "ProfileTab", label: "Profile", in: app)
         app.buttons["ProfileSettingsLink"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
         app.segmentedControls["WeightUnitPicker"].buttons["Kilograms"].tap()
