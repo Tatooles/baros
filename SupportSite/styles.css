@@ -258,7 +258,7 @@ img {
 
 .capture-label {
   margin-top: 20px;
-  color: #8a8781;
+  color: #706d68;
   font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.12em;
@@ -308,7 +308,7 @@ img {
   width: min(var(--wide), calc(100% - 56px));
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(300px, 0.76fr) minmax(520px, 1.24fr);
+  grid-template-columns: minmax(300px, 0.76fr) minmax(480px, 1.24fr);
   align-items: center;
   gap: clamp(64px, 9vw, 132px);
   padding: 140px 0 152px;
@@ -316,6 +316,8 @@ img {
 
 .story-copy h2 {
   margin: 0;
+  padding: 0;
+  border: 0;
   font-size: clamp(42px, 4.1vw, 64px);
   font-weight: 710;
   letter-spacing: -0.055em;
@@ -474,6 +476,11 @@ a:hover {
 a:focus-visible {
   outline: 2px solid var(--link);
   outline-offset: 2px;
+}
+
+.closing a:focus-visible,
+.marketing-footer a:focus-visible {
+  outline-color: var(--accent-on-dark);
 }
 
 .site-footer {
