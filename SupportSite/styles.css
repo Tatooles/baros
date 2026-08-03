@@ -163,13 +163,24 @@ img {
 }
 
 .app-store-badge {
-  display: block;
-  width: 176px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   flex: 0 0 auto;
 }
 
 .app-store-badge img {
-  width: 100%;
+  width: 176px;
+  flex: 0 0 auto;
+}
+
+.app-store-status {
+  color: #565a62;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .secondary-action {
