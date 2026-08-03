@@ -60,6 +60,19 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
         XCTAssertNil(presentation)
     }
 
+    func testExistingOneZeroUserWithoutProcessedVersionSkipsOneOneHighlights() throws {
+        let presentation = LaunchExperienceCoordinator.nextPresentation(
+            state: LaunchExperienceState(
+                hasCompletedOnboarding: true,
+                lastProcessedAppVersion: nil,
+                lastSeenWhatsNewVersion: "1.0"
+            ),
+            currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.1"))
+        )
+
+        XCTAssertNil(presentation)
+    }
+
     func testExistingUserDoesNotReceiveHighlightsAddedWithinSameAppVersion() throws {
         let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.0"))
 

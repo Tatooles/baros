@@ -876,7 +876,7 @@ final class BarosUITests: XCTestCase {
         app.launchArguments.append("--uitest-force-signed-out-auth")
         app.launch()
 
-        app.buttons["ProfileTab"].tap()
+        tapTab(identifier: "ProfileTab", label: "Profile", in: app)
         XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
         app.buttons["ProfileSettingsLink"].tap()
         XCTAssertTrue(app.buttons["SettingsDeleteLocalDataRow"].waitForExistence(timeout: 3))
@@ -1144,6 +1144,19 @@ final class BarosUITests: XCTestCase {
         }
         app.launchArguments = launchArguments
         return app
+    }
+
+    @MainActor
+    private func tapTab(identifier: String, label: String, in app: XCUIApplication) {
+        let identifiedTab = app.buttons[identifier]
+        if identifiedTab.waitForExistence(timeout: 5) {
+            identifiedTab.tap()
+            return
+        }
+
+        let labeledTab = app.buttons[label]
+        XCTAssertTrue(labeledTab.waitForExistence(timeout: 2))
+        labeledTab.tap()
     }
 
     @MainActor

@@ -61,9 +61,6 @@ struct SettingsView: View {
                 LaunchExperienceSheet(presentation: launchPresentation) {
                     sheetPresentation = nil
                 }
-                .onDisappear {
-                    completeAppInfoPresentation(launchPresentation)
-                }
             }
         }
         .onDisappear {
@@ -137,12 +134,6 @@ struct SettingsView: View {
         UIPasteboard.general.string = AppBuildInfo.current.supportSummary(device: .current)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         showCopyConfirmation()
-    }
-
-    private func completeAppInfoPresentation(_ presentation: LaunchExperiencePresentation) {
-        if case .whatsNew(let release) = presentation {
-            FirstRunExperienceStore().markWhatsNewSeen(version: release.version)
-        }
     }
 
     private func showCopyConfirmation() {

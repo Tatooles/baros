@@ -140,7 +140,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
             store.state,
             LaunchExperienceState(
                 hasCompletedOnboarding: true,
-                lastProcessedAppVersion: "1.1",
+                lastProcessedAppVersion: AppBuildInfo.current.version,
                 lastSeenWhatsNewVersion: nil
             )
         )

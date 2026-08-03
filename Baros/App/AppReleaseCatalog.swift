@@ -84,10 +84,60 @@ enum AppReleaseCatalog {
     }
 
     static func latestWhatsNew(upTo version: String) -> WhatsNewRelease? {
-        guard let currentIndex = releases.firstIndex(where: { $0.version == version }) else {
+        guard let targetVersion = AppVersion(version) else {
             return nil
         }
 
-        return releases[...currentIndex].reversed().compactMap(\.whatsNew).first
+        return releases.compactMap { release -> (version: AppVersion, whatsNew: WhatsNewRelease)? in
+            guard let releaseVersion = AppVersion(release.version),
+                  releaseVersion <= targetVersion,
+                  let whatsNew = release.whatsNew else {
+                return nil
+            }
+
+            return (version: releaseVersion, whatsNew: whatsNew)
+        }
+        .max { $0.version < $1.version }?
+        .whatsNew
+    }
+}
+
+private struct AppVersion: Comparable {
+    let components: [Int]
+
+    init?(_ value: String) {
+        let rawComponents = value.split(separator: ".", omittingEmptySubsequences: false)
+        guard !rawComponents.isEmpty else {
+            return nil
+        }
+
+        var components: [Int] = []
+        components.reserveCapacity(rawComponents.count)
+        for rawComponent in rawComponents {
+            guard !rawComponent.isEmpty,
+                  rawComponent.allSatisfy(\.isNumber),
+                  let component = Int(rawComponent) else {
+                return nil
+            }
+            components.append(component)
+        }
+
+        while components.count > 1, components.last == 0 {
+            components.removeLast()
+        }
+        self.components = components
+    }
+
+    static func < (lhs: AppVersion, rhs: AppVersion) -> Bool {
+        let componentCount = max(lhs.components.count, rhs.components.count)
+        for index in 0..<componentCount {
+            let lhsComponent = index < lhs.components.count ? lhs.components[index] : 0
+            let rhsComponent = index < rhs.components.count ? rhs.components[index] : 0
+            if lhsComponent != rhsComponent {
+                return lhsComponent < rhsComponent
+            }
+        }
+
+        return false
     }
 }
