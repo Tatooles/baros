@@ -1,0 +1,44 @@
+---
+interface Props {
+  page: "marketing" | "privacy" | "support";
+}
+
+const { page } = Astro.props;
+---
+
+{
+  page === "marketing" ? (
+    <footer class="bg-dark">
+      <div class="mx-auto flex w-[calc(100%-2.25rem)] max-w-[76.25rem] flex-col items-center gap-3.5 py-[26px] pb-[38px] text-center text-sm text-[#a7a7a7] min-[561px]:w-[calc(100%-3.5rem)] min-[561px]:flex-row min-[561px]:justify-between min-[561px]:gap-6 min-[561px]:text-left">
+        <p>© 2026 Baros</p>
+        <div class="flex gap-6">
+          <a
+            class="text-[#a7a7a7] focus-visible:outline-accent-on-dark"
+            href="/privacy">Privacy</a
+          >
+          <a
+            class="text-[#a7a7a7] focus-visible:outline-accent-on-dark"
+            href="/support">Support</a
+          >
+          <a
+            class="text-[#a7a7a7] focus-visible:outline-accent-on-dark"
+            href="mailto:support@tatooles.dev">Contact</a
+          >
+        </div>
+      </div>
+    </footer>
+  ) : (
+    <footer class="border-t border-border bg-page">
+      <div class="mx-auto w-[calc(100%-2rem)] max-w-[42.5rem] pt-6 pb-9 text-sm text-muted min-[561px]:w-[calc(100%-2.5rem)]">
+        <p>
+          Baros - <a href="mailto:support@tatooles.dev"
+            >support@tatooles.dev</a
+          >
+        </p>
+        {page === "privacy" && (
+          <a class="mt-2 inline-block" href="/support">Back to support</a>
+        )}
+      </div>
+    </footer>
+  )
+}

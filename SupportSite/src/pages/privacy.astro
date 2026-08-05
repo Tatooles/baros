@@ -1,0 +1,85 @@
+---
+import DocumentSection from "../components/DocumentSection.astro";
+import DocumentLayout from "../layouts/DocumentLayout.astro";
+---
+
+<DocumentLayout
+  page="privacy"
+  title="Privacy — Baros"
+  description="Privacy Policy for Baros."
+  heading="Privacy Policy"
+  intro="This policy explains how Baros handles workout data, account data, sync, export, and deletion."
+  lastUpdated="July 17, 2026"
+>
+  <DocumentSection title="Summary">
+    <p>
+      You can use Baros locally without creating an account. Signing in enables
+      sync through Clerk authentication and Convex account-backed storage. You
+      can export workout history and delete account-backed or local data from
+      Settings.
+    </p>
+    <p>
+      Baros does not use third-party advertising, cross-app tracking, or product
+      analytics in the v1 release.
+    </p>
+  </DocumentSection>
+
+  <DocumentSection title="Data stored locally">
+    <p>
+      Baros stores workout-related data such as exercises, sets, workout
+      sessions, notes, settings, and workout history. You can use the app locally
+      on your iPhone without creating an account.
+    </p>
+  </DocumentSection>
+
+  <DocumentSection title="Account and authentication">
+    <p>
+      If you create an account, Baros uses Clerk for authentication. Clerk may
+      process account information such as your email address, authentication
+      identifiers, session information, and Sign in with Apple details.
+    </p>
+    <p>
+      If you use Sign in with Apple and choose Hide My Email, Apple may provide
+      a private relay email address instead of your personal email address.
+    </p>
+  </DocumentSection>
+
+  <DocumentSection title="Sync">
+    <p>
+      When you sign in, Baros uses Convex to sync supported workout, exercise,
+      settings, and history data for your account. Sync data is scoped to your
+      authenticated account.
+    </p>
+  </DocumentSection>
+
+  <DocumentSection title="Exporting and deleting your data">
+    <ul>
+      <li>You can export workout history from Settings.</li>
+      <li>
+        Signed-in users can delete their account and account-backed data from
+        Settings under Privacy &amp; Data.
+      </li>
+      <li>
+        Signed-out users can delete local data stored on the device from Settings
+        under Privacy &amp; Data.
+      </li>
+    </ul>
+  </DocumentSection>
+
+  <DocumentSection title="No analytics, ads, or tracking">
+    <p>
+      Baros does not use third-party advertising, cross-app tracking, or product
+      analytics in the v1 release. Standard platform and provider diagnostics may
+      be processed by Apple, Clerk, Convex, or hosting providers to keep their
+      services reliable and secure.
+    </p>
+  </DocumentSection>
+
+  <DocumentSection title="Contact">
+    <p>
+      For privacy questions or support, email <a
+        href="mailto:support@tatooles.dev">support@tatooles.dev</a
+      >.
+    </p>
+  </DocumentSection>
+</DocumentLayout>

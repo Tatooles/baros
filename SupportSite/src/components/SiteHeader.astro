@@ -1,0 +1,63 @@
+---
+interface Props {
+  page: "marketing" | "privacy" | "support";
+}
+
+const { page } = Astro.props;
+const linkClasses =
+  "text-[13px] text-ink no-underline hover:underline hover:underline-offset-[3px] min-[561px]:text-sm";
+---
+
+<header class="bg-page">
+  <nav
+    class="mx-auto flex min-h-[68px] w-[calc(100%-2rem)] max-w-[76.25rem] items-center justify-between gap-4 min-[561px]:min-h-[72px] min-[561px]:w-[calc(100%-2.25rem)] min-[761px]:min-h-[86px] min-[761px]:w-[calc(100%-3.5rem)] min-[761px]:gap-6"
+    aria-label={page === "marketing" ? "Primary navigation" : "Support navigation"}
+  >
+    <a
+      class="inline-flex items-center gap-2.5 text-[21px] font-semibold tracking-[-0.03em] text-ink no-underline hover:no-underline min-[761px]:gap-3.5 min-[761px]:text-2xl"
+      href="/"
+      aria-label="Baros home"
+    >
+      <img
+        class="size-10 rounded-[10px] shadow-[0_5px_16px_rgba(0,0,0,0.14)] min-[761px]:size-12 min-[761px]:rounded-xl"
+        src="/assets/baros-app-icon.png"
+        width="48"
+        height="48"
+        alt=""
+      />
+      <span>Baros</span>
+    </a>
+    <div class="flex items-center gap-3.5 min-[561px]:gap-[18px] min-[761px]:gap-[34px]">
+      {
+        page === "marketing" && (
+          <a
+            class:list={[linkClasses, "hidden min-[761px]:inline"]}
+            href="#features"
+          >
+            Features
+          </a>
+        )
+      }
+      <a
+        class:list={[
+          linkClasses,
+          page === "privacy" && "underline underline-offset-[3px]",
+        ]}
+        href="/privacy"
+        aria-current={page === "privacy" ? "page" : undefined}
+      >
+        Privacy
+      </a>
+      <a
+        class:list={[
+          linkClasses,
+          page === "support" && "underline underline-offset-[3px]",
+        ]}
+        href="/support"
+        aria-current={page === "support" ? "page" : undefined}
+      >
+        Support
+      </a>
+    </div>
+  </nav>
+</header>
