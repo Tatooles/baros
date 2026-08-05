@@ -9,9 +9,10 @@ interface Props {
   description: string;
   heading: string;
   intro: string;
+  lastUpdated: string;
 }
 
-const { page, title, description, heading, intro } = Astro.props;
+const { page, title, description, heading, intro, lastUpdated } = Astro.props;
 ---
 
 <BaseLayout {title} {description}>
@@ -24,7 +25,7 @@ const { page, title, description, heading, intro } = Astro.props;
     >
       {heading}
     </h1>
-    <p class="mt-2 text-sm text-muted">Last updated July 17, 2026</p>
+    <p class="mt-2 text-sm text-muted">Last updated {lastUpdated}</p>
     <p class="mt-6 text-ink">{intro}</p>
     <slot />
   </main>
