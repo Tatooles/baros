@@ -1,6 +1,6 @@
 import SwiftData
 import XCTest
-@testable import LiftingLog
+@testable import Baros
 
 @MainActor
 final class SyncOutboxTransactionTests: XCTestCase {

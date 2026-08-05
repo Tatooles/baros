@@ -835,6 +835,43 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertTrue(try fetchEntries(context).isEmpty)
     }
 
+    func testDeletingUnclaimedWorkoutHistoryWhileSignedInDoesNotClaimIt() throws {
+        let ownerA = "issuer|owner_a"
+        let ownerB = "issuer|owner_b"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let scheduler = SyncScheduler()
+        scheduler.currentOwnerTokenIdentifier = ownerA
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: ownerB,
+            userSettingsCursor: 1,
+            exercisesCursor: 1,
+            workoutSessionsCursor: 1,
+            loggedExercisesCursor: 1,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let session = makeCompletedWorkout(context: context)
+        try context.save()
+
+        try WorkoutHistoryMutationService(
+            syncOutboxTransaction: makeTransaction(context: context, scheduler: scheduler)
+        ).deleteWorkoutHistory(
+            session,
+            ownerTokenIdentifier: ownerA,
+            context: context,
+            now: Date(timeIntervalSince1970: 2_000)
+        )
+
+        XCTAssertTrue(session.isDeleted)
+        XCTAssertNil(session.syncOwnerTokenIdentifier)
+        XCTAssertTrue(session.loggedExercises.allSatisfy(\.isDeleted))
+        XCTAssertTrue(session.loggedExercises.flatMap(\.sets).allSatisfy(\.isDeleted))
+        XCTAssertTrue(try fetchEntries(context).isEmpty)
+        XCTAssertEqual(scheduler.requestCount, 0)
+    }
+
     func testDeletingOwnedWorkoutHistoryRecordsGraphIntentsAndRequestsSyncOnce() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

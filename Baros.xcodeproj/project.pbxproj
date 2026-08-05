@@ -50,6 +50,7 @@
 		4802E59329C0EE7E45EE2484 /* ActiveWorkoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772D55D5C90198551AF34F90 /* ActiveWorkoutEngine.swift */; };
 		49F9EA1CFDE22D2EDC068483 /* SeedDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82BCC51ACFFB60A56B4FED0 /* SeedDataService.swift */; };
 		4BEBCFE6F1D25EEC83F31602 /* ConvexConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5149C1CB36191BD8869DA3C7 /* ConvexConfiguration.swift */; };
+		527476AEC56DB904B2188D12 /* SyncOutboxTransaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD51E29413D70C2F12ECB1DA /* SyncOutboxTransaction.swift */; };
 		53ACC35ABC22408C0439B0B0 /* SyncStatusDisplayState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6666F95B7EA9CA259BB1C94 /* SyncStatusDisplayState.swift */; };
 		55AE3F3DD8171BB9E9D27B8E /* WorkoutFocusNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492AA0196EBA89CBCA8BBE7A /* WorkoutFocusNavigator.swift */; };
 		5664E7A83BB016694A84453A /* ExerciseCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF3F0B83EE6F098794515746 /* ExerciseCategory.swift */; };
@@ -140,6 +141,7 @@
 		D2C02DE58C4CD1E6C0398F5F /* SyncEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FE370B8C7441DC1B4FCBEBA /* SyncEntityKind.swift */; };
 		D4960AD096F7BAD94039176A /* WorkoutExportFileWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB86D1EF7DB4A2478549754C /* WorkoutExportFileWriterTests.swift */; };
 		D4AF401DC5C1E93EDE5899B0 /* SyncOutboxEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73D1C8510D7568DD0249DF51 /* SyncOutboxEntry.swift */; };
+		D7A8EA492304C11827CE5FE9 /* SyncOutboxTransactionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABFF7F89CFD43A9BC96C4D21 /* SyncOutboxTransactionTests.swift */; };
 		D7FCF44D5C2139A31A579C85 /* LaunchExperienceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34E7B8F0E30270E03AA269C0 /* LaunchExperienceCoordinatorTests.swift */; };
 		D9C47034EDA661798F961FF6 /* ExerciseHistoryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62D75149FBAE878C25D0D614 /* ExerciseHistoryRow.swift */; };
 		DA76808E4A6A5D33AE60CF53 /* WorkoutExportFileWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D64F2D46BF17E313012C72CE /* WorkoutExportFileWriter.swift */; };
@@ -287,6 +289,7 @@
 		A818C833AC1D3BA4E797C7CD /* WorkoutHistoryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutHistoryRow.swift; sourceTree = "<group>"; };
 		A82BCC51ACFFB60A56B4FED0 /* SeedDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedDataService.swift; sourceTree = "<group>"; };
 		A8D3DF0D84D449AEEBB18FD5 /* PreviousSetPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviousSetPerformanceTests.swift; sourceTree = "<group>"; };
+		ABFF7F89CFD43A9BC96C4D21 /* SyncOutboxTransactionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxTransactionTests.swift; sourceTree = "<group>"; };
 		AD05014A54498ADD53C9C84C /* LoggedExercise.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggedExercise.swift; sourceTree = "<group>"; };
 		AE6509A17AE88CDDB51A9EC9 /* LaunchExperienceFeatureRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchExperienceFeatureRow.swift; sourceTree = "<group>"; };
 		B2587D5EEC35D1F502DC01B4 /* ExerciseQuickHistorySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseQuickHistorySheet.swift; sourceTree = "<group>"; };
@@ -296,6 +299,7 @@
 		B974F08FC55BB4083C291E93 /* ActiveWorkoutEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveWorkoutEngineTests.swift; sourceTree = "<group>"; };
 		B9D88B27463914E4DA59FDA2 /* ClerkConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClerkConfigurationTests.swift; sourceTree = "<group>"; };
 		BBD155FBDC40811F65E42418 /* AccountDisplayState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDisplayState.swift; sourceTree = "<group>"; };
+		BD51E29413D70C2F12ECB1DA /* SyncOutboxTransaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxTransaction.swift; sourceTree = "<group>"; };
 		BDE4314AD2B27E0C681BD5D7 /* StateViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateViews.swift; sourceTree = "<group>"; };
 		BF2386D026311F4720EF90CE /* WorkoutHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutHeaderView.swift; sourceTree = "<group>"; };
 		C0C0EA53E504BE5333F9B619 /* SetKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetKind.swift; sourceTree = "<group>"; };
@@ -507,6 +511,7 @@
 				73D1C8510D7568DD0249DF51 /* SyncOutboxEntry.swift */,
 				329AB2376054EB26A89A552E /* SyncOutboxRecorder.swift */,
 				7682C64601E5433B0B4FFC58 /* SyncOutboxStatus.swift */,
+				BD51E29413D70C2F12ECB1DA /* SyncOutboxTransaction.swift */,
 				5DDD6E8B921BB2D16D2D64E0 /* SyncPayloads.swift */,
 				FCDF19AED28F861C331A3BF6 /* SyncRecoveryAction.swift */,
 				9DA22E7754C61C4BB3D503DB /* SyncRecoveryCoordinator.swift */,
@@ -551,6 +556,7 @@
 				F7EDB15F47CC004CD9939924 /* SyncOutboxEntryTests.swift */,
 				EB732FB124E408DF3B3BC320 /* SyncOutboxIntegrationTests.swift */,
 				E5EECD7D24DA02F3A4711161 /* SyncOutboxRecorderTests.swift */,
+				ABFF7F89CFD43A9BC96C4D21 /* SyncOutboxTransactionTests.swift */,
 				F5408C8FD1602F89D94571D0 /* SyncPayloadMappingTests.swift */,
 				5C015C17BCCFD88260626EA1 /* SyncRecoveryCoordinatorTests.swift */,
 				29E473C28433DFA64E0656D3 /* SyncSchedulerStatusTests.swift */,
@@ -962,6 +968,7 @@
 				D4AF401DC5C1E93EDE5899B0 /* SyncOutboxEntry.swift in Sources */,
 				6192E4B3A1E9BC823FD50305 /* SyncOutboxRecorder.swift in Sources */,
 				8B8D3ADBE7EEBC1456B8BCF5 /* SyncOutboxStatus.swift in Sources */,
+				527476AEC56DB904B2188D12 /* SyncOutboxTransaction.swift in Sources */,
 				7D9BB64AB99E1E4815FDF7E1 /* SyncPayloads.swift in Sources */,
 				9CD891183EBE88A375C504F1 /* SyncRecoveryAction.swift in Sources */,
 				04E069D87D269379B9F4C34D /* SyncRecoveryCoordinator.swift in Sources */,
@@ -1027,6 +1034,7 @@
 				600A00CDD4E76C0878FDDB00 /* SyncOutboxEntryTests.swift in Sources */,
 				630701569635BAA508FBF9A1 /* SyncOutboxIntegrationTests.swift in Sources */,
 				97B994C20A18495D414D987F /* SyncOutboxRecorderTests.swift in Sources */,
+				D7A8EA492304C11827CE5FE9 /* SyncOutboxTransactionTests.swift in Sources */,
 				3240230EFD8E68AC5DF744C1 /* SyncPayloadMappingTests.swift in Sources */,
 				F748DA0DE68BD989A365ACC5 /* SyncRecoveryCoordinatorTests.swift in Sources */,
 				994BD0F86EF99DEFF21D1F04 /* SyncSchedulerStatusTests.swift in Sources */,

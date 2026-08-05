@@ -339,10 +339,14 @@ struct WorkoutHistoryMutationService {
         let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
         try validateEditable(session, ownerTokenIdentifier: requestedOwner)
 
-        guard let requestedOwner else {
+        if session.syncOwnerTokenIdentifier == nil {
             session.markDeletedCascade(now: now)
             try context.save()
             return
+        }
+
+        guard let requestedOwner else {
+            throw WorkoutHistoryMutationError.ownerMismatch
         }
 
         guard let syncOutboxTransaction else {

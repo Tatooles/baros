@@ -3,7 +3,7 @@ import XCTest
 
 final class AppInitializationOrderTests: XCTestCase {
     func testAppCreatesAndInjectsOneSyncOutboxTransaction() throws {
-        let appSource = try sourceFileContents("LiftingLog/App/LiftingLogApp.swift")
+        let appSource = try sourceFileContents("Baros/App/BarosApp.swift")
 
         XCTAssertEqual(
             appSource.components(separatedBy: "SyncOutboxTransaction(").count - 1,
