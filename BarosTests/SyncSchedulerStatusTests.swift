@@ -311,6 +311,39 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertNil(scheduler.lastFailure)
     }
 
+    func testPausingActiveSyncQueuesItForAuthenticatedReplay() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let client = FakeSyncClient()
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client),
+            modelContext: context
+        )
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+        client.onFetchChanges = {
+            guard client.fetchRequests.count == 1 else { return }
+            scheduler.pauseCloudSync()
+        }
+
+        scheduler.requestSync()
+        try await waitUntil {
+            client.fetchRequests.count == 1
+                && !scheduler.isSyncing
+        }
+
+        XCTAssertFalse(scheduler.isCloudSyncAuthorized)
+        XCTAssertTrue(scheduler.hasQueuedSyncRequest)
+
+        scheduler.authorizeCloudSync()
+        scheduler.requestSync()
+        try await waitUntil {
+            client.fetchRequests.count == 2
+                && scheduler.lastSyncedAt != nil
+        }
+
+        XCTAssertFalse(scheduler.hasQueuedSyncRequest)
+    }
+
     func testSchedulerRecordsFailureAndRetryUsesSameRequestPath() async throws {
         struct FetchError: LocalizedError {
             var errorDescription: String? { "Convex function sync:fetchChanges failed" }
@@ -651,6 +684,20 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertNil(scheduler.lastSyncedAt)
         XCTAssertFalse(scheduler.hasQueuedSyncRequest)
         XCTAssertFalse(scheduler.isSyncing)
+    }
+
+    func testOwnerChangeClearsPausedSyncRequest() {
+        let scheduler = SyncScheduler()
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+        scheduler.pauseCloudSync()
+        scheduler.requestSync()
+        XCTAssertTrue(scheduler.hasQueuedSyncRequest)
+
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_b"
+        scheduler.authorizeCloudSync()
+        scheduler.pauseCloudSync()
+
+        XCTAssertFalse(scheduler.hasQueuedSyncRequest)
     }
 
     private func waitUntil(

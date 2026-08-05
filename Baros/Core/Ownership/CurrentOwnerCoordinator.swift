@@ -92,9 +92,6 @@ final class CurrentOwnerCoordinator {
         self.clerkSessionProvider = clerkSessionProvider
         self.startupMode = startupMode
         syncScheduler.pauseCloudSync()
-        syncScheduler.setCloudSyncRecoveryRequest { [weak self] in
-            self?.requestSyncRecovery(for: .manualRetry)
-        }
     }
 
     func start() {

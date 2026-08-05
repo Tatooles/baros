@@ -74,7 +74,6 @@ final class SyncScheduler {
     private var modelContext: ModelContext?
     private var syncTask: Task<Void, Never>?
     private var needsSync = false
-    private var cloudSyncRecoveryRequest: (() -> Void)?
     private let lastKnownOwnerTokenStore: LastKnownSyncOwnerTokenStore
 
     init(
@@ -96,16 +95,13 @@ final class SyncScheduler {
         self.modelContext = modelContext
     }
 
-    func setCloudSyncRecoveryRequest(_ request: @escaping () -> Void) {
-        cloudSyncRecoveryRequest = request
-    }
-
     func requestSync() {
         requestCount += 1
         guard !isDeletionModeEnabled else { return }
         guard currentOwnerTokenIdentifier != nil else { return }
         guard isCloudSyncAuthorized else {
-            cloudSyncRecoveryRequest?()
+            needsSync = true
+            hasQueuedSyncRequest = true
             return
         }
         guard let coordinator, let modelContext else { return }
@@ -133,10 +129,13 @@ final class SyncScheduler {
 
     func pauseCloudSync() {
         guard isCloudSyncAuthorized else { return }
+        let shouldQueueSync = syncTask != nil || needsSync
         isCloudSyncAuthorized = false
-        needsSync = false
-        hasQueuedSyncRequest = false
         cancelInFlightSync()
+        if shouldQueueSync {
+            needsSync = true
+            hasQueuedSyncRequest = true
+        }
     }
 
     func authorizeCloudSync() {
@@ -314,6 +313,7 @@ final class SyncScheduler {
     }
 
     private func clearRuntimeStateForOwnerChange() {
+        needsSync = false
         hasQueuedSyncRequest = false
         isSyncing = false
         lastSyncedAt = nil
@@ -372,16 +372,21 @@ final class SyncScheduler {
                 await Task.yield()
             }
 
-            let shouldStartQueuedSync = needsSync
+            let hasValidQueuedSync = needsSync
                 && currentOwnerTokenIdentifier != nil
                 && !isDeletionModeEnabled
-                && isCloudSyncAuthorized
-            needsSync = false
-            hasQueuedSyncRequest = false
+            let shouldStartQueuedSync = hasValidQueuedSync && isCloudSyncAuthorized
             isSyncing = false
             syncTask = nil
             if shouldStartQueuedSync {
+                needsSync = false
+                hasQueuedSyncRequest = false
                 startSyncTask(coordinator: coordinator, modelContext: modelContext)
+            } else if hasValidQueuedSync {
+                hasQueuedSyncRequest = true
+            } else {
+                needsSync = false
+                hasQueuedSyncRequest = false
             }
         }
     }

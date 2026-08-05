@@ -342,7 +342,7 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.finish()
     }
 
-    func testLocalEditAfterFailedForegroundRecoveryRetriesAuthenticationAndSyncs() async throws {
+    func testLocalEditWhileAuthenticationIsUnresolvedQueuesUntilForegroundRecovery() async throws {
         let harness = try CurrentOwnerCoordinatorHarness()
 
         harness.coordinator.start()
@@ -363,12 +363,20 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
 
         harness.succeedLogin(as: ownerA)
         harness.syncScheduler.requestSync()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 2)
+        XCTAssertTrue(harness.syncScheduler.hasQueuedSyncRequest)
+        XCTAssertEqual(harness.syncClient.fetchRequests.count, completedFetchCount)
+
+        harness.coordinator.appDidEnterForeground()
         try await waitUntil {
             harness.authenticationClient.loginFromCacheCallCount == 3
                 && harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
                 && harness.syncClient.fetchRequests.count > completedFetchCount
         }
 
+        XCTAssertFalse(harness.syncScheduler.hasQueuedSyncRequest)
         harness.finish()
     }
 
