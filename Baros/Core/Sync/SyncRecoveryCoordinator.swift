@@ -114,6 +114,12 @@ final class SyncRecoveryCoordinator {
         case manualRetry
     }
 
+    enum AuthenticatedStateDecision {
+        case activate
+        case deferSyncToRecovery
+        case reject
+    }
+
     private struct ActiveRecovery {
         let id: UUID
         let recoveryInvalidationGeneration: UInt
@@ -176,21 +182,31 @@ final class SyncRecoveryCoordinator {
         ownerTokenIdentifier: String,
         sessionIdentifier: String?
     ) async -> Bool {
+        await authenticatedStateDecision(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            sessionIdentifier: sessionIdentifier
+        ) == .activate
+    }
+
+    func authenticatedStateDecision(
+        ownerTokenIdentifier: String,
+        sessionIdentifier: String?
+    ) async -> AuthenticatedStateDecision {
         guard hasActiveSession(), !syncScheduler.isDeletionModeEnabled else {
-            return false
+            return .reject
         }
 
         switch validateOwnerTokenIdentifier(ownerTokenIdentifier) {
         case .current:
             break
         case .unavailable:
-            return false
+            return .reject
         case .mismatch:
             await rejectInstalledAuthentication()
-            return false
+            return .reject
         }
 
-        guard let sessionIdentifier else { return false }
+        guard let sessionIdentifier else { return .reject }
         let key = AuthenticatedStateCorrelation.Key(
             ownerTokenIdentifier: ownerTokenIdentifier,
             sessionIdentifier: sessionIdentifier
@@ -198,11 +214,12 @@ final class SyncRecoveryCoordinator {
         let hasRecoveryForSession = inFlightRecoveries.values.contains { metadata in
             metadata.sessionIdentifier == sessionIdentifier
         }
-        return !authenticatedStateCorrelation.shouldDefer(
+        let shouldDefer = authenticatedStateCorrelation.shouldDefer(
             key: key,
             hasRecoveryForSession: hasRecoveryForSession,
             now: now()
         )
+        return shouldDefer ? .deferSyncToRecovery : .activate
     }
 
     func recoverAuthenticationAndRequestSync(for trigger: Trigger) async {

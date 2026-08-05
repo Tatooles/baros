@@ -92,6 +92,9 @@ final class CurrentOwnerCoordinator {
         self.clerkSessionProvider = clerkSessionProvider
         self.startupMode = startupMode
         syncScheduler.pauseCloudSync()
+        syncScheduler.setCloudSyncRecoveryRequest { [weak self] in
+            self?.requestSyncRecovery(for: .manualRetry)
+        }
     }
 
     func start() {
@@ -217,15 +220,19 @@ final class CurrentOwnerCoordinator {
                 )
                 return
             }
-            guard await syncRecoveryCoordinator.shouldActivateAuthenticatedState(
-                      ownerTokenIdentifier: ownerTokenIdentifier,
-                      sessionIdentifier: clerkSessionProvider.state.sessionIdentifier
-                  ) else {
+            let decision = await syncRecoveryCoordinator.authenticatedStateDecision(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                sessionIdentifier: clerkSessionProvider.state.sessionIdentifier
+            )
+            switch decision {
+            case .activate:
+                activateValidatedOwner(ownerTokenIdentifier)
+                syncScheduler.requestSync()
+            case .deferSyncToRecovery:
+                activateValidatedOwner(ownerTokenIdentifier)
+            case .reject:
                 return
             }
-
-            activateValidatedOwner(ownerTokenIdentifier)
-            syncScheduler.requestSync()
         }
     }
 

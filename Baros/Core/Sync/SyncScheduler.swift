@@ -74,6 +74,7 @@ final class SyncScheduler {
     private var modelContext: ModelContext?
     private var syncTask: Task<Void, Never>?
     private var needsSync = false
+    private var cloudSyncRecoveryRequest: (() -> Void)?
     private let lastKnownOwnerTokenStore: LastKnownSyncOwnerTokenStore
 
     init(
@@ -95,11 +96,18 @@ final class SyncScheduler {
         self.modelContext = modelContext
     }
 
+    func setCloudSyncRecoveryRequest(_ request: @escaping () -> Void) {
+        cloudSyncRecoveryRequest = request
+    }
+
     func requestSync() {
         requestCount += 1
         guard !isDeletionModeEnabled else { return }
-        guard isCloudSyncAuthorized else { return }
         guard currentOwnerTokenIdentifier != nil else { return }
+        guard isCloudSyncAuthorized else {
+            cloudSyncRecoveryRequest?()
+            return
+        }
         guard let coordinator, let modelContext else { return }
         guard syncTask == nil else {
             needsSync = true

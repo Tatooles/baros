@@ -240,6 +240,35 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.finish()
     }
 
+    func testDelayedRecoveryAuthenticationStateDoesNotLeaveCloudSyncPaused() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        harness.succeedLogin(as: ownerA)
+
+        harness.coordinator.start()
+        try await waitUntil {
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && harness.syncScheduler.requestCount == 1
+        }
+
+        harness.authenticationClient.sendAuthenticationState(.loading)
+        try await waitUntil {
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
+                && !harness.syncScheduler.isCloudSyncAuthorized
+        }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil {
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && harness.syncScheduler.isCloudSyncAuthorized
+        }
+
+        XCTAssertEqual(
+            harness.syncScheduler.requestCount,
+            1,
+            "The correlated authentication state must restore authorization without duplicating recovery sync."
+        )
+        harness.finish()
+    }
+
     func testManualRetryRecoversAfterStartupAuthenticationFails() async throws {
         let harness = try CurrentOwnerCoordinatorHarness()
 
@@ -275,6 +304,36 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 2)
         XCTAssertEqual(harness.syncScheduler.requestCount, 1)
+        harness.finish()
+    }
+
+    func testLocalEditAfterFailedForegroundRecoveryRetriesAuthenticationAndSyncs() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil {
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && harness.syncScheduler.lastSyncedAt != nil
+        }
+        let completedFetchCount = harness.syncClient.fetchRequests.count
+
+        harness.coordinator.appDidEnterForeground()
+        try await waitUntil {
+            harness.authenticationClient.loginFromCacheCallCount == 2
+                && harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
+                && !harness.syncScheduler.isCloudSyncAuthorized
+        }
+
+        harness.succeedLogin(as: ownerA)
+        harness.syncScheduler.requestSync()
+        try await waitUntil {
+            harness.authenticationClient.loginFromCacheCallCount == 3
+                && harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && harness.syncClient.fetchRequests.count > completedFetchCount
+        }
+
         harness.finish()
     }
 
