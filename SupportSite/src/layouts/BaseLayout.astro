@@ -7,6 +7,21 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
+const site = Astro.site!;
+const canonicalUrl = new URL(Astro.url.pathname, site);
+const vercelPreviewHost =
+  import.meta.env.VERCEL_ENV === "preview"
+    ? import.meta.env.VERCEL_URL
+    : undefined;
+const socialImageBaseUrl = vercelPreviewHost
+  ? new URL(`https://${vercelPreviewHost}`)
+  : site;
+const socialImageUrl = new URL(
+  "/assets/baros-social-preview.png",
+  socialImageBaseUrl,
+);
+const socialImageAlt =
+  "Baros app icon with the message Log the lift. Keep the history.";
 ---
 
 <!doctype html>
@@ -18,6 +33,24 @@ const { title, description } = Astro.props;
     <meta name="theme-color" content="#f7f5f1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Baros" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={socialImageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={socialImageAlt} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={socialImageUrl} />
+    <meta name="twitter:image:alt" content={socialImageAlt} />
+
     <link rel="icon" type="image/png" href="/assets/baros-app-icon.png" />
   </head>
   <body class="min-h-screen bg-page text-ink">
