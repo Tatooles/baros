@@ -55,13 +55,19 @@ const features = [
         <div
           class="mt-[34px] flex flex-col items-center gap-3.5 min-[561px]:flex-row min-[561px]:gap-[34px] min-[761px]:flex-col min-[761px]:items-start min-[761px]:gap-3.5 min-[941px]:flex-row min-[941px]:items-center min-[941px]:gap-[34px]"
         >
-          <img
-            class="w-44 shrink-0"
-            src="/assets/download-on-the-app-store.svg"
-            width="120"
-            height="40"
-            alt="App Store"
-          />
+          <a
+            class="inline-flex shrink-0 rounded-[9px] focus-visible:outline-accent"
+            href="https://apps.apple.com/us/app/baros-workout-tracker/id6782692304"
+            aria-label="Download Baros on the App Store"
+          >
+            <img
+              class="w-44 shrink-0"
+              src="/assets/download-on-the-app-store.svg"
+              width="120"
+              height="40"
+              alt="Download on the App Store"
+            />
+          </a>
           <a
             class="text-[15px] font-[680] text-ink no-underline underline-offset-4 hover:decoration-2 hover:decoration-accent hover:underline"
             href="#inside-the-app">See how it works</a
@@ -206,10 +212,18 @@ const features = [
         Fast enough for the gym. Thoughtful enough for the long run.
       </p>
       <a
-        class="motion-safe:hover:-translate-y-0.5 mt-8 inline-flex min-h-[52px] items-center justify-center rounded-[13px] bg-accent px-6 font-[680] text-white no-underline shadow-[0_10px_24px_rgba(215,57,52,0.18)] transition-[translate,background-color] duration-160 hover:bg-[#9f211d] hover:no-underline focus-visible:outline-accent-on-dark motion-reduce:transition-none"
-        href="mailto:support@tatooles.dev?subject=Baros%20release%20updates"
-        >Ask about Baros</a
+        class="motion-safe:hover:-translate-y-0.5 mt-8 inline-flex rounded-[9px] shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-transform duration-160 hover:no-underline focus-visible:outline-accent-on-dark motion-reduce:transition-none"
+        href="https://apps.apple.com/us/app/baros-workout-tracker/id6782692304"
+        aria-label="Download Baros on the App Store"
       >
+        <img
+          class="w-44"
+          src="/assets/download-on-the-app-store.svg"
+          width="120"
+          height="40"
+          alt="Download on the App Store"
+        />
+      </a>
     </section>
   </main>
   <SiteFooter page="marketing" />
