@@ -284,7 +284,13 @@ private struct OutboxBookkeepingSnapshot {
 
         func restore(in modelContext: ModelContext) {
             if case .changed = change {
-                entry.statusRaw = statusRaw + "#restoring"
+                // `rollback()` reverts the entry to its last saved values and clears its dirty
+                // flag. Re-assigning a captured value that happens to match the saved one is then
+                // a no-op, so the entry would not be marked changed and the next save would drop
+                // the in-flight bookkeeping this snapshot exists to preserve. Write a value that
+                // cannot match first to force the entry dirty. `updatedAt` is used rather than a
+                // raw enum field so no reader can ever observe an unparseable status.
+                entry.updatedAt = .distantPast
             }
             entry.entityKindRaw = entityKindRaw
             entry.entityID = entityID

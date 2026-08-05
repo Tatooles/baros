@@ -13,6 +13,14 @@ final class SyncCursorState: Identifiable {
     var loggedSetsCursor: Double = 0
     var hasBootstrappedSettingsExercises: Bool = false
     var hasBootstrappedWorkoutGraph: Bool = false
+    /// Instant at which workout-graph bootstrap deliberately left Unclaimed Local Data unclaimed
+    /// for this owner, because the account already carried remote workout history.
+    ///
+    /// `hasBootstrappedWorkoutGraph` is a one-time flag, so on its own it cannot tell "already
+    /// decided not to adopt the workouts that existed then" apart from "never look at Unclaimed
+    /// Local Data again". Recording *when* the decision was made keeps the pre-existing sessions
+    /// local while still letting later ownerless sessions be adopted.
+    var ownerlessWorkoutAdoptionDeclinedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -23,7 +31,8 @@ final class SyncCursorState: Identifiable {
         loggedExercisesCursor: Double = 0,
         loggedSetsCursor: Double = 0,
         hasBootstrappedSettingsExercises: Bool = false,
-        hasBootstrappedWorkoutGraph: Bool = false
+        hasBootstrappedWorkoutGraph: Bool = false,
+        ownerlessWorkoutAdoptionDeclinedAt: Date? = nil
     ) {
         self.id = id
         self.ownerTokenIdentifier = ownerTokenIdentifier
@@ -34,6 +43,7 @@ final class SyncCursorState: Identifiable {
         self.loggedSetsCursor = loggedSetsCursor
         self.hasBootstrappedSettingsExercises = hasBootstrappedSettingsExercises
         self.hasBootstrappedWorkoutGraph = hasBootstrappedWorkoutGraph
+        self.ownerlessWorkoutAdoptionDeclinedAt = ownerlessWorkoutAdoptionDeclinedAt
     }
 
     static func state(for ownerTokenIdentifier: String, context: ModelContext) throws -> SyncCursorState {

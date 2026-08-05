@@ -114,6 +114,19 @@ final class SyncCoordinator {
             }
         }
 
+        // Runs before the outbox-entry claim loop below so an ownerless session is still
+        // recognisable as Unclaimed Local Data: that loop adopts a session's *owner* from a
+        // legacy ownerless entry without enqueueing its children, which would otherwise strand
+        // records added to the session after that entry was written.
+        if hadBootstrappedWorkoutGraph {
+            try adoptOwnerlessCompletedWorkoutsForSync(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                createdAfter: state.ownerlessWorkoutAdoptionDeclinedAt,
+                context: context,
+                now: .now
+            )
+        }
+
         let completedStatus = SyncOutboxStatus.completed.rawValue
         for entry in try context.fetch(FetchDescriptor<SyncOutboxEntry>(
             predicate: #Predicate { entry in
@@ -160,6 +173,11 @@ final class SyncCoordinator {
             )
             if didCompleteWorkoutGraphBootstrap {
                 state.hasBootstrappedWorkoutGraph = true
+                if !includeOwnerlessCompletedWorkouts {
+                    // Bootstrap deliberately left the Unclaimed Local Data that existed now.
+                    // Later ownerless sessions are still eligible for adoption.
+                    state.ownerlessWorkoutAdoptionDeclinedAt = .now
+                }
                 if state.loggedSetsCursor == 0,
                    try hasActiveOutboxEntries(entityKind: .loggedSet, ownerTokenIdentifier: ownerTokenIdentifier, context: context) {
                     state.loggedSetsCursor = 1
@@ -316,6 +334,99 @@ final class SyncCoordinator {
             }
         }
         return true
+    }
+
+    /// Adopts Unclaimed Local Data that appeared after the one-time workout-graph bootstrap.
+    ///
+    /// A Logged Workout finished while signed out carries no outbox entries at all (ADR 0002:
+    /// Unclaimed Local Data has no owner destination), so bootstrap is its only route into the
+    /// cloud. Because `hasBootstrappedWorkoutGraph` is a one-time per-owner flag, a session
+    /// finished signed-out *after* that flag was set would otherwise never be enqueued and would
+    /// silently never reach the cloud. This pass re-runs on every sync to close that window.
+    ///
+    /// Sessions created before `declinedAt` stay local: bootstrap already decided not to merge
+    /// the data that pre-dated the sign-in into an account that had its own history.
+    private func adoptOwnerlessCompletedWorkoutsForSync(
+        ownerTokenIdentifier: String,
+        createdAfter declinedAt: Date?,
+        context: ModelContext,
+        now: Date
+    ) throws {
+        let ownerlessSessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+            .filter { session in
+                session.syncOwnerTokenIdentifier == nil
+                    && session.status == .completed
+                    && !session.isDeleted
+                    && declinedAt.map { session.createdAt > $0 } ?? true
+            }
+        guard !ownerlessSessions.isEmpty else { return }
+        guard try canBootstrapOwnerlessWorkoutGraph(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        ) else {
+            return
+        }
+
+        for session in ownerlessSessions {
+            session.syncOwnerTokenIdentifier = ownerTokenIdentifier
+            try adoptOwnerlessRecordForSync(
+                entityKind: .workoutSession,
+                entityID: session.id,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+
+            for loggedExercise in session.sortedLoggedExercises where !loggedExercise.isDeleted {
+                try adoptOwnerlessRecordForSync(
+                    entityKind: .loggedExercise,
+                    entityID: loggedExercise.id,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context,
+                    now: now
+                )
+
+                for set in loggedExercise.sortedSets where !set.isDeleted {
+                    try adoptOwnerlessRecordForSync(
+                        entityKind: .loggedSet,
+                        entityID: set.id,
+                        ownerTokenIdentifier: ownerTokenIdentifier,
+                        context: context,
+                        now: now
+                    )
+                }
+            }
+        }
+    }
+
+    /// Reuses a legacy ownerless entry for the record when one exists, otherwise enqueues a create.
+    private func adoptOwnerlessRecordForSync(
+        entityKind: SyncEntityKind,
+        entityID: UUID,
+        ownerTokenIdentifier: String,
+        context: ModelContext,
+        now: Date
+    ) throws {
+        if try claimOwnerlessOutboxEntryIfNeeded(
+            entityKind: entityKind,
+            entityID: entityID,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context,
+            now: now
+        ) {
+            return
+        }
+        guard try !hasActiveOutboxEntry(entityKind: entityKind, entityID: entityID, context: context) else {
+            return
+        }
+        try recordBootstrapEntry(
+            entityKind: entityKind,
+            entityID: entityID,
+            isDeleted: false,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context,
+            now: now
+        )
     }
 
     private func backfillOwnedCompletedLoggedSetsForSync(

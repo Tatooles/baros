@@ -4075,6 +4075,211 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(failedEntry.status, .failed)
         XCTAssertEqual(pendingEntry.status, .pending)
     }
+
+    func testBootstrappedPrepareAdoptsOwnerlessWorkoutLoggedAfterBootstrap() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let graph = try insertOwnerlessCompletedWorkout(
+            idPrefix: "00000000-0000-0000-0000-00009100",
+            createdAt: Date(timeIntervalSince1970: 1000),
+            context: context
+        )
+        try context.save()
+
+        try SyncCoordinator(client: FakeSyncClient()).prepareForSync(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertEqual(graph.session.syncOwnerTokenIdentifier, owner)
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertEqual(
+            Set(entries.map(\.entityID)),
+            [graph.session.id, graph.loggedExercise.id, graph.set.id]
+        )
+        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == owner })
+    }
+
+    func testBootstrappedPrepareLeavesOwnerlessWorkoutThatPredatedDeclinedAdoption() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true,
+            ownerlessWorkoutAdoptionDeclinedAt: Date(timeIntervalSince1970: 2000)
+        ))
+        let graph = try insertOwnerlessCompletedWorkout(
+            idPrefix: "00000000-0000-0000-0000-00009200",
+            createdAt: Date(timeIntervalSince1970: 1000),
+            context: context
+        )
+        try context.save()
+
+        try SyncCoordinator(client: FakeSyncClient()).prepareForSync(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertNil(graph.session.syncOwnerTokenIdentifier)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
+    func testBootstrappedPrepareAdoptsOwnerlessWorkoutLoggedAfterDeclinedAdoption() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true,
+            ownerlessWorkoutAdoptionDeclinedAt: Date(timeIntervalSince1970: 2000)
+        ))
+        let graph = try insertOwnerlessCompletedWorkout(
+            idPrefix: "00000000-0000-0000-0000-00009300",
+            createdAt: Date(timeIntervalSince1970: 3000),
+            context: context
+        )
+        try context.save()
+
+        try SyncCoordinator(client: FakeSyncClient()).prepareForSync(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertEqual(graph.session.syncOwnerTokenIdentifier, owner)
+        XCTAssertEqual(
+            Set(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).map(\.entityID)),
+            [graph.session.id, graph.loggedExercise.id, graph.set.id]
+        )
+    }
+
+    /// A legacy ownerless entry claims the session's owner but never enqueues its children, so
+    /// records added to that session while signed out must still be picked up.
+    func testBootstrappedPrepareEnqueuesRecordsAddedToOwnerlessWorkoutWithLegacyOutboxEntry() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let graph = try insertOwnerlessCompletedWorkout(
+            idPrefix: "00000000-0000-0000-0000-00009400",
+            createdAt: Date(timeIntervalSince1970: 1000),
+            context: context
+        )
+        // Legacy signed-out finish recorded the session only; the set was added later.
+        try SyncOutboxRecorder().recordCreate(
+            entityKind: .workoutSession,
+            entityID: graph.session.id,
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 1100)
+        )
+        try context.save()
+
+        try SyncCoordinator(client: FakeSyncClient()).prepareForSync(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertEqual(graph.session.syncOwnerTokenIdentifier, owner)
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertEqual(
+            Set(entries.map(\.entityID)),
+            [graph.session.id, graph.loggedExercise.id, graph.set.id]
+        )
+        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == owner })
+    }
+
+    func testBootstrappedPrepareLeavesOwnerlessWorkoutWhenAnotherOwnerHasLocalData() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        context.insert(SyncCursorState(ownerTokenIdentifier: "issuer|owner_b"))
+        let graph = try insertOwnerlessCompletedWorkout(
+            idPrefix: "00000000-0000-0000-0000-00009500",
+            createdAt: Date(timeIntervalSince1970: 1000),
+            context: context
+        )
+        try context.save()
+
+        try SyncCoordinator(client: FakeSyncClient()).prepareForSync(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertNil(graph.session.syncOwnerTokenIdentifier)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
+    private struct OwnerlessWorkoutGraph {
+        let session: WorkoutSession
+        let loggedExercise: LoggedExercise
+        let set: LoggedSet
+    }
+
+    private func insertOwnerlessCompletedWorkout(
+        idPrefix: String,
+        createdAt: Date,
+        context: ModelContext
+    ) throws -> OwnerlessWorkoutGraph {
+        let session = WorkoutSession(
+            id: try XCTUnwrap(UUID(uuidString: idPrefix + "0001")),
+            title: "Signed-out Push",
+            startedAt: createdAt,
+            endedAt: createdAt.addingTimeInterval(100),
+            durationSeconds: 100,
+            status: .completed,
+            source: .blank,
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+        let loggedExercise = LoggedExercise(
+            id: try XCTUnwrap(UUID(uuidString: idPrefix + "0002")),
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press",
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+        let set = LoggedSet(
+            id: try XCTUnwrap(UUID(uuidString: idPrefix + "0003")),
+            orderIndex: 0,
+            weight: 185,
+            reps: 5,
+            kind: .working,
+            isCompleted: true,
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+        loggedExercise.session = session
+        set.loggedExercise = loggedExercise
+        loggedExercise.sets.append(set)
+        session.loggedExercises.append(loggedExercise)
+        context.insert(session)
+        context.insert(loggedExercise)
+        context.insert(set)
+        return OwnerlessWorkoutGraph(session: session, loggedExercise: loggedExercise, set: set)
+    }
 }
 
 final class FakeSyncClient: SyncClient, @unchecked Sendable {
