@@ -269,6 +269,41 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.finish()
     }
 
+    func testAuthenticatedStateReplaysPendingSyncWhenInFlightRecoveryFails() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        harness.succeedLogin(as: ownerA)
+
+        harness.coordinator.start()
+        try await waitUntil {
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && harness.syncScheduler.lastSyncedAt != nil
+        }
+        let completedFetchCount = harness.syncClient.fetchRequests.count
+
+        harness.authenticationClient.waitsForLoginResume = true
+        harness.coordinator.appDidEnterForeground()
+        try await waitUntil {
+            harness.authenticationClient.hasPendingLogin
+                && harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
+                && !harness.syncScheduler.isCloudSyncAuthorized
+        }
+        harness.syncScheduler.requestSync()
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil {
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && harness.syncScheduler.isCloudSyncAuthorized
+        }
+
+        harness.authenticationClient.loginResult = .failure(TestAuthenticationError())
+        harness.authenticationClient.resumeLogin()
+        try await waitUntil {
+            harness.syncClient.fetchRequests.count > completedFetchCount
+        }
+
+        XCTAssertEqual(harness.syncScheduler.requestCount, 3)
+        harness.finish()
+    }
+
     func testManualRetryRecoversAfterStartupAuthenticationFails() async throws {
         let harness = try CurrentOwnerCoordinatorHarness()
 

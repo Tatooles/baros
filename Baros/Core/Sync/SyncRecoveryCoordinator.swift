@@ -147,6 +147,7 @@ final class SyncRecoveryCoordinator {
     private var activeRecovery: ActiveRecovery?
     private var inFlightRecoveries: [UUID: RecoveryMetadata] = [:]
     private var authenticatedStateCorrelation: AuthenticatedStateCorrelation
+    private var sessionsAwaitingDeferredSync: Set<String> = []
 
     var willActiveRecoveryRequestSync: Bool {
         guard let activeRecovery else { return false }
@@ -219,6 +220,9 @@ final class SyncRecoveryCoordinator {
             hasRecoveryForSession: hasRecoveryForSession,
             now: now()
         )
+        if shouldDefer, hasRecoveryForSession {
+            sessionsAwaitingDeferredSync.insert(sessionIdentifier)
+        }
         return shouldDefer ? .deferSyncToRecovery : .activate
     }
 
@@ -244,6 +248,13 @@ final class SyncRecoveryCoordinator {
             recoverySessionIdentifier,
             now: now()
         )
+        if let recoverySessionIdentifier {
+            sessionsAwaitingDeferredSync = sessionsAwaitingDeferredSync.filter {
+                $0 == recoverySessionIdentifier
+            }
+        } else {
+            sessionsAwaitingDeferredSync.removeAll()
+        }
         inFlightRecoveries[recoveryID] = RecoveryMetadata(
             sessionIdentifier: recoverySessionIdentifier
         )
@@ -277,6 +288,9 @@ final class SyncRecoveryCoordinator {
                 return
             }
 
+            if let recoverySessionIdentifier {
+                sessionsAwaitingDeferredSync.remove(recoverySessionIdentifier)
+            }
             onRecoveredOwner(ownerTokenIdentifier, trigger)
         }
 
@@ -327,6 +341,11 @@ final class SyncRecoveryCoordinator {
             stillHasRecoveryForSession: stillHasRecoveryForSession,
             now: now()
         )
+        guard !stillHasRecoveryForSession,
+              sessionsAwaitingDeferredSync.remove(sessionIdentifier) != nil else {
+            return
+        }
+        syncScheduler.requestSync()
     }
 
     private func validatedRecoveredOwner(from token: String) async -> String? {
