@@ -1,27 +1,9 @@
 import Foundation
-@preconcurrency import ConvexMobile
 
 @MainActor
 protocol SyncAuthenticationClient: AnyObject {
     func loginFromCache() async -> Result<String, Error>
     func logout() async
-}
-
-@MainActor
-final class ConvexSyncAuthenticationClient: SyncAuthenticationClient {
-    private let client: ConvexClientWithAuth<String>
-
-    init(client: ConvexClientWithAuth<String>) {
-        self.client = client
-    }
-
-    func loginFromCache() async -> Result<String, Error> {
-        await client.loginFromCache()
-    }
-
-    func logout() async {
-        await client.logout()
-    }
 }
 
 private struct AuthenticatedStateCorrelation {
@@ -127,8 +109,15 @@ private struct AuthenticatedStateCorrelation {
 @MainActor
 final class SyncRecoveryCoordinator {
     enum Trigger {
+        case startup
         case appForeground
         case manualRetry
+    }
+
+    enum AuthenticatedStateDecision {
+        case activate
+        case deferSyncToRecovery
+        case reject
     }
 
     private struct ActiveRecovery {
@@ -153,10 +142,12 @@ final class SyncRecoveryCoordinator {
     private let hasActiveSession: @MainActor () -> Bool
     private let currentSessionIdentifier: @MainActor () -> String?
     private let expectedOwnerTokenIdentifier: @MainActor () -> String?
+    private let onRecoveredOwner: @MainActor (String, Trigger) -> Void
     private let now: @MainActor () -> Date
     private var activeRecovery: ActiveRecovery?
     private var inFlightRecoveries: [UUID: RecoveryMetadata] = [:]
     private var authenticatedStateCorrelation: AuthenticatedStateCorrelation
+    private var sessionsAwaitingDeferredSync: Set<String> = []
 
     var willActiveRecoveryRequestSync: Bool {
         guard let activeRecovery else { return false }
@@ -172,6 +163,7 @@ final class SyncRecoveryCoordinator {
         hasActiveSession: @MainActor @escaping () -> Bool,
         currentSessionIdentifier: @MainActor @escaping () -> String? = { nil },
         expectedOwnerTokenIdentifier: @MainActor @escaping () -> String?,
+        onRecoveredOwner: @MainActor @escaping (String, Trigger) -> Void,
         pendingAuthenticatedStateLifetime: TimeInterval = 5,
         now: @MainActor @escaping () -> Date = Date.init
     ) {
@@ -180,6 +172,7 @@ final class SyncRecoveryCoordinator {
         self.hasActiveSession = hasActiveSession
         self.currentSessionIdentifier = currentSessionIdentifier
         self.expectedOwnerTokenIdentifier = expectedOwnerTokenIdentifier
+        self.onRecoveredOwner = onRecoveredOwner
         self.now = now
         self.authenticatedStateCorrelation = AuthenticatedStateCorrelation(
             pendingLifetime: pendingAuthenticatedStateLifetime
@@ -190,22 +183,31 @@ final class SyncRecoveryCoordinator {
         ownerTokenIdentifier: String,
         sessionIdentifier: String?
     ) async -> Bool {
+        await authenticatedStateDecision(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            sessionIdentifier: sessionIdentifier
+        ) == .activate
+    }
+
+    func authenticatedStateDecision(
+        ownerTokenIdentifier: String,
+        sessionIdentifier: String?
+    ) async -> AuthenticatedStateDecision {
         guard hasActiveSession(), !syncScheduler.isDeletionModeEnabled else {
-            return false
+            return .reject
         }
 
         switch validateOwnerTokenIdentifier(ownerTokenIdentifier) {
         case .current:
             break
         case .unavailable:
-            syncScheduler.currentOwnerTokenIdentifier = nil
-            return false
+            return .reject
         case .mismatch:
             await rejectInstalledAuthentication()
-            return false
+            return .reject
         }
 
-        guard let sessionIdentifier else { return false }
+        guard let sessionIdentifier else { return .reject }
         let key = AuthenticatedStateCorrelation.Key(
             ownerTokenIdentifier: ownerTokenIdentifier,
             sessionIdentifier: sessionIdentifier
@@ -213,11 +215,15 @@ final class SyncRecoveryCoordinator {
         let hasRecoveryForSession = inFlightRecoveries.values.contains { metadata in
             metadata.sessionIdentifier == sessionIdentifier
         }
-        return !authenticatedStateCorrelation.shouldDefer(
+        let shouldDefer = authenticatedStateCorrelation.shouldDefer(
             key: key,
             hasRecoveryForSession: hasRecoveryForSession,
             now: now()
         )
+        if shouldDefer, hasRecoveryForSession {
+            sessionsAwaitingDeferredSync.insert(sessionIdentifier)
+        }
+        return shouldDefer ? .deferSyncToRecovery : .activate
     }
 
     func recoverAuthenticationAndRequestSync(for trigger: Trigger) async {
@@ -242,6 +248,13 @@ final class SyncRecoveryCoordinator {
             recoverySessionIdentifier,
             now: now()
         )
+        if let recoverySessionIdentifier {
+            sessionsAwaitingDeferredSync = sessionsAwaitingDeferredSync.filter {
+                $0 == recoverySessionIdentifier
+            }
+        } else {
+            sessionsAwaitingDeferredSync.removeAll()
+        }
         inFlightRecoveries[recoveryID] = RecoveryMetadata(
             sessionIdentifier: recoverySessionIdentifier
         )
@@ -275,14 +288,10 @@ final class SyncRecoveryCoordinator {
                 return
             }
 
-            syncScheduler.currentOwnerTokenIdentifier = ownerTokenIdentifier
-            syncScheduler.seedDefaultsForCurrentOwner()
-            switch trigger {
-            case .appForeground:
-                syncScheduler.requestSyncOnAppForeground()
-            case .manualRetry:
-                syncScheduler.retrySync()
+            if let recoverySessionIdentifier {
+                sessionsAwaitingDeferredSync.remove(recoverySessionIdentifier)
             }
+            onRecoveredOwner(ownerTokenIdentifier, trigger)
         }
 
         activeRecovery = ActiveRecovery(
@@ -332,6 +341,11 @@ final class SyncRecoveryCoordinator {
             stillHasRecoveryForSession: stillHasRecoveryForSession,
             now: now()
         )
+        guard !stillHasRecoveryForSession,
+              sessionsAwaitingDeferredSync.remove(sessionIdentifier) != nil else {
+            return
+        }
+        syncScheduler.requestSync()
     }
 
     private func validatedRecoveredOwner(from token: String) async -> String? {
@@ -353,7 +367,6 @@ final class SyncRecoveryCoordinator {
     }
 
     private func rejectInstalledAuthentication() async {
-        syncScheduler.currentOwnerTokenIdentifier = nil
         await authenticationClient.logout()
     }
 }
