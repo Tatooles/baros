@@ -9,9 +9,19 @@ interface Props {
 const { title, description } = Astro.props;
 const site = Astro.site!;
 const canonicalUrl = new URL(Astro.url.pathname, site);
-const socialImageUrl = new URL("/assets/baros-social-preview.png", site);
+const vercelPreviewHost =
+  import.meta.env.VERCEL_ENV === "preview"
+    ? import.meta.env.VERCEL_URL
+    : undefined;
+const socialImageBaseUrl = vercelPreviewHost
+  ? new URL(`https://${vercelPreviewHost}`)
+  : site;
+const socialImageUrl = new URL(
+  "/assets/baros-social-preview.png",
+  socialImageBaseUrl,
+);
 const socialImageAlt =
-  "Baros for iPhone, coming soon, with the message Log the lift. Keep the history. beside an active workout screen.";
+  "Baros app icon with the message Log the lift. Keep the history. and Coming soon for iPhone.";
 ---
 
 <!doctype html>
