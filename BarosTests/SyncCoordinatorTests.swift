@@ -4224,13 +4224,19 @@ final class SyncCoordinatorTests: XCTestCase {
         )
     }
 
-    /// A legacy ownerless entry claims the session's owner but never enqueues its children, so
-    /// records added to that session while signed out must still be picked up.
-    func testBootstrappedPrepareEnqueuesRecordsAddedToOwnerlessWorkoutWithLegacyOutboxEntry() throws {
+    /// An active legacy intent proves this Unclaimed Local Data was already intended for upload,
+    /// so migration must adopt the complete current Logged Workout rather than decline it.
+    func testLegacyCursorAdoptsCompleteUnclaimedLoggedWorkoutWithActiveIntent() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let owner = "issuer|owner_a"
-        context.insert(bootstrappedCursorState(owner: owner))
+        let state = SyncCursorState(
+            ownerTokenIdentifier: owner,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        )
+        context.insert(state)
         let graph = try insertOwnerlessCompletedWorkout(
             idPrefix: "00000000-0000-0000-0000-00009400",
             createdAt: Date(timeIntervalSince1970: 1000),
@@ -4258,6 +4264,69 @@ final class SyncCoordinatorTests: XCTestCase {
             [graph.session.id, graph.loggedExercise.id, graph.set.id]
         )
         XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == owner })
+        XCTAssertTrue(state.hasEvaluatedOwnerlessWorkoutAdoption)
+        XCTAssertTrue(state.declinedOwnerlessWorkoutIDs.isEmpty)
+    }
+
+    /// Migration must reconcile a stale attempted create with the current tombstoned model so a
+    /// signed-out deletion cannot be uploaded as live data.
+    func testLegacyCursorReconcilesDeletedLoggedSetInAdoptedUnclaimedLoggedWorkout() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        let state = SyncCursorState(
+            ownerTokenIdentifier: owner,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        )
+        context.insert(state)
+        let graph = try insertOwnerlessCompletedWorkout(
+            idPrefix: "00000000-0000-0000-0000-00009410",
+            createdAt: Date(timeIntervalSince1970: 1000),
+            context: context
+        )
+        let recorder = SyncOutboxRecorder()
+        try recorder.recordCreate(
+            entityKind: .workoutSession,
+            entityID: graph.session.id,
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 1100)
+        )
+        try recorder.recordCreate(
+            entityKind: .loggedSet,
+            entityID: graph.set.id,
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 1100)
+        )
+        let staleSetEntry = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+                .first { $0.entityID == graph.set.id }
+        )
+        recorder.markInFlight(staleSetEntry, now: Date(timeIntervalSince1970: 1200))
+        recorder.markFailed(staleSetEntry, message: "Offline", now: Date(timeIntervalSince1970: 1300))
+        graph.set.markDeleted(now: Date(timeIntervalSince1970: 1400))
+        try context.save()
+
+        try SyncCoordinator(client: FakeSyncClient()).prepareForSync(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertEqual(graph.session.syncOwnerTokenIdentifier, owner)
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertEqual(
+            Set(entries.map(\.entityID)),
+            [graph.session.id, graph.loggedExercise.id, graph.set.id]
+        )
+        let deletedSetEntry = try XCTUnwrap(entries.first { $0.entityID == graph.set.id })
+        XCTAssertEqual(deletedSetEntry.operation, .delete)
+        XCTAssertEqual(deletedSetEntry.status, .pending)
+        XCTAssertEqual(deletedSetEntry.ownerTokenIdentifier, owner)
+        XCTAssertTrue(state.hasEvaluatedOwnerlessWorkoutAdoption)
+        XCTAssertTrue(state.declinedOwnerlessWorkoutIDs.isEmpty)
     }
 
     func testBootstrappedPrepareLeavesOwnerlessWorkoutWhenAnotherOwnerHasLocalData() throws {
@@ -4280,6 +4349,48 @@ final class SyncCoordinatorTests: XCTestCase {
 
         XCTAssertNil(graph.session.syncOwnerTokenIdentifier)
         XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
+    /// Legacy intent evidence cannot bypass the mixed-owner safeguard: the graph and its intent
+    /// must remain unclaimed while another account still has local sync state.
+    func testLegacyIntentLeavesUnclaimedWorkoutWhenAnotherOwnerHasLocalData() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|owner_a"
+        let state = SyncCursorState(
+            ownerTokenIdentifier: owner,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        )
+        context.insert(state)
+        context.insert(SyncCursorState(ownerTokenIdentifier: "issuer|owner_b"))
+        let graph = try insertOwnerlessCompletedWorkout(
+            idPrefix: "00000000-0000-0000-0000-00009510",
+            createdAt: Date(timeIntervalSince1970: 1000),
+            context: context
+        )
+        try SyncOutboxRecorder().recordCreate(
+            entityKind: .workoutSession,
+            entityID: graph.session.id,
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 1100)
+        )
+        try context.save()
+
+        try SyncCoordinator(client: FakeSyncClient()).prepareForSync(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertNil(graph.session.syncOwnerTokenIdentifier)
+        let entry = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<SyncOutboxEntry>()).first
+        )
+        XCTAssertNil(entry.ownerTokenIdentifier)
+        XCTAssertTrue(state.hasEvaluatedOwnerlessWorkoutAdoption)
+        XCTAssertTrue(state.declinedOwnerlessWorkoutIDs.isEmpty)
     }
 
     private func bootstrappedCursorState(

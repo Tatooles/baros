@@ -118,18 +118,37 @@ final class SyncCoordinator {
         // recognisable as Unclaimed Local Data: that loop adopts a session's *owner* from a
         // legacy ownerless entry without enqueueing its children, which would otherwise strand
         // records added to the session after that entry was written.
+        let loggedWorkoutIDsWithActiveLegacyIntent =
+            try unclaimedLoggedWorkoutIDsWithActiveLegacyIntent(context: context)
         if hadBootstrappedWorkoutGraph {
             if !state.hasEvaluatedOwnerlessWorkoutAdoption {
                 // Cursor row written before adoption was tracked. A previous version may have
-                // deliberately left these sessions local, and nothing recorded which ones, so
-                // decline every Logged Workout that is currently unclaimed rather than treat an
-                // empty list as consent to upload them all.
-                state.declinedOwnerlessWorkoutIDs = try ownerlessCompletedWorkoutIDs(context: context)
+                // deliberately left some Logged Workouts local, and nothing recorded which ones.
+                // An active legacy intent is durable evidence that its complete current graph was
+                // already intended for upload, so only the remaining Unclaimed Local Data is
+                // declined.
+                state.declinedOwnerlessWorkoutIDs = try unclaimedLoggedWorkoutIDs(context: context)
+                    .filter { !loggedWorkoutIDsWithActiveLegacyIntent.contains($0) }
                 state.hasEvaluatedOwnerlessWorkoutAdoption = true
             }
-            try adoptOwnerlessCompletedWorkoutsForSync(
+            try adoptUnclaimedLoggedWorkoutsForSync(
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 declinedWorkoutIDs: Set(state.declinedOwnerlessWorkoutIDs),
+                loggedWorkoutIDsWithActiveLegacyIntent: loggedWorkoutIDsWithActiveLegacyIntent,
+                context: context,
+                now: .now
+            )
+        } else if !loggedWorkoutIDsWithActiveLegacyIntent.isEmpty {
+            // The first workout-graph bootstrap normally leaves Unclaimed Local Data local when
+            // remote history already exists. Preserve the pre-transaction behavior for graphs
+            // that carry legacy upload intent, but adopt each complete current graph as a unit.
+            let loggedWorkoutIDsWithoutLegacyIntent =
+                Set(try unclaimedLoggedWorkoutIDs(context: context))
+                    .subtracting(loggedWorkoutIDsWithActiveLegacyIntent)
+            try adoptUnclaimedLoggedWorkoutsForSync(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                declinedWorkoutIDs: loggedWorkoutIDsWithoutLegacyIntent,
+                loggedWorkoutIDsWithActiveLegacyIntent: loggedWorkoutIDsWithActiveLegacyIntent,
                 context: context,
                 now: .now
             )
@@ -143,6 +162,13 @@ final class SyncCoordinator {
             }
         )) {
             guard let entityKind = entry.entityKind, entityKind.isV1Synced else {
+                continue
+            }
+
+            // Logged Workout graphs are adopted as a unit above (or by first bootstrap below).
+            // Claiming one legacy child intent here can stamp only the parent owner and strand
+            // newer children that never received their own legacy intent.
+            if entry.ownerTokenIdentifier == nil, isLoggedWorkoutGraphEntity(entityKind) {
                 continue
             }
 
@@ -185,7 +211,7 @@ final class SyncCoordinator {
                     // Bootstrap deliberately left the Unclaimed Local Data that exists now,
                     // because the account already carried remote workout history. Later ownerless
                     // sessions are still eligible for adoption.
-                    state.declinedOwnerlessWorkoutIDs = try ownerlessCompletedWorkoutIDs(context: context)
+                    state.declinedOwnerlessWorkoutIDs = try unclaimedLoggedWorkoutIDs(context: context)
                 }
                 state.hasEvaluatedOwnerlessWorkoutAdoption = true
                 if state.loggedSetsCursor == 0,
@@ -356,20 +382,22 @@ final class SyncCoordinator {
     ///
     /// Sessions named in `declinedWorkoutIDs` stay local: bootstrap already decided not to merge
     /// the data that pre-dated the sign-in into an account that had its own history.
-    private func adoptOwnerlessCompletedWorkoutsForSync(
+    private func adoptUnclaimedLoggedWorkoutsForSync(
         ownerTokenIdentifier: String,
         declinedWorkoutIDs: Set<UUID>,
+        loggedWorkoutIDsWithActiveLegacyIntent: Set<UUID>,
         context: ModelContext,
         now: Date
     ) throws {
-        let ownerlessSessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let unclaimedLoggedWorkouts = try context.fetch(FetchDescriptor<WorkoutSession>())
             .filter { session in
                 session.syncOwnerTokenIdentifier == nil
                     && session.status == .completed
-                    && !session.isDeleted
                     && !declinedWorkoutIDs.contains(session.id)
+                    && (!session.isDeleted
+                        || loggedWorkoutIDsWithActiveLegacyIntent.contains(session.id))
             }
-        guard !ownerlessSessions.isEmpty else { return }
+        guard !unclaimedLoggedWorkouts.isEmpty else { return }
         guard try canBootstrapOwnerlessWorkoutGraph(
             ownerTokenIdentifier: ownerTokenIdentifier,
             context: context
@@ -377,29 +405,32 @@ final class SyncCoordinator {
             return
         }
 
-        for session in ownerlessSessions {
+        for session in unclaimedLoggedWorkouts {
             session.syncOwnerTokenIdentifier = ownerTokenIdentifier
-            try adoptOwnerlessRecordForSync(
+            try reconcileAdoptedRecordForSync(
                 entityKind: .workoutSession,
                 entityID: session.id,
+                isDeleted: session.isDeleted,
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context,
                 now: now
             )
 
-            for loggedExercise in session.sortedLoggedExercises where !loggedExercise.isDeleted {
-                try adoptOwnerlessRecordForSync(
+            for loggedExercise in session.loggedExercises {
+                try reconcileAdoptedRecordForSync(
                     entityKind: .loggedExercise,
                     entityID: loggedExercise.id,
+                    isDeleted: loggedExercise.isDeleted,
                     ownerTokenIdentifier: ownerTokenIdentifier,
                     context: context,
                     now: now
                 )
 
-                for set in loggedExercise.sortedSets where !set.isDeleted {
-                    try adoptOwnerlessRecordForSync(
+                for set in loggedExercise.sets {
+                    try reconcileAdoptedRecordForSync(
                         entityKind: .loggedSet,
                         entityID: set.id,
+                        isDeleted: set.isDeleted,
                         ownerTokenIdentifier: ownerTokenIdentifier,
                         context: context,
                         now: now
@@ -410,40 +441,91 @@ final class SyncCoordinator {
     }
 
     /// Identifiers of every Logged Workout that is currently Unclaimed Local Data.
-    private func ownerlessCompletedWorkoutIDs(context: ModelContext) throws -> [UUID] {
+    private func unclaimedLoggedWorkoutIDs(context: ModelContext) throws -> [UUID] {
         try context.fetch(FetchDescriptor<WorkoutSession>())
             .filter { $0.syncOwnerTokenIdentifier == nil && $0.status == .completed && !$0.isDeleted }
             .map(\.id)
     }
 
-    /// Reuses a legacy ownerless entry for the record when one exists, otherwise enqueues a create.
-    private func adoptOwnerlessRecordForSync(
+    /// Active legacy intents prove that the complete current Logged Workout graph was already
+    /// intended for upload, even when only part of that graph had an intent at the time.
+    private func unclaimedLoggedWorkoutIDsWithActiveLegacyIntent(
+        context: ModelContext
+    ) throws -> Set<UUID> {
+        let completedStatus = SyncOutboxStatus.completed.rawValue
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>(
+            predicate: #Predicate { entry in
+                entry.ownerTokenIdentifier == nil
+                    && entry.statusRaw != completedStatus
+                    && entry.operationRaw != ""
+            }
+        ))
+
+        var workoutIDs = Set<UUID>()
+        for entry in entries where entry.isActive && entry.operation != nil {
+            let session: WorkoutSession?
+            switch entry.entityKind {
+            case .workoutSession:
+                session = try findWorkoutSession(id: entry.entityID, context: context)
+            case .loggedExercise:
+                session = try findLoggedExercise(id: entry.entityID, context: context)?.session
+            case .loggedSet:
+                session = try findLoggedSet(id: entry.entityID, context: context)?.loggedExercise?.session
+            default:
+                session = nil
+            }
+
+            if let session,
+               session.syncOwnerTokenIdentifier == nil,
+               session.status == .completed {
+                workoutIDs.insert(session.id)
+            }
+        }
+        return workoutIDs
+    }
+
+    /// Reuses and reconciles a legacy unclaimed entry when one exists, otherwise records the
+    /// current model state so later signed-out graph edits cannot leave a frozen intent manifest.
+    private func reconcileAdoptedRecordForSync(
         entityKind: SyncEntityKind,
         entityID: UUID,
+        isDeleted: Bool,
         ownerTokenIdentifier: String,
         context: ModelContext,
         now: Date
     ) throws {
-        if try claimOwnerlessOutboxEntryIfNeeded(
+        let didClaimLegacyEntry = try claimOwnerlessOutboxEntryIfNeeded(
             entityKind: entityKind,
             entityID: entityID,
             ownerTokenIdentifier: ownerTokenIdentifier,
             context: context,
             now: now
-        ) {
-            return
-        }
-        guard try !hasActiveOutboxEntry(entityKind: entityKind, entityID: entityID, context: context) else {
+        )
+        if !didClaimLegacyEntry,
+           try hasActiveOutboxEntry(
+               entityKind: entityKind,
+               entityID: entityID,
+               context: context
+           ) {
             return
         }
         try recordBootstrapEntry(
             entityKind: entityKind,
             entityID: entityID,
-            isDeleted: false,
+            isDeleted: isDeleted,
             ownerTokenIdentifier: ownerTokenIdentifier,
             context: context,
             now: now
         )
+    }
+
+    private func isLoggedWorkoutGraphEntity(_ entityKind: SyncEntityKind) -> Bool {
+        switch entityKind {
+        case .workoutSession, .loggedExercise, .loggedSet:
+            true
+        default:
+            false
+        }
     }
 
     private func backfillOwnedCompletedLoggedSetsForSync(
