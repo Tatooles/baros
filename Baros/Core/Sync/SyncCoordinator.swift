@@ -119,9 +119,17 @@ final class SyncCoordinator {
         // legacy ownerless entry without enqueueing its children, which would otherwise strand
         // records added to the session after that entry was written.
         if hadBootstrappedWorkoutGraph {
+            if !state.hasEvaluatedOwnerlessWorkoutAdoption {
+                // Cursor row written before adoption was tracked. A previous version may have
+                // deliberately left these sessions local, and nothing recorded which ones, so
+                // decline every Logged Workout that is currently unclaimed rather than treat an
+                // empty list as consent to upload them all.
+                state.declinedOwnerlessWorkoutIDs = try ownerlessCompletedWorkoutIDs(context: context)
+                state.hasEvaluatedOwnerlessWorkoutAdoption = true
+            }
             try adoptOwnerlessCompletedWorkoutsForSync(
                 ownerTokenIdentifier: ownerTokenIdentifier,
-                createdAfter: state.ownerlessWorkoutAdoptionDeclinedAt,
+                declinedWorkoutIDs: Set(state.declinedOwnerlessWorkoutIDs),
                 context: context,
                 now: .now
             )
@@ -174,10 +182,12 @@ final class SyncCoordinator {
             if didCompleteWorkoutGraphBootstrap {
                 state.hasBootstrappedWorkoutGraph = true
                 if !includeOwnerlessCompletedWorkouts {
-                    // Bootstrap deliberately left the Unclaimed Local Data that existed now.
-                    // Later ownerless sessions are still eligible for adoption.
-                    state.ownerlessWorkoutAdoptionDeclinedAt = .now
+                    // Bootstrap deliberately left the Unclaimed Local Data that exists now,
+                    // because the account already carried remote workout history. Later ownerless
+                    // sessions are still eligible for adoption.
+                    state.declinedOwnerlessWorkoutIDs = try ownerlessCompletedWorkoutIDs(context: context)
                 }
+                state.hasEvaluatedOwnerlessWorkoutAdoption = true
                 if state.loggedSetsCursor == 0,
                    try hasActiveOutboxEntries(entityKind: .loggedSet, ownerTokenIdentifier: ownerTokenIdentifier, context: context) {
                     state.loggedSetsCursor = 1
@@ -344,11 +354,11 @@ final class SyncCoordinator {
     /// finished signed-out *after* that flag was set would otherwise never be enqueued and would
     /// silently never reach the cloud. This pass re-runs on every sync to close that window.
     ///
-    /// Sessions created before `declinedAt` stay local: bootstrap already decided not to merge
+    /// Sessions named in `declinedWorkoutIDs` stay local: bootstrap already decided not to merge
     /// the data that pre-dated the sign-in into an account that had its own history.
     private func adoptOwnerlessCompletedWorkoutsForSync(
         ownerTokenIdentifier: String,
-        createdAfter declinedAt: Date?,
+        declinedWorkoutIDs: Set<UUID>,
         context: ModelContext,
         now: Date
     ) throws {
@@ -357,7 +367,7 @@ final class SyncCoordinator {
                 session.syncOwnerTokenIdentifier == nil
                     && session.status == .completed
                     && !session.isDeleted
-                    && declinedAt.map { session.createdAt > $0 } ?? true
+                    && !declinedWorkoutIDs.contains(session.id)
             }
         guard !ownerlessSessions.isEmpty else { return }
         guard try canBootstrapOwnerlessWorkoutGraph(
@@ -397,6 +407,13 @@ final class SyncCoordinator {
                 }
             }
         }
+    }
+
+    /// Identifiers of every Logged Workout that is currently Unclaimed Local Data.
+    private func ownerlessCompletedWorkoutIDs(context: ModelContext) throws -> [UUID] {
+        try context.fetch(FetchDescriptor<WorkoutSession>())
+            .filter { $0.syncOwnerTokenIdentifier == nil && $0.status == .completed && !$0.isDeleted }
+            .map(\.id)
     }
 
     /// Reuses a legacy ownerless entry for the record when one exists, otherwise enqueues a create.

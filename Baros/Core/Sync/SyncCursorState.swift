@@ -13,14 +13,23 @@ final class SyncCursorState: Identifiable {
     var loggedSetsCursor: Double = 0
     var hasBootstrappedSettingsExercises: Bool = false
     var hasBootstrappedWorkoutGraph: Bool = false
-    /// Instant at which workout-graph bootstrap deliberately left Unclaimed Local Data unclaimed
-    /// for this owner, because the account already carried remote workout history.
+    /// Whether the ownerless-adoption decision has ever been made for this owner.
+    ///
+    /// Distinguishes "evaluated, and nothing was declined" from a cursor row written by a version
+    /// that predates `declinedOwnerlessWorkoutIDs`, where an empty list must not be read as
+    /// consent to adopt everything.
+    var hasEvaluatedOwnerlessWorkoutAdoption: Bool = false
+    /// Logged Workouts this owner deliberately left as Unclaimed Local Data.
     ///
     /// `hasBootstrappedWorkoutGraph` is a one-time flag, so on its own it cannot tell "already
     /// decided not to adopt the workouts that existed then" apart from "never look at Unclaimed
-    /// Local Data again". Recording *when* the decision was made keeps the pre-existing sessions
-    /// local while still letting later ownerless sessions be adopted.
-    var ownerlessWorkoutAdoptionDeclinedAt: Date?
+    /// Local Data again". Naming the declined sessions keeps them local while letting every later
+    /// ownerless session be adopted. Identifiers are recorded rather than a cutoff timestamp
+    /// because no field records when a session became a Logged Workout: `createdAt` is stamped
+    /// when the Active Workout starts, and `endedAt` is rewritten by duration edits.
+    ///
+    /// Bounded in practice: entries are only added at the single moment adoption is declined.
+    var declinedOwnerlessWorkoutIDs: [UUID] = []
 
     init(
         id: UUID = UUID(),
@@ -32,7 +41,8 @@ final class SyncCursorState: Identifiable {
         loggedSetsCursor: Double = 0,
         hasBootstrappedSettingsExercises: Bool = false,
         hasBootstrappedWorkoutGraph: Bool = false,
-        ownerlessWorkoutAdoptionDeclinedAt: Date? = nil
+        hasEvaluatedOwnerlessWorkoutAdoption: Bool = false,
+        declinedOwnerlessWorkoutIDs: [UUID] = []
     ) {
         self.id = id
         self.ownerTokenIdentifier = ownerTokenIdentifier
@@ -43,7 +53,8 @@ final class SyncCursorState: Identifiable {
         self.loggedSetsCursor = loggedSetsCursor
         self.hasBootstrappedSettingsExercises = hasBootstrappedSettingsExercises
         self.hasBootstrappedWorkoutGraph = hasBootstrappedWorkoutGraph
-        self.ownerlessWorkoutAdoptionDeclinedAt = ownerlessWorkoutAdoptionDeclinedAt
+        self.hasEvaluatedOwnerlessWorkoutAdoption = hasEvaluatedOwnerlessWorkoutAdoption
+        self.declinedOwnerlessWorkoutIDs = declinedOwnerlessWorkoutIDs
     }
 
     static func state(for ownerTokenIdentifier: String, context: ModelContext) throws -> SyncCursorState {
