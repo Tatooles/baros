@@ -1,26 +1,26 @@
 import Foundation
 
 enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
-    case chest
-    case lats
-    case upperBack
-    case traps
-    case lowerBack
-    case shoulders
-    case biceps
-    case triceps
-    case forearms
-    case quads
-    case hamstrings
-    case glutes
     case abductors
     case adductors
+    case biceps
     case calves
-    case core
-    case neck
-    case fullBody
     case cardio
+    case chest
+    case core
+    case forearms
+    case fullBody
+    case glutes
+    case hamstrings
+    case lats
+    case lowerBack
+    case neck
     case other
+    case quads
+    case shoulders
+    case traps
+    case triceps
+    case upperBack
 
     var id: String { rawValue }
 
