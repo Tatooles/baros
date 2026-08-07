@@ -467,7 +467,6 @@ struct CompletedWorkoutEditView: View {
             errorMessage = nil
             dismiss()
         } catch {
-            modelContext.rollback()
             errorMessage = error.localizedDescription
         }
     }

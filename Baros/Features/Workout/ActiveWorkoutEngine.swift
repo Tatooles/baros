@@ -22,6 +22,28 @@ final class ActiveWorkoutEngine {
     var isStartingWorkout = false
     var lastErrorMessage: String?
 
+    @ObservationIgnored private let save: (ModelContext) throws -> Void
+
+    init(save: @escaping (ModelContext) throws -> Void = { try $0.save() }) {
+        self.save = save
+    }
+
+    /// Every Active Workout save rolls back on failure. Callers in the workout
+    /// form suppress these errors with `try?` and keep the user's keystrokes in
+    /// a view-local draft, so a failed save must not leave the models dirty:
+    /// `SyncOutboxTransaction`'s preflight would otherwise treat the workout's
+    /// own pending edits as unrelated state and discard them when it is
+    /// finished, reporting `unexpectedUnsavedDomainChanges` instead of the real
+    /// failure.
+    private func persist(_ context: ModelContext) throws {
+        do {
+            try save(context)
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
     func loadActiveSession(ownerTokenIdentifier: String? = nil, context: ModelContext) {
         do {
             activeSessionID = try currentActiveSession(ownerTokenIdentifier: ownerTokenIdentifier, context: context)?.id
@@ -55,7 +77,7 @@ final class ActiveWorkoutEngine {
             syncOwnerTokenIdentifier: ownerTokenIdentifier
         )
         context.insert(session)
-        try context.save()
+        try persist(context)
         activeSessionID = session.id
         return session
     }
@@ -132,7 +154,7 @@ final class ActiveWorkoutEngine {
             session.loggedExercises.append(loggedExercise)
         }
 
-        try context.save()
+        try persist(context)
         activeSessionID = session.id
         return session
     }
@@ -150,7 +172,7 @@ final class ActiveWorkoutEngine {
         loggedExercise.sets.append(firstSet)
         session.loggedExercises.append(loggedExercise)
         session.touch()
-        try context.save()
+        try persist(context)
         return loggedExercise
     }
 
@@ -164,7 +186,7 @@ final class ActiveWorkoutEngine {
             reindexLoggedExercises(for: session, now: now)
             session.touch(now: now)
         }
-        try context.save()
+        try persist(context)
     }
 
     func reorderLoggedExercises(
@@ -196,7 +218,7 @@ final class ActiveWorkoutEngine {
 
         guard didChangeOrder else { return }
         session.touch(now: now)
-        try context.save()
+        try persist(context)
     }
 
     @discardableResult
@@ -212,7 +234,7 @@ final class ActiveWorkoutEngine {
         context.insert(set)
         loggedExercise.sets.append(set)
         loggedExercise.touch()
-        try context.save()
+        try persist(context)
         return set
     }
 
@@ -223,7 +245,7 @@ final class ActiveWorkoutEngine {
             reindexSets(for: loggedExercise, now: now)
             loggedExercise.touch(now: now)
         }
-        try context.save()
+        try persist(context)
     }
 
     func updateSet(_ set: LoggedSet, weight: Double?, reps: Int?, rpe: Double?, context: ModelContext) throws {
@@ -231,7 +253,7 @@ final class ActiveWorkoutEngine {
         set.reps = WorkoutNumericInputPolicy.validatedReps(reps)
         set.rpe = WorkoutNumericInputPolicy.validatedRPE(rpe)
         set.touch()
-        try context.save()
+        try persist(context)
     }
 
     func fillSetFromPrevious(_ set: LoggedSet, previous: PreviousSetPerformance, context: ModelContext) throws {
@@ -252,20 +274,20 @@ final class ActiveWorkoutEngine {
         guard didChange else { return }
 
         set.touch()
-        try context.save()
+        try persist(context)
     }
 
     func toggleSetCompletion(_ set: LoggedSet, context: ModelContext, now: Date = .now) throws {
         set.isCompleted.toggle()
         set.completedAt = set.isCompleted ? now : nil
         set.touch(now: now)
-        try context.save()
+        try persist(context)
     }
 
     func finalizeWorkoutTitle(_ session: WorkoutSession, context: ModelContext) throws {
         applyFinalWorkoutTitle(to: session)
         session.touch()
-        try context.save()
+        try persist(context)
     }
 
     /// Applies a draft title in a single commit. Text fields hold keystrokes in
@@ -279,13 +301,13 @@ final class ActiveWorkoutEngine {
     func updateWorkoutNotes(_ notes: String, session: WorkoutSession, context: ModelContext) throws {
         session.notes = notes
         session.touch()
-        try context.save()
+        try persist(context)
     }
 
     func updateExerciseNotes(_ notes: String, loggedExercise: LoggedExercise, context: ModelContext) throws {
         loggedExercise.notes = notes
         loggedExercise.touch()
-        try context.save()
+        try persist(context)
     }
 
     @MainActor
@@ -321,12 +343,7 @@ final class ActiveWorkoutEngine {
             }
         } else {
             applyWorkoutCompletion(to: session, ownerTokenIdentifier: nil, now: now)
-            do {
-                try context.save()
-            } catch {
-                context.rollback()
-                throw error
-            }
+            try persist(context)
         }
         if activeSessionID == session.id {
             activeSessionID = nil
@@ -336,12 +353,7 @@ final class ActiveWorkoutEngine {
     func discardWorkout(_ session: WorkoutSession, context: ModelContext) throws {
         session.status = .discarded
         session.touch()
-        do {
-            try context.save()
-        } catch {
-            context.rollback()
-            throw error
-        }
+        try persist(context)
         if activeSessionID == session.id {
             activeSessionID = nil
         }
@@ -358,7 +370,7 @@ final class ActiveWorkoutEngine {
             for staleSession in activeSessions.dropFirst() {
                 staleSession.status = .discarded
             }
-            try context.save()
+            try persist(context)
         }
 
         return activeSessions.first

@@ -165,7 +165,6 @@ struct WorkoutHistoryDetailView: View {
             deleteErrorMessage = nil
             dismiss()
         } catch {
-            modelContext.rollback()
             deleteErrorMessage = error.localizedDescription
         }
     }

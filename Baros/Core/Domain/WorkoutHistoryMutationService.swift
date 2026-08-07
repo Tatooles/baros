@@ -130,9 +130,14 @@ struct CompletedWorkoutEditSetDraft: Identifiable {
 @MainActor
 struct WorkoutHistoryMutationService {
     private let syncOutboxTransaction: SyncOutboxTransaction?
+    private let localOnlyMutation: LocalOnlyMutation
 
-    init(syncOutboxTransaction: SyncOutboxTransaction? = nil) {
+    init(
+        syncOutboxTransaction: SyncOutboxTransaction? = nil,
+        save: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
+    ) {
         self.syncOutboxTransaction = syncOutboxTransaction
+        localOnlyMutation = LocalOnlyMutation(save: save)
     }
 
     func saveCompletedWorkoutEdit(
@@ -159,15 +164,19 @@ struct WorkoutHistoryMutationService {
                     now: now
                 )
             }
-        } else if try applyCompletedWorkoutEdit(
-            draft,
-            to: session,
-            ownerTokenIdentifier: nil,
-            actions: nil,
-            context: context,
-            now: now
-        ) {
-            try context.save()
+        } else {
+            // `applyCompletedWorkoutEdit` mutates as it goes and can throw part
+            // way through, so the rollback has to cover it as well as the save.
+            try localOnlyMutation.perform(in: context) {
+                _ = try applyCompletedWorkoutEdit(
+                    draft,
+                    to: session,
+                    ownerTokenIdentifier: nil,
+                    actions: nil,
+                    context: context,
+                    now: now
+                )
+            }
         }
     }
 
@@ -340,8 +349,9 @@ struct WorkoutHistoryMutationService {
         try validateEditable(session, ownerTokenIdentifier: requestedOwner)
 
         if session.syncOwnerTokenIdentifier == nil {
-            session.markDeletedCascade(now: now)
-            try context.save()
+            try localOnlyMutation.perform(in: context) {
+                session.markDeletedCascade(now: now)
+            }
             return
         }
 

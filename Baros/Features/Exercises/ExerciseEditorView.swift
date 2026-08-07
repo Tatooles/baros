@@ -122,7 +122,6 @@ struct ExerciseEditorView: View {
             onSave?(savedExercise)
             dismiss()
         } catch {
-            modelContext.rollback()
             validationMessage = "Couldn't save exercise. \(error.localizedDescription)"
         }
     }

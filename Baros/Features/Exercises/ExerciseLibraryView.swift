@@ -41,7 +41,6 @@ struct ExerciseLibraryView: View {
                             ).removeExercise(exercise, context: modelContext)
                             removalErrorMessage = nil
                         } catch {
-                            modelContext.rollback()
                             removalErrorMessage = error.localizedDescription
                         }
                     } label: {

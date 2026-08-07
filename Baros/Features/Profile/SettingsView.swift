@@ -208,7 +208,6 @@ struct SettingsView: View {
                     )
                     alert = nil
                 } catch {
-                    modelContext.rollback()
                     showSaveFailure(error)
                 }
             }
@@ -227,7 +226,6 @@ struct SettingsView: View {
                     )
                     alert = nil
                 } catch {
-                    modelContext.rollback()
                     showSaveFailure(error)
                 }
             }

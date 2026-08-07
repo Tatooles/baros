@@ -4,9 +4,14 @@ import SwiftData
 @MainActor
 struct ExerciseMutationService {
     private let syncOutboxTransaction: SyncOutboxTransaction?
+    private let localOnlyMutation: LocalOnlyMutation
 
-    init(syncOutboxTransaction: SyncOutboxTransaction? = nil) {
+    init(
+        syncOutboxTransaction: SyncOutboxTransaction? = nil,
+        save: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
+    ) {
         self.syncOutboxTransaction = syncOutboxTransaction
+        localOnlyMutation = LocalOnlyMutation(save: save)
     }
 
     @discardableResult
@@ -41,8 +46,7 @@ struct ExerciseMutationService {
                 }
             }
         } else {
-            context.insert(exercise)
-            try context.save()
+            try localOnlyMutation.perform(in: context) { context.insert(exercise) }
         }
         return exercise
     }
@@ -82,8 +86,7 @@ struct ExerciseMutationService {
             guard exercise.syncOwnerTokenIdentifier == nil else {
                 throw SyncMutationOwnershipError.ownerMismatch
             }
-            mutation()
-            try context.save()
+            try localOnlyMutation.perform(in: context) { mutation() }
             return
         }
 
@@ -113,8 +116,9 @@ struct ExerciseMutationService {
             guard exercise.syncOwnerTokenIdentifier == nil else {
                 throw SyncMutationOwnershipError.ownerMismatch
             }
-            _ = try exercise.archiveOrDelete(context: context, now: now)
-            try context.save()
+            try localOnlyMutation.perform(in: context) {
+                _ = try exercise.archiveOrDelete(context: context, now: now)
+            }
             return
         }
 

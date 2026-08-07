@@ -71,7 +71,9 @@ struct FinishWorkoutSheet: View {
 
             Button {
                 focusedField = nil
-                commitWorkoutTitle()
+                // Finishing saves the title too; stop here when it failed so the
+                // draft survives for a retry instead of being rolled back.
+                guard commitWorkoutTitle() else { return }
                 do {
                     try engine.finishWorkout(
                         session,
@@ -95,7 +97,7 @@ struct FinishWorkoutSheet: View {
             .accessibilityIdentifier("SaveWorkoutButton")
 
             Button("Keep Going") {
-                commitWorkoutTitle()
+                guard commitWorkoutTitle() else { return }
                 dismiss()
             }
             .font(.callout.weight(.medium))
@@ -171,13 +173,27 @@ struct FinishWorkoutSheet: View {
         (titleDraft ?? session.title).trimmingCharacters(in: .whitespacesAndNewlines) == "Workout"
     }
 
-    private func commitWorkoutTitle() {
+    /// Returns `false` when the title could not be saved. The draft is kept on
+    /// failure so the user's typing is still on screen and still retryable, and
+    /// the real error is surfaced rather than the `unexpectedUnsavedDomainChanges`
+    /// the finish transaction would otherwise report.
+    @discardableResult
+    private func commitWorkoutTitle() -> Bool {
         // The commit-then-clear-focus buttons also retrigger this through the
         // focus onChange; the guard makes the second pass (and untouched
         // dismissals) a no-op instead of a redundant save.
-        guard let titleDraft else { return }
-        try? engine.commitWorkoutTitle(titleDraft, session: session, context: modelContext)
+        guard let titleDraft else { return true }
+        do {
+            try engine.commitWorkoutTitle(titleDraft, session: session, context: modelContext)
+        } catch {
+            actionError = WorkoutActionError(
+                title: "Couldn't Save Workout Name",
+                message: error.localizedDescription
+            )
+            return false
+        }
         self.titleDraft = nil
+        return true
     }
 
     private struct WorkoutActionError: Identifiable {

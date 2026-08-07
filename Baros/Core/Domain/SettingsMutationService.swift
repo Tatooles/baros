@@ -4,9 +4,14 @@ import SwiftData
 @MainActor
 struct SettingsMutationService {
     private let syncOutboxTransaction: SyncOutboxTransaction?
+    private let localOnlyMutation: LocalOnlyMutation
 
-    init(syncOutboxTransaction: SyncOutboxTransaction? = nil) {
+    init(
+        syncOutboxTransaction: SyncOutboxTransaction? = nil,
+        save: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
+    ) {
         self.syncOutboxTransaction = syncOutboxTransaction
+        localOnlyMutation = LocalOnlyMutation(save: save)
     }
 
     func updateWeightUnit(
@@ -60,8 +65,7 @@ struct SettingsMutationService {
             guard settings.syncOwnerTokenIdentifier == nil else {
                 throw SyncMutationOwnershipError.ownerMismatch
             }
-            mutation()
-            try context.save()
+            try localOnlyMutation.perform(in: context) { mutation() }
             return
         }
 
