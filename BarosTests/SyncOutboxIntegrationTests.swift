@@ -4,11 +4,11 @@ import XCTest
 
 @MainActor
 final class SyncOutboxIntegrationTests: XCTestCase {
-    func testUnclaimedExerciseCreationSavesWithoutOutboxIntent() throws {
+    func testUnclaimedExerciseCreationRecordsOwnerlessIntent() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
 
-        let exercise = try ExerciseMutationService().createExercise(
+        let exercise = try ExerciseMutationService(syncOutboxTransaction: unclaimedTransaction(context)).createExercise(
             name: "Bench Press",
             category: .strength,
             equipment: .barbell,
@@ -20,7 +20,12 @@ final class SyncOutboxIntegrationTests: XCTestCase {
 
         XCTAssertNil(exercise.syncOwnerTokenIdentifier)
         XCTAssertEqual(try context.fetch(FetchDescriptor<Exercise>()).map(\.id), [exercise.id])
-        XCTAssertTrue(try fetchEntries(context).isEmpty)
+        let entry = try XCTUnwrap(fetchEntries(context).first)
+        XCTAssertEqual(fetchEntriesIgnoringErrors(context).count, 1)
+        XCTAssertEqual(entry.entityKind, .exercise)
+        XCTAssertEqual(entry.entityID, exercise.id)
+        XCTAssertEqual(entry.operation, .create)
+        XCTAssertNil(entry.ownerTokenIdentifier)
     }
 
     func testExerciseServiceCreatesUpdatesAndDeletesOutboxIntent() throws {
@@ -264,14 +269,14 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(scheduler.requestCount, 1)
     }
 
-    func testUnclaimedRestTimerUpdateSavesWithoutOutboxIntent() throws {
+    func testUnclaimedRestTimerUpdateRecordsOwnerlessIntent() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let settings = UserSettings(defaultRestTimerSeconds: 90)
         context.insert(settings)
         try context.save()
 
-        try SettingsMutationService().updateDefaultRestTimerSeconds(
+        try SettingsMutationService(syncOutboxTransaction: unclaimedTransaction(context)).updateDefaultRestTimerSeconds(
             120,
             settings: settings,
             context: context,
@@ -280,7 +285,10 @@ final class SyncOutboxIntegrationTests: XCTestCase {
 
         XCTAssertEqual(settings.defaultRestTimerSeconds, 120)
         XCTAssertNil(settings.syncOwnerTokenIdentifier)
-        XCTAssertTrue(try fetchEntries(context).isEmpty)
+        let entry = try XCTUnwrap(fetchEntries(context).first)
+        XCTAssertEqual(entry.entityKind, .userSettings)
+        XCTAssertEqual(entry.operation, .update)
+        XCTAssertNil(entry.ownerTokenIdentifier)
     }
 
     func testSettingsMutationUsesCurrentSyncOwnerAndRequestsSync() throws {
@@ -799,7 +807,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertTrue(try fetchEntries(context).isEmpty)
     }
 
-    func testDeletingUnclaimedWorkoutHistorySavesWithoutOutboxIntent() throws {
+    func testDeletingUnclaimedWorkoutHistoryRecordsOwnerlessDeleteIntents() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let exercise = Exercise(
@@ -823,7 +831,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         context.insert(session)
         try context.save()
 
-        try WorkoutHistoryMutationService().deleteWorkoutHistory(
+        try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).deleteWorkoutHistory(
             session,
             context: context,
             now: Date(timeIntervalSince1970: 100)
@@ -832,7 +840,10 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertTrue(session.isDeleted)
         XCTAssertTrue(session.loggedExercises.allSatisfy(\.isDeleted))
         XCTAssertTrue(session.loggedExercises.flatMap(\.sets).allSatisfy(\.isDeleted))
-        XCTAssertTrue(try fetchEntries(context).isEmpty)
+        let entries = try fetchEntries(context)
+        XCTAssertEqual(entries.count, 6)
+        XCTAssertTrue(entries.allSatisfy { $0.operation == .delete })
+        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == nil })
     }
 
     func testDeletingUnclaimedWorkoutHistoryWhileSignedInDoesNotClaimIt() throws {
@@ -865,11 +876,13 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         )
 
         XCTAssertTrue(session.isDeleted)
+        // The point of this test: deleting never claims the workout for the signed-in
+        // owner. Its intents stay ownerless, so sync applies its own bootstrap policy.
         XCTAssertNil(session.syncOwnerTokenIdentifier)
         XCTAssertTrue(session.loggedExercises.allSatisfy(\.isDeleted))
         XCTAssertTrue(session.loggedExercises.flatMap(\.sets).allSatisfy(\.isDeleted))
-        XCTAssertTrue(try fetchEntries(context).isEmpty)
-        XCTAssertEqual(scheduler.requestCount, 0)
+        XCTAssertTrue(try fetchEntries(context).allSatisfy { $0.ownerTokenIdentifier == nil })
+        XCTAssertEqual(scheduler.requestCount, 1)
     }
 
     func testDeletingOwnedWorkoutHistoryRecordsGraphIntentsAndRequestsSyncOnce() throws {
@@ -913,7 +926,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         let session = makeCompletedWorkout(context: context, ownerTokenIdentifier: "issuer|owner_a")
         try context.save()
 
-        XCTAssertThrowsError(try WorkoutHistoryMutationService().deleteWorkoutHistory(
+        XCTAssertThrowsError(try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).deleteWorkoutHistory(
             session,
             ownerTokenIdentifier: nil,
             context: context,
@@ -1142,7 +1155,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         draft.exercises[0].sets[0].reps = 1_001
         draft.exercises[0].sets[0].rpe = 10.1
 
-        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+        try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).saveCompletedWorkoutEdit(
             draft,
             for: session,
             context: context
@@ -1188,7 +1201,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(scheduler.requestCount, 1)
     }
 
-    func testSignedOutEditingOwnerlessCompletedWorkoutAddsAndRemovesSetsWithoutOutbox() throws {
+    func testSignedOutEditingOwnerlessCompletedWorkoutAddsAndRemovesSetsWithOwnerlessIntents() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let session = makeCompletedWorkout(context: context)
@@ -1213,7 +1226,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
             notes: "Added after the fact"
         ))
 
-        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+        try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).saveCompletedWorkoutEdit(
             draft,
             for: session,
             ownerTokenIdentifier: nil,
@@ -1239,7 +1252,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(addedSet.completedAt, Date(timeIntervalSince1970: 2_000))
         XCTAssertEqual(addedSet.notes, "Added after the fact")
         XCTAssertNil(session.syncOwnerTokenIdentifier)
-        XCTAssertTrue(entries.isEmpty)
+        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == nil })
     }
 
     func testSignedOutEditQueuesAddedSetDuringFirstOwnerBootstrap() async throws {
@@ -1261,7 +1274,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
             notes: "Signed-out added set"
         ))
 
-        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+        try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).saveCompletedWorkoutEdit(
             draft,
             for: session,
             ownerTokenIdentifier: nil,
@@ -1270,7 +1283,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         )
 
         let addedSet = try XCTUnwrap(loggedExercise.sortedSets.first { $0.notes == "Signed-out added set" })
-        XCTAssertTrue(try fetchEntries(context).isEmpty)
+        XCTAssertTrue(try fetchEntries(context).allSatisfy { $0.ownerTokenIdentifier == nil })
 
         let client = FakeSyncClient()
         let result = try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
@@ -1309,7 +1322,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         draft.title = "Signed-out edit"
         draft.exercises[0].sets[0].weight = 225
 
-        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+        try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).saveCompletedWorkoutEdit(
             draft,
             for: session,
             ownerTokenIdentifier: nil,
@@ -1320,14 +1333,16 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(session.title, "Signed-out edit")
         XCTAssertEqual(set.weight, 225)
         XCTAssertNil(session.syncOwnerTokenIdentifier)
-        XCTAssertTrue(try fetchEntries(context).isEmpty)
+        XCTAssertTrue(try fetchEntries(context).allSatisfy { $0.ownerTokenIdentifier == nil })
 
         let client = FakeSyncClient()
         let result = try await SyncCoordinator(client: client).run(ownerTokenIdentifier: ownerA, context: context)
 
+        // The ownerless intents must not become a way around the bootstrap policy:
+        // another owner's data is present, so nothing is claimed or uploaded.
         XCTAssertFalse(result.didPush)
         XCTAssertNil(session.syncOwnerTokenIdentifier)
-        XCTAssertTrue(try fetchEntries(context).isEmpty)
+        XCTAssertTrue(try fetchEntries(context).allSatisfy { $0.ownerTokenIdentifier == nil })
         XCTAssertTrue(client.operationLog.isEmpty)
     }
 
@@ -1341,7 +1356,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         var draft = CompletedWorkoutEditDraft(session: session)
         draft.exercises[0].sets.append(CompletedWorkoutEditSetDraft(orderIndex: 2))
 
-        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+        try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).saveCompletedWorkoutEdit(
             draft,
             for: session,
             ownerTokenIdentifier: nil,
@@ -1362,7 +1377,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         let setUpdatedAt = set.updatedAt
         try context.save()
 
-        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+        try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).saveCompletedWorkoutEdit(
             CompletedWorkoutEditDraft(session: session),
             for: session,
             ownerTokenIdentifier: nil,
@@ -1389,7 +1404,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         let sessionUpdatedAt = session.updatedAt
         try context.save()
 
-        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+        try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).saveCompletedWorkoutEdit(
             CompletedWorkoutEditDraft(session: session),
             for: session,
             ownerTokenIdentifier: nil,
@@ -1446,7 +1461,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         var draft = CompletedWorkoutEditDraft(session: session)
         draft.title = "Should not save"
 
-        XCTAssertThrowsError(try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+        XCTAssertThrowsError(try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).saveCompletedWorkoutEdit(
             draft,
             for: session,
             ownerTokenIdentifier: "issuer|owner_b",
@@ -1467,7 +1482,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         var draft = CompletedWorkoutEditDraft(session: session)
         draft.title = "Should not save"
 
-        XCTAssertThrowsError(try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+        XCTAssertThrowsError(try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).saveCompletedWorkoutEdit(
             draft,
             for: session,
             ownerTokenIdentifier: nil,
@@ -1816,5 +1831,14 @@ final class SyncOutboxIntegrationTests: XCTestCase {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         XCTFail("Condition was not met before timeout")
+    }
+
+    private func fetchEntriesIgnoringErrors(_ context: ModelContext) -> [SyncOutboxEntry] {
+        (try? context.fetch(FetchDescriptor<SyncOutboxEntry>())) ?? []
+    }
+
+    /// Signed out, so the services take the Unclaimed Local Data path.
+    private func unclaimedTransaction(_ context: ModelContext) -> SyncOutboxTransaction {
+        SyncOutboxTransaction(modelContext: context, syncScheduler: SyncScheduler())
     }
 }

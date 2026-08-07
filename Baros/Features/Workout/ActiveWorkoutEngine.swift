@@ -322,31 +322,34 @@ final class ActiveWorkoutEngine {
         now: Date = .now
     ) throws {
         let effectiveOwnerTokenIdentifier = session.syncOwnerTokenIdentifier ?? ownerTokenIdentifier
+        guard let syncOutboxTransaction else {
+            throw SyncOutboxTransactionError.currentOwnerMismatch
+        }
+        let recordCompletedGraph = { (actions: SyncOutboxTransaction.Actions) throws in
+            try actions.create(.loggedWorkout(session), now: now) { _ in
+                self.applyWorkoutCompletion(
+                    to: session,
+                    ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
+                    now: now
+                )
+            }
+            // The children already exist locally; completing their parent makes them sync-eligible.
+            for loggedExercise in session.sortedLoggedExercises {
+                try actions.create(.loggedExercise(loggedExercise), now: now) { _ in }
+                for set in loggedExercise.sortedSets {
+                    try actions.create(.loggedSet(set), now: now) { _ in }
+                }
+            }
+        }
         if let effectiveOwnerTokenIdentifier {
-            guard let syncOutboxTransaction else {
-                throw SyncOutboxTransactionError.currentOwnerMismatch
-            }
             try syncOutboxTransaction.perform(
-                ownerTokenIdentifier: effectiveOwnerTokenIdentifier
-            ) { actions in
-                try actions.create(.loggedWorkout(session), now: now) { _ in
-                    applyWorkoutCompletion(
-                        to: session,
-                        ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
-                        now: now
-                    )
-                }
-                // The children already exist locally; completing their parent makes them sync-eligible.
-                for loggedExercise in session.sortedLoggedExercises {
-                    try actions.create(.loggedExercise(loggedExercise), now: now) { _ in }
-                    for set in loggedExercise.sortedSets {
-                        try actions.create(.loggedSet(set), now: now) { _ in }
-                    }
-                }
-            }
+                ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
+                operation: recordCompletedGraph
+            )
         } else {
-            applyWorkoutCompletion(to: session, ownerTokenIdentifier: nil, now: now)
-            try persist(context)
+            // A workout finished while signed out is still a Logged Workout; its
+            // ownerless intents are what carry it to the cloud once claimed.
+            try syncOutboxTransaction.performUnclaimed(operation: recordCompletedGraph)
         }
         if activeSessionID == session.id {
             activeSessionID = nil

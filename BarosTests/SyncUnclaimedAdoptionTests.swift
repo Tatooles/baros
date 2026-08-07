@@ -138,7 +138,63 @@ final class SyncUnclaimedAdoptionTests: XCTestCase {
         )
     }
 
+    /// The reported P1: `mergeSeedExercise` reads an active outbox entry as the
+    /// durable "the user edited this while signed out" signal. Without it an edited
+    /// duplicate is indistinguishable from a fresh re-seed and gets deleted with the
+    /// edit uncopied.
+    func testSignedOutEditToDuplicateSeedSurvivesMergeIntoCanonicalSeed() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(bootstrappedCursorState())
+        let canonical = Exercise(
+            seedIdentifier: "bench-press",
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            isSeeded: true,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let duplicate = Exercise(
+            seedIdentifier: "bench-press",
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            isSeeded: true,
+            createdAt: Date(timeIntervalSince1970: 200),
+            updatedAt: Date(timeIntervalSince1970: 200)
+        )
+        context.insert(canonical)
+        context.insert(duplicate)
+        try context.save()
+
+        // Signed out, the user renames the re-seeded duplicate.
+        let scheduler = SyncScheduler()
+        try ExerciseMutationService(
+            syncOutboxTransaction: SyncOutboxTransaction(modelContext: context, syncScheduler: scheduler)
+        ).updateExercise(
+            duplicate,
+            name: "Bench Press (Wide)",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            notes: "Wider grip",
+            context: context,
+            now: Date(timeIntervalSince1970: 300)
+        )
+
+        try SyncCoordinator(client: FakeSyncClient())
+            .prepareForSync(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+
+        XCTAssertEqual(canonical.name, "Bench Press (Wide)")
+        XCTAssertEqual(canonical.notes, "Wider grip")
+    }
+
     // MARK: - Helpers
+
 
     private func bootstrappedCursorState() -> SyncCursorState {
         SyncCursorState(

@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		01E72F7AEC990720578B6661 /* SurfaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2BF38D6F76C8271E2051F5 /* SurfaceCard.swift */; };
 		024088D9604EDD6CAB43BEA3 /* AccountDeletionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A02924849ADF947CBA1478E /* AccountDeletionCoordinator.swift */; };
-		02D7F9C99D5FB8FFC023B1BA /* LocalOnlyMutation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6E069C755935C8ED1E5ACAF /* LocalOnlyMutation.swift */; };
 		0461D369DDD5B15D75075F58 /* AppNavigationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A422AEA968D8813BD7F386AE /* AppNavigationState.swift */; };
 		04E069D87D269379B9F4C34D /* SyncRecoveryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DA22E7754C61C4BB3D503DB /* SyncRecoveryCoordinator.swift */; };
 		074D7EEC71998629B1ADC44E /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BA26BCEE247C3F186E88695 /* ActivityView.swift */; };
@@ -334,7 +333,6 @@
 		E324D579AB4041EAC8A66D20 /* Baros.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Baros.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E40ADCC7E59A4CF06A873599 /* SettingsMutationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsMutationService.swift; sourceTree = "<group>"; };
 		E5EECD7D24DA02F3A4711161 /* SyncOutboxRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxRecorderTests.swift; sourceTree = "<group>"; };
-		E6E069C755935C8ED1E5ACAF /* LocalOnlyMutation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalOnlyMutation.swift; sourceTree = "<group>"; };
 		E715A7E35C63C9F09F60A1AD /* WorkoutSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSource.swift; sourceTree = "<group>"; };
 		E7B2CD1BEDF521744803F577 /* SeedMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedMetadata.swift; sourceTree = "<group>"; };
 		E81630F8F09293866BF3EEEF /* WorkoutDataExportServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutDataExportServiceTests.swift; sourceTree = "<group>"; };
@@ -422,7 +420,6 @@
 				14DE923CEA0D7445EC34B642 /* ExerciseMuscleGroup.swift */,
 				965FD60BA45993C269FF0A49 /* ExerciseMutationService.swift */,
 				18C499291D7F51CAEC64DFAD /* HealthSyncStatus.swift */,
-				E6E069C755935C8ED1E5ACAF /* LocalOnlyMutation.swift */,
 				2E826EF555D7CD96336AA868 /* MeasurementUnit.swift */,
 				C0C0EA53E504BE5333F9B619 /* SetKind.swift */,
 				E40ADCC7E59A4CF06A873599 /* SettingsMutationService.swift */,
@@ -946,7 +943,6 @@
 				F8E05939EC019F68ACE7C848 /* LaunchExperienceFeatureRow.swift in Sources */,
 				F31BDE54D77FC6710C931FE9 /* LaunchExperienceSheet.swift in Sources */,
 				880AEBC45FAD9B690182BC62 /* LocalDataResetService.swift in Sources */,
-				02D7F9C99D5FB8FFC023B1BA /* LocalOnlyMutation.swift in Sources */,
 				F8C8080E9BEA0951BFB2737E /* LoggedExercise.swift in Sources */,
 				37C4792F81872CE615236C58 /* LoggedSet.swift in Sources */,
 				C235B723BF3549691267510F /* MeasurementUnit.swift in Sources */,

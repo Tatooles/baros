@@ -563,9 +563,17 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        // Committed like the title field does; the transaction preflight now covers the
+        // unclaimed finish path too, so an uncommitted edit is no longer valid setup.
         session.title = ""
+        try context.save()
 
-        try engine.finishWorkout(session, context: context, now: Date(timeIntervalSince1970: 220))
+        try engine.finishWorkout(
+            session,
+            syncOutboxTransaction: unclaimedTransaction(context),
+            context: context,
+            now: Date(timeIntervalSince1970: 220)
+        )
 
         XCTAssertNil(engine.activeSessionID)
         XCTAssertEqual(session.status, .completed)
@@ -573,7 +581,10 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(session.durationSeconds, 120)
         XCTAssertEqual(try activeSessions(in: context).count, 0)
         XCTAssertEqual(try completedSessions(in: context).count, 1)
-        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+        XCTAssertTrue(
+            try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+                .allSatisfy { $0.ownerTokenIdentifier == nil }
+        )
     }
 
     func testFinishingAuthenticatedWorkoutRequestsSync() throws {
@@ -637,7 +648,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(scheduler.requestCount, 0)
     }
 
-    func testFinishingSignedOutWorkoutWithoutExplicitClaimKeepsOutboxEmpty() throws {
+    func testFinishingSignedOutWorkoutRecordsOwnerlessIntentWithoutClaiming() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
@@ -656,9 +667,12 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         )
 
         let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        // Finishing signed out never claims the workout for whoever happens to be
+        // signed in; the intents it records stay ownerless until sync claims them.
         XCTAssertNil(session.syncOwnerTokenIdentifier)
-        XCTAssertTrue(entries.isEmpty)
-        XCTAssertEqual(scheduler.requestCount, 0)
+        XCTAssertFalse(entries.isEmpty)
+        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == nil })
+        XCTAssertEqual(scheduler.requestCount, 1)
     }
 
     func testFinishingSignedOutWorkoutWithCurrentOwnerRecordsOwnedIntent() throws {
@@ -873,5 +887,10 @@ final class ActiveWorkoutEngineTests: XCTestCase {
     private func allLoggedSets(in context: ModelContext) throws -> [LoggedSet] {
         try context.fetch(FetchDescriptor<LoggedSet>())
             .sorted { $0.orderIndex < $1.orderIndex }
+    }
+
+    /// Signed out, so finishing takes the Unclaimed Local Data path.
+    private func unclaimedTransaction(_ context: ModelContext) -> SyncOutboxTransaction {
+        SyncOutboxTransaction(modelContext: context, syncScheduler: SyncScheduler())
     }
 }

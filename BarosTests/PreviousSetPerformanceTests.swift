@@ -1256,7 +1256,7 @@ final class PreviousSetPerformanceTests: XCTestCase {
         var draft = CompletedWorkoutEditDraft(session: completed)
         draft.exercises[0].sets[0].weight = 145
 
-        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+        try WorkoutHistoryMutationService(syncOutboxTransaction: unclaimedTransaction(context)).saveCompletedWorkoutEdit(
             draft,
             for: completed,
             context: context,
@@ -1293,5 +1293,10 @@ final class PreviousSetPerformanceTests: XCTestCase {
             context.insert(set)
         }
         try context.save()
+    }
+
+    /// Signed out, so the services take the Unclaimed Local Data path.
+    private func unclaimedTransaction(_ context: ModelContext) -> SyncOutboxTransaction {
+        SyncOutboxTransaction(modelContext: context, syncScheduler: SyncScheduler())
     }
 }

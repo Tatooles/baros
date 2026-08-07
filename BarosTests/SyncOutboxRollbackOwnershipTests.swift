@@ -129,13 +129,13 @@ final class SyncOutboxRollbackOwnershipTests: XCTestCase {
         )
     }
 
-    func testFailedLocalOnlyMutationPreservesConcurrentInFlightBookkeeping() throws {
+    func testFailedUnclaimedMutationPreservesConcurrentInFlightBookkeeping() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let (session, _, _) = makeLoggedWorkoutGraph(ownerTokenIdentifier: nil)
         context.insert(session)
         let (recorder, entry, attemptedAt) = try makeSuspendedInFlightEntry(in: context)
-        let service = WorkoutHistoryMutationService(save: { _ in throw RollbackOwnershipTestError.saveFailed })
+        let service = WorkoutHistoryMutationService(syncOutboxTransaction: failingTransaction(for: context))
         _ = recorder
 
         XCTAssertThrowsError(try service.deleteWorkoutHistory(session, context: context)) { error in
@@ -305,12 +305,12 @@ final class SyncOutboxRollbackOwnershipTests: XCTestCase {
         XCTAssertEqual(scheduler.requestCount, 0)
     }
 
-    // MARK: - Domain modules roll back their own local-only path
+    // MARK: - The transaction also owns the Unclaimed Local Data path
 
-    func testFailedLocalOnlyExerciseCreateRollsBackInsideTheService() throws {
+    func testFailedUnclaimedExerciseCreateRollsBackInsideTheTransaction() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
-        let service = ExerciseMutationService(save: { _ in throw RollbackOwnershipTestError.saveFailed })
+        let service = ExerciseMutationService(syncOutboxTransaction: failingTransaction(for: context))
 
         XCTAssertThrowsError(
             try service.createExercise(
@@ -326,50 +326,17 @@ final class SyncOutboxRollbackOwnershipTests: XCTestCase {
         }
 
         XCTAssertFalse(context.hasChanges)
-        XCTAssertTrue(try context.fetch(FetchDescriptor<Exercise>()).isEmpty)
+        XCTAssertTrue(try ModelContext(container).fetch(FetchDescriptor<Exercise>()).isEmpty)
+        XCTAssertTrue(fetchOutboxEntriesIgnoringErrors(in: ModelContext(container)).isEmpty)
     }
 
-    func testFailedLocalOnlyExerciseUpdateRollsBackInsideTheService() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let exercise = Exercise(
-            name: "Bench Press",
-            category: .strength,
-            equipment: .barbell,
-            primaryMuscle: "Chest"
-        )
-        context.insert(exercise)
-        try context.save()
-        let service = ExerciseMutationService(save: { _ in throw RollbackOwnershipTestError.saveFailed })
-
-        XCTAssertThrowsError(
-            try service.updateExercise(
-                exercise,
-                name: "Incline Bench Press",
-                category: .strength,
-                equipment: .barbell,
-                primaryMuscle: "Chest",
-                notes: "",
-                context: context
-            )
-        ) { error in
-            XCTAssertEqual(error as? RollbackOwnershipTestError, .saveFailed)
-        }
-
-        XCTAssertFalse(context.hasChanges)
-        XCTAssertEqual(
-            try XCTUnwrap(ModelContext(container).fetch(FetchDescriptor<Exercise>()).first).name,
-            "Bench Press"
-        )
-    }
-
-    func testFailedLocalOnlySettingsUpdateRollsBackInsideTheService() throws {
+    func testFailedUnclaimedSettingsUpdateRollsBackInsideTheTransaction() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let settings = UserSettings(defaultRestTimerSeconds: 90)
         context.insert(settings)
         try context.save()
-        let service = SettingsMutationService(save: { _ in throw RollbackOwnershipTestError.saveFailed })
+        let service = SettingsMutationService(syncOutboxTransaction: failingTransaction(for: context))
 
         XCTAssertThrowsError(
             try service.updateDefaultRestTimerSeconds(120, settings: settings, context: context)
@@ -385,13 +352,13 @@ final class SyncOutboxRollbackOwnershipTests: XCTestCase {
         )
     }
 
-    func testFailedUnclaimedWorkoutHistoryDeleteRollsBackInsideTheService() throws {
+    func testFailedUnclaimedWorkoutHistoryDeleteRollsBackInsideTheTransaction() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let (session, _, _) = makeLoggedWorkoutGraph(ownerTokenIdentifier: nil)
         context.insert(session)
         try context.save()
-        let service = WorkoutHistoryMutationService(save: { _ in throw RollbackOwnershipTestError.saveFailed })
+        let service = WorkoutHistoryMutationService(syncOutboxTransaction: failingTransaction(for: context))
 
         XCTAssertThrowsError(try service.deleteWorkoutHistory(session, context: context)) { error in
             XCTAssertEqual(error as? RollbackOwnershipTestError, .saveFailed)
@@ -401,13 +368,13 @@ final class SyncOutboxRollbackOwnershipTests: XCTestCase {
         XCTAssertNil(try persistedWorkout(in: container).deletedAt)
     }
 
-    func testFailedUnclaimedWorkoutHistoryEditRollsBackInsideTheService() throws {
+    func testFailedUnclaimedWorkoutHistoryEditRollsBackInsideTheTransaction() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let (session, _, _) = makeLoggedWorkoutGraph(ownerTokenIdentifier: nil)
         context.insert(session)
         try context.save()
-        let service = WorkoutHistoryMutationService(save: { _ in throw RollbackOwnershipTestError.saveFailed })
+        let service = WorkoutHistoryMutationService(syncOutboxTransaction: failingTransaction(for: context))
         var draft = CompletedWorkoutEditDraft(session: session)
         draft.title = "Leg Day"
 
@@ -422,6 +389,21 @@ final class SyncOutboxRollbackOwnershipTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// Signed out, so services take the Unclaimed Local Data path, and every save fails.
+    private func failingTransaction(for context: ModelContext) -> SyncOutboxTransaction {
+        let scheduler = SyncScheduler()
+        scheduler.currentOwnerTokenIdentifier = nil
+        return SyncOutboxTransaction(
+            modelContext: context,
+            syncScheduler: scheduler,
+            save: { _ in throw RollbackOwnershipTestError.saveFailed }
+        )
+    }
+
+    private func fetchOutboxEntriesIgnoringErrors(in context: ModelContext) -> [SyncOutboxEntry] {
+        (try? context.fetch(FetchDescriptor<SyncOutboxEntry>())) ?? []
+    }
 
     /// Models a sync suspended at its network `await`: the entry is saved as
     /// pending, then marked in-flight without saving, exactly as

@@ -28,7 +28,7 @@ final class HistoryPersistenceTests: XCTestCase {
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
 
-        try engine.finishWorkout(session, context: context)
+        try engine.finishWorkout(session, syncOutboxTransaction: unclaimedTransaction(context), context: context)
 
         XCTAssertEqual(try completedSessions(in: context).map(\.id), [session.id])
     }
@@ -38,7 +38,7 @@ final class HistoryPersistenceTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        try engine.finishWorkout(session, context: context)
+        try engine.finishWorkout(session, syncOutboxTransaction: unclaimedTransaction(context), context: context)
 
         session.markDeletedCascade(now: Date(timeIntervalSince1970: 200))
         try context.save()
@@ -640,5 +640,10 @@ final class HistoryPersistenceTests: XCTestCase {
 
     private func completedSessions(in context: ModelContext) throws -> [WorkoutSession] {
         try context.fetch(FetchDescriptor<WorkoutSession>()).filter { $0.status == .completed && !$0.isDeleted }
+    }
+
+    /// Signed out, so finishing takes the Unclaimed Local Data path.
+    private func unclaimedTransaction(_ context: ModelContext) -> SyncOutboxTransaction {
+        SyncOutboxTransaction(modelContext: context, syncScheduler: SyncScheduler())
     }
 }

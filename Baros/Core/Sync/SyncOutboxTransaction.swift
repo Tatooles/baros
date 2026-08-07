@@ -28,13 +28,13 @@ final class SyncOutboxTransaction {
         }
 
         private let modelContext: ModelContext
-        private let ownerTokenIdentifier: String
+        private let ownerTokenIdentifier: String?
         private let recorder: SyncOutboxRecorder
         private(set) var count = 0
 
         fileprivate init(
             modelContext: ModelContext,
-            ownerTokenIdentifier: String,
+            ownerTokenIdentifier: String?,
             recorder: SyncOutboxRecorder
         ) {
             self.modelContext = modelContext
@@ -198,7 +198,30 @@ final class SyncOutboxTransaction {
         guard currentOwnerTokenIdentifier == ownerTokenIdentifier else {
             throw SyncOutboxTransactionError.currentOwnerMismatch
         }
+        try run(ownerTokenIdentifier: ownerTokenIdentifier, operation: operation)
+    }
 
+    /// The Unclaimed Local Data counterpart. Same save, rollback, and scheduling
+    /// mechanics; two rules differ.
+    ///
+    /// There is no Current Owner comparison, because unclaimed data stays editable
+    /// no matter who is signed in — deleting local history from another account must
+    /// not be rejected. Every target must still be ownerless, which `Actions`
+    /// enforces by comparing each one against the declared `nil` owner.
+    ///
+    /// The intents it records are ownerless. They are what carries unclaimed data to
+    /// the cloud once an owner claims it, and they double as the durable record that
+    /// the user edited a row locally: sync preparation reads them to claim rows after
+    /// the one-time bootstrap, and seed merging reads them to tell an edited
+    /// duplicate apart from a freshly re-seeded default.
+    func performUnclaimed(operation: (Actions) throws -> Void) throws {
+        try run(ownerTokenIdentifier: nil, operation: operation)
+    }
+
+    private func run(
+        ownerTokenIdentifier: String?,
+        operation: (Actions) throws -> Void
+    ) throws {
         let outboxBookkeeping = OutboxBookkeepingSnapshot.capture(from: modelContext)
         guard !hasUnsavedDomainChanges else {
             modelContext.rollback()

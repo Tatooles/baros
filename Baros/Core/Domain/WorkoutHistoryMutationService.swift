@@ -130,14 +130,9 @@ struct CompletedWorkoutEditSetDraft: Identifiable {
 @MainActor
 struct WorkoutHistoryMutationService {
     private let syncOutboxTransaction: SyncOutboxTransaction?
-    private let localOnlyMutation: LocalOnlyMutation
 
-    init(
-        syncOutboxTransaction: SyncOutboxTransaction? = nil,
-        save: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
-    ) {
+    init(syncOutboxTransaction: SyncOutboxTransaction? = nil) {
         self.syncOutboxTransaction = syncOutboxTransaction
-        localOnlyMutation = LocalOnlyMutation(save: save)
     }
 
     func saveCompletedWorkoutEdit(
@@ -150,10 +145,10 @@ struct WorkoutHistoryMutationService {
         let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
         try validateEditable(session, ownerTokenIdentifier: requestedOwner)
 
+        guard let syncOutboxTransaction else {
+            throw SyncOutboxTransactionError.currentOwnerMismatch
+        }
         if let requestedOwner {
-            guard let syncOutboxTransaction else {
-                throw SyncOutboxTransactionError.currentOwnerMismatch
-            }
             try syncOutboxTransaction.perform(ownerTokenIdentifier: requestedOwner) { actions in
                 _ = try applyCompletedWorkoutEdit(
                     draft,
@@ -165,14 +160,12 @@ struct WorkoutHistoryMutationService {
                 )
             }
         } else {
-            // `applyCompletedWorkoutEdit` mutates as it goes and can throw part
-            // way through, so the rollback has to cover it as well as the save.
-            try localOnlyMutation.perform(in: context) {
+            try syncOutboxTransaction.performUnclaimed { actions in
                 _ = try applyCompletedWorkoutEdit(
                     draft,
                     to: session,
                     ownerTokenIdentifier: nil,
-                    actions: nil,
+                    actions: actions,
                     context: context,
                     now: now
                 )
@@ -348,19 +341,33 @@ struct WorkoutHistoryMutationService {
         let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
         try validateEditable(session, ownerTokenIdentifier: requestedOwner)
 
+        guard let syncOutboxTransaction else {
+            throw SyncOutboxTransactionError.currentOwnerMismatch
+        }
+
+        // Unclaimed history stays local-only even while signed in: it has never
+        // belonged to this account, so deleting it must not claim it first.
         if session.syncOwnerTokenIdentifier == nil {
-            try localOnlyMutation.perform(in: context) {
-                session.markDeletedCascade(now: now)
+            try syncOutboxTransaction.performUnclaimed { actions in
+                try actions.delete(.loggedWorkout(session), now: now) { _ in
+                    session.markDeleted(now: now)
+                }
+                for loggedExercise in session.loggedExercises {
+                    try actions.delete(.loggedExercise(loggedExercise), now: now) { _ in
+                        loggedExercise.markDeleted(now: now)
+                    }
+                    for set in loggedExercise.sets {
+                        try actions.delete(.loggedSet(set), now: now) { _ in
+                            set.markDeleted(now: now)
+                        }
+                    }
+                }
             }
             return
         }
 
         guard let requestedOwner else {
             throw WorkoutHistoryMutationError.ownerMismatch
-        }
-
-        guard let syncOutboxTransaction else {
-            throw SyncOutboxTransactionError.currentOwnerMismatch
         }
         try syncOutboxTransaction.perform(ownerTokenIdentifier: requestedOwner) { actions in
             try claimOwnerlessWorkoutGraphIfNeeded(

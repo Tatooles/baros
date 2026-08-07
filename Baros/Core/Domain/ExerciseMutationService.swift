@@ -4,14 +4,9 @@ import SwiftData
 @MainActor
 struct ExerciseMutationService {
     private let syncOutboxTransaction: SyncOutboxTransaction?
-    private let localOnlyMutation: LocalOnlyMutation
 
-    init(
-        syncOutboxTransaction: SyncOutboxTransaction? = nil,
-        save: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
-    ) {
+    init(syncOutboxTransaction: SyncOutboxTransaction? = nil) {
         self.syncOutboxTransaction = syncOutboxTransaction
-        localOnlyMutation = LocalOnlyMutation(save: save)
     }
 
     @discardableResult
@@ -36,17 +31,21 @@ struct ExerciseMutationService {
             createdAt: now,
             updatedAt: now
         )
+        guard let syncOutboxTransaction else {
+            throw SyncOutboxTransactionError.currentOwnerMismatch
+        }
         if let effectiveOwner {
-            guard let syncOutboxTransaction else {
-                throw SyncOutboxTransactionError.currentOwnerMismatch
-            }
             try syncOutboxTransaction.perform(ownerTokenIdentifier: effectiveOwner) { actions in
                 try actions.create(.exerciseLibraryEntry(exercise), now: now) { context in
                     context.insert(exercise)
                 }
             }
         } else {
-            try localOnlyMutation.perform(in: context) { context.insert(exercise) }
+            try syncOutboxTransaction.performUnclaimed { actions in
+                try actions.create(.exerciseLibraryEntry(exercise), now: now) { context in
+                    context.insert(exercise)
+                }
+            }
         }
         return exercise
     }
@@ -82,17 +81,20 @@ struct ExerciseMutationService {
             exercise.touch(now: now)
         }
 
+        guard let syncOutboxTransaction else {
+            throw SyncOutboxTransactionError.currentOwnerMismatch
+        }
+
         guard let requestedOwner else {
             guard exercise.syncOwnerTokenIdentifier == nil else {
                 throw SyncMutationOwnershipError.ownerMismatch
             }
-            try localOnlyMutation.perform(in: context) { mutation() }
+            try syncOutboxTransaction.performUnclaimed { actions in
+                try actions.update(.exerciseLibraryEntry(exercise), now: now) { _ in mutation() }
+            }
             return
         }
 
-        guard let syncOutboxTransaction else {
-            throw SyncOutboxTransactionError.currentOwnerMismatch
-        }
         try syncOutboxTransaction.perform(ownerTokenIdentifier: requestedOwner) { actions in
             try actions.update(.exerciseLibraryEntry(exercise), now: now) { _ in
                 let effectiveOwner = try mutationOwner(
@@ -112,20 +114,30 @@ struct ExerciseMutationService {
         now: Date = .now
     ) throws {
         let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
+        guard let syncOutboxTransaction else {
+            throw SyncOutboxTransactionError.currentOwnerMismatch
+        }
+
+        let outcome = try exercise.removalOutcome(context: context)
         guard let requestedOwner else {
             guard exercise.syncOwnerTokenIdentifier == nil else {
                 throw SyncMutationOwnershipError.ownerMismatch
             }
-            try localOnlyMutation.perform(in: context) {
-                _ = try exercise.archiveOrDelete(context: context, now: now)
+            try syncOutboxTransaction.performUnclaimed { actions in
+                switch outcome {
+                case .archived:
+                    try actions.update(.exerciseLibraryEntry(exercise), now: now) { _ in
+                        exercise.applyRemoval(outcome, now: now)
+                    }
+                case .deleted:
+                    try actions.delete(.exerciseLibraryEntry(exercise), now: now) { _ in
+                        exercise.applyRemoval(outcome, now: now)
+                    }
+                }
             }
             return
         }
 
-        guard let syncOutboxTransaction else {
-            throw SyncOutboxTransactionError.currentOwnerMismatch
-        }
-        let outcome = try exercise.removalOutcome(context: context)
         switch outcome {
         case .archived:
             try syncOutboxTransaction.perform(ownerTokenIdentifier: requestedOwner) { actions in
