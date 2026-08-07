@@ -25,7 +25,10 @@ struct LocalOnlyMutation {
             try mutation()
             try save(context)
         } catch {
-            context.rollback()
+            // Unclaimed Local Data records no outbox intents, so any outbox
+            // bookkeeping in the shared context belongs to a suspended sync and
+            // must survive this rollback.
+            OutboxBookkeepingSnapshot.rollbackPreservingBookkeeping(in: context)
             throw error
         }
     }

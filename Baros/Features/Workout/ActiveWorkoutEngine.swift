@@ -39,7 +39,10 @@ final class ActiveWorkoutEngine {
         do {
             try save(context)
         } catch {
-            context.rollback()
+            // Active Workout saves record no outbox intents, so any outbox
+            // bookkeeping in the shared context belongs to a suspended sync and
+            // must survive this rollback.
+            OutboxBookkeepingSnapshot.rollbackPreservingBookkeeping(in: context)
             throw error
         }
     }

@@ -112,6 +112,7 @@
 		9CD891183EBE88A375C504F1 /* SyncRecoveryAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCDF19AED28F861C331A3BF6 /* SyncRecoveryAction.swift */; };
 		9D1670EE8A2239CD5D0C1A45 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4E2709B6422528E5D6A0209A /* AppIcon.icon */; };
 		9EF657FB976E7FFF0AA58340 /* ExerciseHistoryRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD8443E826AAE07C959563D /* ExerciseHistoryRoute.swift */; };
+		A061542E1E1900A487B38F96 /* OutboxBookkeepingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CDDA2D1EA5F883BFDB8BE81 /* OutboxBookkeepingSnapshot.swift */; };
 		A2A107F75E6D8397EDBD6A3D /* HealthDataLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE4045C16E4B3A1168BD2BC4 /* HealthDataLink.swift */; };
 		A2C578E29B532CC40CCBDBCC /* PastWorkoutPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B1C1F38DF42492AC05C7CF /* PastWorkoutPickerView.swift */; };
 		A3BE1F16C51C2DC505A0628D /* PreviousSetPerformance.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB96C3C4C51E842A3BFC40B5 /* PreviousSetPerformance.swift */; };
@@ -237,6 +238,7 @@
 		4B73A1BFB640E17165FD3E49 /* CompletedWorkoutEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletedWorkoutEditView.swift; sourceTree = "<group>"; };
 		4BD14D5BF4512720D7ED8871 /* SyncOutboxRollbackOwnershipTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxRollbackOwnershipTests.swift; sourceTree = "<group>"; };
 		4C52296097D20E7E3E08D87E /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
+		4CDDA2D1EA5F883BFDB8BE81 /* OutboxBookkeepingSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxBookkeepingSnapshot.swift; sourceTree = "<group>"; };
 		4D63A6EF8824690577A135B9 /* SetRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetRowView.swift; sourceTree = "<group>"; };
 		4DF6237A5991830F0D2A352E /* FirstRunExperienceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstRunExperienceStoreTests.swift; sourceTree = "<group>"; };
 		4E2709B6422528E5D6A0209A /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
@@ -508,6 +510,7 @@
 				441BA0058B43A2A2C1CF0856 /* ConvexClientFactory.swift */,
 				5149C1CB36191BD8869DA3C7 /* ConvexConfiguration.swift */,
 				EC72CE677AAA5F7EF79C6CCA /* ConvexSyncClient.swift */,
+				4CDDA2D1EA5F883BFDB8BE81 /* OutboxBookkeepingSnapshot.swift */,
 				F26DF7DF3CD7B69F84EDEDC4 /* OwnerlessWorkoutGraphBootstrapPolicy.swift */,
 				22EC68472E7A9434F132B1D9 /* SyncClient.swift */,
 				2E5509A252C06083154E90D7 /* SyncConflictResolver.swift */,
@@ -949,6 +952,7 @@
 				C235B723BF3549691267510F /* MeasurementUnit.swift in Sources */,
 				EA35DA5903089C90B7AE4BE6 /* ModelContainerFactory.swift in Sources */,
 				9648E59EF3C2727A04EAC646 /* OnboardingFlow.swift in Sources */,
+				A061542E1E1900A487B38F96 /* OutboxBookkeepingSnapshot.swift in Sources */,
 				5EE76A66385854FB0DA95FAA /* OwnerlessWorkoutGraphBootstrapPolicy.swift in Sources */,
 				A2C578E29B532CC40CCBDBCC /* PastWorkoutPickerView.swift in Sources */,
 				A3BE1F16C51C2DC505A0628D /* PreviousSetPerformance.swift in Sources */,
