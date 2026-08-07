@@ -114,6 +114,14 @@ final class SyncCoordinator {
             }
         }
 
+        if state.hasBootstrappedSettingsExercises {
+            try adoptUnclaimedSettingsAndExercisesForSync(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: .now
+            )
+        }
+
         // Runs before the outbox-entry claim loop below so an ownerless session is still
         // recognisable as Unclaimed Local Data: that loop adopts a session's *owner* from a
         // legacy ownerless entry without enqueueing its children, which would otherwise strand
@@ -370,6 +378,72 @@ final class SyncCoordinator {
             }
         }
         return true
+    }
+
+    /// Adopts Unclaimed Local Data that appeared after the one-time settings/exercise bootstrap.
+    ///
+    /// The settings/exercise counterpart to `adoptUnclaimedLoggedWorkoutsForSync`, and needed for
+    /// the same reason: ADR 0002 leaves Unclaimed Local Data outbox-free, so a custom Exercise
+    /// Library Entry created while signed out carries no intent, and `hasBootstrappedSettingsExercises`
+    /// is a one-time per-owner flag. Without this pass such an entry has no route to the cloud at
+    /// all — it stays unclaimed, disappears from the owner's library on sign-in, and never uploads.
+    ///
+    /// Seeded rows are excluded. Signed-out mode re-seeds the default library as ownerless rows, so
+    /// adopting those would duplicate the owner's own seeds; `mergeOwnerlessDuplicateSeedExercises`
+    /// owns that case instead. Tombstoned rows are excluded because the cloud never saw them, so
+    /// there is nothing to delete there.
+    ///
+    /// The settings singleton is adopted only when the owner has no row of their own. Owned and
+    /// ownerless settings coexist as separate rows (`UserSettings.isVisible(to:)` is exact-match),
+    /// so adopting unconditionally would either leave the owner with two owned rows or overwrite
+    /// the account's preferences with whatever local mode had set.
+    private func adoptUnclaimedSettingsAndExercisesForSync(
+        ownerTokenIdentifier: String,
+        context: ModelContext,
+        now: Date
+    ) throws {
+        let unclaimedExercises = try context.fetch(FetchDescriptor<Exercise>())
+            .filter { $0.syncOwnerTokenIdentifier == nil && !$0.isSeeded && !$0.isDeleted }
+
+        let allSettings = try context.fetch(FetchDescriptor<UserSettings>())
+        let ownerHasSettings = allSettings.contains { $0.syncOwnerTokenIdentifier == ownerTokenIdentifier }
+        let unclaimedSettings = ownerHasSettings
+            ? []
+            : allSettings.filter { $0.syncOwnerTokenIdentifier == nil && !$0.isDeleted }
+
+        guard !unclaimedExercises.isEmpty || !unclaimedSettings.isEmpty else { return }
+        // Device-exclusivity check: despite its name the policy refuses whenever any other
+        // owner's cursor, settings, exercises, or sessions are present locally.
+        guard try canBootstrapOwnerlessWorkoutGraph(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        ) else {
+            return
+        }
+
+        for exercise in unclaimedExercises {
+            exercise.syncOwnerTokenIdentifier = ownerTokenIdentifier
+            try reconcileAdoptedRecordForSync(
+                entityKind: .exercise,
+                entityID: exercise.id,
+                isDeleted: false,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+        }
+
+        for settings in unclaimedSettings {
+            settings.syncOwnerTokenIdentifier = ownerTokenIdentifier
+            try reconcileAdoptedRecordForSync(
+                entityKind: .userSettings,
+                entityID: settings.id,
+                isDeleted: false,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+        }
     }
 
     /// Adopts Unclaimed Local Data that appeared after the one-time workout-graph bootstrap.
