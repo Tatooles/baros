@@ -126,6 +126,38 @@ struct SyncOutboxRecorder {
         entry.updatedAt = now
     }
 
+    /// Moves durable signed-out work onto the owner that just claimed the same record. The
+    /// owner-scoped action that follows will coalesce into this entry instead of creating a
+    /// duplicate and leaving the ownerless entry with no future claim path.
+    func retargetOwnerlessEntryIfNeeded(
+        entityKind: SyncEntityKind,
+        entityID: UUID,
+        ownerTokenIdentifier: String,
+        context: ModelContext,
+        now: Date
+    ) throws {
+        guard let ownerlessEntry = try activeEntry(
+            entityKind: entityKind,
+            entityID: entityID,
+            ownerTokenIdentifier: nil,
+            context: context
+        ) else {
+            return
+        }
+
+        if try activeEntry(
+            entityKind: entityKind,
+            entityID: entityID,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        ) != nil {
+            context.delete(ownerlessEntry)
+        } else {
+            ownerlessEntry.ownerTokenIdentifier = ownerTokenIdentifier
+            ownerlessEntry.refreshPending(now: now)
+        }
+    }
+
     func removeCompleted(_ entry: SyncOutboxEntry, context: ModelContext) {
         guard entry.status == .inFlight else {
             return

@@ -10,6 +10,21 @@ struct RetryableWorkoutFieldDraft<Value> {
     }
 }
 
+enum ExerciseNotesCollapsePolicy {
+    static func shouldCollapse(
+        commit: () throws -> Void,
+        onFailure: (Error) -> Void
+    ) -> Bool {
+        do {
+            try commit()
+            return true
+        } catch {
+            onFailure(error)
+            return false
+        }
+    }
+}
+
 enum ActiveWorkoutSetCompletionPolicy {
     static func shouldComplete(
         previousFill: PreviousSetPerformance?,

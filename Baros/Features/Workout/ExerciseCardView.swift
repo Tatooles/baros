@@ -15,6 +15,7 @@ struct ExerciseCardView: View {
     let onReorderExercises: () -> Void
     let onEditRPE: (LoggedSet) -> Void
     @State private var showsRemoveConfirmation = false
+    @State private var exerciseNotesDraft = RetryableWorkoutFieldDraft<String>()
 
     init(
         loggedExercise: LoggedExercise,
@@ -47,9 +48,7 @@ struct ExerciseCardView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     Button {
-                        withAnimation(.snappy(duration: 0.3, extraBounce: 0)) {
-                            isCollapsed.toggle()
-                        }
+                        toggleCollapse()
                     } label: {
                         HStack(spacing: 12) {
                             WorkoutExerciseHeaderContent(
@@ -161,6 +160,7 @@ struct ExerciseCardView: View {
                             exerciseID: loggedExercise.id,
                             exerciseIndex: exerciseIndex,
                             focusedField: focusedField,
+                            draft: $exerciseNotesDraft,
                             commit: { draft in
                                 try engine.updateExerciseNotes(
                                     draft,
@@ -212,19 +212,41 @@ struct ExerciseCardView: View {
     private func presentSaveError(_ error: Error) {
         engine.lastErrorMessage = error.localizedDescription
     }
+
+    private func toggleCollapse() {
+        if !isCollapsed {
+            let shouldCollapse = ExerciseNotesCollapsePolicy.shouldCollapse(
+                commit: {
+                    try exerciseNotesDraft.commit { draft in
+                        try engine.updateExerciseNotes(
+                            draft,
+                            loggedExercise: loggedExercise,
+                            context: modelContext
+                        )
+                    }
+                },
+                onFailure: presentSaveError
+            )
+            guard shouldCollapse else { return }
+        }
+
+        withAnimation(.snappy(duration: 0.3, extraBounce: 0)) {
+            isCollapsed.toggle()
+        }
+    }
 }
 
-/// Owns the exercise-notes draft so keystrokes re-render only this leaf, not
-/// the whole card. Commits (one model write + save) when focus leaves the
-/// field or the field disappears (e.g. the card collapses mid-edit).
+/// Edits the card-owned exercise-notes draft and commits one model write + save
+/// when focus leaves the field or the field disappears. The card owns the draft
+/// so collapsing this subtree cannot destroy text after a failed save.
 private struct ExerciseNotesDraftField: View {
     let notes: String
     let exerciseID: UUID
     let exerciseIndex: Int
     var focusedField: FocusState<WorkoutField?>.Binding
+    @Binding var draft: RetryableWorkoutFieldDraft<String>
     let commit: (String) throws -> Void
     let onFailure: (Error) -> Void
-    @State private var draft = RetryableWorkoutFieldDraft<String>()
 
     private var focusTarget: WorkoutField {
         .exerciseNotes(exerciseID)

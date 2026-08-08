@@ -1093,6 +1093,67 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(scheduler.requestCount, 1)
     }
 
+    /// A signed-out finish may already have durable ownerless work. Claiming and
+    /// editing that workout must retarget those entries instead of creating a
+    /// second owner-scoped copy and leaving the originals stranded.
+    func testClaimingEditedOwnerlessWorkoutRetargetsExistingGraphIntents() throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let scheduler = SyncScheduler()
+        let transaction = makeTransaction(context: context, scheduler: scheduler)
+        let session = makeCompletedWorkout(context: context)
+        let loggedExercise = try XCTUnwrap(session.sortedLoggedExercises.first)
+        let setIDs = Set(loggedExercise.sortedSets.map(\.id))
+        let recorder = SyncOutboxRecorder()
+        try recorder.recordCreate(
+            entityKind: .workoutSession,
+            entityID: session.id,
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+        try recorder.recordCreate(
+            entityKind: .loggedExercise,
+            entityID: loggedExercise.id,
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+        for set in loggedExercise.sortedSets {
+            try recorder.recordCreate(
+                entityKind: .loggedSet,
+                entityID: set.id,
+                ownerTokenIdentifier: nil,
+                context: context,
+                now: Date(timeIntervalSince1970: 1_000)
+            )
+        }
+        try context.save()
+
+        scheduler.currentOwnerTokenIdentifier = owner
+        var draft = CompletedWorkoutEditDraft(session: session)
+        draft.title = "Claimed edit"
+        try WorkoutHistoryMutationService(
+            syncOutboxTransaction: transaction
+        ).saveCompletedWorkoutEdit(
+            draft,
+            for: session,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 2_000)
+        )
+
+        let entries = try fetchEntries(context)
+        XCTAssertEqual(session.syncOwnerTokenIdentifier, owner)
+        XCTAssertEqual(entries.count, 2 + setIDs.count)
+        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == owner })
+        XCTAssertEqual(
+            Set(entries.map(\.entityID)),
+            Set([session.id, loggedExercise.id]).union(setIDs)
+        )
+    }
+
     func testEditingOwnerlessCompletedWorkoutSetBootstrapsGraphForSignedInSync() throws {
         let owner = "issuer|owner_a"
         let container = try SwiftDataTestSupport.makeInMemoryContainer()

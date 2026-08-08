@@ -77,6 +77,15 @@ final class SyncOutboxTransaction {
             try validateOwner(of: target)
             let entityKind = entityKind(of: target)
             let entityID = entityID(of: target)
+            if let ownerTokenIdentifier {
+                try recorder.retargetOwnerlessEntryIfNeeded(
+                    entityKind: entityKind,
+                    entityID: entityID,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: modelContext,
+                    now: now
+                )
+            }
             switch operation {
             case .create:
                 try recorder.recordCreate(

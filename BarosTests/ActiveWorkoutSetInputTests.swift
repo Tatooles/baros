@@ -19,6 +19,34 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
         XCTAssertNil(draft.value)
     }
 
+    func testExerciseNotesCollapseStopsAndRetainsDraftWhenSaveFails() {
+        var draft = RetryableWorkoutFieldDraft(value: "Tempo emphasis")
+        var receivedError: RetryableDraftTestError?
+
+        let shouldCollapse = ExerciseNotesCollapsePolicy.shouldCollapse(
+            commit: {
+                try draft.commit { _ in throw RetryableDraftTestError.saveFailed }
+            },
+            onFailure: { receivedError = $0 as? RetryableDraftTestError }
+        )
+
+        XCTAssertFalse(shouldCollapse)
+        XCTAssertEqual(draft.value, "Tempo emphasis")
+        XCTAssertEqual(receivedError, .saveFailed)
+    }
+
+    func testExerciseNotesCollapseContinuesAfterDraftSaves() {
+        var draft = RetryableWorkoutFieldDraft(value: "Tempo emphasis")
+
+        let shouldCollapse = ExerciseNotesCollapsePolicy.shouldCollapse(
+            commit: { try draft.commit { _ in } },
+            onFailure: { _ in XCTFail("Unexpected save failure") }
+        )
+
+        XCTAssertTrue(shouldCollapse)
+        XCTAssertNil(draft.value)
+    }
+
     func testReturnsOnlyMissingPreviousValueBeforeCompletion() {
         let input = ActiveWorkoutSetInput()
         let previous = PreviousSetPerformance(weight: 185, reps: 5)
