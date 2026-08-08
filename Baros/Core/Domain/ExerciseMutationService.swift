@@ -3,9 +3,9 @@ import SwiftData
 
 @MainActor
 struct ExerciseMutationService {
-    private let syncOutboxTransaction: SyncOutboxTransaction?
+    private let syncOutboxTransaction: SyncOutboxTransaction
 
-    init(syncOutboxTransaction: SyncOutboxTransaction? = nil) {
+    init(syncOutboxTransaction: SyncOutboxTransaction) {
         self.syncOutboxTransaction = syncOutboxTransaction
     }
 
@@ -20,7 +20,7 @@ struct ExerciseMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws -> Exercise {
-        let effectiveOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
+        let effectiveOwner = ownerTokenIdentifier ?? syncOutboxTransaction.currentOwnerTokenIdentifier
         let exercise = Exercise(
             name: name,
             category: category,
@@ -31,9 +31,6 @@ struct ExerciseMutationService {
             createdAt: now,
             updatedAt: now
         )
-        guard let syncOutboxTransaction else {
-            throw SyncOutboxTransactionError.currentOwnerMismatch
-        }
         if let effectiveOwner {
             try syncOutboxTransaction.perform(ownerTokenIdentifier: effectiveOwner) { actions in
                 try actions.create(.exerciseLibraryEntry(exercise), now: now) { context in
@@ -69,7 +66,7 @@ struct ExerciseMutationService {
             return
         }
 
-        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
+        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction.currentOwnerTokenIdentifier
         let mutation = {
             exercise.update(
                 name: name,
@@ -79,10 +76,6 @@ struct ExerciseMutationService {
                 notes: notes
             )
             exercise.touch(now: now)
-        }
-
-        guard let syncOutboxTransaction else {
-            throw SyncOutboxTransactionError.currentOwnerMismatch
         }
 
         guard let requestedOwner else {
@@ -113,10 +106,7 @@ struct ExerciseMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws {
-        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
-        guard let syncOutboxTransaction else {
-            throw SyncOutboxTransactionError.currentOwnerMismatch
-        }
+        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction.currentOwnerTokenIdentifier
 
         let outcome = try exercise.removalOutcome(context: context)
         guard let requestedOwner else {

@@ -3,9 +3,9 @@ import SwiftData
 
 @MainActor
 struct SettingsMutationService {
-    private let syncOutboxTransaction: SyncOutboxTransaction?
+    private let syncOutboxTransaction: SyncOutboxTransaction
 
-    init(syncOutboxTransaction: SyncOutboxTransaction? = nil) {
+    init(syncOutboxTransaction: SyncOutboxTransaction) {
         self.syncOutboxTransaction = syncOutboxTransaction
     }
 
@@ -54,11 +54,7 @@ struct SettingsMutationService {
         now: Date,
         mutation: () -> Void
     ) throws {
-        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
-
-        guard let syncOutboxTransaction else {
-            throw SyncOutboxTransactionError.currentOwnerMismatch
-        }
+        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction.currentOwnerTokenIdentifier
 
         guard let requestedOwner else {
             guard settings.syncOwnerTokenIdentifier == nil else {

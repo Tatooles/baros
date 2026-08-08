@@ -129,9 +129,9 @@ struct CompletedWorkoutEditSetDraft: Identifiable {
 
 @MainActor
 struct WorkoutHistoryMutationService {
-    private let syncOutboxTransaction: SyncOutboxTransaction?
+    private let syncOutboxTransaction: SyncOutboxTransaction
 
-    init(syncOutboxTransaction: SyncOutboxTransaction? = nil) {
+    init(syncOutboxTransaction: SyncOutboxTransaction) {
         self.syncOutboxTransaction = syncOutboxTransaction
     }
 
@@ -142,12 +142,9 @@ struct WorkoutHistoryMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws {
-        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
+        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction.currentOwnerTokenIdentifier
         try validateEditable(session, ownerTokenIdentifier: requestedOwner)
 
-        guard let syncOutboxTransaction else {
-            throw SyncOutboxTransactionError.currentOwnerMismatch
-        }
         if let requestedOwner {
             try syncOutboxTransaction.perform(ownerTokenIdentifier: requestedOwner) { actions in
                 _ = try applyCompletedWorkoutEdit(
@@ -338,12 +335,8 @@ struct WorkoutHistoryMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws {
-        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction?.currentOwnerTokenIdentifier
+        let requestedOwner = ownerTokenIdentifier ?? syncOutboxTransaction.currentOwnerTokenIdentifier
         try validateEditable(session, ownerTokenIdentifier: requestedOwner)
-
-        guard let syncOutboxTransaction else {
-            throw SyncOutboxTransactionError.currentOwnerMismatch
-        }
 
         // Unclaimed history stays local-only even while signed in: it has never
         // belonged to this account, so deleting it must not claim it first.
