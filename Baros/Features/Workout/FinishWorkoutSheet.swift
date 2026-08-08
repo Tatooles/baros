@@ -117,6 +117,9 @@ struct FinishWorkoutSheet: View {
         .presentationDetents([.height(500)])
         .presentationCornerRadius(36)
         .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled(
+            FinishWorkoutDismissalPolicy.shouldDisableInteractiveDismissal(titleDraft: titleDraft)
+        )
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -205,4 +208,10 @@ struct FinishWorkoutSheet: View {
 
 private enum FinishWorkoutFocusedField: Hashable {
     case title
+}
+
+enum FinishWorkoutDismissalPolicy {
+    static func shouldDisableInteractiveDismissal(titleDraft: String?) -> Bool {
+        titleDraft != nil
+    }
 }

@@ -41,6 +41,31 @@ struct RPEChipRow: View {
     }
 }
 
+struct RetryableRPESelection {
+    private(set) var hasDraft = false
+    private(set) var value: Double?
+
+    mutating func stage(_ value: Double?) {
+        hasDraft = true
+        self.value = value
+    }
+
+    mutating func commit(_ save: (Double?) throws -> Void) throws {
+        guard hasDraft else { return }
+        try save(value)
+        reset()
+    }
+
+    mutating func reset() {
+        hasDraft = false
+        value = nil
+    }
+
+    func selectedValue(fallback: Double?) -> Double? {
+        hasDraft ? value : fallback
+    }
+}
+
 enum RPEChipSelectionAction {
     static func apply(value: Double?, to set: LoggedSet, engine: ActiveWorkoutEngine, context: ModelContext) throws {
         try engine.updateSet(set, weight: set.weight, reps: set.reps, rpe: value, context: context)

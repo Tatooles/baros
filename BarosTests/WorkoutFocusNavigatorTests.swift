@@ -135,4 +135,9 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
             RPEEditingFocusPolicy.shouldReset(editingSetID: nil, newFocusedField: .setWeight(secondSetID))
         )
     }
+
+    func testFinishSheetDisablesInteractiveDismissalWhileTitleDraftIsUnsaved() {
+        XCTAssertFalse(FinishWorkoutDismissalPolicy.shouldDisableInteractiveDismissal(titleDraft: nil))
+        XCTAssertTrue(FinishWorkoutDismissalPolicy.shouldDisableInteractiveDismissal(titleDraft: "Leg Day"))
+    }
 }

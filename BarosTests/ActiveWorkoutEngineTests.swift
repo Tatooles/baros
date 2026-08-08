@@ -500,6 +500,24 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(set.rpe, 8.5)
     }
 
+    func testRetryableRPESelectionKeepsSelectedValueAfterSaveFailure() {
+        var selection = RetryableRPESelection()
+        selection.stage(8.5)
+
+        XCTAssertThrowsError(
+            try selection.commit { _ in throw RPESelectionTestError.saveFailed }
+        )
+
+        XCTAssertTrue(selection.hasDraft)
+        XCTAssertEqual(selection.value, 8.5)
+
+        var savedValue: Double?
+        XCTAssertNoThrow(try selection.commit { savedValue = $0 })
+        XCTAssertEqual(savedValue, 8.5)
+        XCTAssertFalse(selection.hasDraft)
+        XCTAssertNil(selection.value)
+    }
+
     func testUncheckingCompletedSetClearsCompletedAtAndPreservesValues() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -893,4 +911,8 @@ final class ActiveWorkoutEngineTests: XCTestCase {
     private func unclaimedTransaction(_ context: ModelContext) -> SyncOutboxTransaction {
         SyncOutboxTransaction(modelContext: context, syncScheduler: SyncScheduler())
     }
+}
+
+private enum RPESelectionTestError: Error {
+    case saveFailed
 }

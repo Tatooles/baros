@@ -27,6 +27,7 @@ struct WorkoutSessionView: View {
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
     @State private var rpeEditingSourceField: WorkoutField?
+    @State private var rpeSelection = RetryableRPESelection()
     @FocusState private var focusedField: WorkoutField?
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
@@ -96,6 +97,7 @@ struct WorkoutSessionView: View {
                                 isReorderExercisesPresented = true
                             },
                             onEditRPE: { set in
+                                rpeSelection.reset()
                                 focusedField = .setReps(set.id)
                                 rpeEditingSourceField = .setReps(set.id)
                                 rpeEditingSetID = set.id
@@ -179,6 +181,7 @@ struct WorkoutSessionView: View {
             }
             .onChange(of: focusedField) { _, newField in
                 if RPEEditingFocusPolicy.shouldReset(editingSetID: rpeEditingSetID, newFocusedField: newField) {
+                    rpeSelection.reset()
                     rpeEditingSetID = nil
                     rpeEditingSourceField = nil
                 }
@@ -204,21 +207,26 @@ struct WorkoutSessionView: View {
                 ToolbarItemGroup(placement: .keyboard) {
                     if rpeEditingSetID != nil {
                         RPEChipRow(
-                            selected: editingSet?.rpe,
+                            selected: rpeSelection.selectedValue(fallback: editingSet?.rpe),
                             onSelect: { value in
                                 let nextField = rpeNextFocusedField
                                 if let set = editingSet {
+                                    rpeSelection.stage(value)
                                     do {
-                                        try RPEChipSelectionAction.apply(
-                                            value: value,
-                                            to: set,
-                                            engine: engine,
-                                            context: modelContext
-                                        )
+                                        try rpeSelection.commit { draftValue in
+                                            try RPEChipSelectionAction.apply(
+                                                value: draftValue,
+                                                to: set,
+                                                engine: engine,
+                                                context: modelContext
+                                            )
+                                        }
                                     } catch {
                                         presentSaveError(error)
+                                        return
                                     }
                                 }
+                                rpeSelection.reset()
                                 rpeEditingSetID = nil
                                 rpeEditingSourceField = nil
                                 focusedField = nextField
@@ -250,6 +258,7 @@ struct WorkoutSessionView: View {
 
                         if let focusedSetID {
                             Button("RPE") {
+                                rpeSelection.reset()
                                 rpeEditingSourceField = focusedField
                                 rpeEditingSetID = focusedSetID
                             }
