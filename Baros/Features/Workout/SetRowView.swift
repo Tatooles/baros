@@ -206,12 +206,22 @@ struct SetRowView: View {
         // must land first (the focus-change commit only fires on a later update).
         guard let commit = commitDraftsIfNeeded() else { return }
         clearFocusedFieldForThisSet()
-        if let previousFill = input.previousFillBeforeCompletion(
+        let previousFill = input.previousFillBeforeCompletion(
             isCompleted: set.isCompleted,
             values: commit.values,
             previous: previous
-        ) {
-            fillFromPrevious(previousFill)
+        )
+        let didPersistPreviousFill: Bool
+        if let previousFill {
+            didPersistPreviousFill = fillFromPrevious(previousFill)
+        } else {
+            didPersistPreviousFill = true
+        }
+        guard ActiveWorkoutSetCompletionPolicy.shouldComplete(
+            previousFill: previousFill,
+            didPersistPreviousFill: didPersistPreviousFill
+        ) else {
+            return
         }
         withAnimation(.easeInOut(duration: 0.2)) {
             do {
@@ -222,15 +232,18 @@ struct SetRowView: View {
         }
     }
 
-    private func fillFromPrevious(_ previous: PreviousSetPerformance) {
+    @discardableResult
+    private func fillFromPrevious(_ previous: PreviousSetPerformance) -> Bool {
         // Commit rather than drop drafts: fillSetFromPrevious only fills fields
         // that are still nil, so a typed-but-uncommitted value must win.
-        guard commitDraftsIfNeeded() != nil else { return }
+        guard commitDraftsIfNeeded() != nil else { return false }
         do {
             try engine.fillSetFromPrevious(set, previous: previous, context: modelContext)
             input.clearRejectionsSatisfiedByPreviousFill(inputValues)
+            return true
         } catch {
             presentSaveError(error)
+            return false
         }
     }
 

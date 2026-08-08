@@ -246,6 +246,23 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
             "225"
         )
     }
+
+    func testCompletionStopsWhenRequiredPreviousFillFails() {
+        let previousFill = PreviousSetPerformance(weight: 185, reps: 5)
+
+        XCTAssertFalse(
+            ActiveWorkoutSetCompletionPolicy.shouldComplete(
+                previousFill: previousFill,
+                didPersistPreviousFill: false
+            )
+        )
+        XCTAssertTrue(
+            ActiveWorkoutSetCompletionPolicy.shouldComplete(
+                previousFill: nil,
+                didPersistPreviousFill: false
+            )
+        )
+    }
 }
 
 private enum RetryableDraftTestError: Error, Equatable {

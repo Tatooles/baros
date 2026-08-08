@@ -10,6 +10,15 @@ struct RetryableWorkoutFieldDraft<Value> {
     }
 }
 
+enum ActiveWorkoutSetCompletionPolicy {
+    static func shouldComplete(
+        previousFill: PreviousSetPerformance?,
+        didPersistPreviousFill: Bool
+    ) -> Bool {
+        previousFill == nil || didPersistPreviousFill
+    }
+}
+
 struct ActiveWorkoutSetInput {
     enum Field {
         case weight
