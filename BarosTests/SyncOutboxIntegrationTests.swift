@@ -1346,6 +1346,129 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertTrue(client.operationLog.isEmpty)
     }
 
+    /// A cursor from the old adoption flow has not yet recorded which workouts
+    /// the user declined. Editing one of those workouts after upgrading creates a
+    /// fresh ownerless intent, but that new edit is not evidence of prior consent
+    /// to upload the workout into the account.
+    func testFreshSignedOutEditDoesNotOverrideUnevaluatedLegacyWorkoutDecline() throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let state = SyncCursorState(
+            ownerTokenIdentifier: owner,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        )
+        context.insert(state)
+        let session = makeCompletedWorkout(context: context)
+        try context.save()
+
+        var draft = CompletedWorkoutEditDraft(session: session)
+        draft.title = "Fresh signed-out edit"
+        try WorkoutHistoryMutationService(
+            syncOutboxTransaction: unclaimedTransaction(context)
+        ).saveCompletedWorkoutEdit(
+            draft,
+            for: session,
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 2_000)
+        )
+
+        try SyncCoordinator(client: FakeSyncClient()).prepareForSync(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertNil(session.syncOwnerTokenIdentifier)
+        XCTAssertTrue(state.hasEvaluatedOwnerlessWorkoutAdoption)
+        XCTAssertEqual(state.declinedOwnerlessWorkoutIDs, [session.id])
+        XCTAssertTrue(try fetchEntries(context).allSatisfy { $0.ownerTokenIdentifier == nil })
+    }
+
+    /// Adding a child record is also a fresh edit. The create intent for that
+    /// child must not make an older declined workout look pre-approved for upload.
+    func testFreshSignedOutSetAdditionDoesNotOverrideUnevaluatedLegacyWorkoutDecline() throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let state = SyncCursorState(
+            ownerTokenIdentifier: owner,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        )
+        context.insert(state)
+        let session = makeCompletedWorkout(context: context)
+        try context.save()
+
+        var draft = CompletedWorkoutEditDraft(session: session)
+        draft.exercises[0].sets.append(CompletedWorkoutEditSetDraft(
+            orderIndex: 2,
+            weight: 225,
+            reps: 5,
+            kind: .working,
+            isCompleted: true,
+            notes: "Fresh child"
+        ))
+        try WorkoutHistoryMutationService(
+            syncOutboxTransaction: unclaimedTransaction(context)
+        ).saveCompletedWorkoutEdit(
+            draft,
+            for: session,
+            ownerTokenIdentifier: nil,
+            context: context,
+            now: Date(timeIntervalSince1970: 2_000)
+        )
+
+        try SyncCoordinator(client: FakeSyncClient()).prepareForSync(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertNil(session.syncOwnerTokenIdentifier)
+        XCTAssertTrue(state.hasEvaluatedOwnerlessWorkoutAdoption)
+        XCTAssertEqual(state.declinedOwnerlessWorkoutIDs, [session.id])
+        XCTAssertTrue(try fetchEntries(context).allSatisfy { $0.ownerTokenIdentifier == nil })
+    }
+
+    /// A fresh local deletion must keep the old decline too. The account should
+    /// not claim a workout merely to upload a deletion for data it never owned.
+    func testFreshSignedOutDeleteDoesNotOverrideUnevaluatedLegacyWorkoutDecline() throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let state = SyncCursorState(
+            ownerTokenIdentifier: owner,
+            loggedSetsCursor: 1,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        )
+        context.insert(state)
+        let session = makeCompletedWorkout(context: context)
+        try context.save()
+
+        try WorkoutHistoryMutationService(
+            syncOutboxTransaction: unclaimedTransaction(context)
+        ).deleteWorkoutHistory(
+            session,
+            context: context,
+            now: Date(timeIntervalSince1970: 2_000)
+        )
+
+        try SyncCoordinator(client: FakeSyncClient()).prepareForSync(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertTrue(session.isDeleted)
+        XCTAssertNil(session.syncOwnerTokenIdentifier)
+        XCTAssertTrue(state.hasEvaluatedOwnerlessWorkoutAdoption)
+        XCTAssertEqual(state.declinedOwnerlessWorkoutIDs, [session.id])
+        XCTAssertTrue(try fetchEntries(context).allSatisfy { $0.ownerTokenIdentifier == nil })
+    }
+
     func testEditingCompletedWorkoutIgnoresEmptyNewSetDraft() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

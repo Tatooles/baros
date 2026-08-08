@@ -87,6 +87,46 @@ final class SyncUnclaimedAdoptionTests: XCTestCase {
         XCTAssertTrue(outboxEntries(in: context).isEmpty)
     }
 
+    /// An ownerless intent from a signed-out edit must not turn the same custom
+    /// entry into adoptable data while another account remains on the device.
+    func testBootstrappedPrepareDoesNotClaimEditedCustomExerciseWhenAnotherOwnerHasLocalData() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(bootstrappedCursorState())
+        context.insert(SyncCursorState(ownerTokenIdentifier: "issuer|owner_b"))
+        let exercise = Exercise(
+            name: "Zercher Squat",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Quads",
+            isSeeded: false
+        )
+        context.insert(exercise)
+        try context.save()
+
+        try ExerciseMutationService(
+            syncOutboxTransaction: SyncOutboxTransaction(
+                modelContext: context,
+                syncScheduler: SyncScheduler()
+            )
+        ).updateExercise(
+            exercise,
+            name: "Paused Zercher Squat",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Quads",
+            notes: "Signed-out edit",
+            context: context
+        )
+
+        try SyncCoordinator(client: FakeSyncClient())
+            .prepareForSync(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+
+        XCTAssertNil(exercise.syncOwnerTokenIdentifier)
+        let entry = try XCTUnwrap(outboxEntries(in: context).first)
+        XCTAssertNil(entry.ownerTokenIdentifier)
+    }
+
     /// Diagnostic for the settings singleton: does a signed-out preference edit
     /// made after bootstrap reach the cloud, or is it stranded the same way?
     func testBootstrappedPrepareAdoptsUnclaimedSettings() throws {
@@ -176,6 +216,32 @@ final class SyncUnclaimedAdoptionTests: XCTestCase {
                 .count,
             1
         )
+    }
+
+    /// The mixed-owner safeguard applies to edited settings as well as untouched
+    /// settings; the ownerless intent cannot claim the row for the current account.
+    func testBootstrappedPrepareDoesNotClaimEditedSettingsWhenAnotherOwnerHasLocalData() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(bootstrappedCursorState())
+        context.insert(SyncCursorState(ownerTokenIdentifier: "issuer|owner_b"))
+        let settings = UserSettings(defaultRestTimerSeconds: 180)
+        context.insert(settings)
+        try context.save()
+
+        try SettingsMutationService(
+            syncOutboxTransaction: SyncOutboxTransaction(
+                modelContext: context,
+                syncScheduler: SyncScheduler()
+            )
+        ).updateDefaultRestTimerSeconds(240, settings: settings, context: context)
+
+        try SyncCoordinator(client: FakeSyncClient())
+            .prepareForSync(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+
+        XCTAssertNil(settings.syncOwnerTokenIdentifier)
+        let entry = try XCTUnwrap(outboxEntries(in: context).first)
+        XCTAssertNil(entry.ownerTokenIdentifier)
     }
 
     /// The reported P1: `mergeSeedExercise` reads an active outbox entry as the

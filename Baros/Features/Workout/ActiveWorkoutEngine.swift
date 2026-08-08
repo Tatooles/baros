@@ -317,14 +317,11 @@ final class ActiveWorkoutEngine {
     func finishWorkout(
         _ session: WorkoutSession,
         ownerTokenIdentifier: String? = nil,
-        syncOutboxTransaction: SyncOutboxTransaction? = nil,
+        syncOutboxTransaction: SyncOutboxTransaction,
         context: ModelContext,
         now: Date = .now
     ) throws {
         let effectiveOwnerTokenIdentifier = session.syncOwnerTokenIdentifier ?? ownerTokenIdentifier
-        guard let syncOutboxTransaction else {
-            throw SyncOutboxTransactionError.currentOwnerMismatch
-        }
         let recordCompletedGraph = { (actions: SyncOutboxTransaction.Actions) throws in
             try actions.create(.loggedWorkout(session), now: now) { _ in
                 self.applyWorkoutCompletion(

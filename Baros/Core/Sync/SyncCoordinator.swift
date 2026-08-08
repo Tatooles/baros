@@ -90,6 +90,14 @@ final class SyncCoordinator {
             context: context
         )
 
+        // Ownerless settings and Exercise Library Entries use the same device-exclusivity
+        // safeguard as ownerless workout graphs. An active ownerless intent proves that a row
+        // was edited, but it is not permission to move that row across an account boundary.
+        let canAdoptOwnerlessSettingsExercises = try canBootstrapOwnerlessWorkoutGraph(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        )
+
         let allSettings = try context.fetch(FetchDescriptor<UserSettings>())
         var ownerHasSettings = allSettings.contains {
             $0.syncOwnerTokenIdentifier == ownerTokenIdentifier
@@ -97,6 +105,7 @@ final class SyncCoordinator {
         for settings in allSettings {
             if settings.syncOwnerTokenIdentifier == nil,
                !ownerHasSettings,
+               canAdoptOwnerlessSettingsExercises,
                try canClaimUnownedRecord(
                    entityKind: .userSettings,
                    entityID: settings.id,
@@ -110,6 +119,7 @@ final class SyncCoordinator {
 
         for exercise in try context.fetch(FetchDescriptor<Exercise>()) {
             if exercise.syncOwnerTokenIdentifier == nil,
+               canAdoptOwnerlessSettingsExercises,
                try canClaimUnownedRecord(
                    entityKind: .exercise,
                    entityID: exercise.id,
@@ -141,8 +151,18 @@ final class SyncCoordinator {
                 // An active legacy intent is durable evidence that its complete current graph was
                 // already intended for upload, so only the remaining Unclaimed Local Data is
                 // declined.
-                state.declinedOwnerlessWorkoutIDs = try unclaimedLoggedWorkoutIDs(context: context)
-                    .filter { !loggedWorkoutIDsWithActiveLegacyIntent.contains($0) }
+                let freshIntentWorkoutIDs = Set(state.declinedOwnerlessWorkoutIDs)
+                let visibleUnclaimedWorkoutIDs = Set(
+                    try unclaimedLoggedWorkoutIDs(context: context)
+                )
+                state.declinedOwnerlessWorkoutIDs = try unclaimedLoggedWorkoutIDsIncludingDeleted(
+                    context: context
+                )
+                    .filter {
+                        freshIntentWorkoutIDs.contains($0)
+                            || (visibleUnclaimedWorkoutIDs.contains($0)
+                                && !loggedWorkoutIDsWithActiveLegacyIntent.contains($0))
+                    }
                 state.hasEvaluatedOwnerlessWorkoutAdoption = true
             }
             try adoptUnclaimedLoggedWorkoutsForSync(
@@ -524,6 +544,15 @@ final class SyncCoordinator {
     private func unclaimedLoggedWorkoutIDs(context: ModelContext) throws -> [UUID] {
         try context.fetch(FetchDescriptor<WorkoutSession>())
             .filter { $0.syncOwnerTokenIdentifier == nil && $0.status == .completed && !$0.isDeleted }
+            .map(\.id)
+    }
+
+    /// Includes tombstones only while carrying a fresh post-upgrade decline forward. A legacy
+    /// delete intent remains adoptable so a deletion that was already intended for cloud upload
+    /// can still be reconciled.
+    private func unclaimedLoggedWorkoutIDsIncludingDeleted(context: ModelContext) throws -> [UUID] {
+        try context.fetch(FetchDescriptor<WorkoutSession>())
+            .filter { $0.syncOwnerTokenIdentifier == nil && $0.status == .completed }
             .map(\.id)
     }
 
@@ -1636,13 +1665,25 @@ final class SyncCoordinator {
             }
             let ownerHasSettings = try context.fetch(FetchDescriptor<UserSettings>())
                 .contains { $0.syncOwnerTokenIdentifier == ownerTokenIdentifier }
-            return !ownerHasSettings
+            guard !ownerHasSettings else { return false }
+            return try canBootstrapOwnerlessWorkoutGraph(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
         case .exercise:
             guard let exercise = try findExercise(id: entry.entityID, context: context) else {
                 return false
             }
-            return exercise.syncOwnerTokenIdentifier == nil
-                || exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier
+            if exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+                return true
+            }
+            guard exercise.syncOwnerTokenIdentifier == nil else {
+                return false
+            }
+            return try canBootstrapOwnerlessWorkoutGraph(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
         case .workoutSession:
             guard let session = try findWorkoutSession(id: entry.entityID, context: context) else {
                 return false

@@ -19,7 +19,9 @@ final class SyncCursorState: Identifiable {
     /// that predates `declinedOwnerlessWorkoutIDs`, where an empty list must not be read as
     /// consent to adopt everything.
     var hasEvaluatedOwnerlessWorkoutAdoption: Bool = false
-    /// Logged Workouts this owner deliberately left as Unclaimed Local Data.
+    /// Logged Workouts this owner deliberately left as Unclaimed Local Data, plus workouts whose
+    /// first ownerless intent was created after an older cursor row but before that legacy row's
+    /// adoption decision could be evaluated.
     ///
     /// `hasBootstrappedWorkoutGraph` is a one-time flag, so on its own it cannot tell "already
     /// decided not to adopt the workouts that existed then" apart from "never look at Unclaimed
@@ -28,7 +30,8 @@ final class SyncCursorState: Identifiable {
     /// because no field records when a session became a Logged Workout: `createdAt` is stamped
     /// when the Active Workout starts, and `endedAt` is rewritten by duration edits.
     ///
-    /// Bounded in practice: entries are only added at the single moment adoption is declined.
+    /// Bounded in practice: entries are added only while recording a decline or protecting the
+    /// one-time upgrade window before that decline is evaluated.
     var declinedOwnerlessWorkoutIDs: [UUID] = []
 
     init(

@@ -72,6 +72,7 @@ final class SyncOutboxTransaction {
             now: Date,
             mutation: (ModelContext) throws -> Void
         ) throws {
+            try preserveLegacyWorkoutDeclineIfThisCreatesFreshIntent(target: target)
             try mutation(modelContext)
             try validateOwner(of: target)
             let entityKind = entityKind(of: target)
@@ -103,6 +104,64 @@ final class SyncOutboxTransaction {
                 )
             }
             count += 1
+        }
+
+        /// Older cursor rows did not persist which ownerless workouts the user declined. If the
+        /// user edits one of those workouts before the first post-upgrade sync, the new ownerless
+        /// intent must not be mistaken for old evidence that upload had already been approved.
+        /// Record that workout in the existing declined list before creating its first intent.
+        private func preserveLegacyWorkoutDeclineIfThisCreatesFreshIntent(target: Target) throws {
+            guard ownerTokenIdentifier == nil,
+                  let session = workoutSession(for: target),
+                  session.status == .completed,
+                  !(try hasActiveOwnerlessIntent(in: session)) else {
+                return
+            }
+
+            for state in try modelContext.fetch(FetchDescriptor<SyncCursorState>())
+            where state.hasBootstrappedWorkoutGraph && !state.hasEvaluatedOwnerlessWorkoutAdoption {
+                if !state.declinedOwnerlessWorkoutIDs.contains(session.id) {
+                    state.declinedOwnerlessWorkoutIDs.append(session.id)
+                }
+            }
+        }
+
+        private func workoutSession(for target: Target) -> WorkoutSession? {
+            switch target {
+            case .userSettings, .exerciseLibraryEntry:
+                nil
+            case let .loggedWorkout(workout):
+                workout
+            case let .loggedExercise(loggedExercise):
+                loggedExercise.session
+            case let .loggedSet(loggedSet):
+                loggedSet.loggedExercise?.session
+            }
+        }
+
+        private func hasActiveOwnerlessIntent(in session: WorkoutSession) throws -> Bool {
+            let completedStatus = SyncOutboxStatus.completed.rawValue
+            let entries = try modelContext.fetch(FetchDescriptor<SyncOutboxEntry>(
+                predicate: #Predicate { entry in
+                    entry.ownerTokenIdentifier == nil
+                        && entry.statusRaw != completedStatus
+                        && entry.operationRaw != ""
+                }
+            ))
+            let loggedExerciseIDs = Set(session.loggedExercises.map(\.id))
+            let loggedSetIDs = Set(session.loggedExercises.flatMap { $0.sets.map(\.id) })
+            return entries.contains { entry in
+                switch entry.entityKind {
+                case .workoutSession:
+                    entry.entityID == session.id
+                case .loggedExercise:
+                    loggedExerciseIDs.contains(entry.entityID)
+                case .loggedSet:
+                    loggedSetIDs.contains(entry.entityID)
+                default:
+                    false
+                }
+            }
         }
 
         private func validateOwner(of target: Target) throws {
