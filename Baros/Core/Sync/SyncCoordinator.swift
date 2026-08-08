@@ -90,8 +90,13 @@ final class SyncCoordinator {
             context: context
         )
 
-        for settings in try context.fetch(FetchDescriptor<UserSettings>()) {
+        let allSettings = try context.fetch(FetchDescriptor<UserSettings>())
+        var ownerHasSettings = allSettings.contains {
+            $0.syncOwnerTokenIdentifier == ownerTokenIdentifier
+        }
+        for settings in allSettings {
             if settings.syncOwnerTokenIdentifier == nil,
+               !ownerHasSettings,
                try canClaimUnownedRecord(
                    entityKind: .userSettings,
                    entityID: settings.id,
@@ -99,6 +104,7 @@ final class SyncCoordinator {
                    context: context
                ) {
                 settings.syncOwnerTokenIdentifier = ownerTokenIdentifier
+                ownerHasSettings = true
             }
         }
 
@@ -1622,8 +1628,15 @@ final class SyncCoordinator {
             guard let settings = try findUserSettings(id: entry.entityID, context: context) else {
                 return false
             }
-            return settings.syncOwnerTokenIdentifier == nil
-                || settings.syncOwnerTokenIdentifier == ownerTokenIdentifier
+            if settings.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+                return true
+            }
+            guard settings.syncOwnerTokenIdentifier == nil else {
+                return false
+            }
+            let ownerHasSettings = try context.fetch(FetchDescriptor<UserSettings>())
+                .contains { $0.syncOwnerTokenIdentifier == ownerTokenIdentifier }
+            return !ownerHasSettings
         case .exercise:
             guard let exercise = try findExercise(id: entry.entityID, context: context) else {
                 return false

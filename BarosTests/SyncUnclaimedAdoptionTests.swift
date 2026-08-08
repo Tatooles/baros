@@ -2,11 +2,10 @@ import SwiftData
 import XCTest
 @testable import Baros
 
-/// ADR 0002 makes Unclaimed Local Data outbox-free, so sync preparation is its
-/// only route to the cloud. That works only if preparation can adopt such data
-/// on *every* run, not just an owner's first one. `adoptUnclaimedLoggedWorkoutsForSync`
-/// does that for Logged Workouts; these tests cover the settings and exercise
-/// records, whose claim path still requires an outbox entry that no longer exists.
+/// Untouched Unclaimed Local Data has no outbox intent, so sync preparation is
+/// its only route to the cloud. That works only if preparation can adopt such data
+/// on *every* run, not just an owner's first one. These tests also cover edited
+/// Unclaimed Local Data, whose ownerless intent must respect the same adoption guards.
 @MainActor
 final class SyncUnclaimedAdoptionTests: XCTestCase {
     private let ownerTokenIdentifier = "issuer|owner_a"
@@ -129,6 +128,47 @@ final class SyncUnclaimedAdoptionTests: XCTestCase {
             .prepareForSync(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
 
         XCTAssertNil(localSettings.syncOwnerTokenIdentifier)
+        XCTAssertEqual(ownedSettings.defaultRestTimerSeconds, 90)
+        XCTAssertEqual(
+            try context.fetch(FetchDescriptor<UserSettings>())
+                .filter { $0.syncOwnerTokenIdentifier == ownerTokenIdentifier }
+                .count,
+            1
+        )
+    }
+
+    /// A signed-out edit records an ownerless intent. That intent must not bypass
+    /// the settings-singleton guard when the returning owner already has settings.
+    func testBootstrappedPrepareDoesNotClaimEditedUnclaimedSettingsWhenOwnerAlreadyHasSettings() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(bootstrappedCursorState())
+        let ownedSettings = UserSettings(
+            defaultRestTimerSeconds: 90,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier
+        )
+        let localSettings = UserSettings(defaultRestTimerSeconds: 180)
+        context.insert(ownedSettings)
+        context.insert(localSettings)
+        try context.save()
+
+        let transaction = SyncOutboxTransaction(
+            modelContext: context,
+            syncScheduler: SyncScheduler()
+        )
+        try SettingsMutationService(syncOutboxTransaction: transaction)
+            .updateDefaultRestTimerSeconds(240, settings: localSettings, context: context)
+
+        let localEntry = try XCTUnwrap(
+            outboxEntries(in: context).first { $0.entityID == localSettings.id }
+        )
+        XCTAssertNil(localEntry.ownerTokenIdentifier)
+
+        try SyncCoordinator(client: FakeSyncClient())
+            .prepareForSync(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+
+        XCTAssertNil(localSettings.syncOwnerTokenIdentifier)
+        XCTAssertNil(localEntry.ownerTokenIdentifier)
         XCTAssertEqual(ownedSettings.defaultRestTimerSeconds, 90)
         XCTAssertEqual(
             try context.fetch(FetchDescriptor<UserSettings>())
