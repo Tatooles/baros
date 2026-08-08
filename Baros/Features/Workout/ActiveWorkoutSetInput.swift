@@ -1,5 +1,15 @@
 import Foundation
 
+struct RetryableWorkoutFieldDraft<Value> {
+    var value: Value? = nil
+
+    mutating func commit(_ save: (Value) throws -> Void) throws {
+        guard let value else { return }
+        try save(value)
+        self.value = nil
+    }
+}
+
 struct ActiveWorkoutSetInput {
     enum Field {
         case weight
@@ -71,13 +81,15 @@ struct ActiveWorkoutSetInput {
             reps = WorkoutNumericInputPolicy.validatedReps(current.reps)
         }
 
-        weightInput.endEditing()
-        repsInput.endEditing()
-
         return Commit(
             values: Values(weight: weight, reps: reps),
             shouldPersist: true
         )
+    }
+
+    mutating func acceptCommit() {
+        weightInput.endEditing()
+        repsInput.endEditing()
     }
 
     func previousFillBeforeCompletion(

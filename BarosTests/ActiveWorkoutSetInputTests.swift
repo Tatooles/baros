@@ -2,6 +2,23 @@ import XCTest
 @testable import Baros
 
 final class ActiveWorkoutSetInputTests: XCTestCase {
+    func testRetryableFieldDraftClearsOnlyAfterSuccessfulSave() throws {
+        var draft = RetryableWorkoutFieldDraft(value: "Leg Day")
+
+        XCTAssertThrowsError(
+            try draft.commit { _ in throw RetryableDraftTestError.saveFailed }
+        ) { error in
+            XCTAssertEqual(error as? RetryableDraftTestError, .saveFailed)
+        }
+        XCTAssertEqual(draft.value, "Leg Day")
+
+        var savedValue: String?
+        try draft.commit { savedValue = $0 }
+
+        XCTAssertEqual(savedValue, "Leg Day")
+        XCTAssertNil(draft.value)
+    }
+
     func testReturnsOnlyMissingPreviousValueBeforeCompletion() {
         let input = ActiveWorkoutSetInput()
         let previous = PreviousSetPerformance(weight: 185, reps: 5)
@@ -207,4 +224,30 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
             .init(values: .init(weight: 200, reps: 5), shouldPersist: true)
         )
     }
+
+    func testCommitKeepsDraftVisibleUntilSaveSucceeds() {
+        var input = ActiveWorkoutSetInput()
+        input.update("225", for: .weight, isFocused: true)
+
+        let commit = input.commit(
+            current: .init(weight: nil, reps: 5),
+            weightUnit: .pounds
+        )
+
+        XCTAssertEqual(
+            input.text(for: .weight, values: .init(weight: nil, reps: 5), weightUnit: .pounds),
+            "225"
+        )
+
+        input.acceptCommit()
+
+        XCTAssertEqual(
+            input.text(for: .weight, values: commit.values, weightUnit: .pounds),
+            "225"
+        )
+    }
+}
+
+private enum RetryableDraftTestError: Error, Equatable {
+    case saveFailed
 }

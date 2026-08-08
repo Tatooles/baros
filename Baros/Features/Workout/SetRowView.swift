@@ -18,7 +18,11 @@ struct SetRowView: View {
             deleteAccessibilityLabel: "Remove set",
             deleteAccessibilityIdentifier: "DeleteSetButton-\(exerciseIndex)-\(index)"
         ) {
-            try? engine.removeSet(set, context: modelContext)
+            do {
+                try engine.removeSet(set, context: modelContext)
+            } catch {
+                presentSaveError(error)
+            }
         } content: {
             rowContent
         }
@@ -74,18 +78,24 @@ struct SetRowView: View {
     /// writes them to the model and saves. Runs on focus leave, completion, and
     /// row disappearance — never per keystroke.
     @discardableResult
-    private func commitDraftsIfNeeded() -> ActiveWorkoutSetInput.Commit {
+    private func commitDraftsIfNeeded() -> ActiveWorkoutSetInput.Commit? {
         let commit = input.commit(current: inputValues, weightUnit: weightUnit)
         guard commit.shouldPersist else { return commit }
 
-        try? engine.updateSet(
-            set,
-            weight: commit.values.weight,
-            reps: commit.values.reps,
-            rpe: set.rpe,
-            context: modelContext
-        )
-        return commit
+        do {
+            try engine.updateSet(
+                set,
+                weight: commit.values.weight,
+                reps: commit.values.reps,
+                rpe: set.rpe,
+                context: modelContext
+            )
+            input.acceptCommit()
+            return commit
+        } catch {
+            presentSaveError(error)
+            return nil
+        }
     }
 
     private var previousColumn: some View {
@@ -194,7 +204,7 @@ struct SetRowView: View {
     private func completeButtonTapped() {
         // The fill policy below reads committed model values, so pending drafts
         // must land first (the focus-change commit only fires on a later update).
-        let commit = commitDraftsIfNeeded()
+        guard let commit = commitDraftsIfNeeded() else { return }
         clearFocusedFieldForThisSet()
         if let previousFill = input.previousFillBeforeCompletion(
             isCompleted: set.isCompleted,
@@ -204,16 +214,24 @@ struct SetRowView: View {
             fillFromPrevious(previousFill)
         }
         withAnimation(.easeInOut(duration: 0.2)) {
-            try? engine.toggleSetCompletion(set, context: modelContext)
+            do {
+                try engine.toggleSetCompletion(set, context: modelContext)
+            } catch {
+                presentSaveError(error)
+            }
         }
     }
 
     private func fillFromPrevious(_ previous: PreviousSetPerformance) {
         // Commit rather than drop drafts: fillSetFromPrevious only fills fields
         // that are still nil, so a typed-but-uncommitted value must win.
-        commitDraftsIfNeeded()
-        try? engine.fillSetFromPrevious(set, previous: previous, context: modelContext)
-        input.clearRejectionsSatisfiedByPreviousFill(inputValues)
+        guard commitDraftsIfNeeded() != nil else { return }
+        do {
+            try engine.fillSetFromPrevious(set, previous: previous, context: modelContext)
+            input.clearRejectionsSatisfiedByPreviousFill(inputValues)
+        } catch {
+            presentSaveError(error)
+        }
     }
 
     private var inputValues: ActiveWorkoutSetInput.Values {
@@ -225,5 +243,9 @@ struct SetRowView: View {
             || focusedField.wrappedValue == .setReps(set.id) {
             focusedField.wrappedValue = nil
         }
+    }
+
+    private func presentSaveError(_ error: Error) {
+        engine.lastErrorMessage = error.localizedDescription
     }
 }

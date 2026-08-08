@@ -104,9 +104,8 @@ struct OutboxBookkeepingSnapshot {
 
 extension OutboxBookkeepingSnapshot {
     /// Rolls back while keeping whatever outbox bookkeeping is already in the
-    /// context. Safe for the paths that never record intents of their own — the
-    /// Active Workout and Unclaimed Local Data saves — where every outbox change
-    /// present necessarily belongs to a concurrent sync.
+    /// context. Safe for Active Workout saves, which never record intents of
+    /// their own, so every outbox change present belongs to a concurrent sync.
     ///
     /// `SyncOutboxTransaction` cannot use this: it captures *before* running its
     /// operation so that the entries it records itself are correctly discarded.

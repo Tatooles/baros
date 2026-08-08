@@ -67,10 +67,12 @@ struct WorkoutSessionView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         WorkoutTitleDraftField(
                             title: session.title,
-                            focusedField: $focusedField
-                        ) { draft in
-                            try? engine.commitWorkoutTitle(draft, session: session, context: modelContext)
-                        }
+                            focusedField: $focusedField,
+                            commit: { draft in
+                                try engine.commitWorkoutTitle(draft, session: session, context: modelContext)
+                            },
+                            onFailure: presentSaveError
+                        )
 
                         Text(AppTheme.formatDate(session.startedAt))
                             .font(.subheadline.weight(.medium))
@@ -118,10 +120,12 @@ struct WorkoutSessionView: View {
                     WorkoutNotesDraftCard(
                         notes: session.notes,
                         referenceNotes: referenceNotes,
-                        focusedField: $focusedField
-                    ) { draft in
-                        try? engine.updateWorkoutNotes(draft, session: session, context: modelContext)
-                    }
+                        focusedField: $focusedField,
+                        commit: { draft in
+                            try engine.updateWorkoutNotes(draft, session: session, context: modelContext)
+                        },
+                        onFailure: presentSaveError
+                    )
                 }
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
@@ -204,12 +208,16 @@ struct WorkoutSessionView: View {
                             onSelect: { value in
                                 let nextField = rpeNextFocusedField
                                 if let set = editingSet {
-                                    try? RPEChipSelectionAction.apply(
-                                        value: value,
-                                        to: set,
-                                        engine: engine,
-                                        context: modelContext
-                                    )
+                                    do {
+                                        try RPEChipSelectionAction.apply(
+                                            value: value,
+                                            to: set,
+                                            engine: engine,
+                                            context: modelContext
+                                        )
+                                    } catch {
+                                        presentSaveError(error)
+                                    }
                                 }
                                 rpeEditingSetID = nil
                                 rpeEditingSourceField = nil
@@ -280,6 +288,28 @@ struct WorkoutSessionView: View {
                 navigationState.openExerciseHistory(route)
             }
         }
+        .alert("Couldn't Save Workout", isPresented: saveErrorIsPresented) {
+            Button("OK", role: .cancel) {
+                engine.lastErrorMessage = nil
+            }
+        } message: {
+            Text(engine.lastErrorMessage ?? "Try again.")
+        }
+    }
+
+    private var saveErrorIsPresented: Binding<Bool> {
+        Binding(
+            get: { engine.lastErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    engine.lastErrorMessage = nil
+                }
+            }
+        )
+    }
+
+    private func presentSaveError(_ error: Error) {
+        engine.lastErrorMessage = error.localizedDescription
     }
 
     private var referenceNotes: String? {
@@ -377,15 +407,16 @@ struct WorkoutSessionView: View {
 private struct WorkoutTitleDraftField: View {
     let title: String
     var focusedField: FocusState<WorkoutField?>.Binding
-    let commit: (String) -> Void
-    @State private var draft: String?
+    let commit: (String) throws -> Void
+    let onFailure: (Error) -> Void
+    @State private var draft = RetryableWorkoutFieldDraft<String>()
 
     var body: some View {
         WorkoutTitleField(
             placeholder: "Workout Name",
             text: Binding(
-                get: { draft ?? title },
-                set: { draft = $0 }
+                get: { draft.value ?? title },
+                set: { draft.value = $0 }
             ),
             focusTarget: .workoutTitle,
             focusedField: focusedField,
@@ -404,9 +435,11 @@ private struct WorkoutTitleDraftField: View {
     }
 
     private func commitIfNeeded() {
-        guard let draft else { return }
-        commit(draft)
-        self.draft = nil
+        do {
+            try draft.commit(commit)
+        } catch {
+            onFailure(error)
+        }
     }
 }
 
@@ -416,8 +449,9 @@ private struct WorkoutNotesDraftCard: View {
     let notes: String
     let referenceNotes: String?
     var focusedField: FocusState<WorkoutField?>.Binding
-    let commit: (String) -> Void
-    @State private var draft: String?
+    let commit: (String) throws -> Void
+    let onFailure: (Error) -> Void
+    @State private var draft = RetryableWorkoutFieldDraft<String>()
 
     var body: some View {
         SurfaceCard {
@@ -429,8 +463,8 @@ private struct WorkoutNotesDraftCard: View {
                 TextField(
                     "How did this session feel? Any notes for next time...",
                     text: Binding(
-                        get: { draft ?? notes },
-                        set: { draft = $0 }
+                        get: { draft.value ?? notes },
+                        set: { draft.value = $0 }
                     ),
                     axis: .vertical
                 )
@@ -482,9 +516,11 @@ private struct WorkoutNotesDraftCard: View {
     }
 
     private func commitIfNeeded() {
-        guard let draft else { return }
-        commit(draft)
-        self.draft = nil
+        do {
+            try draft.commit(commit)
+        } catch {
+            onFailure(error)
+        }
     }
 }
 

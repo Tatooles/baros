@@ -102,7 +102,11 @@ struct ExerciseCardView: View {
                     titleVisibility: .visible
                 ) {
                     Button("Remove Exercise", role: .destructive) {
-                        try? engine.removeLoggedExercise(loggedExercise, context: modelContext)
+                        do {
+                            try engine.removeLoggedExercise(loggedExercise, context: modelContext)
+                        } catch {
+                            presentSaveError(error)
+                        }
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
@@ -142,8 +146,11 @@ struct ExerciseCardView: View {
                             accessibilityIdentifier: "AddSetButton-\(exerciseIndex)"
                         ) {
                             withAnimation(.spring(response: 0.26, dampingFraction: 0.85)) {
-                                if let set = try? engine.addSet(to: loggedExercise, context: modelContext) {
+                                do {
+                                    let set = try engine.addSet(to: loggedExercise, context: modelContext)
                                     focusedField.wrappedValue = set.weight == nil ? .setWeight(set.id) : nil
+                                } catch {
+                                    presentSaveError(error)
                                 }
                             }
                         }
@@ -153,10 +160,16 @@ struct ExerciseCardView: View {
                             notes: loggedExercise.notes,
                             exerciseID: loggedExercise.id,
                             exerciseIndex: exerciseIndex,
-                            focusedField: focusedField
-                        ) { draft in
-                            try? engine.updateExerciseNotes(draft, loggedExercise: loggedExercise, context: modelContext)
-                        }
+                            focusedField: focusedField,
+                            commit: { draft in
+                                try engine.updateExerciseNotes(
+                                    draft,
+                                    loggedExercise: loggedExercise,
+                                    context: modelContext
+                                )
+                            },
+                            onFailure: presentSaveError
+                        )
 
                         if let referenceNotes {
                             VStack(alignment: .leading, spacing: 6) {
@@ -195,6 +208,10 @@ struct ExerciseCardView: View {
         let completed = visibleSets.filter(\.isCompleted).count
         return WorkoutExerciseProgress(completed: completed, total: visibleSets.count)
     }
+
+    private func presentSaveError(_ error: Error) {
+        engine.lastErrorMessage = error.localizedDescription
+    }
 }
 
 /// Owns the exercise-notes draft so keystrokes re-render only this leaf, not
@@ -205,8 +222,9 @@ private struct ExerciseNotesDraftField: View {
     let exerciseID: UUID
     let exerciseIndex: Int
     var focusedField: FocusState<WorkoutField?>.Binding
-    let commit: (String) -> Void
-    @State private var draft: String?
+    let commit: (String) throws -> Void
+    let onFailure: (Error) -> Void
+    @State private var draft = RetryableWorkoutFieldDraft<String>()
 
     private var focusTarget: WorkoutField {
         .exerciseNotes(exerciseID)
@@ -216,8 +234,8 @@ private struct ExerciseNotesDraftField: View {
         TextField(
             "Exercise notes...",
             text: Binding(
-                get: { draft ?? notes },
-                set: { draft = $0 }
+                get: { draft.value ?? notes },
+                set: { draft.value = $0 }
             ),
             axis: .vertical
         )
@@ -253,8 +271,10 @@ private struct ExerciseNotesDraftField: View {
     }
 
     private func commitIfNeeded() {
-        guard let draft else { return }
-        commit(draft)
-        self.draft = nil
+        do {
+            try draft.commit(commit)
+        } catch {
+            onFailure(error)
+        }
     }
 }

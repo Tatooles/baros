@@ -28,9 +28,9 @@ final class ActiveWorkoutEngine {
         self.save = save
     }
 
-    /// Every Active Workout save rolls back on failure. Callers in the workout
-    /// form suppress these errors with `try?` and keep the user's keystrokes in
-    /// a view-local draft, so a failed save must not leave the models dirty:
+    /// Every Active Workout save rolls back on failure. Callers keep the user's
+    /// keystrokes in a view-local draft and surface the error for a retry, so a
+    /// failed save must not leave the models dirty:
     /// `SyncOutboxTransaction`'s preflight would otherwise treat the workout's
     /// own pending edits as unrelated state and discard them when it is
     /// finished, reporting `unexpectedUnsavedDomainChanges` instead of the real
