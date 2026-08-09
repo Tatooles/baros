@@ -112,7 +112,7 @@ private struct ExercisePickerList: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .contentMargins(.bottom, 80, for: .scrollContent)
+        .contentMargins(.bottom, 24, for: .scrollContent)
         .background(AppTheme.subtleBackground.ignoresSafeArea())
         .navigationTitle("Add Exercise")
         .navigationBarTitleDisplayMode(.inline)
