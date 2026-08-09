@@ -1,11 +1,24 @@
 import Foundation
 import SwiftData
 
-enum SyncOutboxTransactionError: Error, Equatable {
+enum SyncOutboxTransactionError: LocalizedError, Equatable {
     case currentOwnerMismatch
     case targetOwnerMismatch
     case unexpectedUnsavedDomainChanges
     case targetIsNotLoggedWorkoutData
+
+    var errorDescription: String? {
+        switch self {
+        case .currentOwnerMismatch:
+            return "Your account changed before this could be saved. Try again."
+        case .targetOwnerMismatch:
+            return "This item belongs to a different account and could not be saved."
+        case .unexpectedUnsavedDomainChanges:
+            return "Another change was still being saved. Try again."
+        case .targetIsNotLoggedWorkoutData:
+            return "Only finished workouts can be added to your synced history."
+        }
+    }
 }
 
 @MainActor

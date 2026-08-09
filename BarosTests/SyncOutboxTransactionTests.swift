@@ -4,6 +4,25 @@ import XCTest
 
 @MainActor
 final class SyncOutboxTransactionTests: XCTestCase {
+    func testInvariantErrorsHaveUserFacingDescriptions() {
+        XCTAssertEqual(
+            SyncOutboxTransactionError.currentOwnerMismatch.localizedDescription,
+            "Your account changed before this could be saved. Try again."
+        )
+        XCTAssertEqual(
+            SyncOutboxTransactionError.targetOwnerMismatch.localizedDescription,
+            "This item belongs to a different account and could not be saved."
+        )
+        XCTAssertEqual(
+            SyncOutboxTransactionError.unexpectedUnsavedDomainChanges.localizedDescription,
+            "Another change was still being saved. Try again."
+        )
+        XCTAssertEqual(
+            SyncOutboxTransactionError.targetIsNotLoggedWorkoutData.localizedDescription,
+            "Only finished workouts can be added to your synced history."
+        )
+    }
+
     func testZeroActionTransactionDoesNotSaveOrRequestSync() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

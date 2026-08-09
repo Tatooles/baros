@@ -8,10 +8,11 @@ struct FinishWorkoutSheet: View {
     @Environment(SyncOutboxTransaction.self) private var syncOutboxTransaction
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
+    @Bindable var titleDraft: FinishWorkoutTitleDraft
     @State private var showsDiscardConfirmation = false
     @State private var actionError: WorkoutActionError?
-    @State private var titleDraft: String?
     @State private var isDiscardingWorkout = false
+    @State private var isLeavingWithRetryableTitleDraft = false
     @FocusState private var focusedField: FinishWorkoutFocusedField?
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
@@ -73,7 +74,7 @@ struct FinishWorkoutSheet: View {
                 focusedField = nil
                 // Finishing saves the title too; stop here when it failed so the
                 // draft survives for a retry instead of being rolled back.
-                guard commitWorkoutTitle() else { return }
+                guard commitWorkoutTitleIfNeeded() else { return }
                 do {
                     try engine.finishWorkout(
                         session,
@@ -97,8 +98,16 @@ struct FinishWorkoutSheet: View {
             .accessibilityIdentifier("SaveWorkoutButton")
 
             Button("Keep Going") {
-                guard commitWorkoutTitle() else { return }
-                dismiss()
+                let shouldDismiss = FinishWorkoutDismissalPolicy.shouldDismissAfterKeepGoing(
+                    commitTitle: commitWorkoutTitle,
+                    onFailure: { error in
+                        engine.lastErrorMessage = error.localizedDescription
+                    }
+                )
+                if shouldDismiss {
+                    isLeavingWithRetryableTitleDraft = titleDraft.value != nil
+                    dismiss()
+                }
             }
             .font(.callout.weight(.medium))
             .foregroundStyle(AppTheme.textSecondary)
@@ -118,7 +127,7 @@ struct FinishWorkoutSheet: View {
         .presentationCornerRadius(36)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(
-            FinishWorkoutDismissalPolicy.shouldDisableInteractiveDismissal(titleDraft: titleDraft)
+            FinishWorkoutDismissalPolicy.shouldDisableInteractiveDismissal(titleDraft: titleDraft.value)
         )
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -131,12 +140,12 @@ struct FinishWorkoutSheet: View {
         }
         .onChange(of: focusedField) { previousField, newField in
             if previousField == .title, newField != .title {
-                commitWorkoutTitle()
+                commitWorkoutTitleIfNeeded()
             }
         }
         .onDisappear {
-            guard !isDiscardingWorkout else { return }
-            commitWorkoutTitle()
+            guard !isDiscardingWorkout, !isLeavingWithRetryableTitleDraft else { return }
+            commitWorkoutTitleIfNeeded()
         }
         .alert("Discard Workout?", isPresented: $showsDiscardConfirmation) {
             Button("Discard", role: .destructive) {
@@ -167,27 +176,30 @@ struct FinishWorkoutSheet: View {
     // loss or when leaving the sheet; never per keystroke.
     private var workoutTitleBinding: Binding<String> {
         Binding(
-            get: { titleDraft ?? session.title },
-            set: { titleDraft = $0 }
+            get: { titleDraft.value ?? session.title },
+            set: { titleDraft.value = $0 }
         )
     }
 
     private var showsDefaultTitleHint: Bool {
-        (titleDraft ?? session.title).trimmingCharacters(in: .whitespacesAndNewlines) == "Workout"
+        (titleDraft.value ?? session.title).trimmingCharacters(in: .whitespacesAndNewlines) == "Workout"
     }
 
-    /// Returns `false` when the title could not be saved. The draft is kept on
-    /// failure so the user's typing is still on screen and still retryable, and
-    /// the real error is surfaced rather than the `unexpectedUnsavedDomainChanges`
-    /// the finish transaction would otherwise report.
-    @discardableResult
-    private func commitWorkoutTitle() -> Bool {
+    /// Keeps the title draft when saving fails so the user's typing remains
+    /// retryable and the real save error can be surfaced.
+    private func commitWorkoutTitle() throws {
         // The commit-then-clear-focus buttons also retrigger this through the
         // focus onChange; the guard makes the second pass (and untouched
         // dismissals) a no-op instead of a redundant save.
-        guard let titleDraft else { return true }
+        try titleDraft.commit { draft in
+            try engine.commitWorkoutTitle(draft, session: session, context: modelContext)
+        }
+    }
+
+    @discardableResult
+    private func commitWorkoutTitleIfNeeded() -> Bool {
         do {
-            try engine.commitWorkoutTitle(titleDraft, session: session, context: modelContext)
+            try commitWorkoutTitle()
         } catch {
             actionError = WorkoutActionError(
                 title: "Couldn't Save Workout Name",
@@ -195,7 +207,6 @@ struct FinishWorkoutSheet: View {
             )
             return false
         }
-        self.titleDraft = nil
         return true
     }
 
@@ -210,8 +221,36 @@ private enum FinishWorkoutFocusedField: Hashable {
     case title
 }
 
+@MainActor
+@Observable
+final class FinishWorkoutTitleDraft {
+    var value: String?
+
+    init(value: String? = nil) {
+        self.value = value
+    }
+
+    func commit(_ save: (String) throws -> Void) throws {
+        guard let value else { return }
+        try save(value)
+        self.value = nil
+    }
+}
+
 enum FinishWorkoutDismissalPolicy {
     static func shouldDisableInteractiveDismissal(titleDraft: String?) -> Bool {
         titleDraft != nil
+    }
+
+    static func shouldDismissAfterKeepGoing(
+        commitTitle: () throws -> Void,
+        onFailure: (Error) -> Void
+    ) -> Bool {
+        do {
+            try commitTitle()
+        } catch {
+            onFailure(error)
+        }
+        return true
     }
 }

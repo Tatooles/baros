@@ -140,4 +140,24 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         XCTAssertFalse(FinishWorkoutDismissalPolicy.shouldDisableInteractiveDismissal(titleDraft: nil))
         XCTAssertTrue(FinishWorkoutDismissalPolicy.shouldDisableInteractiveDismissal(titleDraft: "Leg Day"))
     }
+
+    func testFinishSheetKeepGoingDismissesAndRetainsTitleDraftWhenSaveFails() {
+        let draft = FinishWorkoutTitleDraft(value: "Leg Day")
+        var receivedError: FinishWorkoutDraftTestError?
+
+        let shouldDismiss = FinishWorkoutDismissalPolicy.shouldDismissAfterKeepGoing(
+            commitTitle: {
+                try draft.commit { _ in throw FinishWorkoutDraftTestError.saveFailed }
+            },
+            onFailure: { receivedError = $0 as? FinishWorkoutDraftTestError }
+        )
+
+        XCTAssertTrue(shouldDismiss)
+        XCTAssertEqual(draft.value, "Leg Day")
+        XCTAssertEqual(receivedError, .saveFailed)
+    }
+}
+
+private enum FinishWorkoutDraftTestError: Error, Equatable {
+    case saveFailed
 }

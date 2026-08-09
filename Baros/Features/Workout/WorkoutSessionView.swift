@@ -17,6 +17,9 @@ struct WorkoutSessionView: View {
     @Bindable var engine: ActiveWorkoutEngine
     @Bindable var navigationState: AppNavigationState
     @State private var isFinishSheetPresented = false
+    // The sheet observes this reference directly, so title keystrokes do not
+    // invalidate and re-render the full Active Workout form behind it.
+    @State private var finishWorkoutTitleDraft = FinishWorkoutTitleDraft()
     @State private var isReorderExercisesPresented = false
     @State private var isAddExercisePresented = false
     @State private var selectedHistoryExercise: LoggedExercise?
@@ -280,7 +283,11 @@ struct WorkoutSessionView: View {
         .background(AppTheme.subtleBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $isFinishSheetPresented) {
-            FinishWorkoutSheet(session: session, engine: engine)
+            FinishWorkoutSheet(
+                session: session,
+                engine: engine,
+                titleDraft: finishWorkoutTitleDraft
+            )
         }
         .sheet(isPresented: $isReorderExercisesPresented) {
             ReorderExercisesSheet(session: session, engine: engine)
