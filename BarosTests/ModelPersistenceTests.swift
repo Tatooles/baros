@@ -32,6 +32,15 @@ final class ModelPersistenceTests: XCTestCase {
         XCTAssertEqual(ExerciseMuscleGroup(rawValue: "futureValue") ?? .other, .other)
     }
 
+    func testExerciseMuscleGroupCasesAreAlphabetical() {
+        let displayNames = ExerciseMuscleGroup.allCases.map(\.displayName)
+
+        XCTAssertEqual(
+            displayNames,
+            displayNames.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        )
+    }
+
     func testExerciseMuscleGroupMapsLegacyValues() throws {
         XCTAssertEqual(ExerciseMuscleGroup.legacyGroup(for: "Quads"), .quads)
         XCTAssertEqual(ExerciseMuscleGroup.legacyGroup(for: "Glutes"), .glutes)
