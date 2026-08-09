@@ -1402,7 +1402,12 @@ final class BarosUITests: XCTestCase {
                 if app.navigationBars["Add Exercise"].waitForExistence(timeout: 1) {
                     for _ in 0..<8 {
                         let exerciseButton = app.buttons[exerciseRowIdentifier]
-                        if exerciseButton.exists && exerciseButton.isHittable {
+                        let navigationBar = app.navigationBars["Add Exercise"]
+                        let searchField = app.searchFields.firstMatch
+                        let isFullyVisible = exerciseButton.exists
+                            && exerciseButton.frame.minY >= navigationBar.frame.maxY
+                            && exerciseButton.frame.maxY <= searchField.frame.minY
+                        if isFullyVisible && exerciseButton.isHittable {
                             exerciseButton.tap()
                             return
                         }
