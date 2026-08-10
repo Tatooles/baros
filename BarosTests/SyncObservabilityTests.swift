@@ -50,42 +50,6 @@ final class SyncObservabilityTests: XCTestCase {
         XCTAssertNotEqual(failures[0].fingerprint, failures[1].fingerprint)
     }
 
-    func testRecoveryMarkerPersistenceFailureUsesLocalPersistenceClassification() throws {
-        let sink = RecordingSyncObservationSink()
-        let observability = SyncObservability(sink: sink)
-        observability.record(.durableFailure(DurableSyncFailure(
-            phase: .scheduler,
-            category: .localPersistence,
-            errorCode: .recoveryMarkerPersistenceFailed
-        )))
-
-        let observation = try XCTUnwrap(sink.observations.first {
-            $0.kind == .durableFailure
-        })
-        XCTAssertEqual(observation.failureCategory, .localPersistence)
-        XCTAssertEqual(observation.errorCode, .recoveryMarkerPersistenceFailed)
-
-        let event = SentrySyncObservationSink.makeEvent(from: observation)
-        XCTAssertNotNil(SentrySyncEventScrubber.scrub(event))
-    }
-
-    func testSuccessfulCycleAfterFailureRecordsOneRecoveryButRoutineSuccessDoesNot() {
-        let sink = RecordingSyncObservationSink()
-        let observability = SyncObservability(sink: sink)
-        let counts = SyncObservationCounts(attempt: 1, pending: 0, failed: 0, recovered: 1)
-
-        observability.record(.syncSucceeded(counts: counts))
-        observability.record(.durableFailure(DurableSyncFailure(
-            phase: .pull,
-            category: .remotePull,
-            errorCode: .incompleteRemotePull
-        )))
-        observability.record(.syncSucceeded(counts: counts))
-        observability.record(.syncSucceeded(counts: counts))
-
-        XCTAssertEqual(sink.observations.filter { $0.kind == .recovery }.count, 1)
-    }
-
     func testOwnerPseudonymIsStableAcrossInstancesAndRawOwnerIsAbsent() throws {
         let firstSink = RecordingSyncObservationSink()
         let secondSink = RecordingSyncObservationSink()
@@ -95,32 +59,48 @@ final class SyncObservabilityTests: XCTestCase {
 
         first.setCurrentOwner(rawOwner)
         second.setCurrentOwner(rawOwner)
+        let failure = DurableSyncFailure(
+            phase: .pull,
+            category: .remotePull,
+            errorCode: .incompleteRemotePull
+        )
+        first.record(.durableFailure(failure))
+        second.record(.durableFailure(failure))
 
         let firstPseudonym = try XCTUnwrap(
-            firstSink.pseudonymousCurrentOwnerIDs.last ?? nil
+            firstSink.observations.last?.pseudonymousCurrentOwnerID
         ).sentryValue
         let secondPseudonym = try XCTUnwrap(
-            secondSink.pseudonymousCurrentOwnerIDs.last ?? nil
+            secondSink.observations.last?.pseudonymousCurrentOwnerID
         ).sentryValue
         XCTAssertEqual(firstPseudonym, secondPseudonym)
         XCTAssertTrue(firstPseudonym.hasPrefix("owner_v1_"))
         XCTAssertFalse(firstPseudonym.contains(rawOwner))
     }
 
-    func testOwnerChangeAndSignOutReplaceThenClearSentryUserScope() {
+    func testOwnerChangeAndSignOutReplaceThenClearSyncEventAttribution() {
         let sink = RecordingSyncObservationSink()
         let observability = SyncObservability(sink: sink)
+        let failure = DurableSyncFailure(
+            phase: .pull,
+            category: .remotePull,
+            errorCode: .incompleteRemotePull
+        )
 
         observability.setCurrentOwner("issuer|owner_a")
+        observability.record(.durableFailure(failure))
         observability.setCurrentOwner("issuer|owner_b")
+        observability.record(.durableFailure(failure))
         observability.setCurrentOwner(nil)
+        observability.record(.durableFailure(failure))
 
-        XCTAssertEqual(sink.pseudonymousCurrentOwnerIDs.count, 3)
+        let events = sink.observations.filter { $0.kind == .durableFailure }
+        XCTAssertEqual(events.count, 3)
         XCTAssertNotEqual(
-            sink.pseudonymousCurrentOwnerIDs[0],
-            sink.pseudonymousCurrentOwnerIDs[1]
+            events[0].pseudonymousCurrentOwnerID,
+            events[1].pseudonymousCurrentOwnerID
         )
-        XCTAssertNil(sink.pseudonymousCurrentOwnerIDs[2])
+        XCTAssertNil(events[2].pseudonymousCurrentOwnerID)
     }
 
     func testCountsAreBoundedBeforeTheyReachTheSink() {
@@ -134,8 +114,7 @@ final class SyncObservabilityTests: XCTestCase {
             counts: SyncObservationCounts(
                 attempt: -1,
                 pending: 50_000,
-                failed: 50_000,
-                recovered: 50_000
+                failed: 50_000
             )
         )))
 
@@ -143,7 +122,6 @@ final class SyncObservabilityTests: XCTestCase {
         XCTAssertEqual(failure?.counts.attempt, 0)
         XCTAssertEqual(failure?.counts.pending, 1_000)
         XCTAssertEqual(failure?.counts.failed, 1_000)
-        XCTAssertEqual(failure?.counts.recovered, 1_000)
     }
 
     func testProductionConfigurationRequiresExplicitFlagAndNonEmptyDSN() throws {
@@ -233,7 +211,7 @@ final class SyncObservabilityTests: XCTestCase {
         XCTAssertNil(SentrySyncEventScrubber.scrub(event))
     }
 
-    func testLifecycleFactsProduceSafePhaseFailureAndRecoveryBreadcrumbs() {
+    func testLifecycleFactsProduceSafePhaseAndFailureBreadcrumbs() {
         let sink = RecordingSyncObservationSink()
         let observability = SyncObservability(sink: sink)
 
@@ -245,16 +223,14 @@ final class SyncObservabilityTests: XCTestCase {
             category: .outbox,
             errorCode: .failedOutboxPush
         )))
-        observability.record(.syncSucceeded(counts: SyncObservationCounts(recovered: 1)))
 
         let breadcrumbs = sink.observations.filter { $0.kind == .breadcrumb }
-        XCTAssertEqual(breadcrumbs.map(\.outcome), [.completed, .failure, .recovered])
-        XCTAssertEqual(breadcrumbs.map(\.phase), [.pull, .push, .recovery])
+        XCTAssertEqual(breadcrumbs.map(\.outcome), [.completed, .failure])
+        XCTAssertEqual(breadcrumbs.map(\.phase), [.pull, .push])
         XCTAssertEqual(
             sink.observations.filter { $0.kind == .durableFailure }.count,
             1
         )
-        XCTAssertEqual(sink.observations.filter { $0.kind == .recovery }.count, 1)
     }
 
     func testTransientSyncConditionClassifierMapsConnectivityTimeoutAndCancellation() {
@@ -318,13 +294,6 @@ final class SyncObservabilityTests: XCTestCase {
 @MainActor
 final class RecordingSyncObservationSink: SyncObservationSink {
     private(set) var observations: [SanitizedSyncObservation] = []
-    private(set) var pseudonymousCurrentOwnerIDs: [PseudonymousCurrentOwnerID?] = []
-
-    func setPseudonymousCurrentOwnerID(
-        _ pseudonymousCurrentOwnerID: PseudonymousCurrentOwnerID?
-    ) {
-        pseudonymousCurrentOwnerIDs.append(pseudonymousCurrentOwnerID)
-    }
 
     func record(_ observation: SanitizedSyncObservation) {
         observations.append(observation)

@@ -50,7 +50,7 @@ Baros does not use third-party advertising, cross-app tracking, or product analy
 
 ### Diagnostics
 
-Apple, Clerk, Convex, Sentry, Vercel, and platform providers may process diagnostics needed to operate, secure, and troubleshoot Baros and its services. Production Baros builds use Sentry for crash data, app-hang/performance data, and other diagnostic data such as classified Durable Sync Failures and Sync Recovery.
+Apple, Clerk, Convex, Sentry, Vercel, and platform providers may process diagnostics needed to operate, secure, and troubleshoot Baros and its services. Production Baros builds use Sentry for crash data, app-hang/performance data, and other diagnostic data such as classified Durable Sync Failures.
 
 Sentry diagnostic events may be linked to an account through the Pseudonymous Current Owner ID used to count distinct affected Current Owners. App Store Connect privacy answers must therefore disclose Crash Data, Performance Data, and Other Diagnostic Data as linked to the user for App Functionality. Baros does not use this data for tracking or product analytics and does not send Sentry raw account identifiers, email, name, authentication tokens, workout content, record identifiers, or request/response payloads.
 
@@ -101,8 +101,8 @@ Capture final screenshots after UI stabilizes:
 - App Store Connect discloses linked Crash Data, Performance Data, and Other Diagnostic Data for App Functionality before the Sentry-enabled build ships.
 - The deployed privacy policy includes the Sentry crash and sync diagnostics disclosure.
 - The Sentry project prevents IP-address storage, keeps server-side data scrubbing enabled, and includes the Baros-specific sensitive-field list.
-- Sentry Spike Protection remains disabled and Stats is checked for accepted, filtered, rate-limited, invalid, and client-discarded outcomes.
-- A Sentry alert routes Durable Sync Failures to the maintainer without alerting on Sync Recovery.
+- Sentry Spike Protection is enabled to protect the project quota from unexpected event spikes.
+- A Sentry alert routes Durable Sync Failures to the maintainer.
 - The exact archive dSYM appears under the Sentry project's Debug Files before TestFlight testing begins.
 - Final app icon ticket is complete before submission.
 - App Store screenshots are final.

@@ -369,8 +369,8 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertEqual(scheduler.requestCount, 1)
         XCTAssertEqual(scheduler.lastFailure?.message, "Convex function sync:fetchChanges failed")
         let failure = try XCTUnwrap(sink.observations.first { $0.kind == .durableFailure })
-        XCTAssertEqual(failure.failureCategory, .clientCall)
-        XCTAssertEqual(failure.errorCode, .clientCallFailed)
+        XCTAssertEqual(failure.failureCategory, .syncRun)
+        XCTAssertEqual(failure.errorCode, .syncRunFailed)
 
         client.fetchError = nil
         scheduler.retrySync()
@@ -378,7 +378,7 @@ final class SyncSchedulerStatusTests: XCTestCase {
 
         XCTAssertEqual(scheduler.requestCount, 2)
         XCTAssertNil(scheduler.lastFailure)
-        XCTAssertEqual(sink.observations.filter { $0.kind == .recovery }.count, 1)
+        XCTAssertEqual(sink.observations.filter { $0.kind == .durableFailure }.count, 1)
     }
 
     func testOfflinePushIsATransientSyncConditionInsteadOfADurableSyncFailure() async throws {
@@ -425,7 +425,7 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertFalse(String(describing: sink.observations).contains(owner))
     }
 
-    func testThirdOfflinePushAttemptBecomesADurableSyncFailure() async throws {
+    func testRepeatedOfflinePushAttemptsRemainTransient() async throws {
         let owner = "issuer|owner_private"
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -465,13 +465,12 @@ final class SyncSchedulerStatusTests: XCTestCase {
             }
         }
 
-        let failures = sink.observations.filter { $0.kind == .durableFailure }
-        let failure = try XCTUnwrap(failures.first)
-        XCTAssertEqual(failures.count, 1)
-        XCTAssertEqual(failure.errorCode, .failedOutboxPush)
-        XCTAssertEqual(failure.counts.attempt, 3)
-        XCTAssertFalse(String(describing: failure).contains(owner))
-        XCTAssertFalse(String(describing: failure).contains("Private workout content"))
+        XCTAssertFalse(sink.observations.contains { $0.kind == .durableFailure })
+        XCTAssertEqual(sink.observations.filter {
+            $0.kind == .breadcrumb && $0.errorCode == .networkUnavailable
+        }.count, 3)
+        XCTAssertFalse(String(describing: sink.observations).contains(owner))
+        XCTAssertFalse(String(describing: sink.observations).contains("Private workout content"))
     }
 
     func testTimedOutPullIsATransientSyncConditionInsteadOfADurableSyncFailure() async throws {
@@ -524,7 +523,7 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertFalse(sink.observations.contains { $0.kind == .durableFailure })
     }
 
-    func testRepeatedDurablePushFailuresAreAllRecordedAndSuccessfulRetryRecordsRecovery() async throws {
+    func testRepeatedDurablePushFailuresAreAllRecorded() async throws {
         struct PushError: LocalizedError {
             var errorDescription: String? { "private server detail" }
         }
@@ -580,14 +579,11 @@ final class SyncSchedulerStatusTests: XCTestCase {
 
         client.error = nil
         scheduler.retrySync()
-        try await waitUntil {
-            sink.observations.contains { $0.kind == .recovery }
-        }
-
-        XCTAssertEqual(sink.observations.filter { $0.kind == .recovery }.count, 1)
+        try await waitUntil { scheduler.lastSyncedAt != nil }
+        XCTAssertEqual(sink.observations.filter { $0.kind == .durableFailure }.count, 2)
     }
 
-    func testSuccessfulRetryAfterRelaunchRecordsRecoveryForPersistedDurableFailure() async throws {
+    func testSuccessfulRetryAfterRelaunchDoesNotEmitAnotherFailure() async throws {
         struct PushError: LocalizedError {
             var errorDescription: String? { "private server detail" }
         }
@@ -641,17 +637,10 @@ final class SyncSchedulerStatusTests: XCTestCase {
         relaunchedScheduler.retrySync()
         try await waitUntil { relaunchedScheduler.lastSyncedAt != nil }
 
-        let recovery = try XCTUnwrap(
-            relaunchedSink.observations.first { $0.kind == .recovery }
-        )
-        XCTAssertEqual(recovery.errorCode, .failedOutboxPush)
-        XCTAssertEqual(recovery.entityKind, .exercise)
-        XCTAssertEqual(recovery.operation, .create)
-        XCTAssertFalse(String(describing: recovery).contains(owner))
-        XCTAssertFalse(String(describing: recovery).contains("Private workout content"))
+        XCTAssertFalse(relaunchedSink.observations.contains { $0.kind == .durableFailure })
     }
 
-    func testSuccessfulRetryDoesNotReportRecoveryForLegacyUnreportedFailure() async throws {
+    func testSuccessfulRetryOfPreviouslyFailedEntryDoesNotEmitFailure() async throws {
         let owner = "issuer|owner_a"
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -674,7 +663,6 @@ final class SyncSchedulerStatusTests: XCTestCase {
             attemptCount: 3,
             lastErrorMessage: "legacy failure"
         )
-        failedEntry.hasReportedDurableFailure = nil
         context.insert(exercise)
         context.insert(failedEntry)
         try context.save()
@@ -692,7 +680,7 @@ final class SyncSchedulerStatusTests: XCTestCase {
         scheduler.retrySync()
         try await waitUntil { scheduler.lastSyncedAt != nil }
 
-        XCTAssertFalse(sink.observations.contains { $0.kind == .recovery })
+        XCTAssertFalse(sink.observations.contains { $0.kind == .durableFailure })
     }
 
     func testSchedulerDoesNotRecordSuccessWhenPushLeavesFailedOutboxEntry() async throws {
@@ -913,7 +901,7 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertNil(scheduler.lastFailure)
         XCTAssertNotNil(scheduler.lastSyncedAt)
         let events = sink.observations.filter { $0.kind != .breadcrumb }
-        XCTAssertEqual(events.map(\.kind), [.durableFailure, .recovery])
+        XCTAssertEqual(events.map(\.kind), [.durableFailure])
         XCTAssertEqual(events.first?.failureCategory, .ownership)
         XCTAssertEqual(events.first?.errorCode, .ownerMismatch)
         XCTAssertEqual(events.first?.entityKind, .loggedSet)

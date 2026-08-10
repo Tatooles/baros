@@ -14,7 +14,6 @@ final class SyncOutboxEntry: Identifiable {
     var lastAttemptAt: Date?
     var attemptCount: Int
     var lastErrorMessage: String?
-    var hasReportedDurableFailure: Bool?
 
     init(
         id: UUID = UUID(),
@@ -27,8 +26,7 @@ final class SyncOutboxEntry: Identifiable {
         updatedAt: Date,
         lastAttemptAt: Date? = nil,
         attemptCount: Int = 0,
-        lastErrorMessage: String? = nil,
-        hasReportedDurableFailure: Bool = false
+        lastErrorMessage: String? = nil
     ) {
         self.id = id
         self.entityKindRaw = entityKind.rawValue
@@ -41,7 +39,6 @@ final class SyncOutboxEntry: Identifiable {
         self.lastAttemptAt = lastAttemptAt
         self.attemptCount = attemptCount
         self.lastErrorMessage = lastErrorMessage
-        self.hasReportedDurableFailure = hasReportedDurableFailure
     }
 
     convenience init(

@@ -15,23 +15,20 @@ enum SyncObservationOutcome: String, CaseIterable, Equatable {
     case completed
     case paused
     case failure
-    case recovered
     case changed
 }
 
 enum SyncFailureCategory: String, CaseIterable, Equatable {
     case outbox
     case remotePull = "remote_pull"
-    case clientCall = "client_call"
-    case localPersistence = "local_persistence"
+    case syncRun = "sync_run"
     case ownership
 }
 
 enum SyncStableErrorCode: String, CaseIterable, Equatable {
     case failedOutboxPush = "failed_outbox_push"
     case incompleteRemotePull = "incomplete_remote_pull"
-    case clientCallFailed = "client_call_failed"
-    case recoveryMarkerPersistenceFailed = "recovery_marker_persistence_failed"
+    case syncRunFailed = "sync_run_failed"
     case ownerMismatch = "owner_mismatch"
     case noCurrentOwner = "no_current_owner"
     case authorizationUnavailable = "authorization_unavailable"
@@ -52,18 +49,15 @@ struct SyncObservationCounts: Equatable {
     let attempt: Int
     let pending: Int
     let failed: Int
-    let recovered: Int
 
     init(
         attempt: Int = 0,
         pending: Int = 0,
-        failed: Int = 0,
-        recovered: Int = 0
+        failed: Int = 0
     ) {
         self.attempt = Self.bounded(attempt)
         self.pending = Self.bounded(pending)
         self.failed = Self.bounded(failed)
-        self.recovered = Self.bounded(recovered)
     }
 
     private static func bounded(_ value: Int) -> Int {
@@ -101,14 +95,11 @@ enum SyncLifecycleFact: Equatable {
     case syncPhaseCompleted(SyncObservationPhase)
     case transient(phase: SyncObservationPhase, errorCode: SyncStableErrorCode)
     case durableFailure(DurableSyncFailure)
-    case syncSucceeded(counts: SyncObservationCounts)
-    case syncRecovered(failure: DurableSyncFailure, counts: SyncObservationCounts)
 }
 
 enum SyncObservationKind: Equatable {
     case breadcrumb
     case durableFailure
-    case recovery
 }
 
 enum SyncObservationLevel: Equatable {
@@ -159,7 +150,6 @@ struct PseudonymousCurrentOwnerID: Equatable {
 
 @MainActor
 protocol SyncObservationSink: AnyObject {
-    func setPseudonymousCurrentOwnerID(_ pseudonymousCurrentOwnerID: PseudonymousCurrentOwnerID?)
     func record(_ observation: SanitizedSyncObservation)
 }
 
@@ -173,7 +163,6 @@ protocol SyncObserving: AnyObject {
 final class SyncObservability: SyncObserving {
     private let sink: any SyncObservationSink
     private var pseudonymousCurrentOwnerID: PseudonymousCurrentOwnerID?
-    private var activeFailure: DurableSyncFailure?
 
     init(sink: any SyncObservationSink) {
         self.sink = sink
@@ -186,8 +175,6 @@ final class SyncObservability: SyncObserving {
         guard newPseudonymousCurrentOwnerID != pseudonymousCurrentOwnerID else { return }
 
         pseudonymousCurrentOwnerID = newPseudonymousCurrentOwnerID
-        activeFailure = nil
-        sink.setPseudonymousCurrentOwnerID(newPseudonymousCurrentOwnerID)
         recordBreadcrumb(
             phase: .ownership,
             outcome: .changed,
@@ -216,19 +203,11 @@ final class SyncObservability: SyncObserving {
                 errorCode: errorCode
             )
         case .durableFailure(let failure):
-            activeFailure = failure
             let observation = Self.makeFailureObservation(
                 failure,
                 pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
             )
             recordEventWithLifecycleBreadcrumb(observation)
-        case .syncSucceeded(let counts):
-            guard let activeFailure else { return }
-            self.activeFailure = nil
-            recordRecovery(from: activeFailure, counts: counts)
-        case let .syncRecovered(failure, counts):
-            activeFailure = nil
-            recordRecovery(from: failure, counts: counts)
         }
     }
 
@@ -257,18 +236,6 @@ final class SyncObservability: SyncObserving {
         sink.record(observation)
     }
 
-    private func recordRecovery(
-        from failure: DurableSyncFailure,
-        counts: SyncObservationCounts
-    ) {
-        let observation = Self.makeRecoveryObservation(
-            from: failure,
-            counts: counts,
-            pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
-        )
-        recordEventWithLifecycleBreadcrumb(observation)
-    }
-
     private static func makeFailureObservation(
         _ failure: DurableSyncFailure,
         pseudonymousCurrentOwnerID: PseudonymousCurrentOwnerID?
@@ -291,34 +258,6 @@ final class SyncObservability: SyncObserving {
                 category: failure.category,
                 errorCode: failure.errorCode,
                 outcome: .failure
-            ),
-            pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
-        )
-    }
-
-    private static func makeRecoveryObservation(
-        from failure: DurableSyncFailure,
-        counts: SyncObservationCounts,
-        pseudonymousCurrentOwnerID: PseudonymousCurrentOwnerID?
-    ) -> SanitizedSyncObservation {
-        SanitizedSyncObservation(
-            kind: .recovery,
-            level: .info,
-            phase: .recovery,
-            entityKind: failure.entityKind,
-            operation: failure.operation,
-            outcome: .recovered,
-            failureCategory: failure.category,
-            errorCode: failure.errorCode,
-            counts: counts,
-            fingerprint: fingerprint(
-                prefix: "baros-sync-recovery-v1",
-                phase: .recovery,
-                entityKind: failure.entityKind,
-                operation: failure.operation,
-                category: failure.category,
-                errorCode: failure.errorCode,
-                outcome: .recovered
             ),
             pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
         )

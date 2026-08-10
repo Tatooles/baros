@@ -15,11 +15,6 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         )
         let client = harness.client
         let scheduler = harness.scheduler
-        observability.record(.durableFailure(DurableSyncFailure(
-            phase: .pull,
-            category: .clientCall,
-            errorCode: .clientCallFailed
-        )))
         let authenticationClient = StubSyncAuthenticationClient(
             result: .success(makeJWT(issuer: "https://clerk.baros.fit", subject: "user_123")),
             waitsForResume: true
@@ -50,10 +45,6 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, ownerTokenIdentifier)
         XCTAssertEqual(scheduler.requestCount, 1)
         XCTAssertFalse(client.fetchRequests.isEmpty)
-        XCTAssertEqual(sink.observations.filter { $0.kind == .recovery }.count, 1)
-        XCTAssertTrue(sink.observations.contains {
-            $0.kind == .breadcrumb && $0.outcome == .recovered
-        })
     }
 
     func testRecoveryRejectsMismatchedAuthenticatedStateBeforeDeferral() async throws {
@@ -312,7 +303,7 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, "issuer|owner_a")
     }
 
-    func testCanceledRecoveryDoesNotResumeOrReportAFalseSyncRecoveryAfterAccountDeletion() async throws {
+    func testCanceledRecoveryDoesNotResumeSyncAfterAccountDeletion() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let client = FakeSyncClient()
         let sink = RecordingSyncObservationSink()
@@ -324,11 +315,6 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
             observability: observability
         )
         scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
-        observability.record(.durableFailure(DurableSyncFailure(
-            phase: .pull,
-            category: .clientCall,
-            errorCode: .clientCallFailed
-        )))
         let authenticationClient = StubSyncAuthenticationClient(
             result: .success(makeJWT(issuer: "issuer", subject: "owner_a")),
             waitsForResume: true
@@ -353,8 +339,9 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(scheduler.requestCount, 0)
         XCTAssertNil(scheduler.currentOwnerTokenIdentifier)
         XCTAssertTrue(client.fetchRequests.isEmpty)
-        XCTAssertFalse(sink.observations.contains { $0.kind == .recovery })
-        XCTAssertNil(sink.pseudonymousCurrentOwnerIDs.last ?? nil)
+        let finalObservation = try XCTUnwrap(sink.observations.last)
+        XCTAssertEqual(finalObservation.phase, .ownership)
+        XCTAssertNil(finalObservation.pseudonymousCurrentOwnerID)
     }
 
     func testInvalidatedRecoveryDefersLateAuthenticatedStateForOriginalSession() async throws {

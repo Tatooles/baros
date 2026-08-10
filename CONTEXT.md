@@ -27,12 +27,8 @@ A completed workout in which an exercise has at least one completed set. An exer
 _Avoid_: Completed set count, exercise appearance
 
 **Durable Sync Failure**:
-A sync problem that remains after Baros completes its ordinary retry process, or an owner-boundary problem that blocks or discards pending sync work. It warrants an external technical report without workout content or Current Owner identity.
+A sync problem that Baros already classifies as a failed outbox push, incomplete remote pull, safely mapped sync error, or owner-boundary problem. It warrants an external technical report without workout content or Current Owner identity.
 _Avoid_: Sync error, Sentry event, persistent error
-
-**Sync Recovery**:
-A transition in which Baros removes a Durable Sync Failure and restores normal synchronization without crossing Current Owner boundaries.
-_Avoid_: Cleanup, automatic fix, recovery event
 
 **Transient Sync Condition**:
 A temporary condition, such as being offline or having a resolving Current Owner, that does not mean synchronization is durably stuck.

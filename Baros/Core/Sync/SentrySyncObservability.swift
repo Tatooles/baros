@@ -36,12 +36,6 @@ enum SentryRuntime {
 
 @MainActor
 final class SentrySyncObservationSink: SyncObservationSink {
-    func setPseudonymousCurrentOwnerID(
-        _ pseudonymousCurrentOwnerID: PseudonymousCurrentOwnerID?
-    ) {
-        SentrySDK.setUser(pseudonymousCurrentOwnerID.map { User(userId: $0.sentryValue) })
-    }
-
     func record(_ observation: SanitizedSyncObservation) {
         if observation.kind.eventMessage != nil {
             SentrySDK.capture(event: Self.makeEvent(from: observation))
@@ -76,7 +70,6 @@ final class SentrySyncObservationSink: SyncObservationSink {
                 "attempt_count": observation.counts.attempt,
                 "pending_outbox_count": observation.counts.pending,
                 "failed_outbox_count": observation.counts.failed,
-                "recovered_outbox_count": observation.counts.recovered,
                 "classifier_version": 1,
             ],
         ]
@@ -137,14 +130,12 @@ enum SentrySyncEventScrubber {
         "attempt_count",
         "pending_outbox_count",
         "failed_outbox_count",
-        "recovered_outbox_count",
         "classifier_version",
     ]
     private static let durableErrorCodes: Set<String> = [
         SyncStableErrorCode.failedOutboxPush.rawValue,
         SyncStableErrorCode.incompleteRemotePull.rawValue,
-        SyncStableErrorCode.clientCallFailed.rawValue,
-        SyncStableErrorCode.recoveryMarkerPersistenceFailed.rawValue,
+        SyncStableErrorCode.syncRunFailed.rawValue,
         SyncStableErrorCode.ownerMismatch.rawValue,
     ]
 
@@ -155,18 +146,16 @@ enum SentrySyncEventScrubber {
         guard let tags = event.tags,
               areValidCommonTags(tags, allowsDistributionChannel: true),
               let outcome = tags["outcome"],
-              outcome == SyncObservationOutcome.failure.rawValue
-                || outcome == SyncObservationOutcome.recovered.rawValue,
+              outcome == SyncObservationOutcome.failure.rawValue,
               let errorCode = tags["error_code"],
               durableErrorCodes.contains(errorCode),
               tags["failure_category"] != "none",
               (tags["entity_kind"] == "none") == (tags["operation"] == "none"),
               let fingerprint = event.fingerprint,
               let formattedMessage = event.message?.formatted,
-              let expectedEventMetadata = expectedEventMetadata(for: outcome),
-              formattedMessage == expectedEventMetadata.message,
+              formattedMessage == "Durable Sync Failure",
               fingerprint == [
-                expectedEventMetadata.fingerprintPrefix,
+                "baros-sync-v1",
                 tags["sync_phase"]!,
                 tags["entity_kind"]!,
                 tags["operation"]!,
@@ -228,19 +217,6 @@ enum SentrySyncEventScrubber {
         return true
     }
 
-    private static func expectedEventMetadata(
-        for outcome: String
-    ) -> (message: String, fingerprintPrefix: String)? {
-        switch outcome {
-        case SyncObservationOutcome.failure.rawValue:
-            ("Durable Sync Failure", "baros-sync-v1")
-        case SyncObservationOutcome.recovered.rawValue:
-            ("Sync Recovery", "baros-sync-recovery-v1")
-        default:
-            nil
-        }
-    }
-
     private static func areValidSyncContextValues(_ context: [String: Any]) -> Bool {
         for (key, value) in context {
             guard let number = value as? NSNumber else { return false }
@@ -271,8 +247,6 @@ private extension SyncObservationKind {
         switch self {
         case .durableFailure:
             "Durable Sync Failure"
-        case .recovery:
-            "Sync Recovery"
         case .breadcrumb:
             nil
         }

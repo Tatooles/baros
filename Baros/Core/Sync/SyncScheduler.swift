@@ -38,13 +38,11 @@ final class LastKnownSyncOwnerTokenStore {
 @Observable
 final class SyncScheduler {
     private static let incompleteSyncFailureMessage = "Cloud sync could not finish."
-    private static let durableFailureAttemptThreshold = 3
 
     enum FailureReason: Equatable {
         case failedOutboxPush
         case incompleteRemotePull
         case syncError
-        case recoveryMarkerPersistenceFailed
     }
 
     struct Failure: Equatable {
@@ -341,10 +339,6 @@ final class SyncScheduler {
     private func startSyncTask(coordinator: SyncCoordinator, modelContext: ModelContext) {
         syncTask = Task { @MainActor in
             isSyncing = true
-            var reportedFailureBeingRetried = reportedDurableOutboxFailure(
-                ownerTokenIdentifier: currentOwnerTokenIdentifier,
-                context: modelContext
-            )
             while true {
                 needsSync = false
                 hasQueuedSyncRequest = false
@@ -360,23 +354,10 @@ final class SyncScheduler {
                             occurredAt: .now,
                             reason: .failedOutboxPush
                         )
-                        let reachedDurableFailureThreshold = failedActiveV1OutboxEntries(
-                            ownerTokenIdentifier: syncOwnerTokenIdentifier,
-                            context: modelContext
-                        ).contains { entry in
-                            entry.attemptCount >= Self.durableFailureAttemptThreshold
-                        }
-                        if reachedDurableFailureThreshold {
-                            recordDurableOutboxFailure(
-                                ownerTokenIdentifier: syncOwnerTokenIdentifier,
-                                context: modelContext
-                            )
-                        } else {
-                            observability.record(.transient(
-                                phase: .push,
-                                errorCode: transientCondition
-                            ))
-                        }
+                        observability.record(.transient(
+                            phase: .push,
+                            errorCode: transientCondition
+                        ))
                         break
                     }
                     guard !hasFailedActiveV1OutboxEntries(
@@ -388,7 +369,8 @@ final class SyncScheduler {
                             occurredAt: .now,
                             reason: .failedOutboxPush
                         )
-                        recordDurableOutboxFailure(
+                        recordDurableFailure(
+                            reason: .failedOutboxPush,
                             ownerTokenIdentifier: syncOwnerTokenIdentifier,
                             context: modelContext
                         )
@@ -410,20 +392,6 @@ final class SyncScheduler {
                         break
                     } else {
                         lastSyncedAt = .now
-                        let counts = observationCounts(
-                            ownerTokenIdentifier: syncOwnerTokenIdentifier,
-                            context: modelContext,
-                            recovered: 1
-                        )
-                        if let recoveredFailure = reportedFailureBeingRetried {
-                            observability.record(.syncRecovered(
-                                failure: recoveredFailure,
-                                counts: counts
-                            ))
-                            reportedFailureBeingRetried = nil
-                        } else {
-                            observability.record(.syncSucceeded(counts: counts))
-                        }
                     }
                     lastFailure = nil
                 } catch is CancellationError {
@@ -516,10 +484,19 @@ final class SyncScheduler {
         ownerTokenIdentifier: String?,
         context: ModelContext
     ) {
-        let failedEntry = failedActiveV1OutboxEntries(
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context
-        ).first
+        let failedEntry: SyncOutboxEntry? = if reason == .failedOutboxPush {
+            failedActiveV1OutboxEntries(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            ).min { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+        } else {
+            nil
+        }
         let failureClassification: (
             phase: SyncObservationPhase,
             category: SyncFailureCategory,
@@ -530,9 +507,7 @@ final class SyncScheduler {
         case .incompleteRemotePull:
             (.pull, .remotePull, .incompleteRemotePull)
         case .syncError:
-            (.scheduler, .clientCall, .clientCallFailed)
-        case .recoveryMarkerPersistenceFailed:
-            (.scheduler, .localPersistence, .recoveryMarkerPersistenceFailed)
+            (.scheduler, .syncRun, .syncRunFailed)
         }
         observability.record(.durableFailure(DurableSyncFailure(
             phase: failureClassification.phase,
@@ -548,69 +523,13 @@ final class SyncScheduler {
         )))
     }
 
-    private func recordDurableOutboxFailure(
-        ownerTokenIdentifier: String?,
-        context: ModelContext
-    ) {
-        guard let failedEntry = failedActiveV1OutboxEntries(
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context
-        ).first else {
-            recordDurableFailure(
-                reason: .syncError,
-                ownerTokenIdentifier: ownerTokenIdentifier,
-                context: context
-            )
-            return
-        }
-
-        failedEntry.hasReportedDurableFailure = true
-        do {
-            try context.save()
-        } catch {
-            context.rollback()
-            recordDurableFailure(
-                reason: .recoveryMarkerPersistenceFailed,
-                ownerTokenIdentifier: ownerTokenIdentifier,
-                context: context
-            )
-            return
-        }
-
-        recordDurableFailure(
-            reason: .failedOutboxPush,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context
-        )
-    }
-
-    private func reportedDurableOutboxFailure(
-        ownerTokenIdentifier: String?,
-        context: ModelContext
-    ) -> DurableSyncFailure? {
-        guard let entry = failedActiveV1OutboxEntries(
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context
-        ).first(where: { $0.hasReportedDurableFailure == true }) else {
-            return nil
-        }
-        return DurableSyncFailure(
-            phase: .push,
-            entityKind: entry.entityKind,
-            operation: entry.operation,
-            category: .outbox,
-            errorCode: .failedOutboxPush
-        )
-    }
-
     private func observationCounts(
         ownerTokenIdentifier: String?,
         context: ModelContext,
-        attempt: Int = 0,
-        recovered: Int = 0
+        attempt: Int = 0
     ) -> SyncObservationCounts {
         guard let ownerTokenIdentifier else {
-            return SyncObservationCounts(attempt: attempt, recovered: recovered)
+            return SyncObservationCounts(attempt: attempt)
         }
         let entries = ((try? context.fetch(FetchDescriptor<SyncOutboxEntry>())) ?? [])
             .filter { entry in
@@ -621,8 +540,7 @@ final class SyncScheduler {
         return SyncObservationCounts(
             attempt: attempt,
             pending: entries.count,
-            failed: entries.filter { $0.status == .failed }.count,
-            recovered: recovered
+            failed: entries.filter { $0.status == .failed }.count
         )
     }
 }

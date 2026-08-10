@@ -8,8 +8,8 @@ Use this checklist for issue #50 after the implementation build passes unit test
 2. Keep the project slug used by `SENTRY_PROJECT` in `project.yml` synchronized with any future slug change.
 3. Under **Security & Privacy**, keep default data scrubbing enabled and prevent storage of IP addresses.
 4. Add these sensitive field names to the project's scrubbing rules: `ownerTokenIdentifier`, `owner_subject`, `authorization`, `session_token`, `email`, `workout_notes`, `set_notes`, `record_id`, `client_id`, `request_body`, and `response_body`.
-5. Leave Spike Protection disabled for this project.
-6. Create an alert named `Baros persistent sync failure` that emails the maintainer for every captured event with `component=sync` and `outcome=failure`. This operator-facing title does not rename the Baros domain concept **Durable Sync Failure**. Do not include `outcome=recovered`.
+5. Keep Spike Protection enabled to protect the small project quota from an unexpected event spike.
+6. Create an alert named `Baros persistent sync failure` that emails the maintainer for every captured event with `component=sync` and `outcome=failure`. This operator-facing title does not rename the Baros domain concept **Durable Sync Failure**.
 7. Keep the alert action throttle at **Get notified on every trigger**. Do not add an ingestion filter that discards stored events.
 
 ## Archive and symbols
@@ -25,16 +25,13 @@ Use this checklist for issue #50 after the implementation build passes unit test
 2. Force a completed failed outbox push twice through the approved test setup.
 3. Verify Sentry stores two events under one issue with the same stable fingerprint and shows one distinct affected user.
 4. Repeat with a second disposable Current Owner and verify the distinct affected-user count increases to two without creating a separate issue solely for that owner.
-5. Restore synchronization and verify one informational `Sync Recovery` event appears without a failure email.
-6. Confirm the event tags include `component`, `sync_phase`, `entity_kind`, `operation`, `outcome`, `failure_category`, `error_code`, and `distribution_channel=testflight`.
-7. Confirm the event has the expected release, build (`dist`), and `production` environment.
+5. Confirm the event tags include `component`, `sync_phase`, `entity_kind`, `operation`, `outcome`, `failure_category`, `error_code`, and `distribution_channel=testflight`.
+6. Confirm the event has the expected release, build (`dist`), and `production` environment.
 
 ## Privacy inspection
 
-Inspect the raw JSON for a failure and recovery event. It must not contain raw Current Owner values, provider subjects, email addresses, names, authentication tokens, workout content, record or Convex document identifiers, URLs, headers, request or response bodies, localized error descriptions, or unrelated breadcrumbs.
+Inspect the raw JSON for a failure event. It must not contain raw Current Owner values, provider subjects, email addresses, names, authentication tokens, workout content, record or Convex document identifiers, URLs, headers, request or response bodies, localized error descriptions, or unrelated breadcrumbs.
 
 The only Sentry user field may be an ID beginning with `owner_v1_`. Confirm that changing Current Owner or signing out clears the prior scope before generating another event.
 
-## Delivery review
-
-Open Sentry Stats and record accepted, filtered, rate-limited, invalid, and client-discarded outcomes for the test window. Issue #50 can be closed only after the archive symbols, grouping, event count, affected-owner count, privacy inspection, recovery behavior, and alert behavior are all verified.
+Issue #50 can be closed after archive symbols, grouping, affected-owner attribution, privacy, and alert delivery are verified.
