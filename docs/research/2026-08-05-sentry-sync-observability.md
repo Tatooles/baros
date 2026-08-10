@@ -397,7 +397,7 @@ Default projects include an Issue Stream Monitor and Error Monitor. Custom Metri
 5. Configure an alert for every matching Durable Sync Failure event if Sentry supports that behavior. If it does not, document the exact platform limitation and add the closest event-frequency alert without filtering the stored events.
 6. Filter to the Baros sync marker/component and warning/error severity if the UI exposes those attributes for the selected source.
 7. Add a direct maintainer action, initially email; add Slack/on-call routing only if that is already an owned operational channel.
-8. Name it `Baros durable sync failure`.
+8. Name it `Baros persistent sync failure`; this operator-facing alert title does not rename the Baros domain concept **Durable Sync Failure**.
 9. Exercise it with repeated forced TestFlight failures; confirm every event is stored and document exactly how many notifications Sentry sends.
 
 Do not alert on recovery/info events. Keep those visible for diagnosis and confirmation.

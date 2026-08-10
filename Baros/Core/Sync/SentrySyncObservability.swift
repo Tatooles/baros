@@ -144,6 +144,7 @@ enum SentrySyncEventScrubber {
         SyncStableErrorCode.failedOutboxPush.rawValue,
         SyncStableErrorCode.incompleteRemotePull.rawValue,
         SyncStableErrorCode.clientCallFailed.rawValue,
+        SyncStableErrorCode.recoveryMarkerPersistenceFailed.rawValue,
         SyncStableErrorCode.ownerMismatch.rawValue,
     ]
 

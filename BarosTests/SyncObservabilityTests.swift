@@ -50,6 +50,25 @@ final class SyncObservabilityTests: XCTestCase {
         XCTAssertNotEqual(failures[0].fingerprint, failures[1].fingerprint)
     }
 
+    func testRecoveryMarkerPersistenceFailureUsesLocalPersistenceClassification() throws {
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
+        observability.record(.durableFailure(DurableSyncFailure(
+            phase: .scheduler,
+            category: .localPersistence,
+            errorCode: .recoveryMarkerPersistenceFailed
+        )))
+
+        let observation = try XCTUnwrap(sink.observations.first {
+            $0.kind == .durableFailure
+        })
+        XCTAssertEqual(observation.failureCategory, .localPersistence)
+        XCTAssertEqual(observation.errorCode, .recoveryMarkerPersistenceFailed)
+
+        let event = SentrySyncObservationSink.makeEvent(from: observation)
+        XCTAssertNotNil(SentrySyncEventScrubber.scrub(event))
+    }
+
     func testSuccessfulCycleAfterFailureRecordsOneRecoveryButRoutineSuccessDoesNot() {
         let sink = RecordingSyncObservationSink()
         let observability = SyncObservability(sink: sink)

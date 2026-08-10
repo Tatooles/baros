@@ -425,6 +425,55 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertFalse(String(describing: sink.observations).contains(owner))
     }
 
+    func testThirdOfflinePushAttemptBecomesADurableSyncFailure() async throws {
+        let owner = "issuer|owner_private"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Private workout content",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(exercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.error = URLError(.notConnectedToInternet)
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client, observability: observability),
+            modelContext: context,
+            observability: observability
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+
+        for attempt in 1...3 {
+            attempt == 1 ? scheduler.requestSync() : scheduler.retrySync()
+            try await waitUntil {
+                let entries = try? context.fetch(FetchDescriptor<SyncOutboxEntry>())
+                return entries?.first?.attemptCount == attempt && !scheduler.isSyncing
+            }
+        }
+
+        let failures = sink.observations.filter { $0.kind == .durableFailure }
+        let failure = try XCTUnwrap(failures.first)
+        XCTAssertEqual(failures.count, 1)
+        XCTAssertEqual(failure.errorCode, .failedOutboxPush)
+        XCTAssertEqual(failure.counts.attempt, 3)
+        XCTAssertFalse(String(describing: failure).contains(owner))
+        XCTAssertFalse(String(describing: failure).contains("Private workout content"))
+    }
+
     func testTimedOutPullIsATransientSyncConditionInsteadOfADurableSyncFailure() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -536,6 +585,114 @@ final class SyncSchedulerStatusTests: XCTestCase {
         }
 
         XCTAssertEqual(sink.observations.filter { $0.kind == .recovery }.count, 1)
+    }
+
+    func testSuccessfulRetryAfterRelaunchRecordsRecoveryForPersistedDurableFailure() async throws {
+        struct PushError: LocalizedError {
+            var errorDescription: String? { "private server detail" }
+        }
+
+        let owner = "issuer|owner_private"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Private workout content",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(exercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.error = PushError()
+        let firstSink = RecordingSyncObservationSink()
+        let firstObservability = SyncObservability(sink: firstSink)
+        let firstScheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client, observability: firstObservability),
+            modelContext: context,
+            observability: firstObservability
+        )
+        firstScheduler.currentOwnerTokenIdentifier = owner
+        firstScheduler.requestSync()
+        try await waitUntil {
+            firstSink.observations.contains { $0.kind == .durableFailure }
+                && !firstScheduler.isSyncing
+        }
+
+        client.error = nil
+        let relaunchedContext = ModelContext(container)
+        let relaunchedSink = RecordingSyncObservationSink()
+        let relaunchedObservability = SyncObservability(sink: relaunchedSink)
+        let relaunchedScheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client, observability: relaunchedObservability),
+            modelContext: relaunchedContext,
+            observability: relaunchedObservability
+        )
+        relaunchedScheduler.currentOwnerTokenIdentifier = owner
+        relaunchedScheduler.retrySync()
+        try await waitUntil { relaunchedScheduler.lastSyncedAt != nil }
+
+        let recovery = try XCTUnwrap(
+            relaunchedSink.observations.first { $0.kind == .recovery }
+        )
+        XCTAssertEqual(recovery.errorCode, .failedOutboxPush)
+        XCTAssertEqual(recovery.entityKind, .exercise)
+        XCTAssertEqual(recovery.operation, .create)
+        XCTAssertFalse(String(describing: recovery).contains(owner))
+        XCTAssertFalse(String(describing: recovery).contains("Private workout content"))
+    }
+
+    func testSuccessfulRetryDoesNotReportRecoveryForLegacyUnreportedFailure() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        let failedEntry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            operation: .create,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200),
+            lastAttemptAt: Date(timeIntervalSince1970: 150),
+            attemptCount: 3,
+            lastErrorMessage: "legacy failure"
+        )
+        failedEntry.hasReportedDurableFailure = nil
+        context.insert(exercise)
+        context.insert(failedEntry)
+        try context.save()
+
+        let retryContext = ModelContext(container)
+        let client = FakeSyncClient()
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client, observability: observability),
+            modelContext: retryContext,
+            observability: observability
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+        scheduler.retrySync()
+        try await waitUntil { scheduler.lastSyncedAt != nil }
+
+        XCTAssertFalse(sink.observations.contains { $0.kind == .recovery })
     }
 
     func testSchedulerDoesNotRecordSuccessWhenPushLeavesFailedOutboxEntry() async throws {

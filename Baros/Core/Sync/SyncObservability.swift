@@ -23,6 +23,7 @@ enum SyncFailureCategory: String, CaseIterable, Equatable {
     case outbox
     case remotePull = "remote_pull"
     case clientCall = "client_call"
+    case localPersistence = "local_persistence"
     case ownership
 }
 
@@ -30,6 +31,7 @@ enum SyncStableErrorCode: String, CaseIterable, Equatable {
     case failedOutboxPush = "failed_outbox_push"
     case incompleteRemotePull = "incomplete_remote_pull"
     case clientCallFailed = "client_call_failed"
+    case recoveryMarkerPersistenceFailed = "recovery_marker_persistence_failed"
     case ownerMismatch = "owner_mismatch"
     case noCurrentOwner = "no_current_owner"
     case authorizationUnavailable = "authorization_unavailable"
@@ -100,6 +102,7 @@ enum SyncLifecycleFact: Equatable {
     case transient(phase: SyncObservationPhase, errorCode: SyncStableErrorCode)
     case durableFailure(DurableSyncFailure)
     case syncSucceeded(counts: SyncObservationCounts)
+    case syncRecovered(failure: DurableSyncFailure, counts: SyncObservationCounts)
 }
 
 enum SyncObservationKind: Equatable {
@@ -222,12 +225,10 @@ final class SyncObservability: SyncObserving {
         case .syncSucceeded(let counts):
             guard let activeFailure else { return }
             self.activeFailure = nil
-            let observation = Self.makeRecoveryObservation(
-                from: activeFailure,
-                counts: counts,
-                pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
-            )
-            recordEventWithLifecycleBreadcrumb(observation)
+            recordRecovery(from: activeFailure, counts: counts)
+        case let .syncRecovered(failure, counts):
+            activeFailure = nil
+            recordRecovery(from: failure, counts: counts)
         }
     }
 
@@ -254,6 +255,18 @@ final class SyncObservability: SyncObserving {
     private func recordEventWithLifecycleBreadcrumb(_ observation: SanitizedSyncObservation) {
         sink.record(Self.makeLifecycleBreadcrumb(from: observation))
         sink.record(observation)
+    }
+
+    private func recordRecovery(
+        from failure: DurableSyncFailure,
+        counts: SyncObservationCounts
+    ) {
+        let observation = Self.makeRecoveryObservation(
+            from: failure,
+            counts: counts,
+            pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
+        )
+        recordEventWithLifecycleBreadcrumb(observation)
     }
 
     private static func makeFailureObservation(
