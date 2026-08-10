@@ -21,3 +21,7 @@ _Avoid_: Unowned data, hidden owner data
 **Active Workout**:
 A workout in progress whose exercises and sets remain editable until the workout is finished or discarded.
 _Avoid_: Workout draft, live session
+
+**Exercise Performance**:
+A completed workout in which an exercise has at least one completed set. An exercise counts at most once per workout, even when it appears more than once.
+_Avoid_: Completed set count, exercise appearance

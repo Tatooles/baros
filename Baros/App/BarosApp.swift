@@ -37,6 +37,7 @@ struct BarosApp: App {
         }
         FirstRunExperienceStore.resetForUITestingIfRequested(arguments: arguments)
         FirstRunExperienceStore.markSeenForUITestingIfRequested(arguments: arguments)
+        ExercisePickerSortPreferenceStore.resetForUITestingIfRequested(arguments: arguments)
 
         do {
             let useInMemoryStore = arguments.contains("--uitest-in-memory-store")

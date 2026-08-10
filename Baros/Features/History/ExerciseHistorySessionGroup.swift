@@ -49,7 +49,7 @@ struct ExerciseHistorySessionGroup: Identifiable {
         WorkoutSession.visibleCompletedSessions(from: sessions, ownerTokenIdentifier: ownerTokenIdentifier)
             .compactMap { session in
                 let entries = session.sortedLoggedExercises.flatMap { loggedExercise in
-                    guard matches(loggedExercise, summary: summary) else { return [ExerciseHistorySetEntry]() }
+                    guard summary.matches(loggedExercise) else { return [ExerciseHistorySetEntry]() }
 
                     return loggedExercise.sortedSets
                         .filter(\.isCompleted)
@@ -78,15 +78,6 @@ struct ExerciseHistorySessionGroup: Identifiable {
             matching: summary,
             ownerTokenIdentifier: ownerTokenIdentifier
         ).prefix(limit))
-    }
-
-    private static func matches(_ loggedExercise: LoggedExercise, summary: ExerciseHistorySummary) -> Bool {
-        if let exerciseID = summary.exerciseID {
-            return loggedExercise.exercise?.id == exerciseID
-        }
-
-        return loggedExercise.exerciseSnapshotName.caseInsensitiveCompare(summary.name) == .orderedSame
-            && loggedExercise.resolvedSnapshotEquipmentRaw == summary.equipmentRaw
     }
 
     private static func groupByLoggedExercise(

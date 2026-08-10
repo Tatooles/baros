@@ -26,20 +26,12 @@ struct ExerciseHistoryRow: View {
                             .foregroundStyle(AppTheme.textSecondary)
                             .lineLimit(1)
                     }
-                    Text("Last: \(summary.lastPerformedLabel)")
+                    Text(summary.performanceSummaryLabel)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)
                 }
 
                 Spacer()
-
-                Text("x\(summary.completedSetCount)")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(AppTheme.surfaceMuted)
-                    .clipShape(Capsule())
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 15, weight: .medium))

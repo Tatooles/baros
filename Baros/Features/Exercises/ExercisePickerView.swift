@@ -2,21 +2,59 @@ import SwiftData
 import SwiftUI
 
 struct ExercisePickerView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(SyncScheduler.self) private var syncScheduler
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
+    @Query private var sessions: [WorkoutSession]
+    let onSelect: (Exercise) -> Void
+    private let sortPreferenceStore: ExercisePickerSortPreferenceStore
+
+    init(
+        sortPreferenceStore: ExercisePickerSortPreferenceStore = ExercisePickerSortPreferenceStore(),
+        onSelect: @escaping (Exercise) -> Void
+    ) {
+        self.sortPreferenceStore = sortPreferenceStore
+        self.onSelect = onSelect
+    }
+
+    var body: some View {
+        ExercisePickerList(
+            baseRows: ExercisePickerContent.makeBaseRows(
+                exercises: exercises,
+                sessions: sessions,
+                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ),
+            sortPreferenceStore: sortPreferenceStore,
+            onSelect: onSelect
+        )
+    }
+}
+
+private struct ExercisePickerList: View {
+    @Environment(\.dismiss) private var dismiss
+    let baseRows: [ExercisePickerRowContent]
     let onSelect: (Exercise) -> Void
     @State private var searchText = ""
     @State private var isCreatingExercise = false
+    @State private var sortOrder: ExercisePickerSortOrder
+    private let sortPreferenceStore: ExercisePickerSortPreferenceStore
 
-    private var filteredExercises: [Exercise] {
-        Exercise.visibleActiveExercises(
-            from: exercises,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+    init(
+        baseRows: [ExercisePickerRowContent],
+        sortPreferenceStore: ExercisePickerSortPreferenceStore,
+        onSelect: @escaping (Exercise) -> Void
+    ) {
+        self.baseRows = baseRows
+        self.sortPreferenceStore = sortPreferenceStore
+        self.onSelect = onSelect
+        _sortOrder = State(initialValue: sortPreferenceStore.sortOrder)
+    }
+
+    private var rows: [ExercisePickerRowContent] {
+        ExercisePickerContent.filterAndSort(
+            rows: baseRows,
+            query: searchText,
+            sortOrder: sortOrder
         )
-            .filter { exercise in
-                searchText.isEmpty || exercise.name.localizedCaseInsensitiveContains(searchText)
-            }
     }
 
     var body: some View {
@@ -34,24 +72,54 @@ struct ExercisePickerView: View {
             }
 
             Section {
-                ForEach(filteredExercises) { exercise in
+                ForEach(rows) { row in
                     Button {
-                        onSelect(exercise)
+                        onSelect(row.exercise)
                     } label: {
-                        exerciseRow(exercise)
+                        exerciseRow(row)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityIdentifier("ExercisePickerRow-\(exercise.name)-\(exercise.equipment.displayName)")
+                    .accessibilityIdentifier(
+                        "ExercisePickerRow-\(row.exercise.name)-\(row.exercise.equipment.displayName)"
+                    )
                     .listRowBackground(AppTheme.surface)
                     .listRowSeparatorTint(AppTheme.border)
                 }
+            } header: {
+                HStack {
+                    Text("Exercises")
+
+                    Spacer()
+
+                    Menu {
+                        Picker("Sort exercises", selection: $sortOrder) {
+                            ForEach(ExercisePickerSortOrder.allCases) { option in
+                                Text(option.displayName).tag(option)
+                            }
+                        }
+                    } label: {
+                        Label(
+                            "Sort: \(sortOrder.displayName)",
+                            systemImage: "arrow.up.arrow.down"
+                        )
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppTheme.accentBright)
+                    }
+                    .accessibilityLabel("Sort: \(sortOrder.displayName)")
+                    .accessibilityIdentifier("ExercisePickerSortMenu")
+                }
+                .textCase(nil)
             }
         }
         .scrollContentBackground(.hidden)
+        .contentMargins(.bottom, 24, for: .scrollContent)
         .background(AppTheme.subtleBackground.ignoresSafeArea())
         .navigationTitle("Add Exercise")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search exercises")
+        .onChange(of: sortOrder) { _, newValue in
+            sortPreferenceStore.sortOrder = newValue
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Done") {
@@ -67,14 +135,17 @@ struct ExercisePickerView: View {
         }
     }
 
-    private func exerciseRow(_ exercise: Exercise) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(exercise.name)
+    private func exerciseRow(_ row: ExercisePickerRowContent) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(row.exercise.name)
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(AppTheme.textPrimary)
-            Text(exercise.metadataDisplayText)
+            Text(row.exercise.metadataDisplayText)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppTheme.textSecondary)
+            Text(row.performanceSummaryText)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppTheme.textTertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
