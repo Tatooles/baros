@@ -121,7 +121,7 @@ targets:
           fi
 
           export SENTRY_ORG=kevin-tatooles
-          export SENTRY_PROJECT=apple-ios
+          export SENTRY_PROJECT=baros-ios
           sentry-cli debug-files upload "${DWARF_DSYM_FOLDER_PATH}"
     settings:
       base:

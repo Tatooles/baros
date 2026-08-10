@@ -4,8 +4,8 @@ Use this checklist for issue #50 after the implementation build passes unit test
 
 ## Sentry project setup
 
-1. Open the existing `apple-ios` project in the `kevin-tatooles` organization.
-2. If this project contains only the onboarding event, rename it to `baros-ios`. Keep the project slug used by `SENTRY_PROJECT` in `project.yml` synchronized with any slug change.
+1. Open the existing `baros-ios` project in the `kevin-tatooles` organization and confirm its platform is iOS.
+2. Keep the project slug used by `SENTRY_PROJECT` in `project.yml` synchronized with any future slug change.
 3. Under **Security & Privacy**, keep default data scrubbing enabled and prevent storage of IP addresses.
 4. Add these sensitive field names to the project's scrubbing rules: `ownerTokenIdentifier`, `owner_subject`, `authorization`, `session_token`, `email`, `workout_notes`, `set_notes`, `record_id`, `client_id`, `request_body`, and `response_body`.
 5. Leave Spike Protection disabled for this project.

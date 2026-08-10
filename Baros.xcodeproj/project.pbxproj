@@ -905,7 +905,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\n\n# A normal Release build does not require upload credentials. Archives do.\nif [ \"${CONFIGURATION}\" != \"Release\" ] || [ \"${ACTION}\" != \"install\" ]; then\n  exit 0\nfi\n\nif [ -z \"${SENTRY_AUTH_TOKEN:-}\" ]; then\n  echo \"error: SENTRY_AUTH_TOKEN is required to upload archive dSYMs\"\n  exit 1\nfi\n\nif ! command -v sentry-cli >/dev/null 2>&1; then\n  echo \"error: sentry-cli is required to upload archive dSYMs\"\n  exit 1\nfi\n\nexport SENTRY_ORG=kevin-tatooles\nexport SENTRY_PROJECT=apple-ios\nsentry-cli debug-files upload \"${DWARF_DSYM_FOLDER_PATH}\"\n";
+			shellScript = "set -euo pipefail\n\n# A normal Release build does not require upload credentials. Archives do.\nif [ \"${CONFIGURATION}\" != \"Release\" ] || [ \"${ACTION}\" != \"install\" ]; then\n  exit 0\nfi\n\nif [ -z \"${SENTRY_AUTH_TOKEN:-}\" ]; then\n  echo \"error: SENTRY_AUTH_TOKEN is required to upload archive dSYMs\"\n  exit 1\nfi\n\nif ! command -v sentry-cli >/dev/null 2>&1; then\n  echo \"error: sentry-cli is required to upload archive dSYMs\"\n  exit 1\nfi\n\nexport SENTRY_ORG=kevin-tatooles\nexport SENTRY_PROJECT=baros-ios\nsentry-cli debug-files upload \"${DWARF_DSYM_FOLDER_PATH}\"\n";
 		};
 		1BE28BD9A0FE10AF53495929 /* Write Build Source Metadata */ = {
 			isa = PBXShellScriptBuildPhase;
