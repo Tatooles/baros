@@ -218,8 +218,7 @@ final class SyncObservability: SyncObserving {
                 failure,
                 pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
             )
-            sink.record(Self.makeLifecycleBreadcrumb(from: observation))
-            sink.record(observation)
+            recordEventWithLifecycleBreadcrumb(observation)
         case .syncSucceeded(let counts):
             guard let activeFailure else { return }
             self.activeFailure = nil
@@ -228,8 +227,7 @@ final class SyncObservability: SyncObserving {
                 counts: counts,
                 pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
             )
-            sink.record(Self.makeLifecycleBreadcrumb(from: observation))
-            sink.record(observation)
+            recordEventWithLifecycleBreadcrumb(observation)
         }
     }
 
@@ -251,6 +249,11 @@ final class SyncObservability: SyncObserving {
             fingerprint: [],
             pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
         ))
+    }
+
+    private func recordEventWithLifecycleBreadcrumb(_ observation: SanitizedSyncObservation) {
+        sink.record(Self.makeLifecycleBreadcrumb(from: observation))
+        sink.record(observation)
     }
 
     private static func makeFailureObservation(
