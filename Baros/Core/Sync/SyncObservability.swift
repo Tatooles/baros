@@ -185,65 +185,33 @@ final class SyncObservability: SyncObserving {
         pseudonymousCurrentOwnerID = newPseudonymousCurrentOwnerID
         activeFailure = nil
         sink.setPseudonymousCurrentOwnerID(newPseudonymousCurrentOwnerID)
-        sink.record(SanitizedSyncObservation(
-            kind: .breadcrumb,
-            level: .info,
+        recordBreadcrumb(
             phase: .ownership,
-            entityKind: nil,
-            operation: nil,
             outcome: .changed,
-            failureCategory: nil,
-            errorCode: .currentOwnerChanged,
-            counts: SyncObservationCounts(),
-            fingerprint: [],
-            pseudonymousCurrentOwnerID: newPseudonymousCurrentOwnerID
-        ))
+            errorCode: .currentOwnerChanged
+        )
     }
 
     func record(_ fact: SyncLifecycleFact) {
         switch fact {
         case .syncRequested(let isRetry):
-            sink.record(SanitizedSyncObservation(
-                kind: .breadcrumb,
-                level: .info,
+            recordBreadcrumb(
                 phase: .scheduler,
-                entityKind: nil,
-                operation: nil,
                 outcome: isRetry ? .retrying : .requested,
-                failureCategory: nil,
-                errorCode: isRetry ? .syncRetryRequested : .syncRequested,
-                counts: SyncObservationCounts(),
-                fingerprint: [],
-                pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
-            ))
+                errorCode: isRetry ? .syncRetryRequested : .syncRequested
+            )
         case .syncPhaseCompleted(let phase):
-            sink.record(SanitizedSyncObservation(
-                kind: .breadcrumb,
-                level: .info,
+            recordBreadcrumb(
                 phase: phase,
-                entityKind: nil,
-                operation: nil,
                 outcome: .completed,
-                failureCategory: nil,
-                errorCode: .syncPhaseCompleted,
-                counts: SyncObservationCounts(),
-                fingerprint: [],
-                pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
-            ))
+                errorCode: .syncPhaseCompleted
+            )
         case let .transient(phase, errorCode):
-            sink.record(SanitizedSyncObservation(
-                kind: .breadcrumb,
-                level: .info,
+            recordBreadcrumb(
                 phase: phase,
-                entityKind: nil,
-                operation: nil,
                 outcome: .paused,
-                failureCategory: nil,
-                errorCode: errorCode,
-                counts: SyncObservationCounts(),
-                fingerprint: [],
-                pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
-            ))
+                errorCode: errorCode
+            )
         case .durableFailure(let failure):
             activeFailure = failure
             let observation = Self.makeFailureObservation(
@@ -263,6 +231,26 @@ final class SyncObservability: SyncObserving {
             sink.record(Self.makeLifecycleBreadcrumb(from: observation))
             sink.record(observation)
         }
+    }
+
+    private func recordBreadcrumb(
+        phase: SyncObservationPhase,
+        outcome: SyncObservationOutcome,
+        errorCode: SyncStableErrorCode
+    ) {
+        sink.record(SanitizedSyncObservation(
+            kind: .breadcrumb,
+            level: .info,
+            phase: phase,
+            entityKind: nil,
+            operation: nil,
+            outcome: outcome,
+            failureCategory: nil,
+            errorCode: errorCode,
+            counts: SyncObservationCounts(),
+            fingerprint: [],
+            pseudonymousCurrentOwnerID: pseudonymousCurrentOwnerID
+        ))
     }
 
     private static func makeFailureObservation(

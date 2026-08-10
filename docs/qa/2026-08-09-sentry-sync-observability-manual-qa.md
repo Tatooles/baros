@@ -9,7 +9,7 @@ Use this checklist for issue #50 after the implementation build passes unit test
 3. Under **Security & Privacy**, keep default data scrubbing enabled and prevent storage of IP addresses.
 4. Add these sensitive field names to the project's scrubbing rules: `ownerTokenIdentifier`, `owner_subject`, `authorization`, `session_token`, `email`, `workout_notes`, `set_notes`, `record_id`, `client_id`, `request_body`, and `response_body`.
 5. Leave Spike Protection disabled for this project.
-6. Create an alert named `Baros persistent sync failure` that emails the maintainer for every captured event with `component=sync` and `outcome=failure`. Do not include `outcome=recovered`.
+6. Create an alert named `Baros persistent sync failure` that emails the maintainer for every captured event with `component=sync` and `outcome=failure`. This operator-facing title does not rename the Baros domain concept **Durable Sync Failure**. Do not include `outcome=recovered`.
 7. Keep the alert action throttle at **Get notified on every trigger**. Do not add an ingestion filter that discards stored events.
 
 ## Archive and symbols

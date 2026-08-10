@@ -493,7 +493,7 @@ final class SyncScheduler {
             ownerTokenIdentifier: ownerTokenIdentifier,
             context: context
         ).first
-        let details: (
+        let failureClassification: (
             phase: SyncObservationPhase,
             category: SyncFailureCategory,
             errorCode: SyncStableErrorCode
@@ -506,11 +506,11 @@ final class SyncScheduler {
             (.scheduler, .clientCall, .clientCallFailed)
         }
         observability.record(.durableFailure(DurableSyncFailure(
-            phase: details.phase,
+            phase: failureClassification.phase,
             entityKind: failedEntry?.entityKind,
             operation: failedEntry?.operation,
-            category: details.category,
-            errorCode: details.errorCode,
+            category: failureClassification.category,
+            errorCode: failureClassification.errorCode,
             counts: observationCounts(
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context,
