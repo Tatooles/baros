@@ -29,3 +29,5 @@ fastlane/test_output
 .env.local
 
 node_modules/
+
+.sentryclirc

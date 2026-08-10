@@ -18,6 +18,9 @@ packages:
   ConvexMobile:
     url: https://github.com/get-convex/convex-swift
     from: 0.8.1
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa.git
+    from: 9.23.0
 schemes:
   BarosUnitTests:
     build:
@@ -48,6 +51,8 @@ targets:
         product: ClerkConvex
       - package: ConvexMobile
         product: ConvexMobile
+      - package: Sentry
+        product: Sentry
     postBuildScripts:
       - name: Write Build Source Metadata
         basedOnDependencyAnalysis: false
@@ -93,6 +98,31 @@ targets:
           /usr/bin/plutil -insert HasLocalChanges -bool "${has_local_changes}" "${metadata_path}"
           /usr/bin/plutil -insert BuiltAt -string "$(/bin/date '+%Y-%m-%d %H:%M:%S %z')" "${metadata_path}"
           /usr/bin/plutil -insert Configuration -string "${CONFIGURATION}" "${metadata_path}"
+      - name: Upload Debug Symbols to Sentry
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(TARGET_NAME)
+        script: |
+          set -euo pipefail
+
+          # A normal Release build does not require upload credentials. Archives do.
+          if [ "${CONFIGURATION}" != "Release" ] || [ "${ACTION}" != "install" ]; then
+            exit 0
+          fi
+
+          if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
+            echo "error: SENTRY_AUTH_TOKEN is required to upload archive dSYMs"
+            exit 1
+          fi
+
+          if ! command -v sentry-cli >/dev/null 2>&1; then
+            echo "error: sentry-cli is required to upload archive dSYMs"
+            exit 1
+          fi
+
+          export SENTRY_ORG=kevin-tatooles
+          export SENTRY_PROJECT=apple-ios
+          sentry-cli debug-files upload "${DWARF_DSYM_FOLDER_PATH}"
     settings:
       base:
         # The Write Build Source Metadata script reads .git and writes into the
@@ -107,6 +137,8 @@ targets:
         DEVELOPMENT_TEAM: RJGJJ38RV9
         APP_DISPLAY_NAME: Baros Dev
         BAROS_ENVIRONMENT: Development
+        SENTRY_ENABLED: NO
+        SENTRY_DSN: ""
         CLERK_PUBLISHABLE_KEY: pk_test_Z2xhZC1rcmlsbC0yMi5jbGVyay5hY2NvdW50cy5kZXYk
         CLERK_ASSOCIATED_DOMAIN: webcredentials:glad-krill-22.clerk.accounts.dev
         CONVEX_DEPLOYMENT_URL: https://glad-cow-603.convex.cloud
@@ -119,6 +151,8 @@ targets:
           PRODUCT_BUNDLE_IDENTIFIER: com.kevintatooles.LiftingLog
           APP_DISPLAY_NAME: Baros
           BAROS_ENVIRONMENT: Production
+          SENTRY_ENABLED: YES
+          SENTRY_DSN: https://7e078530be3bfc7c45aaeecc13fc5cab@o4511860701855744.ingest.us.sentry.io/4511860712210432
           CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuYmFyb3MuZml0JA
           CLERK_ASSOCIATED_DOMAIN: webcredentials:clerk.baros.fit
           CONVEX_DEPLOYMENT_URL: https://sensible-reindeer-16.convex.cloud
@@ -135,6 +169,8 @@ targets:
       - path: BarosTests
     dependencies:
       - target: Baros
+      - package: Sentry
+        product: Sentry
     settings:
       base:
         PRODUCT_NAME: BarosTests

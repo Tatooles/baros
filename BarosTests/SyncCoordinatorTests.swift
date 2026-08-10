@@ -3426,6 +3426,47 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(entry.lastErrorMessage, "offline")
     }
 
+    func testRunClassifiesOfflinePushAsTransientAtTheCoordinatorSeam() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Private workout content",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Quads",
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(exercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.error = URLError(.notConnectedToInternet)
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
+        let result = try await SyncCoordinator(
+            client: client,
+            observability: observability
+        ).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertEqual(result.transientCondition, .networkUnavailable)
+        XCTAssertTrue(sink.observations.contains {
+            $0.kind == .breadcrumb
+                && $0.phase == .pull
+                && $0.outcome == .completed
+        })
+        XCTAssertFalse(sink.observations.contains { $0.kind == .durableFailure })
+        XCTAssertFalse(String(describing: sink.observations).contains(owner))
+        XCTAssertFalse(String(describing: sink.observations).contains("Private workout content"))
+    }
+
     func testRunRetriesPreviouslyFailedEntryOnNextRun() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

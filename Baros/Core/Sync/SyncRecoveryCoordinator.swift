@@ -201,8 +201,13 @@ final class SyncRecoveryCoordinator {
         case .current:
             break
         case .unavailable:
+            syncScheduler.observability.record(.transient(
+                phase: .ownership,
+                errorCode: .authorizationUnavailable
+            ))
             return .reject
         case .mismatch:
+            recordOwnerMismatch()
             await rejectInstalledAuthentication()
             return .reject
         }
@@ -237,7 +242,18 @@ final class SyncRecoveryCoordinator {
             self.activeRecovery = nil
         }
 
-        guard hasActiveSession(), !syncScheduler.isDeletionModeEnabled else {
+        guard hasActiveSession() else {
+            syncScheduler.observability.record(.transient(
+                phase: .recovery,
+                errorCode: .noCurrentOwner
+            ))
+            return
+        }
+        guard !syncScheduler.isDeletionModeEnabled else {
+            syncScheduler.observability.record(.transient(
+                phase: .recovery,
+                errorCode: .deletionMode
+            ))
             return
         }
 
@@ -271,6 +287,10 @@ final class SyncRecoveryCoordinator {
             }
             let result = await authenticationClient.loginFromCache()
             guard case .success(let token) = result else {
+                syncScheduler.observability.record(.transient(
+                    phase: .recovery,
+                    errorCode: .authenticationFailed
+                ))
                 return
             }
             guard let ownerTokenIdentifier = await validatedRecoveredOwner(from: token) else {
@@ -349,14 +369,31 @@ final class SyncRecoveryCoordinator {
     }
 
     private func validatedRecoveredOwner(from token: String) async -> String? {
-        guard let ownerTokenIdentifier = ClerkJWTIdentityResolver.ownerTokenIdentifier(from: token),
-              validateOwnerTokenIdentifier(ownerTokenIdentifier) == .current else {
+        guard let ownerTokenIdentifier = ClerkJWTIdentityResolver.ownerTokenIdentifier(from: token) else {
+            syncScheduler.observability.record(.transient(
+                phase: .recovery,
+                errorCode: .authenticationFailed
+            ))
             // loginFromCache installs the token on the shared Convex client before
             // returning it, so an unvalidated result must fail closed.
             await rejectInstalledAuthentication()
             return nil
         }
-        return ownerTokenIdentifier
+        switch validateOwnerTokenIdentifier(ownerTokenIdentifier) {
+        case .current:
+            return ownerTokenIdentifier
+        case .unavailable:
+            syncScheduler.observability.record(.transient(
+                phase: .ownership,
+                errorCode: .authorizationUnavailable
+            ))
+        case .mismatch:
+            recordOwnerMismatch()
+        }
+        // loginFromCache installs the token on the shared Convex client before
+        // returning it, so an unvalidated result must fail closed.
+        await rejectInstalledAuthentication()
+        return nil
     }
 
     private func validateOwnerTokenIdentifier(_ ownerTokenIdentifier: String) -> OwnerValidation {
@@ -368,5 +405,13 @@ final class SyncRecoveryCoordinator {
 
     private func rejectInstalledAuthentication() async {
         await authenticationClient.logout()
+    }
+
+    private func recordOwnerMismatch() {
+        syncScheduler.observability.record(.durableFailure(DurableSyncFailure(
+            phase: .ownership,
+            category: .ownership,
+            errorCode: .ownerMismatch
+        )))
     }
 }

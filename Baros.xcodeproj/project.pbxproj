@@ -23,6 +23,7 @@
 		1290675C0A2AE7B2F0E38C74 /* CurrentOwnerCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F588959C1E1A67FF3642EF7F /* CurrentOwnerCoordinatorTests.swift */; };
 		18D01B6DE3B7EC33317AC025 /* AddExerciseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6795620478217A9EB5FD5B3 /* AddExerciseSheet.swift */; };
 		1BE75AA267FD088A1F025F89 /* PreviousSetPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D3DF0D84D449AEEBB18FD5 /* PreviousSetPerformanceTests.swift */; };
+		1CA3C2D4EB1DE15086129C9C /* SyncObservabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDAF79438867AE4B03C833D2 /* SyncObservabilityTests.swift */; };
 		1E8C9B53B3B5803EE6CE732E /* ExercisePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C712C286971BE7C1978A666F /* ExercisePickerView.swift */; };
 		1F4BD41F4A5C5E3390D3C392 /* ClerkConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9D88B27463914E4DA59FDA2 /* ClerkConfigurationTests.swift */; };
 		233E6969E9BDE6B6E6C7829E /* SyncDiagnosticsSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 318834D32DB011FBB4C5CD88 /* SyncDiagnosticsSnapshotTests.swift */; };
@@ -85,6 +86,7 @@
 		757D3494F09D0C72629246B5 /* ExerciseCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01EF284AA0E3A57AA5A5386C /* ExerciseCardView.swift */; };
 		7606A14265FBBC2861BA4578 /* ExerciseHistorySessionGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82C747A6370C59E5BE134187 /* ExerciseHistorySessionGroup.swift */; };
 		794026046E84D2CBF94AC284 /* SeedDataServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F55C233BF6AAA144598BE831 /* SeedDataServiceTests.swift */; };
+		7A7740099B1C27BF7AF28086 /* SyncObservability.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5936CA36FE13A3B1E79ADBC /* SyncObservability.swift */; };
 		7D9BB64AB99E1E4815FDF7E1 /* SyncPayloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DDD6E8B921BB2D16D2D64E0 /* SyncPayloads.swift */; };
 		7DC1C56FC90D8C4D8B7DD38E /* CurrentOwnerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AEB241A4C3C0D4E330CD85D /* CurrentOwnerCoordinator.swift */; };
 		7F5A071CBB94335C1BF65B6B /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = F2FB979D818E9A36AF10A37C /* ConvexMobile */; };
@@ -109,6 +111,7 @@
 		9C91EF78450734AFBF0FF735 /* AccountDisplayState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBD155FBDC40811F65E42418 /* AccountDisplayState.swift */; };
 		9CD891183EBE88A375C504F1 /* SyncRecoveryAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCDF19AED28F861C331A3BF6 /* SyncRecoveryAction.swift */; };
 		9D1670EE8A2239CD5D0C1A45 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4E2709B6422528E5D6A0209A /* AppIcon.icon */; };
+		9E271B0ADCB359B0939A0EC3 /* SentrySyncObservability.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5AF0566582191A5F473612A /* SentrySyncObservability.swift */; };
 		9EF657FB976E7FFF0AA58340 /* ExerciseHistoryRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD8443E826AAE07C959563D /* ExerciseHistoryRoute.swift */; };
 		A2A107F75E6D8397EDBD6A3D /* HealthDataLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE4045C16E4B3A1168BD2BC4 /* HealthDataLink.swift */; };
 		A2C578E29B532CC40CCBDBCC /* PastWorkoutPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B1C1F38DF42492AC05C7CF /* PastWorkoutPickerView.swift */; };
@@ -140,6 +143,7 @@
 		CAB9DC7DA60F44E2615476A7 /* SyncFailureNoticePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A94F78B35154BEA2F61421 /* SyncFailureNoticePresentationTests.swift */; };
 		CC80CC6016464B5945910A07 /* ExercisePickerSortPreferenceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3E5C8C7DABBD57DEFC3E3E4 /* ExercisePickerSortPreferenceStoreTests.swift */; };
 		CF89B18ADB82484845F4BD6A /* SwiftDataTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1D50ACD78458E239985830 /* SwiftDataTestSupport.swift */; };
+		D0ADE9D5A7C759EC582ADC14 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = BA5076EFED2D8140E77C87FB /* Sentry */; };
 		D204D15EC70CFCD0E4657F3D /* AppLinksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44D18B715F04028777E92CDA /* AppLinksTests.swift */; };
 		D2C02DE58C4CD1E6C0398F5F /* SyncEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FE370B8C7441DC1B4FCBEBA /* SyncEntityKind.swift */; };
 		D4960AD096F7BAD94039176A /* WorkoutExportFileWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB86D1EF7DB4A2478549754C /* WorkoutExportFileWriterTests.swift */; };
@@ -168,6 +172,7 @@
 		F8C8080E9BEA0951BFB2737E /* LoggedExercise.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD05014A54498ADD53C9C84C /* LoggedExercise.swift */; };
 		F8E05939EC019F68ACE7C848 /* LaunchExperienceFeatureRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6509A17AE88CDDB51A9EC9 /* LaunchExperienceFeatureRow.swift */; };
 		FA4E500DC7E56E0F46E006CA /* StateViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE4314AD2B27E0C681BD5D7 /* StateViews.swift */; };
+		FB58BA468030F9847559D07B /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = E49F56257C19C0BBCE62F977 /* Sentry */; };
 		FC3D10AD637B2B69291993E9 /* SyncConflictResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C1BE6DD7730BBE9292B992F /* SyncConflictResolverTests.swift */; };
 		FF2C2372AAE61B0B690AD23E /* WorkoutEditingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899D04423C1918B8B8546277 /* WorkoutEditingComponents.swift */; };
 /* End PBXBuildFile section */
@@ -308,6 +313,7 @@
 		BF2386D026311F4720EF90CE /* WorkoutHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutHeaderView.swift; sourceTree = "<group>"; };
 		C0C0EA53E504BE5333F9B619 /* SetKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetKind.swift; sourceTree = "<group>"; };
 		C290FBB2CA7EF425B4E16FCA /* WhatsNewVersion1_0View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewVersion1_0View.swift; sourceTree = "<group>"; };
+		C5936CA36FE13A3B1E79ADBC /* SyncObservability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncObservability.swift; sourceTree = "<group>"; };
 		C6D631ED7FEE968DDF2C9D76 /* AppReleaseCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppReleaseCatalog.swift; sourceTree = "<group>"; };
 		C712C286971BE7C1978A666F /* ExercisePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExercisePickerView.swift; sourceTree = "<group>"; };
 		C8EB3A48F483C08DC5E65436 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -327,6 +333,7 @@
 		DCA03F6A97DC5E4B559FD09E /* RPEChipRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RPEChipRow.swift; sourceTree = "<group>"; };
 		DD2BF38D6F76C8271E2051F5 /* SurfaceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurfaceCard.swift; sourceTree = "<group>"; };
 		DD824F36A386212D32C34A33 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
+		DDAF79438867AE4B03C833D2 /* SyncObservabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncObservabilityTests.swift; sourceTree = "<group>"; };
 		DF18349C45B491C4A98201DB /* Baros.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Baros.entitlements; sourceTree = "<group>"; };
 		E324D579AB4041EAC8A66D20 /* Baros.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Baros.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E40ADCC7E59A4CF06A873599 /* SettingsMutationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsMutationService.swift; sourceTree = "<group>"; };
@@ -346,6 +353,7 @@
 		F5408C8FD1602F89D94571D0 /* SyncPayloadMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncPayloadMappingTests.swift; sourceTree = "<group>"; };
 		F55C233BF6AAA144598BE831 /* SeedDataServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedDataServiceTests.swift; sourceTree = "<group>"; };
 		F588959C1E1A67FF3642EF7F /* CurrentOwnerCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentOwnerCoordinatorTests.swift; sourceTree = "<group>"; };
+		F5AF0566582191A5F473612A /* SentrySyncObservability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentrySyncObservability.swift; sourceTree = "<group>"; };
 		F7BB86538071FA55EFE83D7F /* WorkoutDataExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutDataExportService.swift; sourceTree = "<group>"; };
 		F7EDB15F47CC004CD9939924 /* SyncOutboxEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxEntryTests.swift; sourceTree = "<group>"; };
 		F91EC9A9A2151AAECCF22118 /* AppInitializationOrderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInitializationOrderTests.swift; sourceTree = "<group>"; };
@@ -365,6 +373,15 @@
 				5EFEACC304F4DE014301EF89 /* ClerkKitUI in Frameworks */,
 				40BD09DD19D5FAEFD93B4EC7 /* ClerkConvex in Frameworks */,
 				7F5A071CBB94335C1BF65B6B /* ConvexMobile in Frameworks */,
+				FB58BA468030F9847559D07B /* Sentry in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DADDBD069C9631655E816D5C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D0ADE9D5A7C759EC582ADC14 /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -506,11 +523,13 @@
 				5149C1CB36191BD8869DA3C7 /* ConvexConfiguration.swift */,
 				EC72CE677AAA5F7EF79C6CCA /* ConvexSyncClient.swift */,
 				F26DF7DF3CD7B69F84EDEDC4 /* OwnerlessWorkoutGraphBootstrapPolicy.swift */,
+				F5AF0566582191A5F473612A /* SentrySyncObservability.swift */,
 				22EC68472E7A9434F132B1D9 /* SyncClient.swift */,
 				2E5509A252C06083154E90D7 /* SyncConflictResolver.swift */,
 				4C52296097D20E7E3E08D87E /* SyncCoordinator.swift */,
 				5CFF2757B016137FD2F7D3F5 /* SyncCursorState.swift */,
 				4FE370B8C7441DC1B4FCBEBA /* SyncEntityKind.swift */,
+				C5936CA36FE13A3B1E79ADBC /* SyncObservability.swift */,
 				5B1F882E3761355B5987906A /* SyncOperation.swift */,
 				73D1C8510D7568DD0249DF51 /* SyncOutboxEntry.swift */,
 				329AB2376054EB26A89A552E /* SyncOutboxRecorder.swift */,
@@ -558,6 +577,7 @@
 				21E38602F1EBAE6BD866C2F4 /* SyncCursorStateTests.swift */,
 				318834D32DB011FBB4C5CD88 /* SyncDiagnosticsSnapshotTests.swift */,
 				14A94F78B35154BEA2F61421 /* SyncFailureNoticePresentationTests.swift */,
+				DDAF79438867AE4B03C833D2 /* SyncObservabilityTests.swift */,
 				F7EDB15F47CC004CD9939924 /* SyncOutboxEntryTests.swift */,
 				EB732FB124E408DF3B3BC320 /* SyncOutboxIntegrationTests.swift */,
 				E5EECD7D24DA02F3A4711161 /* SyncOutboxRecorderTests.swift */,
@@ -752,6 +772,7 @@
 				1B0E2F5494BA16AE203D400C /* Resources */,
 				4FCACF5B8AB6DBF8054E37B4 /* Frameworks */,
 				1BE28BD9A0FE10AF53495929 /* Write Build Source Metadata */,
+				0B9FDBAF45068423F94BB1C1 /* Upload Debug Symbols to Sentry */,
 			);
 			buildRules = (
 			);
@@ -763,6 +784,7 @@
 				BE59C9D225B764792D14BC61 /* ClerkKitUI */,
 				F16DCEE085204D1243D6FA51 /* ClerkConvex */,
 				F2FB979D818E9A36AF10A37C /* ConvexMobile */,
+				E49F56257C19C0BBCE62F977 /* Sentry */,
 			);
 			productName = Baros;
 			productReference = E324D579AB4041EAC8A66D20 /* Baros.app */;
@@ -791,6 +813,7 @@
 			buildConfigurationList = A3E5B5D3215D3540E394EE4A /* Build configuration list for PBXNativeTarget "BarosTests" */;
 			buildPhases = (
 				D498D840E70B9D7EBCA94CDA /* Sources */,
+				DADDBD069C9631655E816D5C /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -799,6 +822,7 @@
 			);
 			name = BarosTests;
 			packageProductDependencies = (
+				BA5076EFED2D8140E77C87FB /* Sentry */,
 			);
 			productName = BarosTests;
 			productReference = DA9615ADEE1BFA19E6244260 /* BarosTests.xctest */;
@@ -835,6 +859,7 @@
 				A6B722D2C0A824060420650F /* XCRemoteSwiftPackageReference "clerk-ios" */,
 				6C4B126934013ED2E5FAB6DE /* XCRemoteSwiftPackageReference "clerk-convex-swift" */,
 				C127582637811537C1AEAC2E /* XCRemoteSwiftPackageReference "convex-swift" */,
+				84008FBC2697A51AD553174C /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = EFFB0976949E3BBB72DAD21B /* Products */;
@@ -862,6 +887,26 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		0B9FDBAF45068423F94BB1C1 /* Upload Debug Symbols to Sentry */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(TARGET_NAME)",
+			);
+			name = "Upload Debug Symbols to Sentry";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\n\n# A normal Release build does not require upload credentials. Archives do.\nif [ \"${CONFIGURATION}\" != \"Release\" ] || [ \"${ACTION}\" != \"install\" ]; then\n  exit 0\nfi\n\nif [ -z \"${SENTRY_AUTH_TOKEN:-}\" ]; then\n  echo \"error: SENTRY_AUTH_TOKEN is required to upload archive dSYMs\"\n  exit 1\nfi\n\nif ! command -v sentry-cli >/dev/null 2>&1; then\n  echo \"error: sentry-cli is required to upload archive dSYMs\"\n  exit 1\nfi\n\nexport SENTRY_ORG=kevin-tatooles\nexport SENTRY_PROJECT=apple-ios\nsentry-cli debug-files upload \"${DWARF_DSYM_FOLDER_PATH}\"\n";
+		};
 		1BE28BD9A0FE10AF53495929 /* Write Build Source Metadata */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -958,6 +1003,7 @@
 				745C0A0414A80A63A13A218A /* ReorderExercisesSheet.swift in Sources */,
 				49F9EA1CFDE22D2EDC068483 /* SeedDataService.swift in Sources */,
 				B025D3F208CE0B5AF8F9D653 /* SeedMetadata.swift in Sources */,
+				9E271B0ADCB359B0939A0EC3 /* SentrySyncObservability.swift in Sources */,
 				B48FF44242DD47918D9BC288 /* SetKind.swift in Sources */,
 				BA2F5DE8D041AF193D8E851B /* SetRowView.swift in Sources */,
 				460F374D669ADE8B9FEF1FB7 /* SettingsAccountSection.swift in Sources */,
@@ -972,6 +1018,7 @@
 				AF8580108066179BE6C0B795 /* SyncCoordinator.swift in Sources */,
 				4456F6EF865E4AE5B81D075A /* SyncCursorState.swift in Sources */,
 				D2C02DE58C4CD1E6C0398F5F /* SyncEntityKind.swift in Sources */,
+				7A7740099B1C27BF7AF28086 /* SyncObservability.swift in Sources */,
 				9A3663CAFAA692DE29688BDF /* SyncOperation.swift in Sources */,
 				D4AF401DC5C1E93EDE5899B0 /* SyncOutboxEntry.swift in Sources */,
 				6192E4B3A1E9BC823FD50305 /* SyncOutboxRecorder.swift in Sources */,
@@ -1040,6 +1087,7 @@
 				B53DB49AD329CEEF58DEEFCB /* SyncCursorStateTests.swift in Sources */,
 				233E6969E9BDE6B6E6C7829E /* SyncDiagnosticsSnapshotTests.swift in Sources */,
 				CAB9DC7DA60F44E2615476A7 /* SyncFailureNoticePresentationTests.swift in Sources */,
+				1CA3C2D4EB1DE15086129C9C /* SyncObservabilityTests.swift in Sources */,
 				600A00CDD4E76C0878FDDB00 /* SyncOutboxEntryTests.swift in Sources */,
 				630701569635BAA508FBF9A1 /* SyncOutboxIntegrationTests.swift in Sources */,
 				97B994C20A18495D414D987F /* SyncOutboxRecorderTests.swift in Sources */,
@@ -1224,6 +1272,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.kevintatooles.LiftingLog.dev;
 				PRODUCT_NAME = Baros;
 				SDKROOT = iphoneos;
+				SENTRY_DSN = "";
+				SENTRY_ENABLED = NO;
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -1332,6 +1382,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.kevintatooles.LiftingLog;
 				PRODUCT_NAME = Baros;
 				SDKROOT = iphoneos;
+				SENTRY_DSN = "https://7e078530be3bfc7c45aaeecc13fc5cab@o4511860701855744.ingest.us.sentry.io/4511860712210432";
+				SENTRY_ENABLED = YES;
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -1387,6 +1439,14 @@
 				minimumVersion = 0.1.0;
 			};
 		};
+		84008FBC2697A51AD553174C /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.23.0;
+			};
+		};
 		A6B722D2C0A824060420650F /* XCRemoteSwiftPackageReference "clerk-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/clerk/clerk-ios";
@@ -1411,10 +1471,20 @@
 			package = A6B722D2C0A824060420650F /* XCRemoteSwiftPackageReference "clerk-ios" */;
 			productName = ClerkKit;
 		};
+		BA5076EFED2D8140E77C87FB /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 84008FBC2697A51AD553174C /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
+		};
 		BE59C9D225B764792D14BC61 /* ClerkKitUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A6B722D2C0A824060420650F /* XCRemoteSwiftPackageReference "clerk-ios" */;
 			productName = ClerkKitUI;
+		};
+		E49F56257C19C0BBCE62F977 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 84008FBC2697A51AD553174C /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
 		};
 		F16DCEE085204D1243D6FA51 /* ClerkConvex */ = {
 			isa = XCSwiftPackageProductDependency;

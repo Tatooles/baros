@@ -5,12 +5,18 @@ import SwiftData
 final class SyncCoordinator {
     private let client: any SyncClient & Sendable
     private let maxPendingPushEntriesPerRun: Int
+    private let observability: any SyncObserving
     private let recorder = SyncOutboxRecorder()
     private var isRunning = false
 
-    init(client: any SyncClient & Sendable, maxPendingPushEntriesPerRun: Int = 50) {
+    init(
+        client: any SyncClient & Sendable,
+        maxPendingPushEntriesPerRun: Int = 50,
+        observability: any SyncObserving = DisabledSyncObservability.shared
+    ) {
         self.client = client
         self.maxPendingPushEntriesPerRun = maxPendingPushEntriesPerRun
+        self.observability = observability
     }
 
     @discardableResult
@@ -24,6 +30,9 @@ final class SyncCoordinator {
         let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
         let pullSummary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         var hasIncompleteRemotePull = pullSummary.hasIncompleteRemotePull
+        if !pullSummary.hasIncompleteRemotePull {
+            observability.record(.syncPhaseCompleted(.pull))
+        }
         try Task.checkCancellation()
 
         let bootstrapScope: BootstrapScope
@@ -49,7 +58,14 @@ final class SyncCoordinator {
         try Task.checkCancellation()
         let pushResult = try await pushPendingEntries(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         guard pushResult.didComplete else {
-            return SyncRunResult(didPush: pushResult.didPush, hasIncompleteRemotePull: hasIncompleteRemotePull)
+            return SyncRunResult(
+                didPush: pushResult.didPush,
+                hasIncompleteRemotePull: hasIncompleteRemotePull,
+                transientCondition: pushResult.transientCondition
+            )
+        }
+        if pushResult.didPush {
+            observability.record(.syncPhaseCompleted(.push))
         }
         guard !pushResult.hasMorePendingEntries else {
             return SyncRunResult(
@@ -61,6 +77,9 @@ final class SyncCoordinator {
         if pushResult.didPush {
             let summary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
             hasIncompleteRemotePull = summary.hasIncompleteRemotePull
+            if !summary.hasIncompleteRemotePull {
+                observability.record(.syncPhaseCompleted(.pull))
+            }
         }
         return SyncRunResult(didPush: pushResult.didPush, hasIncompleteRemotePull: hasIncompleteRemotePull)
     }
@@ -479,6 +498,17 @@ final class SyncCoordinator {
                 }
             } catch {
                 if let syncError = error as? SyncCoordinatorError, case .ownerMismatch = syncError {
+                    observability.record(.durableFailure(DurableSyncFailure(
+                        phase: .ownership,
+                        entityKind: entry.entityKind,
+                        operation: entry.operation,
+                        category: .ownership,
+                        errorCode: .ownerMismatch,
+                        counts: SyncObservationCounts(
+                            attempt: entry.attemptCount,
+                            pending: fetchedEntries.count
+                        )
+                    )))
                     context.delete(entry)
                     needsSave = true
                     completedSinceLastSave += 1
@@ -496,7 +526,11 @@ final class SyncCoordinator {
                 if needsSave {
                     try context.save()
                 }
-                return SyncPushResult(didComplete: false, didPush: true)
+                return SyncPushResult(
+                    didComplete: false,
+                    didPush: true,
+                    transientCondition: TransientSyncConditionClassifier.errorCode(for: error)
+                )
             }
         }
 
@@ -1631,12 +1665,14 @@ struct SyncRunResult {
     var didPush = false
     var hasMorePendingEntries = false
     var hasIncompleteRemotePull = false
+    var transientCondition: SyncStableErrorCode?
 }
 
 private struct SyncPushResult {
     var didComplete: Bool
     var didPush: Bool
     var hasMorePendingEntries = false
+    var transientCondition: SyncStableErrorCode?
 }
 
 private struct WorkoutGraphApplyResult {
