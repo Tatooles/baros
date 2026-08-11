@@ -7,7 +7,12 @@ import XCTest
 final class SyncRecoveryCoordinatorTests: XCTestCase {
     func testForegroundRecoveryAuthenticatesBeforeRequestingSync() async throws {
         let ownerTokenIdentifier = "https://clerk.baros.fit|user_123"
-        let harness = try makeConfiguredScheduler(ownerTokenIdentifier: ownerTokenIdentifier)
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
+        let harness = try makeConfiguredScheduler(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            observability: observability
+        )
         let client = harness.client
         let scheduler = harness.scheduler
         let authenticationClient = StubSyncAuthenticationClient(
@@ -141,10 +146,13 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         context.insert(workout)
         context.insert(failedEntry)
         try context.save()
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
         let scheduler = SyncScheduler(
             coordinator: SyncCoordinator(client: FakeSyncClient()),
             modelContext: context,
-            lastKnownOwnerTokenStore: makeOwnerStore()
+            lastKnownOwnerTokenStore: makeOwnerStore(),
+            observability: observability
         )
         scheduler.currentOwnerTokenIdentifier = ownerTokenIdentifier
         let failureDate = Date(timeIntervalSince1970: 300)
@@ -175,10 +183,19 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(remainingEntry.lastErrorMessage, "Not authenticated")
         XCTAssertEqual(remainingWorkout.title, "Offline Workout")
         XCTAssertEqual(remainingWorkout.syncOwnerTokenIdentifier, ownerTokenIdentifier)
+        XCTAssertTrue(sink.observations.contains {
+            $0.kind == .breadcrumb && $0.errorCode == .authenticationFailed
+        })
+        XCTAssertFalse(sink.observations.contains { $0.kind == .durableFailure })
     }
 
     func testRecoveryRejectsTokenForDifferentClerkOwner() async throws {
-        let harness = try makeConfiguredScheduler(ownerTokenIdentifier: "issuer|owner_b")
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
+        let harness = try makeConfiguredScheduler(
+            ownerTokenIdentifier: "issuer|owner_b",
+            observability: observability
+        )
         let client = harness.client
         let scheduler = harness.scheduler
         let authenticationClient = StubSyncAuthenticationClient(
@@ -199,6 +216,12 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, "issuer|owner_b")
         XCTAssertEqual(scheduler.requestCount, 0)
         XCTAssertTrue(client.fetchRequests.isEmpty)
+        let failures = sink.observations.filter { $0.kind == .durableFailure }
+        XCTAssertEqual(failures.count, 1)
+        XCTAssertEqual(failures.first?.failureCategory, .ownership)
+        XCTAssertEqual(failures.first?.errorCode, .ownerMismatch)
+        XCTAssertFalse(String(describing: failures).contains("owner_a"))
+        XCTAssertFalse(String(describing: failures).contains("owner_b"))
     }
 
     func testRecoveryIsNoOpWithoutAnActiveSession() async throws {
@@ -280,13 +303,16 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, "issuer|owner_a")
     }
 
-    func testRecoveryDoesNotResumeAfterAccountDeletionCompletes() async throws {
+    func testCanceledRecoveryDoesNotResumeSyncAfterAccountDeletion() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let client = FakeSyncClient()
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
         let scheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: client),
+            coordinator: SyncCoordinator(client: client, observability: observability),
             modelContext: container.mainContext,
-            lastKnownOwnerTokenStore: makeOwnerStore()
+            lastKnownOwnerTokenStore: makeOwnerStore(),
+            observability: observability
         )
         scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
         let authenticationClient = StubSyncAuthenticationClient(
@@ -313,6 +339,9 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(scheduler.requestCount, 0)
         XCTAssertNil(scheduler.currentOwnerTokenIdentifier)
         XCTAssertTrue(client.fetchRequests.isEmpty)
+        let finalObservation = try XCTUnwrap(sink.observations.last)
+        XCTAssertEqual(finalObservation.phase, .ownership)
+        XCTAssertNil(finalObservation.pseudonymousCurrentOwnerID)
     }
 
     func testInvalidatedRecoveryDefersLateAuthenticatedStateForOriginalSession() async throws {
@@ -544,14 +573,17 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
     }
 
     private func makeConfiguredScheduler(
-        ownerTokenIdentifier: String? = nil
+        ownerTokenIdentifier: String? = nil,
+        observability: (any SyncObserving)? = nil
     ) throws -> ConfiguredSchedulerHarness {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let client = FakeSyncClient()
+        let observability = observability ?? DisabledSyncObservability.shared
         let scheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: client),
+            coordinator: SyncCoordinator(client: client, observability: observability),
             modelContext: container.mainContext,
-            lastKnownOwnerTokenStore: makeOwnerStore()
+            lastKnownOwnerTokenStore: makeOwnerStore(),
+            observability: observability
         )
         scheduler.currentOwnerTokenIdentifier = ownerTokenIdentifier
         return ConfiguredSchedulerHarness(

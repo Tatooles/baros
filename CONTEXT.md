@@ -25,3 +25,15 @@ _Avoid_: Workout draft, live session
 **Exercise Performance**:
 A completed workout in which an exercise has at least one completed set. An exercise counts at most once per workout, even when it appears more than once.
 _Avoid_: Completed set count, exercise appearance
+
+**Durable Sync Failure**:
+A sync problem that Baros already classifies as a failed outbox push, incomplete remote pull, safely mapped sync error, or owner-boundary problem. It warrants an external technical report without workout content or Current Owner identity.
+_Avoid_: Sync error, Sentry event, persistent error
+
+**Transient Sync Condition**:
+A temporary condition, such as being offline or having a resolving Current Owner, that does not mean synchronization is durably stuck.
+_Avoid_: Transient error, network error, sync failure
+
+**Pseudonymous Current Owner ID**:
+A stable one-way code that lets Baros count distinct Current Owners in diagnostics without sending a raw account identifier, name, or email address. It is cleared when the Current Owner changes or signs out.
+_Avoid_: User ID, owner token, account ID

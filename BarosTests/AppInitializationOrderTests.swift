@@ -22,6 +22,30 @@ final class AppInitializationOrderTests: XCTestCase {
         )
     }
 
+    func testSentryBoundaryStartsEarlyAndIsSharedBySyncOrchestration() throws {
+        let appSource = try sourceFileContents("Baros/App/BarosApp.swift")
+
+        let sentryStartOffset = try XCTUnwrap(
+            appSource.range(of: "let syncObservability = SentryRuntime.startIfEnabled()")
+        ).lowerBound
+        let clerkConfigureOffset = try XCTUnwrap(appSource.range(of: "Clerk.configure")).lowerBound
+        let persistenceOffset = try XCTUnwrap(
+            appSource.range(of: "ModelContainerFactory.makeModelContainer")
+        ).lowerBound
+
+        XCTAssertLessThan(
+            appSource.distance(from: appSource.startIndex, to: sentryStartOffset),
+            appSource.distance(from: appSource.startIndex, to: clerkConfigureOffset)
+        )
+        XCTAssertLessThan(
+            appSource.distance(from: appSource.startIndex, to: sentryStartOffset),
+            appSource.distance(from: appSource.startIndex, to: persistenceOffset)
+        )
+        XCTAssertTrue(appSource.contains("SyncScheduler(observability: syncObservability)"))
+        XCTAssertTrue(appSource.contains("observability: syncObservability"))
+        XCTAssertFalse(appSource.contains("import Sentry"))
+    }
+
     func testUITestHelpersForceSignedOutAuthByDefault() throws {
         let uiTestSource = try sourceFileContents("BarosUITests/BarosUITests.swift")
 

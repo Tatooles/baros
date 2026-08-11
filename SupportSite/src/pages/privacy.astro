@@ -9,7 +9,7 @@ import DocumentLayout from "../layouts/DocumentLayout.astro";
   description="Privacy Policy for Baros."
   heading="Privacy Policy"
   intro="This policy explains how Baros handles workout data, account data, sync, export, and deletion."
-  lastUpdated="July 17, 2026"
+  lastUpdated="August 9, 2026"
 >
   <DocumentSection title="Summary">
     <p>
@@ -69,9 +69,27 @@ import DocumentLayout from "../layouts/DocumentLayout.astro";
   <DocumentSection title="No analytics, ads, or tracking">
     <p>
       Baros does not use third-party advertising, cross-app tracking, or product
-      analytics in the v1 release. Standard platform and provider diagnostics may
-      be processed by Apple, Clerk, Convex, or hosting providers to keep their
+      analytics. Standard platform and provider diagnostics may be processed by
+      Apple, Clerk, Convex, Sentry, or hosting providers to keep Baros and its
       services reliable and secure.
+    </p>
+  </DocumentSection>
+
+  <DocumentSection title="Crash and sync diagnostics">
+    <p>
+      Baros uses Sentry to receive crash, app-hang, and classified synchronization
+      diagnostics from production builds. These diagnostics can include the app
+      version and build, operating-system and device technical details, the sync
+      phase and outcome, and bounded retry or pending-change counts.
+    </p>
+    <p>
+      When you are signed in, Baros sends Sentry a one-way pseudonymous code so the
+      maintainer can count how many distinct accounts are affected. Baros does not
+      send Sentry your raw account identifier, email address, display name,
+      authentication token, workout names, workout notes, set notes, record
+      identifiers, request bodies, or full synchronization entries. The
+      pseudonymous code is cleared from the active diagnostic scope when the
+      current account changes or signs out.
     </p>
   </DocumentSection>
 

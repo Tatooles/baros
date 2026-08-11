@@ -34,6 +34,10 @@
 	<true/>
 	<key>BarosEnvironment</key>
 	<string>$(BAROS_ENVIRONMENT)</string>
+	<key>SentryEnabled</key>
+	<string>$(SENTRY_ENABLED)</string>
+	<key>SentryDSN</key>
+	<string>$(SENTRY_DSN)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

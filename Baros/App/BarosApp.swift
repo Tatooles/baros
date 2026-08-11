@@ -17,6 +17,7 @@ struct BarosApp: App {
     @State private var currentOwnerCoordinator: CurrentOwnerCoordinator
 
     init() {
+        let syncObservability = SentryRuntime.startIfEnabled()
         Clerk.configure(publishableKey: ClerkConfiguration.publishableKey)
         let convexClient = ConvexClientFactory.makeAuthenticatedClient()
         self.convexClient = convexClient
@@ -67,12 +68,13 @@ struct BarosApp: App {
             #endif
             modelContainer = container
 
-            let syncScheduler = SyncScheduler()
+            let syncScheduler = SyncScheduler(observability: syncObservability)
             switch ownerLaunchConfiguration.startupMode {
             case .live:
                 syncScheduler.configure(
                     coordinator: SyncCoordinator(
-                        client: ConvexSyncClient(client: convexClient)
+                        client: ConvexSyncClient(client: convexClient),
+                        observability: syncObservability
                     ),
                     modelContext: container.mainContext
                 )
