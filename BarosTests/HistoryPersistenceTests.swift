@@ -210,6 +210,7 @@ final class HistoryPersistenceTests: XCTestCase {
         let summaries = ExerciseHistorySummary.makeSummaries(from: [session])
 
         XCTAssertEqual(summaries.first?.completedSetCount, 1)
+        XCTAssertTrue(summaries.first?.historyDetailSummaryLabel.hasSuffix("· 1 workout · 1 set") == true)
     }
 
     func testExerciseHistoryCountsOnePerformancePerCompletedWorkoutWithDuplicateExerciseRows() throws {
@@ -247,6 +248,7 @@ final class HistoryPersistenceTests: XCTestCase {
 
         XCTAssertEqual(summary.performanceCount, 1)
         XCTAssertEqual(summary.completedSetCount, 2)
+        XCTAssertTrue(summary.historyDetailSummaryLabel.hasSuffix("· 1 workout · 2 sets"))
     }
 
     func testExerciseHistoryReconcilesLinkedAndSnapshotPerformancesIntoOneSummary() throws {
@@ -261,6 +263,7 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(summary.exerciseID, fixture.exercise.id)
         XCTAssertEqual(summary.performanceCount, 2)
         XCTAssertEqual(summary.completedSetCount, 2)
+        XCTAssertTrue(summary.historyDetailSummaryLabel.hasSuffix("· 2 workouts · 2 sets"))
         XCTAssertEqual(summary.lastPerformedAt, fixture.snapshotSession.startedAt)
         XCTAssertEqual(
             ExerciseHistorySummary.find(
@@ -746,6 +749,50 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(group.loggedExerciseEntries.flatMap { entry in
             entry.setEntries.map { $0.loggedExercise.id }
         }, [firstLoggedExercise.id, secondLoggedExercise.id])
+    }
+
+    func testExerciseHistoryEntryOnlyShowsIdentityForDifferingHistoricalSnapshot() {
+        let headingIdentity = ExerciseHistoryDisplayIdentity(
+            name: "Competition Bench Press",
+            metadataDisplayText: "Barbell • Chest"
+        )
+        let matchingExercise = LoggedExercise(
+            orderIndex: 0,
+            exerciseSnapshotName: "Competition Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue
+        )
+        let renamedExercise = LoggedExercise(
+            orderIndex: 1,
+            exerciseSnapshotName: "Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue
+        )
+        let changedEquipmentExercise = LoggedExercise(
+            orderIndex: 2,
+            exerciseSnapshotName: "Competition Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.dumbbell.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue
+        )
+
+        XCTAssertFalse(
+            ExerciseHistoryLoggedExerciseEntry(
+                loggedExercise: matchingExercise,
+                setEntries: []
+            ).showsIdentity(comparedTo: headingIdentity)
+        )
+        XCTAssertTrue(
+            ExerciseHistoryLoggedExerciseEntry(
+                loggedExercise: renamedExercise,
+                setEntries: []
+            ).showsIdentity(comparedTo: headingIdentity)
+        )
+        XCTAssertTrue(
+            ExerciseHistoryLoggedExerciseEntry(
+                loggedExercise: changedEquipmentExercise,
+                setEntries: []
+            ).showsIdentity(comparedTo: headingIdentity)
+        )
     }
 
     func testExerciseHistoryNoteBlockTreatsWhitespaceOnlyNotesAsAbsent() {

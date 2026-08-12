@@ -1,7 +1,60 @@
 import SwiftUI
 
+struct ExerciseHistoryHeading: View {
+    let name: String
+    let metadata: String?
+    let performanceSummary: String?
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            if !dynamicTypeSize.isAccessibilitySize {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(AppTheme.accentMuted)
+                    .frame(width: 48, height: 48)
+                    .overlay {
+                        Image(systemName: "dumbbell.fill")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(AppTheme.accentBright)
+                            .accessibilityHidden(true)
+                    }
+                    .accessibilityHidden(true)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(name)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let metadata {
+                        Text(metadata)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                if let performanceSummary {
+                    Text(performanceSummary)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct ExerciseHistorySessionGroupCard: View {
     let group: ExerciseHistorySessionGroup
+    let headingIdentity: ExerciseHistoryDisplayIdentity
     var weightUnit: MeasurementUnit = .pounds
     var showsExerciseNotes: Bool = true
 
@@ -9,6 +62,10 @@ struct ExerciseHistorySessionGroupCard: View {
         SurfaceCard {
             VStack(alignment: .leading, spacing: 12) {
                 header
+
+                Divider()
+                    .overlay(AppTheme.border)
+
                 loggedExerciseEntries
             }
         }
@@ -29,10 +86,10 @@ struct ExerciseHistorySessionGroupCard: View {
 
             Text(setCountLabel(for: group.completedSetCount))
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(AppTheme.textSecondary)
+                .foregroundStyle(AppTheme.accentBright)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(AppTheme.surfaceMuted)
+                .background(AppTheme.accentMuted)
                 .clipShape(Capsule())
         }
     }
@@ -41,16 +98,8 @@ struct ExerciseHistorySessionGroupCard: View {
         VStack(spacing: 12) {
             ForEach(Array(group.loggedExerciseEntries.enumerated()), id: \.element.id) { index, entry in
                 VStack(alignment: .leading, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.loggedExercise.exerciseSnapshotName)
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(AppTheme.textPrimary)
-                        if let metadataDisplayText = entry.loggedExercise.metadataDisplayText {
-                            Text(metadataDisplayText)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(AppTheme.textSecondary)
-                                .lineLimit(1)
-                        }
+                    if entry.showsIdentity(comparedTo: headingIdentity) {
+                        entryIdentity(entry.displayIdentity)
                     }
 
                     setRows(for: entry.setEntries)
@@ -64,6 +113,21 @@ struct ExerciseHistorySessionGroupCard: View {
                     Divider()
                         .overlay(AppTheme.border)
                 }
+            }
+        }
+    }
+
+    private func entryIdentity(_ identity: ExerciseHistoryDisplayIdentity) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(identity.name)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(AppTheme.textPrimary)
+
+            if let metadataDisplayText = identity.metadataDisplayText {
+                Text(metadataDisplayText)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .lineLimit(1)
             }
         }
     }

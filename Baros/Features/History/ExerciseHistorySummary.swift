@@ -24,6 +24,11 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
         return "Last: \(lastPerformedLabel) · \(performanceCount) \(workoutLabel)"
     }
 
+    var historyDetailSummaryLabel: String {
+        let setLabel = completedSetCount == 1 ? "set" : "sets"
+        return "\(performanceSummaryLabel) · \(completedSetCount) \(setLabel)"
+    }
+
     var metadataDisplayText: String? {
         guard let equipmentRaw, let primaryMuscleGroupRaw else {
             return nil

@@ -45,7 +45,7 @@ struct ExerciseCardView: View {
     var body: some View {
         SurfaceCard(padding: 0) {
             VStack(spacing: 0) {
-                HStack(spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Button {
                         withAnimation(.snappy(duration: 0.3, extraBounce: 0)) {
                             isCollapsed.toggle()
@@ -88,6 +88,9 @@ struct ExerciseCardView: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(AppTheme.textSecondary)
                             .frame(width: 44, height: 44)
+                            .alignmentGuide(.firstTextBaseline) { dimensions in
+                                dimensions[VerticalAlignment.center] + 6
+                            }
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)

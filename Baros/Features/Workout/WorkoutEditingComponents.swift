@@ -31,7 +31,7 @@ struct WorkoutExerciseHeaderContent: View {
     var isCollapsed: Bool?
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             if let isCollapsed {
                 Image(systemName: "chevron.down")
                     .font(.footnote.weight(.bold))
@@ -43,7 +43,10 @@ struct WorkoutExerciseHeaderContent: View {
                 Text(title)
                     .font(.title3.weight(.bold))
                     .foregroundStyle(AppTheme.textPrimary)
-                    .lineLimit(1)
+                    .lineLimit(isCollapsed == true ? 1 : nil)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 if let metadata {
                     Text(metadata)
                         .font(.footnote.weight(.medium))

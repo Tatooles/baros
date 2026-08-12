@@ -22,37 +22,34 @@ struct ExerciseQuickHistorySheet: View {
         ExerciseHistoryRoute(loggedExercise: loggedExercise)
     }
 
-    private var completedSessions: [WorkoutSession] {
-        WorkoutSession.visibleCompletedSessions(
-            from: sessions,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
-        )
-    }
-
-    private var summary: ExerciseHistorySummary? {
+    var body: some View {
         let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
-        return ExerciseHistorySummary.makeResolvedHistory(
-            from: sessions,
+        let historyRoute = route
+        let historySnapshot = ExerciseHistoryViewSnapshot(
+            sessions: sessions,
             exercises: exercises,
             ownerTokenIdentifier: ownerTokenIdentifier
-        ).summary(for: route)
-    }
-
-    private var recentGroups: [ExerciseHistorySessionGroup] {
-        guard let summary else { return [] }
-
-        return ExerciseHistorySessionGroup.recentGroups(
-            from: sessions,
-            matching: summary,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
-            limit: 3
         )
-    }
+        let summary = historySnapshot.resolvedHistory.summary(for: historyRoute)
+        let recentGroups = summary.map {
+            ExerciseHistorySessionGroup.recentGroups(
+                from: sessions,
+                matching: $0,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                limit: 3
+            )
+        } ?? []
 
-    var body: some View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 12) {
+                VStack(spacing: 16) {
+                    ExerciseHistoryHeading(
+                        name: loggedExercise.exerciseSnapshotName,
+                        metadata: loggedExercise.metadataDisplayText,
+                        performanceSummary: summary?.historyDetailSummaryLabel
+                    )
+                    .accessibilityIdentifier("QuickExerciseHistoryHeading")
+
                     if recentGroups.isEmpty {
                         EmptyStateView(
                             title: "No History Yet",
@@ -60,7 +57,33 @@ struct ExerciseQuickHistorySheet: View {
                         )
                     } else {
                         ForEach(recentGroups) { group in
-                            ExerciseHistorySessionGroupCard(group: group, weightUnit: weightUnit)
+                            ExerciseHistorySessionGroupCard(
+                                group: group,
+                                headingIdentity: ExerciseHistoryDisplayIdentity(
+                                    loggedExercise: loggedExercise
+                                ),
+                                weightUnit: weightUnit
+                            )
+                        }
+
+                        if let summary, summary.performanceCount > recentGroups.count {
+                            HStack(spacing: 6) {
+                                Text("Showing \(recentGroups.count) of \(summary.performanceCount) workouts")
+                                    .foregroundStyle(AppTheme.textSecondary)
+                                    .accessibilityIdentifier("QuickHistoryLimitFooter")
+
+                                Text("·")
+                                    .foregroundStyle(AppTheme.textTertiary)
+
+                                Button("View all") {
+                                    showFullHistory(historyRoute)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(AppTheme.accentBright)
+                                .accessibilityIdentifier("QuickHistoryViewAllButton")
+                            }
+                            .font(.footnote.weight(.medium))
+                            .frame(maxWidth: .infinity)
                         }
                     }
                 }
@@ -68,7 +91,6 @@ struct ExerciseQuickHistorySheet: View {
                 .padding(.vertical, 16)
             }
             .background(AppTheme.subtleBackground.ignoresSafeArea())
-            .navigationTitle(loggedExercise.exerciseSnapshotName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -80,8 +102,7 @@ struct ExerciseQuickHistorySheet: View {
                 if summary != nil {
                     ToolbarItem(placement: .primaryAction) {
                         Button("Full History") {
-                            dismiss()
-                            openFullHistory(route)
+                            showFullHistory(historyRoute)
                         }
                         .accessibilityIdentifier("FullExerciseHistoryButton")
                     }
@@ -90,5 +111,10 @@ struct ExerciseQuickHistorySheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    private func showFullHistory(_ historyRoute: ExerciseHistoryRoute) {
+        dismiss()
+        openFullHistory(historyRoute)
     }
 }
