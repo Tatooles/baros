@@ -54,7 +54,6 @@ struct ExerciseHistoryDetailView: View {
             .padding(AppTheme.shellPadding)
         }
         .background(AppTheme.subtleBackground.ignoresSafeArea())
-        .navigationTitle("Exercise History")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

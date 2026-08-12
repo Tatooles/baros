@@ -74,7 +74,6 @@ struct ExerciseQuickHistorySheet: View {
                 .padding(.vertical, 16)
             }
             .background(AppTheme.subtleBackground.ignoresSafeArea())
-            .navigationTitle("Quick History")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
