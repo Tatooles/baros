@@ -3,21 +3,49 @@ import SwiftUI
 struct ExerciseHistoryHeading: View {
     let name: String
     let metadata: String?
+    let performanceSummary: String?
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(name)
-                .font(.title2.weight(.bold))
-                .foregroundStyle(AppTheme.textPrimary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let metadata {
-                Text(metadata)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .lineLimit(1)
+        HStack(alignment: .top, spacing: 12) {
+            if !dynamicTypeSize.isAccessibilitySize {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(AppTheme.accentMuted)
+                    .frame(width: 48, height: 48)
+                    .overlay {
+                        Image(systemName: "dumbbell.fill")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(AppTheme.accentBright)
+                            .accessibilityHidden(true)
+                    }
+                    .accessibilityHidden(true)
             }
+
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(name)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let metadata {
+                        Text(metadata)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                if let performanceSummary {
+                    Text(performanceSummary)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -33,6 +61,10 @@ struct ExerciseHistorySessionGroupCard: View {
         SurfaceCard {
             VStack(alignment: .leading, spacing: 12) {
                 header
+
+                Divider()
+                    .overlay(AppTheme.border)
+
                 loggedExerciseEntries
             }
         }
@@ -53,10 +85,10 @@ struct ExerciseHistorySessionGroupCard: View {
 
             Text(setCountLabel(for: group.completedSetCount))
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(AppTheme.textSecondary)
+                .foregroundStyle(AppTheme.accentBright)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(AppTheme.surfaceMuted)
+                .background(AppTheme.accentMuted)
                 .clipShape(Capsule())
         }
     }

@@ -52,10 +52,11 @@ struct ExerciseQuickHistorySheet: View {
     var body: some View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 12) {
+                VStack(spacing: 16) {
                     ExerciseHistoryHeading(
                         name: loggedExercise.exerciseSnapshotName,
-                        metadata: loggedExercise.metadataDisplayText
+                        metadata: loggedExercise.metadataDisplayText,
+                        performanceSummary: summary?.historyDetailSummaryLabel
                     )
                     .accessibilityIdentifier("QuickExerciseHistoryHeading")
 

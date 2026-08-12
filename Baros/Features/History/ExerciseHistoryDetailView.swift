@@ -24,28 +24,13 @@ struct ExerciseHistoryDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 ExerciseHistoryHeading(
                     name: summary.name,
-                    metadata: summary.metadataDisplayText
+                    metadata: summary.metadataDisplayText,
+                    performanceSummary: summary.historyDetailSummaryLabel
                 )
                 .accessibilityIdentifier("ExerciseHistoryHeading")
-
-                Text("Last performed \(summary.lastPerformedLabel)")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppTheme.textSecondary)
-
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Completed Sets")
-                            .font(.system(size: 16, weight: .bold))
-                        Text("\(summary.completedSetCount) tracked sets across completed workouts.")
-                            .font(.system(size: 14))
-                            .foregroundStyle(AppTheme.textSecondary)
-                    }
-                }
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("ExerciseHistoryCompletedSetsCard")
 
                 ForEach(sessionGroups) { group in
                     ExerciseHistorySessionGroupCard(group: group, weightUnit: weightUnit)
