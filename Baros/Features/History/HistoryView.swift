@@ -4,8 +4,15 @@ import SwiftUI
 struct HistoryView: View {
     @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
+    @State private var exerciseHistoryState = ExerciseHistoryViewState()
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
-    @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
+    @Query(
+        filter: #Predicate<WorkoutSession> { session in
+            session.statusRaw == "completed"
+        },
+        sort: \WorkoutSession.startedAt,
+        order: .reverse
+    ) private var sessions: [WorkoutSession]
 
     private var completedSessions: [WorkoutSession] {
         WorkoutSession.visibleCompletedSessions(
@@ -15,10 +22,15 @@ struct HistoryView: View {
     }
 
     var body: some View {
-        let exerciseHistorySnapshot = ExerciseHistoryViewSnapshot(
+        let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
+        // Remote child records do not always touch their parent session. Reading
+        // the sync completion date makes the state boundary re-check its semantic
+        // key after a pull without treating every no-op sync as a history change.
+        let exerciseHistorySnapshot = exerciseHistoryState.snapshot(
             sessions: sessions,
             exercises: exercises,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            syncCompletion: syncScheduler.lastSyncedAt
         )
 
         ScrollView(showsIndicators: false) {
@@ -108,6 +120,113 @@ struct HistoryView: View {
     }
 }
 
+@MainActor
+final class ExerciseHistoryViewState {
+    private let resolveHistory: ExerciseHistoryViewSnapshot.ResolveHistory
+    private var invalidationKey: ExerciseHistoryInvalidationKey?
+    private var currentSnapshot: ExerciseHistoryViewSnapshot?
+
+    init(
+        resolveHistory: @escaping ExerciseHistoryViewSnapshot.ResolveHistory = ExerciseHistorySummary.makeResolvedHistory
+    ) {
+        self.resolveHistory = resolveHistory
+    }
+
+    func snapshot(
+        sessions: [WorkoutSession],
+        exercises: [Exercise],
+        ownerTokenIdentifier: String?,
+        syncCompletion: Date?
+    ) -> ExerciseHistoryViewSnapshot {
+        _ = syncCompletion
+        let nextKey = ExerciseHistoryInvalidationKey(
+            sessions: sessions,
+            exercises: exercises,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
+        if nextKey != invalidationKey || currentSnapshot == nil {
+            invalidationKey = nextKey
+            currentSnapshot = ExerciseHistoryViewSnapshot(
+                sessions: sessions,
+                exercises: exercises,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                resolveHistory: resolveHistory
+            )
+        }
+        guard let currentSnapshot else {
+            preconditionFailure("Exercise History state did not create its initial snapshot")
+        }
+        return currentSnapshot
+    }
+}
+
+private struct ExerciseHistoryInvalidationKey: Equatable {
+    private struct SessionContribution: Equatable {
+        let id: UUID
+        let startedAt: Date
+        let exercises: [LoggedExerciseContribution]
+    }
+
+    private struct LoggedExerciseContribution: Equatable {
+        let orderIndex: Int
+        let linkedExerciseID: UUID?
+        let snapshotName: String
+        let snapshotEquipmentRaw: String?
+        let snapshotPrimaryMuscleGroupRaw: String?
+        let completedSetCount: Int
+    }
+
+    private struct ExerciseDefinition: Equatable {
+        let id: UUID
+        let name: String
+        let equipmentRaw: String
+    }
+
+    private let ownerTokenIdentifier: String?
+    private let sessions: [SessionContribution]
+    private let exercises: [ExerciseDefinition]
+
+    init(
+        sessions: [WorkoutSession],
+        exercises: [Exercise],
+        ownerTokenIdentifier: String?
+    ) {
+        self.ownerTokenIdentifier = ownerTokenIdentifier
+        self.sessions = WorkoutSession.visibleCompletedSessions(
+            from: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        ).map { session in
+            SessionContribution(
+                id: session.id,
+                startedAt: session.startedAt,
+                exercises: session.sortedLoggedExercises.compactMap { loggedExercise in
+                    let completedSetCount = loggedExercise.sortedSets.filter(\.isCompleted).count
+                    guard completedSetCount > 0 else { return nil }
+                    return LoggedExerciseContribution(
+                        orderIndex: loggedExercise.orderIndex,
+                        linkedExerciseID: loggedExercise.exercise?.id,
+                        snapshotName: loggedExercise.exerciseSnapshotName,
+                        snapshotEquipmentRaw: loggedExercise.resolvedSnapshotEquipmentRaw,
+                        snapshotPrimaryMuscleGroupRaw: loggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw,
+                        completedSetCount: completedSetCount
+                    )
+                }
+            )
+        }
+        self.exercises = Exercise.visibleActiveExercises(
+            from: exercises,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        ).map { exercise in
+            ExerciseDefinition(
+                id: exercise.id,
+                name: exercise.name,
+                equipmentRaw: exercise.equipmentRaw
+            )
+        }.sorted { $0.id.uuidString < $1.id.uuidString }
+    }
+}
+
+@MainActor
 final class ExerciseHistoryViewSnapshot {
     typealias ResolveHistory = (
         _ sessions: [WorkoutSession],
@@ -126,7 +245,15 @@ final class ExerciseHistoryViewSnapshot {
         resolveHistory: @escaping ResolveHistory = ExerciseHistorySummary.makeResolvedHistory
     ) {
         self.resolveHistory = {
-            resolveHistory(
+            #if DEBUG
+            let startedAt = ProcessInfo.processInfo.systemUptime
+            defer {
+                ExerciseHistoryUITestMetrics.shared.recordResolution(
+                    elapsed: ProcessInfo.processInfo.systemUptime - startedAt
+                )
+            }
+            #endif
+            return resolveHistory(
                 sessions,
                 exercises,
                 ownerTokenIdentifier
@@ -134,3 +261,25 @@ final class ExerciseHistoryViewSnapshot {
         }
     }
 }
+
+#if DEBUG
+@MainActor
+final class ExerciseHistoryUITestMetrics {
+    static let measurementArgument = "--uitest-measure-exercise-history-invalidation"
+    static let shared = ExerciseHistoryUITestMetrics()
+
+    let isEnabled: Bool
+    private(set) var resolutionCount = 0
+    private(set) var resolutionTimeMilliseconds = 0.0
+
+    init(arguments: [String] = ProcessInfo.processInfo.arguments) {
+        isEnabled = arguments.contains(Self.measurementArgument)
+    }
+
+    func recordResolution(elapsed: TimeInterval) {
+        guard isEnabled else { return }
+        resolutionCount += 1
+        resolutionTimeMilliseconds += elapsed * 1_000
+    }
+}
+#endif

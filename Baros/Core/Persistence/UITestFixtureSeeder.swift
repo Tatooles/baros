@@ -4,6 +4,7 @@ import SwiftData
 #if DEBUG
 enum UITestFixtureSeeder {
     static let completedBenchWorkoutArgument = "--uitest-seed-completed-bench-workout"
+    static let exerciseHistoryPerformanceArgument = "--uitest-seed-exercise-history-performance"
 
     static func seedFixtures(
         from arguments: [String],
@@ -13,6 +14,13 @@ enum UITestFixtureSeeder {
         for title in values(after: completedBenchWorkoutArgument, in: arguments) {
             try seedCompletedBenchWorkout(
                 title: title,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+
+        if arguments.contains(exerciseHistoryPerformanceArgument) {
+            try seedExerciseHistoryPerformanceFixture(
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context
             )
@@ -77,6 +85,61 @@ enum UITestFixtureSeeder {
         )
 
         context.insert(session)
+        try context.save()
+    }
+
+    static func seedExerciseHistoryPerformanceFixture(
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext
+    ) throws {
+        let exercises = try context.fetch(
+            FetchDescriptor<Exercise>(sortBy: [SortDescriptor(\Exercise.name)])
+        ).filter { $0.isVisible(to: ownerTokenIdentifier) }
+        let fixtureExercises = Array(exercises.prefix(20))
+        guard fixtureExercises.count == 20 else { return }
+
+        for sessionIndex in 0..<100 {
+            let startedAt = Date(timeIntervalSince1970: TimeInterval(1_700_000_000 + sessionIndex))
+            let loggedExercises = (0..<10).map { exerciseOffset in
+                let exercise = fixtureExercises[(sessionIndex + exerciseOffset) % fixtureExercises.count]
+                let sets = (0..<3).map { setIndex in
+                    LoggedSet(
+                        orderIndex: setIndex,
+                        weight: Double(100 + sessionIndex + setIndex),
+                        reps: 5 + setIndex,
+                        rpe: 8,
+                        isCompleted: true,
+                        completedAt: startedAt,
+                        createdAt: startedAt,
+                        updatedAt: startedAt
+                    )
+                }
+                return LoggedExercise(
+                    orderIndex: exerciseOffset,
+                    exercise: exercise,
+                    exerciseSnapshotName: exercise.name,
+                    exerciseSnapshotEquipmentRaw: exercise.equipmentRaw,
+                    exerciseSnapshotPrimaryMuscleGroupRaw: exercise.primaryMuscleGroupRaw,
+                    createdAt: startedAt,
+                    updatedAt: startedAt,
+                    sets: sets
+                )
+            }
+            context.insert(
+                WorkoutSession(
+                    title: "Performance Workout \(sessionIndex)",
+                    startedAt: startedAt,
+                    endedAt: startedAt.addingTimeInterval(3_600),
+                    durationSeconds: 3_600,
+                    status: .completed,
+                    source: .blank,
+                    createdAt: startedAt,
+                    updatedAt: startedAt,
+                    syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                    loggedExercises: loggedExercises
+                )
+            )
+        }
         try context.save()
     }
 
