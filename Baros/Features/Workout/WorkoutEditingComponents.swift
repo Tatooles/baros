@@ -31,7 +31,7 @@ struct WorkoutExerciseHeaderContent: View {
     var isCollapsed: Bool?
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             if let isCollapsed {
                 Image(systemName: "chevron.down")
                     .font(.footnote.weight(.bold))
