@@ -65,6 +65,26 @@ struct ExerciseQuickHistorySheet: View {
                                 weightUnit: weightUnit
                             )
                         }
+
+                        if let summary, summary.performanceCount > recentGroups.count {
+                            HStack(spacing: 6) {
+                                Text("Showing \(recentGroups.count) of \(summary.performanceCount) workouts")
+                                    .foregroundStyle(AppTheme.textSecondary)
+                                    .accessibilityIdentifier("QuickHistoryLimitFooter")
+
+                                Text("·")
+                                    .foregroundStyle(AppTheme.textTertiary)
+
+                                Button("View all") {
+                                    showFullHistory(historyRoute)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(AppTheme.accentBright)
+                                .accessibilityIdentifier("QuickHistoryViewAllButton")
+                            }
+                            .font(.footnote.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                        }
                     }
                 }
                 .padding(.horizontal, AppTheme.shellPadding)
@@ -82,8 +102,7 @@ struct ExerciseQuickHistorySheet: View {
                 if summary != nil {
                     ToolbarItem(placement: .primaryAction) {
                         Button("Full History") {
-                            dismiss()
-                            openFullHistory(historyRoute)
+                            showFullHistory(historyRoute)
                         }
                         .accessibilityIdentifier("FullExerciseHistoryButton")
                     }
@@ -92,5 +111,10 @@ struct ExerciseQuickHistorySheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    private func showFullHistory(_ historyRoute: ExerciseHistoryRoute) {
+        dismiss()
+        openFullHistory(historyRoute)
     }
 }

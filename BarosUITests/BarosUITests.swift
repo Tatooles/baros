@@ -727,6 +727,36 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(historyHeading.label.contains("· 1 workout · 1 set"))
         XCTAssertTrue(app.buttons["Done"].exists)
         XCTAssertTrue(app.buttons["Full History"].exists)
+        XCTAssertFalse(app.staticTexts["QuickHistoryLimitFooter"].exists)
+    }
+
+    @MainActor
+    func testQuickExerciseHistoryExplainsTruncatedRecentWorkouts() {
+        let app = makeApp(
+            completedBenchWorkoutTitles: ["Push One", "Push Two", "Push Three", "Push Four"]
+        )
+        app.launch()
+
+        app.buttons["WorkoutTab"].tap()
+        XCTAssertTrue(app.buttons["PastWorkoutButton-0"].waitForExistence(timeout: 3))
+        app.buttons["PastWorkoutButton-0"].tap()
+        confirmStartFromPastWorkout(in: app)
+
+        XCTAssertTrue(app.buttons["ExerciseMenuButton-0"].waitForExistence(timeout: 3))
+        app.buttons["ExerciseMenuButton-0"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["ExerciseHistoryButton-0"].tap()
+
+        let footer = app.staticTexts["QuickHistoryLimitFooter"]
+        XCTAssertTrue(footer.waitForExistence(timeout: 3))
+        XCTAssertTrue(footer.label.contains("Showing 3 of 4 workouts"))
+
+        let viewAllButton = app.buttons["QuickHistoryViewAllButton"]
+        XCTAssertTrue(viewAllButton.exists)
+        viewAllButton.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["ExerciseHistoryHeading"].waitForExistence(timeout: 3)
+        )
     }
 
     @MainActor
