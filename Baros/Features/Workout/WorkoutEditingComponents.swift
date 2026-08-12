@@ -43,7 +43,7 @@ struct WorkoutExerciseHeaderContent: View {
                 Text(title)
                     .font(.title3.weight(.bold))
                     .foregroundStyle(AppTheme.textPrimary)
-                    .lineLimit(isCollapsed == true ? 1 : 2)
+                    .lineLimit(isCollapsed == true ? 1 : nil)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 

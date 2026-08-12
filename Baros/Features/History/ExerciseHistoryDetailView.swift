@@ -33,7 +33,14 @@ struct ExerciseHistoryDetailView: View {
                 .accessibilityIdentifier("ExerciseHistoryHeading")
 
                 ForEach(sessionGroups) { group in
-                    ExerciseHistorySessionGroupCard(group: group, weightUnit: weightUnit)
+                    ExerciseHistorySessionGroupCard(
+                        group: group,
+                        headingIdentity: ExerciseHistoryDisplayIdentity(
+                            name: summary.name,
+                            metadataDisplayText: summary.metadataDisplayText
+                        ),
+                        weightUnit: weightUnit
+                    )
                 }
             }
             .padding(AppTheme.shellPadding)

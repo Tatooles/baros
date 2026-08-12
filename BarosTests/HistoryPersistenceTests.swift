@@ -751,6 +751,50 @@ final class HistoryPersistenceTests: XCTestCase {
         }, [firstLoggedExercise.id, secondLoggedExercise.id])
     }
 
+    func testExerciseHistoryEntryOnlyShowsIdentityForDifferingHistoricalSnapshot() {
+        let headingIdentity = ExerciseHistoryDisplayIdentity(
+            name: "Competition Bench Press",
+            metadataDisplayText: "Barbell • Chest"
+        )
+        let matchingExercise = LoggedExercise(
+            orderIndex: 0,
+            exerciseSnapshotName: "Competition Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue
+        )
+        let renamedExercise = LoggedExercise(
+            orderIndex: 1,
+            exerciseSnapshotName: "Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue
+        )
+        let changedEquipmentExercise = LoggedExercise(
+            orderIndex: 2,
+            exerciseSnapshotName: "Competition Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.dumbbell.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue
+        )
+
+        XCTAssertFalse(
+            ExerciseHistoryLoggedExerciseEntry(
+                loggedExercise: matchingExercise,
+                setEntries: []
+            ).showsIdentity(comparedTo: headingIdentity)
+        )
+        XCTAssertTrue(
+            ExerciseHistoryLoggedExerciseEntry(
+                loggedExercise: renamedExercise,
+                setEntries: []
+            ).showsIdentity(comparedTo: headingIdentity)
+        )
+        XCTAssertTrue(
+            ExerciseHistoryLoggedExerciseEntry(
+                loggedExercise: changedEquipmentExercise,
+                setEntries: []
+            ).showsIdentity(comparedTo: headingIdentity)
+        )
+    }
+
     func testExerciseHistoryNoteBlockTreatsWhitespaceOnlyNotesAsAbsent() {
         XCTAssertNil(ExerciseHistoryNoteBlock.displayNote(from: " \n\t "))
     }

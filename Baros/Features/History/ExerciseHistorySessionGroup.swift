@@ -14,6 +14,30 @@ struct ExerciseHistoryLoggedExerciseEntry: Identifiable {
 
     var id: UUID { loggedExercise.id }
     var exerciseNotes: String { loggedExercise.notes }
+    var displayIdentity: ExerciseHistoryDisplayIdentity {
+        ExerciseHistoryDisplayIdentity(loggedExercise: loggedExercise)
+    }
+
+    func showsIdentity(comparedTo headingIdentity: ExerciseHistoryDisplayIdentity) -> Bool {
+        displayIdentity != headingIdentity
+    }
+}
+
+struct ExerciseHistoryDisplayIdentity: Equatable {
+    let name: String
+    let metadataDisplayText: String?
+
+    init(name: String, metadataDisplayText: String?) {
+        self.name = name
+        self.metadataDisplayText = metadataDisplayText
+    }
+
+    init(loggedExercise: LoggedExercise) {
+        self.init(
+            name: loggedExercise.exerciseSnapshotName,
+            metadataDisplayText: loggedExercise.metadataDisplayText
+        )
+    }
 }
 
 struct ExerciseHistorySessionGroup: Identifiable {

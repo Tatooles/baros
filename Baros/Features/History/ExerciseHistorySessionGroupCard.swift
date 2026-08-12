@@ -54,6 +54,7 @@ struct ExerciseHistoryHeading: View {
 
 struct ExerciseHistorySessionGroupCard: View {
     let group: ExerciseHistorySessionGroup
+    let headingIdentity: ExerciseHistoryDisplayIdentity
     var weightUnit: MeasurementUnit = .pounds
     var showsExerciseNotes: Bool = true
 
@@ -97,6 +98,10 @@ struct ExerciseHistorySessionGroupCard: View {
         VStack(spacing: 12) {
             ForEach(Array(group.loggedExerciseEntries.enumerated()), id: \.element.id) { index, entry in
                 VStack(alignment: .leading, spacing: 10) {
+                    if entry.showsIdentity(comparedTo: headingIdentity) {
+                        entryIdentity(entry.displayIdentity)
+                    }
+
                     setRows(for: entry.setEntries)
 
                     if showsExerciseNotes {
@@ -108,6 +113,21 @@ struct ExerciseHistorySessionGroupCard: View {
                     Divider()
                         .overlay(AppTheme.border)
                 }
+            }
+        }
+    }
+
+    private func entryIdentity(_ identity: ExerciseHistoryDisplayIdentity) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(identity.name)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(AppTheme.textPrimary)
+
+            if let metadataDisplayText = identity.metadataDisplayText {
+                Text(metadataDisplayText)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .lineLimit(1)
             }
         }
     }

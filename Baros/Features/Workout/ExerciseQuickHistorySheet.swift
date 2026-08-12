@@ -67,7 +67,13 @@ struct ExerciseQuickHistorySheet: View {
                         )
                     } else {
                         ForEach(recentGroups) { group in
-                            ExerciseHistorySessionGroupCard(group: group, weightUnit: weightUnit)
+                            ExerciseHistorySessionGroupCard(
+                                group: group,
+                                headingIdentity: ExerciseHistoryDisplayIdentity(
+                                    loggedExercise: loggedExercise
+                                ),
+                                weightUnit: weightUnit
+                            )
                         }
                     }
                 }
