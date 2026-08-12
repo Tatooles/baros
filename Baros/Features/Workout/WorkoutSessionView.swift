@@ -89,7 +89,10 @@ struct WorkoutSessionView: View {
                             weightUnit: weightUnit,
                             previousSets: cachedPreviousSets[loggedExercise.id] ?? [],
                             canReorder: canReorderExercises,
-                            viewHistory: { selectedHistoryExercise = loggedExercise },
+                            viewHistory: {
+                                focusedField = nil
+                                selectedHistoryExercise = loggedExercise
+                            },
                             onReorderExercises: {
                                 isReorderExercisesPresented = true
                             },
