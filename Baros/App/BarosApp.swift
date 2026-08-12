@@ -125,6 +125,11 @@ struct BarosApp: App {
                         .accessibilityIdentifier("UITestSyncRequestCount")
                 }
             }
+            #if DEBUG
+            .overlay(alignment: .topLeading) {
+                ExerciseHistoryUITestMetricsOverlay()
+            }
+            #endif
             .task {
                 currentOwnerCoordinator.start()
                 if let uiTestSyncFailureMessage {
@@ -138,3 +143,31 @@ struct BarosApp: App {
         }
     }
 }
+
+#if DEBUG
+private struct ExerciseHistoryUITestMetricsOverlay: View {
+    private let metrics = ExerciseHistoryUITestMetrics.shared
+    @State private var displayedResolutionCount = 0
+    @State private var displayedResolutionTimeMilliseconds = 0.0
+
+    var body: some View {
+        if metrics.isEnabled {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(
+                    "resolutions=\(displayedResolutionCount) "
+                        + "resolutionTimeMilliseconds=\(displayedResolutionTimeMilliseconds)"
+                )
+                .font(.caption2)
+                .accessibilityIdentifier("UITestExerciseHistoryMetrics")
+
+                Button("Refresh history metrics") {
+                    displayedResolutionCount = metrics.resolutionCount
+                    displayedResolutionTimeMilliseconds = metrics.resolutionTimeMilliseconds
+                }
+                .font(.caption2)
+                .accessibilityIdentifier("UITestExerciseHistoryMetricsRefresh")
+            }
+        }
+    }
+}
+#endif

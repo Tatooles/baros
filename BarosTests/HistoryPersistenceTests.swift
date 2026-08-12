@@ -892,6 +892,309 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(resolutionCount, 1)
     }
 
+    func testExerciseHistoryViewStateIgnoresActiveWorkoutAndNoOpSyncChanges() throws {
+        let fixture = try makeHistoryViewPerformanceFixture()
+        let activeSession = WorkoutSession(
+            title: "Active",
+            startedAt: Date(timeIntervalSince1970: 500),
+            status: .active,
+            source: .blank,
+            syncOwnerTokenIdentifier: fixture.ownerTokenIdentifier
+        )
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+        let sessions = fixture.sessions + [activeSession]
+
+        XCTAssertEqual(
+            state.snapshot(
+                sessions: sessions,
+                exercises: fixture.exercises,
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+                syncCompletion: nil
+            ).resolvedHistory.summaries.count,
+            fixture.exercises.count
+        )
+
+        activeSession.title = "Renamed Active"
+        activeSession.touch(now: Date(timeIntervalSince1970: 600))
+        _ = state.snapshot(
+            sessions: sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: Date(timeIntervalSince1970: 700)
+        ).resolvedHistory
+
+        XCTAssertEqual(resolutionCounter.count, 1)
+    }
+
+    func testExerciseHistoryViewStateIgnoresActiveSetAndExerciseChanges() throws {
+        let fixture = try makeHistoryViewPerformanceFixture()
+        let activeSession = WorkoutSession(
+            title: "Active",
+            startedAt: Date(timeIntervalSince1970: 500),
+            status: .active,
+            source: .blank,
+            syncOwnerTokenIdentifier: fixture.ownerTokenIdentifier
+        )
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+        let sessions = fixture.sessions + [activeSession]
+
+        _ = state.snapshot(
+            sessions: sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory
+
+        let exercise = try XCTUnwrap(fixture.exercises.first)
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: exercise,
+            exerciseSnapshotName: exercise.name,
+            sets: [LoggedSet(orderIndex: 0, weight: 185, reps: 5, isCompleted: false)]
+        )
+        loggedExercise.session = activeSession
+        activeSession.loggedExercises.append(loggedExercise)
+        _ = state.snapshot(
+            sessions: sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory
+
+        loggedExercise.sets.append(
+            LoggedSet(orderIndex: 1, weight: 195, reps: 5, isCompleted: true)
+        )
+        activeSession.loggedExercises.removeAll()
+        _ = state.snapshot(
+            sessions: sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory
+
+        XCTAssertEqual(resolutionCounter.count, 1)
+    }
+
+    func testExerciseHistoryViewStateRebuildsWhenCompletedContributionChanges() throws {
+        let fixture = try makeHistoryViewPerformanceFixture()
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+        let firstSnapshot = state.snapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        )
+        let initialCompletedSetCount = firstSnapshot.resolvedHistory.summaries
+            .reduce(0) { $0 + $1.completedSetCount }
+        let set = try XCTUnwrap(fixture.sessions.first?.sortedLoggedExercises.first?.sortedSets.first)
+
+        set.isCompleted = false
+        set.touch(now: Date(timeIntervalSince1970: 800))
+        let updatedCompletedSetCount = state.snapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory.summaries.reduce(0) { $0 + $1.completedSetCount }
+
+        XCTAssertEqual(updatedCompletedSetCount, initialCompletedSetCount - 1)
+        XCTAssertEqual(resolutionCounter.count, 2)
+    }
+
+    func testExerciseHistoryViewStateRebuildsExactlyForCompletedWorkoutContributionChanges() throws {
+        let fixture = try makeHistoryViewPerformanceFixture()
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+        let session = try XCTUnwrap(fixture.sessions.first)
+        let set = try XCTUnwrap(session.sortedLoggedExercises.first?.sortedSets.first)
+
+        _ = state.snapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory
+
+        session.title = "Irrelevant completed title edit"
+        set.weight = (set.weight ?? 0) + 5
+        set.reps = (set.reps ?? 0) + 1
+        _ = state.snapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory
+        XCTAssertEqual(resolutionCounter.count, 1)
+
+        session.startedAt = session.startedAt.addingTimeInterval(60)
+        _ = state.snapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory
+        XCTAssertEqual(resolutionCounter.count, 2)
+
+        session.markDeleted(now: Date(timeIntervalSince1970: 1_200))
+        _ = state.snapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory
+        XCTAssertEqual(resolutionCounter.count, 3)
+
+        session.restoreFromDeletion(now: Date(timeIntervalSince1970: 1_300))
+        session.status = .active
+        _ = state.snapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory
+        XCTAssertEqual(
+            resolutionCounter.count,
+            3,
+            "Restoring a workout as active does not restore a completed-history contribution"
+        )
+
+        session.status = .completed
+        _ = state.snapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory
+        XCTAssertEqual(resolutionCounter.count, 4)
+    }
+
+    func testExerciseHistoryViewStateRebuildsWhenLoggedExerciseOrderChangesResolvedMetadata() throws {
+        let fixture = try makeHistoryViewPerformanceFixture()
+        let session = try XCTUnwrap(fixture.sessions.first)
+        let exercise = try XCTUnwrap(fixture.exercises.first)
+        let first = LoggedExercise(
+            orderIndex: 0,
+            exercise: exercise,
+            exerciseSnapshotName: "First Snapshot",
+            sets: [LoggedSet(orderIndex: 0, isCompleted: true)]
+        )
+        let second = LoggedExercise(
+            orderIndex: 1,
+            exercise: exercise,
+            exerciseSnapshotName: "Second Snapshot",
+            sets: [LoggedSet(orderIndex: 0, isCompleted: true)]
+        )
+        first.session = session
+        second.session = session
+        session.loggedExercises = [first, second]
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+
+        let firstName = try XCTUnwrap(
+            state.snapshot(
+                sessions: [session],
+                exercises: [exercise],
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+                syncCompletion: nil
+            ).resolvedHistory.summary(for: exercise)
+        ).name
+
+        first.orderIndex = 1
+        second.orderIndex = 0
+        let secondName = try XCTUnwrap(
+            state.snapshot(
+                sessions: [session],
+                exercises: [exercise],
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+                syncCompletion: nil
+            ).resolvedHistory.summary(for: exercise)
+        ).name
+
+        XCTAssertEqual(firstName, "First Snapshot")
+        XCTAssertEqual(secondName, "Second Snapshot")
+        XCTAssertEqual(resolutionCounter.count, 2)
+    }
+
+    func testExerciseHistoryViewStateRebuildsForExerciseDefinitionAndCurrentOwnerChanges() throws {
+        let fixture = try makeHistoryViewPerformanceFixture()
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+
+        _ = state.snapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory
+
+        let exercise = try XCTUnwrap(fixture.exercises.first)
+        exercise.name = "Renamed Performance Exercise"
+        exercise.touch(now: Date(timeIntervalSince1970: 900))
+        _ = state.snapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            syncCompletion: nil
+        ).resolvedHistory
+        _ = state.snapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: nil,
+            syncCompletion: nil
+        ).resolvedHistory
+
+        XCTAssertEqual(resolutionCounter.count, 3)
+    }
+
+    func testExerciseHistoryViewStateRebuildsAfterSynchronizedCompletedWorkoutArrives() throws {
+        let fixture = try makeHistoryViewPerformanceFixture()
+        let context = fixture.container.mainContext
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+        let initialPerformanceCount = try XCTUnwrap(
+            state.snapshot(
+                sessions: fixture.sessions,
+                exercises: fixture.exercises,
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+                syncCompletion: nil
+            ).resolvedHistory.summaries.first
+        ).performanceCount
+        let exercise = try XCTUnwrap(fixture.exercises.first)
+        let synchronizedSession = WorkoutSession(
+            title: "Synchronized Workout",
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: fixture.ownerTokenIdentifier,
+            loggedExercises: [
+                LoggedExercise(
+                    orderIndex: 0,
+                    exercise: exercise,
+                    exerciseSnapshotName: exercise.name,
+                    sets: [LoggedSet(orderIndex: 0, weight: 225, reps: 5, isCompleted: true)]
+                )
+            ]
+        )
+        context.insert(synchronizedSession)
+        try context.save()
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+
+        let updatedSummary = try XCTUnwrap(
+            state.snapshot(
+                sessions: sessions,
+                exercises: fixture.exercises,
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+                syncCompletion: Date(timeIntervalSince1970: 1_100)
+            ).resolvedHistory.summary(for: exercise)
+        )
+
+        XCTAssertEqual(updatedSummary.performanceCount, initialPerformanceCount + 1)
+        XCTAssertEqual(resolutionCounter.count, 2)
+    }
+
     private func makeReconciledHistoryFixture() throws -> (
         container: ModelContainer,
         exercise: Exercise,
@@ -947,6 +1250,23 @@ final class HistoryPersistenceTests: XCTestCase {
             linkedSession,
             snapshotSession
         )
+    }
+
+    private func makeExerciseHistoryViewState(
+        resolutionCounter: ExerciseHistoryResolutionCounter
+    ) -> ExerciseHistoryViewState {
+        ExerciseHistoryViewState { sessions, exercises, ownerTokenIdentifier in
+            resolutionCounter.count += 1
+            return ExerciseHistorySummary.makeResolvedHistory(
+                from: sessions,
+                exercises: exercises,
+                ownerTokenIdentifier: ownerTokenIdentifier
+            )
+        }
+    }
+
+    private final class ExerciseHistoryResolutionCounter {
+        var count = 0
     }
 
     private func makeHistoryViewPerformanceFixture() throws -> (
