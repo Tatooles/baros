@@ -22,34 +22,24 @@ struct ExerciseQuickHistorySheet: View {
         ExerciseHistoryRoute(loggedExercise: loggedExercise)
     }
 
-    private var completedSessions: [WorkoutSession] {
-        WorkoutSession.visibleCompletedSessions(
-            from: sessions,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
-        )
-    }
-
-    private var summary: ExerciseHistorySummary? {
+    var body: some View {
         let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
-        return ExerciseHistorySummary.makeResolvedHistory(
-            from: sessions,
+        let historyRoute = route
+        let historySnapshot = ExerciseHistoryViewSnapshot(
+            sessions: sessions,
             exercises: exercises,
             ownerTokenIdentifier: ownerTokenIdentifier
-        ).summary(for: route)
-    }
-
-    private var recentGroups: [ExerciseHistorySessionGroup] {
-        guard let summary else { return [] }
-
-        return ExerciseHistorySessionGroup.recentGroups(
-            from: sessions,
-            matching: summary,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
-            limit: 3
         )
-    }
+        let summary = historySnapshot.resolvedHistory.summary(for: historyRoute)
+        let recentGroups = summary.map {
+            ExerciseHistorySessionGroup.recentGroups(
+                from: sessions,
+                matching: $0,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                limit: 3
+            )
+        } ?? []
 
-    var body: some View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 16) {
@@ -93,7 +83,7 @@ struct ExerciseQuickHistorySheet: View {
                     ToolbarItem(placement: .primaryAction) {
                         Button("Full History") {
                             dismiss()
-                            openFullHistory(route)
+                            openFullHistory(historyRoute)
                         }
                         .accessibilityIdentifier("FullExerciseHistoryButton")
                     }
