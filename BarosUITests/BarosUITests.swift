@@ -839,6 +839,64 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testIrrelevantActiveWorkoutAndForegroundChangesDoNotRebuildExerciseHistory() throws {
+        let app = makeApp(extraArguments: [
+            "--uitest-seed-exercise-history-performance",
+            "--uitest-measure-exercise-history-invalidation",
+        ])
+        app.launch()
+
+        app.buttons["HistoryTab"].tap()
+        XCTAssertTrue(app.staticTexts["HistoryTitle"].waitForExistence(timeout: 5))
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 10))
+        let initialMetrics = try settledExerciseHistoryMetrics(in: app)
+
+        app.buttons["WorkoutTab"].tap()
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 5))
+        addBenchPress(in: app)
+        dismissKeyboardIfNeeded(in: app)
+        let beforeActiveEdit = try settledExerciseHistoryMetrics(in: app)
+
+        app.textFields["SetWeightField-0-0"].tap()
+        app.textFields["SetWeightField-0-0"].typeText("185")
+        dismissKeyboardIfNeeded(in: app)
+        let afterActiveEdit = try settledExerciseHistoryMetrics(in: app)
+
+        XCTAssertEqual(
+            afterActiveEdit.resolutions,
+            beforeActiveEdit.resolutions,
+            "Active Workout field changes rebuilt unchanged completed Exercise History"
+        )
+
+        app.buttons["HistoryTab"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 10))
+        let beforeForeground = try settledExerciseHistoryMetrics(in: app)
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 10))
+        let afterForeground = try settledExerciseHistoryMetrics(in: app)
+
+        print(
+            "HISTORY_INVALIDATION_METRICS "
+                + "sessions=100 exercises=20 completedSets=3000 "
+                + "initialResolutions=\(initialMetrics.resolutions) "
+                + "beforeActiveEditResolutions=\(beforeActiveEdit.resolutions) "
+                + "afterActiveEditResolutions=\(afterActiveEdit.resolutions) "
+                + "beforeForegroundResolutions=\(beforeForeground.resolutions) "
+                + "afterForegroundResolutions=\(afterForeground.resolutions) "
+                + "totalResolutionTimeMilliseconds=\(afterForeground.resolutionTimeMilliseconds)"
+        )
+        XCTAssertEqual(
+            afterForeground.resolutions,
+            beforeForeground.resolutions,
+            "Foreground return rebuilt unchanged completed Exercise History"
+        )
+    }
+
+    @MainActor
     func testSettingsWeightUnitPreferenceRoundsDisplayedWorkoutAndHistoryValues() {
         let app = makeApp(completedBenchWorkoutTitles: ["Metric Display"])
         app.launch()
@@ -1279,6 +1337,53 @@ final class BarosUITests: XCTestCase {
         }
         app.launchArguments = launchArguments
         return app
+    }
+
+    @MainActor
+    private func settledExerciseHistoryMetrics(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 5
+    ) throws -> (resolutions: Int, resolutionTimeMilliseconds: Double) {
+        let element = app.staticTexts["UITestExerciseHistoryMetrics"]
+        XCTAssertTrue(element.waitForExistence(timeout: timeout))
+        let refreshButton = app.buttons["UITestExerciseHistoryMetricsRefresh"]
+        XCTAssertTrue(refreshButton.waitForExistence(timeout: timeout))
+
+        var previous: (resolutions: Int, resolutionTimeMilliseconds: Double)?
+        var stableReads = 0
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            refreshButton.tap()
+            let current = try parseExerciseHistoryMetrics(element.label)
+            if current.resolutions == previous?.resolutions {
+                stableReads += 1
+                if stableReads >= 3 {
+                    return current
+                }
+            } else {
+                previous = current
+                stableReads = 0
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+
+        refreshButton.tap()
+        return try parseExerciseHistoryMetrics(element.label)
+    }
+
+    private func parseExerciseHistoryMetrics(
+        _ label: String
+    ) throws -> (resolutions: Int, resolutionTimeMilliseconds: Double) {
+        var values: [String: String] = [:]
+        for component in label.split(separator: " ") {
+            let parts = component.split(separator: "=", maxSplits: 1)
+            guard parts.count == 2 else { continue }
+            values[String(parts[0])] = String(parts[1])
+        }
+        return (
+            try XCTUnwrap(values["resolutions"].flatMap(Int.init)),
+            try XCTUnwrap(values["resolutionTimeMilliseconds"].flatMap(Double.init))
+        )
     }
 
     @MainActor
