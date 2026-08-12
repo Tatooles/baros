@@ -25,6 +25,12 @@ struct ExerciseHistoryDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                ExerciseHistoryHeading(
+                    name: summary.name,
+                    metadata: summary.metadataDisplayText
+                )
+                .accessibilityIdentifier("ExerciseHistoryHeading")
+
                 Text("Last performed \(summary.lastPerformedLabel)")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppTheme.textSecondary)
@@ -48,7 +54,7 @@ struct ExerciseHistoryDetailView: View {
             .padding(AppTheme.shellPadding)
         }
         .background(AppTheme.subtleBackground.ignoresSafeArea())
-        .navigationTitle(summary.name)
+        .navigationTitle("Exercise History")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

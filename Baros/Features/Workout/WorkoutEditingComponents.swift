@@ -43,7 +43,10 @@ struct WorkoutExerciseHeaderContent: View {
                 Text(title)
                     .font(.title3.weight(.bold))
                     .foregroundStyle(AppTheme.textPrimary)
-                    .lineLimit(1)
+                    .lineLimit(isCollapsed == true ? 1 : 2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 if let metadata {
                     Text(metadata)
                         .font(.footnote.weight(.medium))

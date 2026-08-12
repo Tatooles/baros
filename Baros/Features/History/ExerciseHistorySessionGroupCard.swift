@@ -1,5 +1,29 @@
 import SwiftUI
 
+struct ExerciseHistoryHeading: View {
+    let name: String
+    let metadata: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(name)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(AppTheme.textPrimary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let metadata {
+                Text(metadata)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct ExerciseHistorySessionGroupCard: View {
     let group: ExerciseHistorySessionGroup
     var weightUnit: MeasurementUnit = .pounds
@@ -41,18 +65,6 @@ struct ExerciseHistorySessionGroupCard: View {
         VStack(spacing: 12) {
             ForEach(Array(group.loggedExerciseEntries.enumerated()), id: \.element.id) { index, entry in
                 VStack(alignment: .leading, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.loggedExercise.exerciseSnapshotName)
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(AppTheme.textPrimary)
-                        if let metadataDisplayText = entry.loggedExercise.metadataDisplayText {
-                            Text(metadataDisplayText)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(AppTheme.textSecondary)
-                                .lineLimit(1)
-                        }
-                    }
-
                     setRows(for: entry.setEntries)
 
                     if showsExerciseNotes {

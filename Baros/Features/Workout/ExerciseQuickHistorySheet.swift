@@ -53,6 +53,12 @@ struct ExerciseQuickHistorySheet: View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 12) {
+                    ExerciseHistoryHeading(
+                        name: loggedExercise.exerciseSnapshotName,
+                        metadata: loggedExercise.metadataDisplayText
+                    )
+                    .accessibilityIdentifier("QuickExerciseHistoryHeading")
+
                     if recentGroups.isEmpty {
                         EmptyStateView(
                             title: "No History Yet",
@@ -68,7 +74,7 @@ struct ExerciseQuickHistorySheet: View {
                 .padding(.vertical, 16)
             }
             .background(AppTheme.subtleBackground.ignoresSafeArea())
-            .navigationTitle(loggedExercise.exerciseSnapshotName)
+            .navigationTitle("Quick History")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
