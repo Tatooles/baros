@@ -890,6 +890,55 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(group.exerciseNotes, "Felt strong")
     }
 
+    func testExerciseHistoryViewSnapshotResolvesHistoryOnceForAllConsumers() throws {
+        let fixture = try makeHistoryViewPerformanceFixture()
+        var resolutionCount = 0
+        var resolutionTime = TimeInterval.zero
+        let snapshot = ExerciseHistoryViewSnapshot(
+            sessions: fixture.sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
+        ) { sessions, exercises, ownerTokenIdentifier in
+            resolutionCount += 1
+            let startedAt = ProcessInfo.processInfo.systemUptime
+            defer {
+                resolutionTime += ProcessInfo.processInfo.systemUptime - startedAt
+            }
+            return ExerciseHistorySummary.makeResolvedHistory(
+                from: sessions,
+                exercises: exercises,
+                ownerTokenIdentifier: ownerTokenIdentifier
+            )
+        }
+
+        XCTAssertFalse(snapshot.resolvedHistory.summaries.isEmpty)
+        let summaries = snapshot.resolvedHistory.summaries
+        XCTAssertEqual(summaries.count, fixture.exercises.count)
+        for index in summaries.indices {
+            XCTAssertEqual(
+                index < snapshot.resolvedHistory.summaries.count - 1,
+                index < summaries.count - 1
+            )
+        }
+        let firstSummary = try XCTUnwrap(summaries.first)
+        XCTAssertEqual(
+            snapshot.resolvedHistory.summary(
+                for: ExerciseHistoryRoute(summary: firstSummary)
+            )?.id,
+            firstSummary.id
+        )
+
+        print(
+            "HISTORY_VIEW_UPDATE_METRICS "
+                + "sessions=\(fixture.sessions.count) "
+                + "exercises=\(fixture.exercises.count) "
+                + "completedSets=\(fixture.completedSetCount) "
+                + "resolutions=\(resolutionCount) "
+                + "resolutionTimeMilliseconds=\(resolutionTime * 1_000)"
+        )
+        XCTAssertEqual(resolutionCount, 1)
+    }
+
     private func makeReconciledHistoryFixture() throws -> (
         container: ModelContainer,
         exercise: Exercise,
@@ -944,6 +993,70 @@ final class HistoryPersistenceTests: XCTestCase {
             snapshotExercise,
             linkedSession,
             snapshotSession
+        )
+    }
+
+    private func makeHistoryViewPerformanceFixture() throws -> (
+        container: ModelContainer,
+        sessions: [WorkoutSession],
+        exercises: [Exercise],
+        ownerTokenIdentifier: String,
+        completedSetCount: Int
+    ) {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let ownerTokenIdentifier = "issuer|history_performance_owner"
+        let exercises = (0..<20).map { index in
+            Exercise(
+                name: "Performance Exercise \(index)",
+                category: .strength,
+                equipment: index.isMultiple(of: 2) ? .barbell : .dumbbell,
+                primaryMuscleGroup: index.isMultiple(of: 2) ? .chest : .upperBack,
+                syncOwnerTokenIdentifier: ownerTokenIdentifier
+            )
+        }
+        for exercise in exercises {
+            context.insert(exercise)
+        }
+
+        let sessions = (0..<100).map { sessionIndex in
+            let loggedExercises = (0..<10).map { exerciseOffset in
+                let exercise = exercises[(sessionIndex + exerciseOffset) % exercises.count]
+                return LoggedExercise(
+                    orderIndex: exerciseOffset,
+                    exercise: exercise,
+                    exerciseSnapshotName: exercise.name,
+                    sets: (0..<3).map { setIndex in
+                        LoggedSet(
+                            orderIndex: setIndex,
+                            weight: Double(100 + sessionIndex + setIndex),
+                            reps: 5 + setIndex,
+                            rpe: 8,
+                            isCompleted: true
+                        )
+                    }
+                )
+            }
+            return WorkoutSession(
+                title: "Performance Workout \(sessionIndex)",
+                startedAt: Date(timeIntervalSince1970: TimeInterval(sessionIndex)),
+                status: .completed,
+                source: .blank,
+                syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                loggedExercises: loggedExercises
+            )
+        }
+        for session in sessions {
+            context.insert(session)
+        }
+        try context.save()
+
+        return (
+            container,
+            try context.fetch(FetchDescriptor<WorkoutSession>()),
+            try context.fetch(FetchDescriptor<Exercise>()),
+            ownerTokenIdentifier,
+            100 * 10 * 3
         )
     }
 

@@ -14,20 +14,13 @@ struct HistoryView: View {
         )
     }
 
-    private var resolvedExerciseHistory: ResolvedExerciseHistory {
-        let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
-        return ExerciseHistorySummary.makeResolvedHistory(
-            from: sessions,
-            exercises: exercises,
-            ownerTokenIdentifier: ownerTokenIdentifier
-        )
-    }
-
-    private var exerciseSummaries: [ExerciseHistorySummary] {
-        resolvedExerciseHistory.summaries
-    }
-
     var body: some View {
+        let exerciseHistorySnapshot = ExerciseHistoryViewSnapshot(
+            sessions: sessions,
+            exercises: exercises,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        )
+
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
                 Text("History")
@@ -47,7 +40,7 @@ struct HistoryView: View {
                 case .workouts:
                     workoutContent
                 case .exercises:
-                    exerciseContent
+                    exerciseContent(snapshot: exerciseHistorySnapshot)
                 }
             }
             .padding(AppTheme.shellPadding)
@@ -57,7 +50,7 @@ struct HistoryView: View {
         .navigationDestination(for: HistoryRoute.self) { route in
             switch route {
             case .exercise(let exerciseRoute):
-                if let summary = resolvedExerciseHistory.summary(for: exerciseRoute) {
+                if let summary = exerciseHistorySnapshot.resolvedHistory.summary(for: exerciseRoute) {
                     ExerciseHistoryDetailView(summary: summary)
                 } else {
                     EmptyStateView(
@@ -90,23 +83,54 @@ struct HistoryView: View {
     }
 
     @ViewBuilder
-    private var exerciseContent: some View {
-        if exerciseSummaries.isEmpty {
+    private func exerciseContent(snapshot: ExerciseHistoryViewSnapshot) -> some View {
+        let summaries = snapshot.resolvedHistory.summaries
+        if summaries.isEmpty {
             EmptyStateView(title: "No Exercise History", message: "Completed sets will build exercise history.")
         } else {
             SurfaceCard(padding: 0) {
                 VStack(spacing: 0) {
-                    ForEach(Array(exerciseSummaries.enumerated()), id: \.element.id) { index, summary in
+                    ForEach(Array(summaries.enumerated()), id: \.element.id) { index, summary in
                         NavigationLink {
                             ExerciseHistoryDetailView(summary: summary)
                         } label: {
-                            ExerciseHistoryRow(summary: summary, showsDivider: index < exerciseSummaries.count - 1)
+                            ExerciseHistoryRow(
+                                summary: summary,
+                                showsDivider: index < summaries.count - 1
+                            )
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("ExerciseHistoryButton-\(index)")
                     }
                 }
             }
+        }
+    }
+}
+
+final class ExerciseHistoryViewSnapshot {
+    typealias ResolveHistory = (
+        _ sessions: [WorkoutSession],
+        _ exercises: [Exercise],
+        _ ownerTokenIdentifier: String?
+    ) -> ResolvedExerciseHistory
+
+    private let resolveHistory: () -> ResolvedExerciseHistory
+
+    private(set) lazy var resolvedHistory = resolveHistory()
+
+    init(
+        sessions: [WorkoutSession],
+        exercises: [Exercise],
+        ownerTokenIdentifier: String?,
+        resolveHistory: @escaping ResolveHistory = ExerciseHistorySummary.makeResolvedHistory
+    ) {
+        self.resolveHistory = {
+            resolveHistory(
+                sessions,
+                exercises,
+                ownerTokenIdentifier
+            )
         }
     }
 }
