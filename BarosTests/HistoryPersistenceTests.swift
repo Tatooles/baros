@@ -1118,6 +1118,63 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(resolutionCounter.count, 2)
     }
 
+    func testExerciseHistoryViewStateRebuildsWhenTiedSessionOrderChangesResolvedMetadata() throws {
+        let fixture = try makeHistoryViewPerformanceFixture()
+        let exercise = try XCTUnwrap(fixture.exercises.first)
+        let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+        func makeSession(id: UUID, snapshotName: String) -> WorkoutSession {
+            WorkoutSession(
+                id: id,
+                title: snapshotName,
+                startedAt: startedAt,
+                status: .completed,
+                source: .blank,
+                syncOwnerTokenIdentifier: fixture.ownerTokenIdentifier,
+                loggedExercises: [
+                    LoggedExercise(
+                        orderIndex: 0,
+                        exercise: exercise,
+                        exerciseSnapshotName: snapshotName,
+                        sets: [LoggedSet(orderIndex: 0, isCompleted: true)]
+                    )
+                ]
+            )
+        }
+
+        let firstSession = makeSession(
+            id: UUID(),
+            snapshotName: "First Session Snapshot"
+        )
+        let secondSession = makeSession(
+            id: UUID(),
+            snapshotName: "Second Session Snapshot"
+        )
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+
+        let firstName = try XCTUnwrap(
+            state.snapshot(
+                sessions: [firstSession, secondSession],
+                exercises: [exercise],
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+                syncCompletion: nil
+            ).resolvedHistory.summary(for: exercise)
+        ).name
+        let secondName = try XCTUnwrap(
+            state.snapshot(
+                sessions: [secondSession, firstSession],
+                exercises: [exercise],
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+                syncCompletion: nil
+            ).resolvedHistory.summary(for: exercise)
+        ).name
+
+        XCTAssertEqual(firstName, "First Session Snapshot")
+        XCTAssertEqual(secondName, "Second Session Snapshot")
+        XCTAssertEqual(resolutionCounter.count, 2)
+    }
+
     func testExerciseHistoryViewStateRebuildsForExerciseDefinitionAndCurrentOwnerChanges() throws {
         let fixture = try makeHistoryViewPerformanceFixture()
         let resolutionCounter = ExerciseHistoryResolutionCounter()

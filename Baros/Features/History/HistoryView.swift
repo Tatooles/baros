@@ -212,7 +212,7 @@ private struct ExerciseHistoryInvalidationKey: Equatable {
                     )
                 }
             )
-        }.sorted { $0.id.uuidString < $1.id.uuidString }
+        }
         self.exercises = Exercise.visibleActiveExercises(
             from: exercises,
             ownerTokenIdentifier: ownerTokenIdentifier
