@@ -13,5 +13,11 @@ final class CurrentOwnerLaunchConfigurationTests: XCTestCase {
         XCTAssertFalse(CurrentOwnerLaunchConfiguration(arguments: [
             "--uitest-force-signed-out-auth",
         ]).observesNetworkRecovery)
+        XCTAssertFalse(CurrentOwnerLaunchConfiguration(arguments: [
+            "--uitest-force-signed-in-auth",
+        ]).observesNetworkRecovery)
+        XCTAssertFalse(CurrentOwnerLaunchConfiguration(arguments: [
+            "--uitest-disable-animations",
+        ]).observesNetworkRecovery)
     }
 }

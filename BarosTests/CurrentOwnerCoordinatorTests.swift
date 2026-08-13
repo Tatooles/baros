@@ -386,6 +386,7 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         }
         let authenticationCount = harness.authenticationClient.loginFromCacheCallCount
         let requestCount = harness.syncScheduler.requestCount
+        XCTAssertNotNil(harness.coordinator.makeNetworkRecoveryCandidate())
 
         harness.coordinator.networkDidRecover()
         try await Task.sleep(for: .milliseconds(50))

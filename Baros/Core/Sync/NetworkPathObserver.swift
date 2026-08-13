@@ -52,11 +52,22 @@ protocol NetworkPathMonitoring: AnyObject {
 final class SystemNetworkPathMonitor: NetworkPathMonitoring {
     private let queue = DispatchQueue(label: "com.tatooles.baros.network-path")
     private var monitor: NWPathMonitor?
+    private var statusContinuation: AsyncStream<NetworkPathStatus>.Continuation?
+    private var deliveryTask: Task<Void, Never>?
 
     func start(
         receiveStatus: @escaping @MainActor @Sendable (NetworkPathStatus) -> Void
     ) {
         cancel()
+
+        let statuses = AsyncStream<NetworkPathStatus>.makeStream()
+        statusContinuation = statuses.continuation
+        deliveryTask = Task { @MainActor in
+            for await status in statuses.stream {
+                guard !Task.isCancelled else { break }
+                receiveStatus(status)
+            }
+        }
 
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { path in
@@ -70,9 +81,7 @@ final class SystemNetworkPathMonitor: NetworkPathMonitoring {
             @unknown default:
                 .unsatisfied
             }
-            Task { @MainActor in
-                receiveStatus(status)
-            }
+            statuses.continuation.yield(status)
         }
         self.monitor = monitor
         monitor.start(queue: queue)
@@ -81,10 +90,16 @@ final class SystemNetworkPathMonitor: NetworkPathMonitoring {
     func cancel() {
         monitor?.cancel()
         monitor = nil
+        statusContinuation?.finish()
+        statusContinuation = nil
+        deliveryTask?.cancel()
+        deliveryTask = nil
     }
 
     deinit {
         monitor?.cancel()
+        statusContinuation?.finish()
+        deliveryTask?.cancel()
     }
 }
 

@@ -5,10 +5,7 @@ import Foundation
 struct CurrentOwnerLaunchConfiguration {
     let startupMode: CurrentOwnerCoordinator.StartupMode
     let fixedOwnerTokenIdentifier: String?
-
-    var observesNetworkRecovery: Bool {
-        startupMode == .live
-    }
+    let observesNetworkRecovery: Bool
 
     init(arguments: [String]) {
         let fixedOwnerTokenIdentifier = Self.argument(
@@ -31,6 +28,8 @@ struct CurrentOwnerLaunchConfiguration {
         } else {
             startupMode = .live
         }
+        observesNetworkRecovery = startupMode == .live
+            && !arguments.contains(where: { $0.hasPrefix("--uitest-") })
     }
 
     private static func argument(after flag: String, in arguments: [String]) -> String? {

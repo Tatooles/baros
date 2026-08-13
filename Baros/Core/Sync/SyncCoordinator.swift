@@ -1362,20 +1362,6 @@ final class SyncCoordinator {
         }
     }
 
-    private func canSyncWorkoutSession(
-        _ session: WorkoutSession,
-        ownerTokenIdentifier: String,
-        context: ModelContext
-    ) throws -> Bool {
-        if session.syncOwnerTokenIdentifier == ownerTokenIdentifier {
-            return true
-        }
-        guard session.syncOwnerTokenIdentifier == nil else {
-            return false
-        }
-        return try canBootstrapOwnerlessWorkoutGraph(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
-    }
-
     private func canClaimUnownedRecord(
         entityKind: SyncEntityKind,
         entityID: UUID,

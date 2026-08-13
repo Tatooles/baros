@@ -168,8 +168,7 @@ final class CurrentOwnerCoordinator {
               !syncScheduler.isDeletionModeEnabled,
               clerkSessionProvider.state.hasActiveSession,
               let ownerTokenIdentifier = clerkSessionProvider.state.ownerTokenIdentifier,
-              syncScheduler.currentOwnerTokenIdentifier == ownerTokenIdentifier,
-              syncScheduler.hasUnfinishedSyncWork else {
+              syncScheduler.currentOwnerTokenIdentifier == ownerTokenIdentifier else {
             return nil
         }
         return NetworkRecoveryCandidate(
@@ -224,6 +223,7 @@ final class CurrentOwnerCoordinator {
         _ candidate: NetworkRecoveryCandidate
     ) -> Bool {
         makeNetworkRecoveryCandidate() == candidate
+            && syncScheduler.hasUnfinishedSyncWork
     }
 
     private func requestSyncInTestMode(for trigger: SyncRecoveryCoordinator.Trigger) {
