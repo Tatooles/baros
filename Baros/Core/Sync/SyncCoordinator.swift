@@ -144,7 +144,7 @@ final class SyncCoordinator {
                 continue
             }
 
-            if entry.ownerTokenIdentifier == nil, try canClaim(
+            if entry.ownerTokenIdentifier == nil, try SyncOutboxClaimEligibility.canClaim(
                 entry: entry,
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context
@@ -1360,67 +1360,6 @@ final class SyncCoordinator {
         if !loggedExercise.sets.contains(where: { $0.id == set.id }) {
             loggedExercise.sets.append(set)
         }
-    }
-
-    private func canClaim(
-        entry: SyncOutboxEntry,
-        ownerTokenIdentifier: String,
-        context: ModelContext
-    ) throws -> Bool {
-        switch entry.entityKind {
-        case .userSettings:
-            guard let settings = try findUserSettings(id: entry.entityID, context: context) else {
-                return false
-            }
-            return settings.syncOwnerTokenIdentifier == nil
-                || settings.syncOwnerTokenIdentifier == ownerTokenIdentifier
-        case .exercise:
-            guard let exercise = try findExercise(id: entry.entityID, context: context) else {
-                return false
-            }
-            return exercise.syncOwnerTokenIdentifier == nil
-                || exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier
-        case .workoutSession:
-            guard let session = try findWorkoutSession(id: entry.entityID, context: context) else {
-                return false
-            }
-            if session.syncOwnerTokenIdentifier == nil {
-                return entry.isActive
-            }
-            return try canSyncWorkoutSession(session, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
-        case .loggedExercise:
-            guard let session = try findLoggedExercise(id: entry.entityID, context: context)?.session else {
-                return false
-            }
-            if session.syncOwnerTokenIdentifier == nil {
-                return entry.isActive
-            }
-            return try canSyncWorkoutSession(session, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
-        case .loggedSet:
-            guard let session = try findLoggedSet(id: entry.entityID, context: context)?.loggedExercise?.session else {
-                return false
-            }
-            if session.syncOwnerTokenIdentifier == nil {
-                return entry.isActive
-            }
-            return try canSyncWorkoutSession(session, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
-        default:
-            return false
-        }
-    }
-
-    private func canSyncWorkoutSession(
-        _ session: WorkoutSession,
-        ownerTokenIdentifier: String,
-        context: ModelContext
-    ) throws -> Bool {
-        if session.syncOwnerTokenIdentifier == ownerTokenIdentifier {
-            return true
-        }
-        guard session.syncOwnerTokenIdentifier == nil else {
-            return false
-        }
-        return try canBootstrapOwnerlessWorkoutGraph(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
     }
 
     private func canClaimUnownedRecord(

@@ -365,6 +365,210 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.finish()
     }
 
+    func testNetworkRecoveryReauthenticatesAndRequestsQueuedSyncNormally() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.succeedLogin(as: ownerA)
+        harness.coordinator.appDidEnterForeground()
+        try await waitUntil {
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && harness.syncScheduler.lastSyncedAt != nil
+        }
+        let completedSyncCount = harness.syncScheduler.requestCount
+        let completedFetchCount = harness.syncClient.fetchRequests.count
+
+        harness.syncScheduler.pauseCloudSync()
+        harness.syncScheduler.requestSync()
+        XCTAssertTrue(harness.syncScheduler.hasQueuedSyncRequest)
+
+        harness.coordinator.networkDidRecover()
+        try await waitUntil {
+            harness.authenticationClient.loginFromCacheCallCount == 3
+                && harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && !harness.syncScheduler.hasQueuedSyncRequest
+                && !harness.syncScheduler.isSyncing
+                && harness.syncClient.fetchRequests.count > completedFetchCount
+        }
+
+        XCTAssertEqual(harness.syncScheduler.requestCount, completedSyncCount + 2)
+        harness.finish()
+    }
+
+    func testNetworkRecoveryWithNoUnfinishedWorkDoesNotAuthenticateOrChangeState() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.succeedLogin(as: ownerA)
+        harness.coordinator.appDidEnterForeground()
+        try await waitUntil {
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && harness.syncScheduler.lastSyncedAt != nil
+        }
+        let authenticationCount = harness.authenticationClient.loginFromCacheCallCount
+        let requestCount = harness.syncScheduler.requestCount
+        XCTAssertNotNil(harness.coordinator.makeNetworkRecoveryCandidate())
+
+        harness.coordinator.networkDidRecover()
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, authenticationCount)
+        XCTAssertEqual(harness.syncScheduler.requestCount, requestCount)
+        XCTAssertEqual(harness.coordinator.state, .active(ownerTokenIdentifier: ownerA))
+        harness.finish()
+    }
+
+    func testNetworkRecoveryIsNoOpDuringAccountDeletion() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        harness.context.insert(SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: UUID(),
+            operation: .update,
+            ownerTokenIdentifier: ownerA,
+            now: Date(timeIntervalSince1970: 100)
+        ))
+        try harness.context.save()
+        harness.syncScheduler.currentOwnerTokenIdentifier = ownerA
+        harness.syncScheduler.beginDeletionMode()
+
+        harness.coordinator.networkDidRecover()
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 0)
+        XCTAssertEqual(harness.syncScheduler.requestCount, 0)
+        harness.finish()
+    }
+
+    func testNetworkRecoveryCandidateIsCancelledWhenOwnerAndSessionChangeDuringSettling() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        harness.context.insert(SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: UUID(),
+            operation: .update,
+            ownerTokenIdentifier: ownerA,
+            now: Date(timeIntervalSince1970: 100)
+        ))
+        try harness.context.save()
+        harness.syncScheduler.currentOwnerTokenIdentifier = ownerA
+        let candidate = try XCTUnwrap(harness.coordinator.makeNetworkRecoveryCandidate())
+
+        harness.setClerkOwner("issuer|owner_b", sessionIdentifier: "session_b")
+        harness.coordinator.networkDidRecover(candidate)
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 0)
+        XCTAssertEqual(harness.syncScheduler.requestCount, 0)
+        harness.finish()
+    }
+
+    func testSignedOutModeCannotCreateNetworkRecoveryCandidate() throws {
+        let harness = try CurrentOwnerCoordinatorHarness(
+            clerkOwner: nil,
+            startupMode: .signedOut
+        )
+
+        harness.coordinator.start()
+
+        XCTAssertNil(harness.coordinator.makeNetworkRecoveryCandidate())
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 0)
+        harness.finish()
+    }
+
+    func testNetworkRecoveryCandidateIsCancelledWhenWorkCompletesDuringSettling() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        let entry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: UUID(),
+            operation: .update,
+            ownerTokenIdentifier: ownerA,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        harness.context.insert(entry)
+        try harness.context.save()
+        harness.syncScheduler.currentOwnerTokenIdentifier = ownerA
+        let candidate = try XCTUnwrap(harness.coordinator.makeNetworkRecoveryCandidate())
+
+        entry.status = .completed
+        try harness.context.save()
+        harness.coordinator.networkDidRecover(candidate)
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 0)
+        XCTAssertEqual(harness.syncScheduler.requestCount, 0)
+        harness.finish()
+    }
+
+    func testNetworkRecoveryRechecksSessionAfterWaitingForClerk() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(clerkWaitsUntilResumed: true)
+        harness.context.insert(SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: UUID(),
+            operation: .update,
+            ownerTokenIdentifier: ownerA,
+            now: Date(timeIntervalSince1970: 100)
+        ))
+        try harness.context.save()
+        harness.syncScheduler.currentOwnerTokenIdentifier = ownerA
+        let candidate = try XCTUnwrap(harness.coordinator.makeNetworkRecoveryCandidate())
+
+        harness.coordinator.networkDidRecover(candidate)
+        try await waitUntil { harness.clerkSessionProvider.hasPendingLoad }
+        harness.setClerkOwner(ownerA, sessionIdentifier: "session_b")
+        harness.clerkSessionProvider.resumeLoading()
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 0)
+        XCTAssertEqual(harness.syncScheduler.requestCount, 0)
+        harness.finish()
+    }
+
+    func testFailedNetworkRecoveryPreservesQueuedWorkWithoutRetryLoop() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        harness.syncScheduler.currentOwnerTokenIdentifier = ownerA
+        harness.syncScheduler.pauseCloudSync()
+        harness.syncScheduler.requestSync()
+        let candidate = try XCTUnwrap(harness.coordinator.makeNetworkRecoveryCandidate())
+
+        harness.coordinator.networkDidRecover(candidate)
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 1)
+        XCTAssertTrue(harness.syncScheduler.hasQueuedSyncRequest)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
+    }
+
+    func testOverlappingNetworkAndManualRecoveryShareAuthenticationAndSync() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        harness.succeedLogin(as: ownerA)
+        harness.authenticationClient.waitsForLoginResume = true
+        harness.syncScheduler.currentOwnerTokenIdentifier = ownerA
+        harness.syncScheduler.pauseCloudSync()
+        harness.syncScheduler.requestSync()
+        let candidate = try XCTUnwrap(harness.coordinator.makeNetworkRecoveryCandidate())
+
+        harness.coordinator.networkDidRecover(candidate)
+        try await waitUntil { harness.authenticationClient.hasPendingLogin }
+        harness.coordinator.retrySync()
+        await Task.yield()
+
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 1)
+        harness.authenticationClient.resumeLogin()
+        try await waitUntil {
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+                && !harness.syncScheduler.hasQueuedSyncRequest
+                && !harness.syncScheduler.isSyncing
+                && harness.syncScheduler.lastSyncedAt != nil
+        }
+
+        XCTAssertEqual(harness.authenticationClient.loginFromCacheCallCount, 1)
+        XCTAssertEqual(harness.syncScheduler.requestCount, 2)
+        harness.finish()
+    }
+
     func testLocalEditWhileAuthenticationIsUnresolvedQueuesUntilForegroundRecovery() async throws {
         let harness = try CurrentOwnerCoordinatorHarness()
 
@@ -673,6 +877,10 @@ private final class TestCurrentOwnerClerkSessionProvider: CurrentOwnerClerkSessi
     var state: CurrentOwnerClerkSessionState
     private let waitsUntilResumed: Bool
     private var loadContinuations: [CheckedContinuation<Void, Never>] = []
+
+    var hasPendingLoad: Bool {
+        !loadContinuations.isEmpty
+    }
 
     init(
         state: CurrentOwnerClerkSessionState,
