@@ -10,13 +10,14 @@ enum EmptyHistoryPresentation: Equatable {
         currentOwnerState: CurrentOwnerCoordinator.State,
         isSyncing: Bool,
         hasVisibleCompletedWorkouts: Bool = false,
+        isRecoveringAuthentication: Bool = false,
         isAwaitingInitialRecovery: Bool = false
     ) -> Self {
         switch currentOwnerState {
         case .localOnly:
             return hasVisibleCompletedWorkouts ? .ordinaryEmpty : .signInRecovery
         case .resolving:
-            return .syncing
+            return isRecoveringAuthentication ? .syncing : .ordinaryEmpty
         case .active:
             return isSyncing || isAwaitingInitialRecovery ? .syncing : .ordinaryEmpty
         }
@@ -49,6 +50,7 @@ struct EmptyHistoryStateView: View {
             currentOwnerState: currentOwnerCoordinator.state,
             isSyncing: syncScheduler.isSyncing,
             hasVisibleCompletedWorkouts: hasVisibleCompletedWorkouts,
+            isRecoveringAuthentication: currentOwnerCoordinator.isRecoveringAuthentication,
             isAwaitingInitialRecovery: isAwaitingInitialRecovery
         )
     }
@@ -59,11 +61,6 @@ struct EmptyHistoryStateView: View {
             case .signInRecovery:
                 SurfaceCard {
                     VStack(spacing: 12) {
-                        Image(systemName: "person.crop.circle.badge.plus")
-                            .font(.system(size: 28))
-                            .foregroundStyle(AppTheme.accentBright)
-                            .accessibilityHidden(true)
-
                         Text(recoveryTitle)
                             .font(.system(size: 20, weight: .bold))
                             .multilineTextAlignment(.center)

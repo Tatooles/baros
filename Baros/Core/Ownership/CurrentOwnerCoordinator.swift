@@ -52,6 +52,7 @@ final class CurrentOwnerCoordinator {
     }
 
     private(set) var state: State = .resolving(ownerTokenIdentifier: nil)
+    private(set) var isRecoveringAuthentication = false
 
     private let authenticationClient: any CurrentOwnerAuthenticationClient
     private let syncScheduler: SyncScheduler
@@ -60,6 +61,7 @@ final class CurrentOwnerCoordinator {
     private var hasStarted = false
     private var startupTask: Task<Void, Never>?
     private var authenticationStateTask: Task<Void, Never>?
+    private var authenticationRecoveryCount = 0
     @ObservationIgnored
     private lazy var syncRecoveryCoordinator = SyncRecoveryCoordinator(
         authenticationClient: authenticationClient,
@@ -166,6 +168,13 @@ final class CurrentOwnerCoordinator {
     }
 
     private func recoverAuthentication(for trigger: SyncRecoveryCoordinator.Trigger) async {
+        authenticationRecoveryCount += 1
+        isRecoveringAuthentication = true
+        defer {
+            authenticationRecoveryCount -= 1
+            isRecoveringAuthentication = authenticationRecoveryCount > 0
+        }
+
         await clerkSessionProvider.waitUntilLoaded()
         guard !Task.isCancelled else { return }
         enterLocalAccessStateFromClerk()

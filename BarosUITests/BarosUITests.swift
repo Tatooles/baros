@@ -1334,13 +1334,13 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testResolvingCurrentOwnerShowsSyncingWithoutSignInOrEmptyStateFlash() {
+    func testIdleResolvingCurrentOwnerFallsBackWithoutShowingSignIn() {
         let app = makeApp(extraArguments: ["--uitest-restore-cached-sync-owner"])
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Syncing your workout history…"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["No Past Workouts"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
-        XCTAssertFalse(app.staticTexts["No Past Workouts"].exists)
+        XCTAssertFalse(app.staticTexts["Syncing your workout history…"].exists)
     }
 
     @MainActor

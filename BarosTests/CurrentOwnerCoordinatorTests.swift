@@ -325,6 +325,29 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.finish()
     }
 
+    func testAuthenticationRecoveryActivityEndsWhenCachedLoginFails() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        harness.authenticationClient.waitsForLoginResume = true
+
+        harness.coordinator.start()
+        try await waitUntil {
+            harness.authenticationClient.hasPendingLogin
+                && harness.coordinator.isRecoveringAuthentication
+        }
+
+        harness.authenticationClient.resumeLogin()
+        try await waitUntil {
+            !harness.coordinator.isRecoveringAuthentication
+        }
+
+        XCTAssertEqual(
+            harness.coordinator.state,
+            .resolving(ownerTokenIdentifier: ownerA)
+        )
+        XCTAssertFalse(harness.syncScheduler.isSyncing)
+        harness.finish()
+    }
+
     func testForegroundRecoversAfterStartupAuthenticationFails() async throws {
         let harness = try CurrentOwnerCoordinatorHarness()
 

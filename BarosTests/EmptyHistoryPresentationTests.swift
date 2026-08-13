@@ -12,11 +12,12 @@ final class EmptyHistoryPresentationTests: XCTestCase {
         )
     }
 
-    func testResolvingShowsSyncingWithoutFlashingSignInOrEmptyState() {
+    func testResolvingShowsSyncingOnlyWhileAuthenticationRecoveryIsRunning() {
         XCTAssertEqual(
             EmptyHistoryPresentation.make(
                 currentOwnerState: .resolving(ownerTokenIdentifier: nil),
-                isSyncing: false
+                isSyncing: false,
+                isRecoveringAuthentication: true
             ),
             .syncing
         )
@@ -24,9 +25,19 @@ final class EmptyHistoryPresentationTests: XCTestCase {
         XCTAssertEqual(
             EmptyHistoryPresentation.make(
                 currentOwnerState: .resolving(ownerTokenIdentifier: "issuer|owner"),
-                isSyncing: false
+                isSyncing: false,
+                isRecoveringAuthentication: true
             ),
             .syncing
+        )
+
+        XCTAssertEqual(
+            EmptyHistoryPresentation.make(
+                currentOwnerState: .resolving(ownerTokenIdentifier: "issuer|owner"),
+                isSyncing: false,
+                isRecoveringAuthentication: false
+            ),
+            .ordinaryEmpty
         )
     }
 
@@ -64,7 +75,8 @@ final class EmptyHistoryPresentationTests: XCTestCase {
             EmptyHistoryPresentation.make(
                 currentOwnerState: .resolving(ownerTokenIdentifier: "issuer|owner"),
                 isSyncing: false,
-                hasVisibleCompletedWorkouts: true
+                hasVisibleCompletedWorkouts: true,
+                isRecoveringAuthentication: true
             ),
             .syncing
         )
