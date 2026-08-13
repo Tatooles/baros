@@ -7,10 +7,41 @@ final class EmptyHistoryPresentationTests: XCTestCase {
 
         activity.currentOwnerStateDidChange(
             from: .localOnly,
-            to: .resolving(ownerTokenIdentifier: "issuer|owner")
+            to: .resolving(ownerTokenIdentifier: "issuer|owner"),
+            isRecoveringAuthentication: true
         )
 
         XCTAssertTrue(activity.isAwaitingInitialRecovery)
+    }
+
+    func testRecoveryActivityDoesNotStartForIdleResolvingTransition() {
+        var activity = EmptyHistoryRecoveryActivity()
+
+        activity.currentOwnerStateDidChange(
+            from: .localOnly,
+            to: .resolving(ownerTokenIdentifier: "issuer|owner"),
+            isRecoveringAuthentication: false
+        )
+
+        XCTAssertFalse(activity.isAwaitingInitialRecovery)
+    }
+
+    func testRecoveryActivityEndsWhenAuthenticationReturnsToIdleResolving() {
+        var activity = EmptyHistoryRecoveryActivity()
+        activity.currentOwnerStateDidChange(
+            from: .localOnly,
+            to: .resolving(ownerTokenIdentifier: "issuer|owner"),
+            isRecoveringAuthentication: true
+        )
+
+        activity.authenticationRecoveryDidChange(
+            from: true,
+            to: false,
+            currentOwnerState: .resolving(ownerTokenIdentifier: "issuer|owner"),
+            isSyncing: false
+        )
+
+        XCTAssertFalse(activity.isAwaitingInitialRecovery)
     }
 
     func testLocalOnlyShowsSignInRecoveryPrompt() {

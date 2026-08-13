@@ -20,6 +20,51 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.finish()
     }
 
+    func testDirectSignInReportsAuthenticationRecoveryUntilConvexAuthenticationSettles() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(
+            clerkOwner: nil,
+            schedulerMode: .unconfigured
+        )
+
+        harness.coordinator.start()
+        try await waitUntil { harness.coordinator.state == .localOnly }
+
+        harness.setClerkOwner(ownerA)
+        harness.authenticationClient.sendAuthenticationState(.loading)
+        try await waitUntil {
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
+                && harness.coordinator.isRecoveringAuthentication
+        }
+
+        harness.authenticationClient.sendAuthenticationState(.unauthenticated)
+        try await waitUntil { !harness.coordinator.isRecoveringAuthentication }
+
+        XCTAssertEqual(
+            harness.coordinator.state,
+            .resolving(ownerTokenIdentifier: ownerA)
+        )
+        harness.finish()
+    }
+
+    func testDirectUnauthenticatedStateRemainsIdleWhileClerkSessionIsActive() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(
+            clerkOwner: nil,
+            schedulerMode: .unconfigured
+        )
+
+        harness.coordinator.start()
+        try await waitUntil { harness.coordinator.state == .localOnly }
+
+        harness.setClerkOwner(ownerA)
+        harness.authenticationClient.sendAuthenticationState(.unauthenticated)
+        try await waitUntil {
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
+        }
+
+        XCTAssertFalse(harness.coordinator.isRecoveringAuthentication)
+        harness.finish()
+    }
+
     func testRepeatedStartOnlyObservesAndRecoversAuthenticationOnce() async throws {
         let harness = try CurrentOwnerCoordinatorHarness(
             schedulerMode: .unconfigured

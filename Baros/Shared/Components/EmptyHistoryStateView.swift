@@ -29,17 +29,18 @@ struct EmptyHistoryRecoveryActivity: Equatable {
 
     mutating func currentOwnerStateDidChange(
         from oldState: CurrentOwnerCoordinator.State,
-        to newState: CurrentOwnerCoordinator.State
+        to newState: CurrentOwnerCoordinator.State,
+        isRecoveringAuthentication: Bool
     ) {
         switch newState {
         case .localOnly:
             isAwaitingInitialRecovery = false
         case .resolving:
-            if oldState == .localOnly {
+            if oldState == .localOnly, isRecoveringAuthentication {
                 isAwaitingInitialRecovery = true
             }
         case .active:
-            if oldState == .localOnly {
+            if oldState == .localOnly, isRecoveringAuthentication {
                 isAwaitingInitialRecovery = true
             }
         }
@@ -51,6 +52,21 @@ struct EmptyHistoryRecoveryActivity: Equatable {
         } else if wasSyncing {
             isAwaitingInitialRecovery = false
         }
+    }
+
+    mutating func authenticationRecoveryDidChange(
+        from wasRecovering: Bool,
+        to isRecovering: Bool,
+        currentOwnerState: CurrentOwnerCoordinator.State,
+        isSyncing: Bool
+    ) {
+        guard wasRecovering,
+              !isRecovering,
+              !isSyncing,
+              case .resolving = currentOwnerState else {
+            return
+        }
+        isAwaitingInitialRecovery = false
     }
 
     mutating func syncDidFinish() {
@@ -143,10 +159,22 @@ struct EmptyHistoryStateView: View {
             }
         }
         .onChange(of: currentOwnerCoordinator.state, initial: true) { oldState, newState in
-            recoveryActivity.currentOwnerStateDidChange(from: oldState, to: newState)
+            recoveryActivity.currentOwnerStateDidChange(
+                from: oldState,
+                to: newState,
+                isRecoveringAuthentication: currentOwnerCoordinator.isRecoveringAuthentication
+            )
         }
         .onChange(of: syncScheduler.isSyncing) { wasSyncing, isSyncing in
             recoveryActivity.syncDidChange(from: wasSyncing, to: isSyncing)
+        }
+        .onChange(of: currentOwnerCoordinator.isRecoveringAuthentication) { wasRecovering, isRecovering in
+            recoveryActivity.authenticationRecoveryDidChange(
+                from: wasRecovering,
+                to: isRecovering,
+                currentOwnerState: currentOwnerCoordinator.state,
+                isSyncing: syncScheduler.isSyncing
+            )
         }
         .onChange(of: syncScheduler.lastSyncedAt) { _, lastSyncedAt in
             if lastSyncedAt != nil {
@@ -169,7 +197,8 @@ struct EmptyHistoryStateView: View {
         )
         recoveryActivity.currentOwnerStateDidChange(
             from: .localOnly,
-            to: resolvingState
+            to: resolvingState,
+            isRecoveringAuthentication: true
         )
         uiTestCurrentOwnerStateOverride = resolvingState
 
@@ -180,7 +209,8 @@ struct EmptyHistoryStateView: View {
             )
             recoveryActivity.currentOwnerStateDidChange(
                 from: resolvingState,
-                to: activeState
+                to: activeState,
+                isRecoveringAuthentication: true
             )
             uiTestCurrentOwnerStateOverride = activeState
             recoveryActivity.syncDidFinish()
