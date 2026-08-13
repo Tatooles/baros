@@ -125,7 +125,7 @@ final class SyncRecoveryCoordinator {
         let id: UUID
         let recoveryInvalidationGeneration: UInt
         let sessionIdentifier: String?
-        let task: Task<Void, Never>
+        let task: Task<Bool, Never>
     }
 
     private struct RecoveryMetadata {
@@ -235,12 +235,28 @@ final class SyncRecoveryCoordinator {
     func recoverAuthenticationAndRequestSync(for trigger: Trigger) async {
         if let activeRecovery {
             if willActiveRecoveryRequestSync {
-                await activeRecovery.task.value
-                return
+                let recovered = await activeRecovery.task.value
+                if recovered || trigger != .networkRecovery {
+                    return
+                }
+                guard isRecoveryValid(
+                    activeRecovery.recoveryInvalidationGeneration,
+                    sessionIdentifier: activeRecovery.sessionIdentifier
+                ), syncScheduler.hasUnfinishedSyncWork else {
+                    return
+                }
+                if let newerRecovery = self.activeRecovery,
+                   newerRecovery.id != activeRecovery.id {
+                    _ = await newerRecovery.task.value
+                    return
+                }
+                if self.activeRecovery?.id == activeRecovery.id {
+                    self.activeRecovery = nil
+                }
+            } else {
+                activeRecovery.task.cancel()
+                self.activeRecovery = nil
             }
-
-            activeRecovery.task.cancel()
-            self.activeRecovery = nil
         }
 
         guard hasActiveSession() else {
@@ -276,7 +292,7 @@ final class SyncRecoveryCoordinator {
             sessionIdentifier: recoverySessionIdentifier
         )
         let task = Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self else { return false }
             defer { finishRecovery(recoveryID) }
 
             guard !Task.isCancelled,
@@ -284,7 +300,7 @@ final class SyncRecoveryCoordinator {
                       recoveryInvalidationGeneration,
                       sessionIdentifier: recoverySessionIdentifier
                   ) else {
-                return
+                return false
             }
             let result = await authenticationClient.loginFromCache()
             guard case .success(let token) = result else {
@@ -292,10 +308,10 @@ final class SyncRecoveryCoordinator {
                     phase: .recovery,
                     errorCode: .authenticationFailed
                 ))
-                return
+                return false
             }
             guard let ownerTokenIdentifier = await validatedRecoveredOwner(from: token) else {
-                return
+                return false
             }
             registerAuthenticatedState(
                 ownerTokenIdentifier: ownerTokenIdentifier,
@@ -306,13 +322,14 @@ final class SyncRecoveryCoordinator {
                       recoveryInvalidationGeneration,
                       sessionIdentifier: recoverySessionIdentifier
                   ) else {
-                return
+                return false
             }
 
             if let recoverySessionIdentifier {
                 sessionsAwaitingDeferredSync.remove(recoverySessionIdentifier)
             }
             onRecoveredOwner(ownerTokenIdentifier, trigger)
+            return true
         }
 
         activeRecovery = ActiveRecovery(
@@ -321,7 +338,7 @@ final class SyncRecoveryCoordinator {
             sessionIdentifier: recoverySessionIdentifier,
             task: task
         )
-        await task.value
+        _ = await task.value
         if activeRecovery?.id == recoveryID {
             activeRecovery = nil
         }
