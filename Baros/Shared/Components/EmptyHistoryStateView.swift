@@ -17,10 +17,44 @@ enum EmptyHistoryPresentation: Equatable {
         case .localOnly:
             return hasVisibleCompletedWorkouts ? .ordinaryEmpty : .signInRecovery
         case .resolving:
-            return isRecoveringAuthentication ? .syncing : .ordinaryEmpty
+            return isRecoveringAuthentication || isAwaitingInitialRecovery ? .syncing : .ordinaryEmpty
         case .active:
             return isSyncing || isAwaitingInitialRecovery ? .syncing : .ordinaryEmpty
         }
+    }
+}
+
+struct EmptyHistoryRecoveryActivity: Equatable {
+    private(set) var isAwaitingInitialRecovery = false
+
+    mutating func currentOwnerStateDidChange(
+        from oldState: CurrentOwnerCoordinator.State,
+        to newState: CurrentOwnerCoordinator.State
+    ) {
+        switch newState {
+        case .localOnly:
+            isAwaitingInitialRecovery = false
+        case .resolving:
+            if oldState == .localOnly {
+                isAwaitingInitialRecovery = true
+            }
+        case .active:
+            if oldState == .localOnly {
+                isAwaitingInitialRecovery = true
+            }
+        }
+    }
+
+    mutating func syncDidChange(from wasSyncing: Bool, to isSyncing: Bool) {
+        if isSyncing {
+            isAwaitingInitialRecovery = true
+        } else if wasSyncing {
+            isAwaitingInitialRecovery = false
+        }
+    }
+
+    mutating func syncDidFinish() {
+        isAwaitingInitialRecovery = false
     }
 }
 
@@ -34,24 +68,25 @@ struct EmptyHistoryStateView: View {
     let emptyMessage: String
     var hasVisibleCompletedWorkouts = false
     @State private var authIsPresented = false
-    @State private var isAwaitingInitialRecovery = false
+    @State private var recoveryActivity = EmptyHistoryRecoveryActivity()
     #if DEBUG
-    @State private var uiTestPresentationOverride: EmptyHistoryPresentation?
+    @State private var uiTestCurrentOwnerStateOverride: CurrentOwnerCoordinator.State?
     #endif
 
     private var presentation: EmptyHistoryPresentation {
         #if DEBUG
-        if let uiTestPresentationOverride {
-            return uiTestPresentationOverride
-        }
+        let currentOwnerState = uiTestCurrentOwnerStateOverride
+            ?? currentOwnerCoordinator.state
+        #else
+        let currentOwnerState = currentOwnerCoordinator.state
         #endif
 
         return EmptyHistoryPresentation.make(
-            currentOwnerState: currentOwnerCoordinator.state,
+            currentOwnerState: currentOwnerState,
             isSyncing: syncScheduler.isSyncing,
             hasVisibleCompletedWorkouts: hasVisibleCompletedWorkouts,
             isRecoveringAuthentication: currentOwnerCoordinator.isRecoveringAuthentication,
-            isAwaitingInitialRecovery: isAwaitingInitialRecovery
+            isAwaitingInitialRecovery: recoveryActivity.isAwaitingInitialRecovery
         )
     }
 
@@ -108,44 +143,47 @@ struct EmptyHistoryStateView: View {
             }
         }
         .onChange(of: currentOwnerCoordinator.state, initial: true) { oldState, newState in
-            switch newState {
-            case .localOnly:
-                isAwaitingInitialRecovery = false
-            case .resolving:
-                isAwaitingInitialRecovery = true
-            case .active:
-                if oldState == .localOnly {
-                    isAwaitingInitialRecovery = true
-                }
-            }
+            recoveryActivity.currentOwnerStateDidChange(from: oldState, to: newState)
         }
         .onChange(of: syncScheduler.isSyncing) { wasSyncing, isSyncing in
-            if isSyncing {
-                isAwaitingInitialRecovery = true
-            } else if wasSyncing {
-                isAwaitingInitialRecovery = false
-            }
+            recoveryActivity.syncDidChange(from: wasSyncing, to: isSyncing)
         }
         .onChange(of: syncScheduler.lastSyncedAt) { _, lastSyncedAt in
             if lastSyncedAt != nil {
-                isAwaitingInitialRecovery = false
+                recoveryActivity.syncDidFinish()
             }
         }
         .onChange(of: syncScheduler.lastFailure) { _, lastFailure in
             if lastFailure != nil {
-                isAwaitingInitialRecovery = false
+                recoveryActivity.syncDidFinish()
             }
         }
     }
 
     #if DEBUG
     private func simulateInitialRecoveryForUITesting() {
-        // Drive only this view's presentation so the harness cannot create a
-        // false Current Owner or touch persisted data and synchronization.
-        uiTestPresentationOverride = .syncing
+        // Exercise this view's real owner-transition policy without mutating
+        // the Current Owner, persisted data, or synchronization.
+        let resolvingState = CurrentOwnerCoordinator.State.resolving(
+            ownerTokenIdentifier: "issuer|ui_test_owner"
+        )
+        recoveryActivity.currentOwnerStateDidChange(
+            from: .localOnly,
+            to: resolvingState
+        )
+        uiTestCurrentOwnerStateOverride = resolvingState
+
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
-            uiTestPresentationOverride = .ordinaryEmpty
+            let activeState = CurrentOwnerCoordinator.State.active(
+                ownerTokenIdentifier: "issuer|ui_test_owner"
+            )
+            recoveryActivity.currentOwnerStateDidChange(
+                from: resolvingState,
+                to: activeState
+            )
+            uiTestCurrentOwnerStateOverride = activeState
+            recoveryActivity.syncDidFinish()
         }
     }
     #endif

@@ -2,6 +2,17 @@ import XCTest
 @testable import Baros
 
 final class EmptyHistoryPresentationTests: XCTestCase {
+    func testRecoveryActivityStartsWhenConfirmedSignOutTransitionsToResolving() {
+        var activity = EmptyHistoryRecoveryActivity()
+
+        activity.currentOwnerStateDidChange(
+            from: .localOnly,
+            to: .resolving(ownerTokenIdentifier: "issuer|owner")
+        )
+
+        XCTAssertTrue(activity.isAwaitingInitialRecovery)
+    }
+
     func testLocalOnlyShowsSignInRecoveryPrompt() {
         XCTAssertEqual(
             EmptyHistoryPresentation.make(
@@ -96,6 +107,18 @@ final class EmptyHistoryPresentationTests: XCTestCase {
             EmptyHistoryPresentation.make(
                 currentOwnerState: .active(ownerTokenIdentifier: "issuer|owner"),
                 isSyncing: false,
+                isAwaitingInitialRecovery: true
+            ),
+            .syncing
+        )
+    }
+
+    func testPostSignInResolvingDoesNotFlashOrdinaryEmptyStateBeforeSyncStarts() {
+        XCTAssertEqual(
+            EmptyHistoryPresentation.make(
+                currentOwnerState: .resolving(ownerTokenIdentifier: "issuer|owner"),
+                isSyncing: false,
+                isRecoveringAuthentication: false,
                 isAwaitingInitialRecovery: true
             ),
             .syncing
