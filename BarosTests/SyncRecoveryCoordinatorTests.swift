@@ -572,6 +572,55 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
         XCTAssertFalse(client.fetchRequests.isEmpty)
     }
 
+    func testNetworkRecoveryRetriesAfterOverlappingOlderRecoveryFails() async throws {
+        struct OfflineError: Error {}
+
+        let harness = try makeConfiguredScheduler(ownerTokenIdentifier: "issuer|owner_a")
+        let client = harness.client
+        let scheduler = harness.scheduler
+        harness.container.mainContext.insert(SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: UUID(),
+            operation: .update,
+            ownerTokenIdentifier: "issuer|owner_a",
+            now: Date(timeIntervalSince1970: 100)
+        ))
+        try harness.container.mainContext.save()
+        let authenticationClient = StubSyncAuthenticationClient(
+            result: .success(makeJWT(issuer: "issuer", subject: "owner_a")),
+            waitsForResume: true
+        )
+        let coordinator = makeCoordinator(
+            authenticationClient: authenticationClient,
+            syncScheduler: scheduler,
+            hasActiveSession: { true }
+        )
+
+        let foregroundRecovery = Task { @MainActor in
+            await coordinator.recoverAuthenticationAndRequestSync(for: .appForeground)
+        }
+        try await waitUntil { authenticationClient.hasPendingLogin }
+        let networkRecovery = Task { @MainActor in
+            await coordinator.recoverAuthenticationAndRequestSync(for: .networkRecovery)
+        }
+        await Task.yield()
+
+        XCTAssertEqual(authenticationClient.loginFromCacheCallCount, 1)
+        authenticationClient.resumeLogin(returning: .failure(OfflineError()))
+        try await waitUntil {
+            authenticationClient.loginFromCacheCallCount == 2
+                && authenticationClient.hasPendingLogin
+        }
+        authenticationClient.resumeLogin()
+        await foregroundRecovery.value
+        await networkRecovery.value
+        try await waitUntil { scheduler.lastSyncedAt != nil }
+
+        XCTAssertEqual(authenticationClient.loginFromCacheCallCount, 2)
+        XCTAssertEqual(scheduler.requestCount, 1)
+        XCTAssertFalse(client.fetchRequests.isEmpty)
+    }
+
     private func makeConfiguredScheduler(
         ownerTokenIdentifier: String? = nil,
         observability: (any SyncObserving)? = nil
@@ -619,6 +668,8 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
                     syncScheduler.requestSync()
                 case .appForeground:
                     syncScheduler.requestSyncOnAppForeground()
+                case .networkRecovery:
+                    syncScheduler.requestSync()
                 case .manualRetry:
                     syncScheduler.retrySync()
                 }
@@ -696,9 +747,9 @@ private final class StubSyncAuthenticationClient: SyncAuthenticationClient {
         logoutCallCount += 1
     }
 
-    func resumeLogin() {
+    func resumeLogin(returning overrideResult: Result<String, Error>? = nil) {
         guard !continuations.isEmpty else { return }
-        continuations.removeFirst().resume(returning: result)
+        continuations.removeFirst().resume(returning: overrideResult ?? result)
     }
 }
 

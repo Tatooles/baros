@@ -10,6 +10,11 @@ struct BarosApp: App {
     private let convexClient: ConvexClientWithAuth<String>
     private let uiTestSyncOwner: String?
     private let uiTestSyncFailureMessage: String?
+    private let observesNetworkRecovery: Bool
+    private let networkRecoveryActivity: NetworkRecoveryActivity
+    private let networkPathObserver: NetworkPathObserver<
+        NetworkRecoveryActivity.Candidate<CurrentOwnerCoordinator.NetworkRecoveryCandidate>
+    >
     @Environment(\.scenePhase) private var scenePhase
     @State private var navigationState = AppNavigationState()
     @State private var activeWorkoutEngine = ActiveWorkoutEngine()
@@ -29,6 +34,9 @@ struct BarosApp: App {
         }
         #endif
         let ownerLaunchConfiguration = CurrentOwnerLaunchConfiguration(arguments: arguments)
+        observesNetworkRecovery = ownerLaunchConfiguration.observesNetworkRecovery
+        let networkRecoveryActivity = NetworkRecoveryActivity()
+        self.networkRecoveryActivity = networkRecoveryActivity
         uiTestSyncOwner = ownerLaunchConfiguration.fixedOwnerTokenIdentifier
         uiTestSyncFailureMessage = if let uiTestSyncOwner,
                                       arguments.contains("--uitest-show-sync-failure") {
@@ -84,16 +92,20 @@ struct BarosApp: App {
                 break
             }
             _syncScheduler = State(initialValue: syncScheduler)
-            _currentOwnerCoordinator = State(
-                initialValue: CurrentOwnerCoordinator(
-                    authenticationClient: ConvexCurrentOwnerAuthenticationClient(
-                        client: convexClient
-                    ),
-                    syncScheduler: syncScheduler,
-                    clerkSessionProvider: ClerkCurrentOwnerSessionProvider(),
-                    startupMode: ownerLaunchConfiguration.startupMode
-                )
+            let currentOwnerCoordinator = CurrentOwnerCoordinator(
+                authenticationClient: ConvexCurrentOwnerAuthenticationClient(
+                    client: convexClient
+                ),
+                syncScheduler: syncScheduler,
+                clerkSessionProvider: ClerkCurrentOwnerSessionProvider(),
+                startupMode: ownerLaunchConfiguration.startupMode
             )
+            _currentOwnerCoordinator = State(initialValue: currentOwnerCoordinator)
+            networkPathObserver = NetworkPathObserver {
+                networkRecoveryActivity.makeCandidate {
+                    currentOwnerCoordinator.makeNetworkRecoveryCandidate()
+                }
+            }
         } catch {
             fatalError("Unable to initialize Baros persistence: \(error)")
         }
@@ -132,11 +144,20 @@ struct BarosApp: App {
             #endif
             .task {
                 currentOwnerCoordinator.start()
+                networkRecoveryActivity.setActive(scenePhase == .active)
+                if observesNetworkRecovery {
+                    networkPathObserver.start { candidate in
+                        networkRecoveryActivity.performIfCurrent(candidate) { ownerCandidate in
+                            currentOwnerCoordinator.networkDidRecover(ownerCandidate)
+                        }
+                    }
+                }
                 if let uiTestSyncFailureMessage {
                     syncScheduler.recordFailureForTesting(message: uiTestSyncFailureMessage)
                 }
             }
             .onChange(of: scenePhase) { _, newScenePhase in
+                networkRecoveryActivity.setActive(newScenePhase == .active)
                 guard newScenePhase == .active else { return }
                 currentOwnerCoordinator.appDidEnterForeground()
             }

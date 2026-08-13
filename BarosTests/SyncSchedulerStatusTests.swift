@@ -979,6 +979,120 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertNotNil(scheduler.lastSyncedAt)
     }
 
+    func testUnfinishedSyncWorkIncludesPendingEntryForCurrentOwner() throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: UUID(),
+            operation: .update,
+            ownerTokenIdentifier: owner,
+            now: Date(timeIntervalSince1970: 100)
+        ))
+        try context.save()
+        let scheduler = SyncScheduler(modelContext: context)
+        scheduler.currentOwnerTokenIdentifier = owner
+
+        XCTAssertTrue(scheduler.hasUnfinishedSyncWork)
+    }
+
+    func testUnfinishedSyncWorkIncludesFailedInFlightAndOwnerlessV1Entries() throws {
+        let owner = "issuer|owner_a"
+        for (status, entryOwner) in [
+            (SyncOutboxStatus.failed, owner as String?),
+            (.inFlight, owner),
+            (.pending, nil),
+        ] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let entityID = UUID()
+            if entryOwner == nil {
+                context.insert(Exercise(
+                    id: entityID,
+                    name: "Unclaimed Press",
+                    category: .strength,
+                    equipment: .barbell,
+                    primaryMuscleGroup: .chest
+                ))
+            }
+            context.insert(SyncOutboxEntry(
+                entityKind: .exercise,
+                entityID: entityID,
+                operation: .update,
+                status: status,
+                ownerTokenIdentifier: entryOwner,
+                createdAt: Date(timeIntervalSince1970: 100),
+                updatedAt: Date(timeIntervalSince1970: 100)
+            ))
+            try context.save()
+            let scheduler = SyncScheduler(modelContext: context)
+            scheduler.currentOwnerTokenIdentifier = owner
+
+            XCTAssertTrue(scheduler.hasUnfinishedSyncWork, "Expected \(status) work for \(String(describing: entryOwner))")
+        }
+    }
+
+    func testUnfinishedSyncWorkExcludesCompletedExcludedAndOtherOwnerEntries() throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: UUID(),
+            operation: .update,
+            status: .completed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100)
+        ))
+        context.insert(SyncOutboxEntry(
+            entityKind: .workoutTemplate,
+            entityID: UUID(),
+            operation: .update,
+            ownerTokenIdentifier: owner,
+            now: Date(timeIntervalSince1970: 100)
+        ))
+        context.insert(SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: UUID(),
+            operation: .update,
+            ownerTokenIdentifier: "issuer|owner_b",
+            now: Date(timeIntervalSince1970: 100)
+        ))
+        try context.save()
+        let scheduler = SyncScheduler(modelContext: context)
+        scheduler.currentOwnerTokenIdentifier = owner
+
+        XCTAssertFalse(scheduler.hasUnfinishedSyncWork)
+    }
+
+    func testUnfinishedSyncWorkIncludesQueuedSchedulerRequest() {
+        let scheduler = SyncScheduler()
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+        scheduler.pauseCloudSync()
+        scheduler.requestSync()
+
+        XCTAssertTrue(scheduler.hasUnfinishedSyncWork)
+    }
+
+    func testUnfinishedSyncWorkExcludesUnclaimableOwnerlessEntry() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: UUID(),
+            operation: .update,
+            ownerTokenIdentifier: nil,
+            now: Date(timeIntervalSince1970: 100)
+        ))
+        try context.save()
+        let scheduler = SyncScheduler(modelContext: context)
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+
+        XCTAssertFalse(scheduler.hasUnfinishedSyncWork)
+    }
+
     func testForegroundTriggerIsNoOpInDeletionMode() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

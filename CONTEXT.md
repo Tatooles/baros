@@ -34,6 +34,10 @@ _Avoid_: Sync error, Sentry event, persistent error
 A temporary condition, such as being offline or having a resolving Current Owner, that does not mean synchronization is durably stuck.
 _Avoid_: Transient error, network error, sync failure
 
+**Unfinished Sync Work**:
+Local changes that Baros knows have not completed cloud synchronization. The changes are already saved locally and remain eligible for a later synchronization attempt.
+_Avoid_: Unsaved data, offline data, sync failure
+
 **Pseudonymous Current Owner ID**:
 A stable one-way code that lets Baros count distinct Current Owners in diagnostics without sending a raw account identifier, name, or email address. It is cleared when the Current Owner changes or signs out.
 _Avoid_: User ID, owner token, account ID
