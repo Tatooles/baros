@@ -72,11 +72,9 @@ struct EmptyHistoryStateView: View {
                             .multilineTextAlignment(.center)
                             .foregroundStyle(AppTheme.textSecondary)
 
-                        Button("Sign In") {
+                        AccountSignInButton {
                             authIsPresented = true
                         }
-                        .buttonStyle(.glassProminent)
-                        .tint(AppTheme.accentBright)
                         .accessibilityIdentifier("EmptyHistorySignInButton")
                     }
                     .frame(maxWidth: .infinity)

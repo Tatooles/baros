@@ -1301,16 +1301,18 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Looking for past workouts?"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Sign in to sync workouts saved to your account and keep future workouts backed up."].exists)
-        XCTAssertTrue(app.buttons["EmptyHistorySignInButton"].exists)
+        let startSignInButton = app.buttons["EmptyHistorySignInButton"]
+        XCTAssertTrue(startSignInButton.exists)
+        XCTAssertEqual(startSignInButton.label, "Sign in")
         XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].exists)
 
         app.buttons["HistoryTab"].tap()
         XCTAssertTrue(app.staticTexts["Looking for your workouts?"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["EmptyHistorySignInButton"].exists)
+        XCTAssertEqual(app.buttons["EmptyHistorySignInButton"].label, "Sign in")
 
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
         XCTAssertTrue(app.staticTexts["Looking for your exercise history?"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["EmptyHistorySignInButton"].exists)
+        XCTAssertEqual(app.buttons["EmptyHistorySignInButton"].label, "Sign in")
     }
 
     @MainActor

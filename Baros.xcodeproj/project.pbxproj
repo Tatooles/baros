@@ -177,6 +177,7 @@
 		FC3D10AD637B2B69291993E9 /* SyncConflictResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C1BE6DD7730BBE9292B992F /* SyncConflictResolverTests.swift */; };
 		FF2C2372AAE61B0B690AD23E /* WorkoutEditingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899D04423C1918B8B8546277 /* WorkoutEditingComponents.swift */; };
 		FFA861796C9D50E403A56C5F /* EmptyHistoryStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0806162D8B4D60C712F43690 /* EmptyHistoryStateView.swift */; };
+		FFB14801A13E4E1D8BB14801 /* AccountSignInButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFB14802A13E4E1D8BB14802 /* AccountSignInButton.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -202,6 +203,7 @@
 		067C858CD25AAD81AD93A4FD /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		06B35F51ABC00FD0B31231F1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0806162D8B4D60C712F43690 /* EmptyHistoryStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyHistoryStateView.swift; sourceTree = "<group>"; };
+		FFB14802A13E4E1D8BB14802 /* AccountSignInButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSignInButton.swift; sourceTree = "<group>"; };
 		0B5793BDA3A5AB55DD48ABD8 /* LoggedSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggedSet.swift; sourceTree = "<group>"; };
 		0EC5F25DFB5B9816D415FAC0 /* FinishWorkoutSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinishWorkoutSheet.swift; sourceTree = "<group>"; };
 		10AA17812EE68578B569970E /* AppBuildInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBuildInfo.swift; sourceTree = "<group>"; };
@@ -407,6 +409,7 @@
 		0B6693B117B32C3A914F2665 /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				FFB14802A13E4E1D8BB14802 /* AccountSignInButton.swift */,
 				1BA26BCEE247C3F186E88695 /* ActivityView.swift */,
 				0806162D8B4D60C712F43690 /* EmptyHistoryStateView.swift */,
 				BDE4314AD2B27E0C681BD5D7 /* StateViews.swift */,
@@ -939,6 +942,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FFB14801A13E4E1D8BB14801 /* AccountSignInButton.swift in Sources */,
 				024088D9604EDD6CAB43BEA3 /* AccountDeletionCoordinator.swift in Sources */,
 				0A26468DAB35148EE53DC05D /* AccountDeletionFactory.swift in Sources */,
 				9C91EF78450734AFBF0FF735 /* AccountDisplayState.swift in Sources */,
