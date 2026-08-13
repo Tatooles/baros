@@ -51,6 +51,11 @@ final class CurrentOwnerCoordinator {
         case active(ownerTokenIdentifier: String)
     }
 
+    struct NetworkRecoveryCandidate: Equatable {
+        let ownerTokenIdentifier: String
+        let sessionIdentifier: String?
+    }
+
     private(set) var state: State = .resolving(ownerTokenIdentifier: nil)
 
     private let authenticationClient: any CurrentOwnerAuthenticationClient
@@ -153,6 +158,38 @@ final class CurrentOwnerCoordinator {
         requestSyncRecovery(for: .manualRetry)
     }
 
+    func networkDidRecover() {
+        guard let candidate = makeNetworkRecoveryCandidate() else { return }
+        networkDidRecover(candidate)
+    }
+
+    func makeNetworkRecoveryCandidate() -> NetworkRecoveryCandidate? {
+        guard startupMode == .live,
+              !syncScheduler.isDeletionModeEnabled,
+              clerkSessionProvider.state.hasActiveSession,
+              let ownerTokenIdentifier = clerkSessionProvider.state.ownerTokenIdentifier,
+              syncScheduler.currentOwnerTokenIdentifier == ownerTokenIdentifier,
+              syncScheduler.hasUnfinishedSyncWork else {
+            return nil
+        }
+        return NetworkRecoveryCandidate(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            sessionIdentifier: clerkSessionProvider.state.sessionIdentifier
+        )
+    }
+
+    func networkDidRecover(_ candidate: NetworkRecoveryCandidate) {
+        guard isCurrentNetworkRecoveryCandidate(candidate) else { return }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await recoverAuthentication(
+                for: .networkRecovery,
+                networkRecoveryCandidate: candidate
+            )
+        }
+    }
+
     func requestSyncRecovery(for trigger: SyncRecoveryCoordinator.Trigger) {
         guard startupMode == .live else {
             requestSyncInTestMode(for: trigger)
@@ -165,13 +202,28 @@ final class CurrentOwnerCoordinator {
         }
     }
 
-    private func recoverAuthentication(for trigger: SyncRecoveryCoordinator.Trigger) async {
+    private func recoverAuthentication(
+        for trigger: SyncRecoveryCoordinator.Trigger,
+        networkRecoveryCandidate: NetworkRecoveryCandidate? = nil
+    ) async {
         await clerkSessionProvider.waitUntilLoaded()
         guard !Task.isCancelled else { return }
+        if trigger == .networkRecovery {
+            guard let networkRecoveryCandidate,
+                  isCurrentNetworkRecoveryCandidate(networkRecoveryCandidate) else {
+                return
+            }
+        }
         enterLocalAccessStateFromClerk()
         guard clerkSessionProvider.state.hasActiveSession else { return }
 
         await syncRecoveryCoordinator.recoverAuthenticationAndRequestSync(for: trigger)
+    }
+
+    private func isCurrentNetworkRecoveryCandidate(
+        _ candidate: NetworkRecoveryCandidate
+    ) -> Bool {
+        makeNetworkRecoveryCandidate() == candidate
     }
 
     private func requestSyncInTestMode(for trigger: SyncRecoveryCoordinator.Trigger) {
@@ -180,6 +232,8 @@ final class CurrentOwnerCoordinator {
         case .startup:
             syncScheduler.requestSync()
         case .appForeground:
+            break
+        case .networkRecovery:
             break
         case .manualRetry:
             syncScheduler.retrySync()
@@ -274,6 +328,8 @@ final class CurrentOwnerCoordinator {
             syncScheduler.requestSync()
         case .appForeground:
             syncScheduler.requestSyncOnAppForeground()
+        case .networkRecovery:
+            syncScheduler.requestSync()
         case .manualRetry:
             syncScheduler.retrySync()
         }

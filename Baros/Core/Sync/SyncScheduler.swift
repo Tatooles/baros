@@ -99,6 +99,28 @@ final class SyncScheduler {
         self.modelContext = modelContext
     }
 
+    var hasUnfinishedSyncWork: Bool {
+        guard let currentOwnerTokenIdentifier else { return false }
+        if hasQueuedSyncRequest {
+            return true
+        }
+        guard let modelContext else { return false }
+
+        return activeV1OutboxEntries(
+            ownerTokenIdentifier: currentOwnerTokenIdentifier,
+            context: modelContext
+        ).contains { entry in
+            if entry.ownerTokenIdentifier == currentOwnerTokenIdentifier {
+                return true
+            }
+            return (try? SyncOutboxClaimEligibility.canClaim(
+                entry: entry,
+                ownerTokenIdentifier: currentOwnerTokenIdentifier,
+                context: modelContext
+            )) == true
+        }
+    }
+
     func requestSync() {
         requestSync(isRetry: false)
     }
@@ -466,12 +488,21 @@ final class SyncScheduler {
         ownerTokenIdentifier: String?,
         context: ModelContext
     ) -> [SyncOutboxEntry] {
+        activeV1OutboxEntries(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        ).filter { $0.status == .failed }
+    }
+
+    private func activeV1OutboxEntries(
+        ownerTokenIdentifier: String?,
+        context: ModelContext
+    ) -> [SyncOutboxEntry] {
         guard let ownerTokenIdentifier else { return [] }
-        let failedStatus = SyncOutboxStatus.failed.rawValue
         let entries = (try? context.fetch(FetchDescriptor<SyncOutboxEntry>(
             predicate: #Predicate { entry in
-                entry.statusRaw == failedStatus
-                    && (entry.ownerTokenIdentifier == ownerTokenIdentifier || entry.ownerTokenIdentifier == nil)
+                entry.ownerTokenIdentifier == ownerTokenIdentifier
+                    || entry.ownerTokenIdentifier == nil
             }
         ))) ?? []
         return entries.filter { entry in
@@ -528,15 +559,10 @@ final class SyncScheduler {
         context: ModelContext,
         attempt: Int = 0
     ) -> SyncObservationCounts {
-        guard let ownerTokenIdentifier else {
-            return SyncObservationCounts(attempt: attempt)
-        }
-        let entries = ((try? context.fetch(FetchDescriptor<SyncOutboxEntry>())) ?? [])
-            .filter { entry in
-                entry.isActive
-                    && entry.entityKind?.isV1Synced == true
-                    && (entry.ownerTokenIdentifier == ownerTokenIdentifier || entry.ownerTokenIdentifier == nil)
-            }
+        let entries = activeV1OutboxEntries(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        )
         return SyncObservationCounts(
             attempt: attempt,
             pending: entries.count,

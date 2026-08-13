@@ -108,9 +108,10 @@ private struct AuthenticatedStateCorrelation {
 
 @MainActor
 final class SyncRecoveryCoordinator {
-    enum Trigger {
+    enum Trigger: Equatable {
         case startup
         case appForeground
+        case networkRecovery
         case manualRetry
     }
 

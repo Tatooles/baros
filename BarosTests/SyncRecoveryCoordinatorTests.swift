@@ -619,6 +619,8 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
                     syncScheduler.requestSync()
                 case .appForeground:
                     syncScheduler.requestSyncOnAppForeground()
+                case .networkRecovery:
+                    syncScheduler.requestSync()
                 case .manualRetry:
                     syncScheduler.retrySync()
                 }

@@ -6,6 +6,10 @@ struct CurrentOwnerLaunchConfiguration {
     let startupMode: CurrentOwnerCoordinator.StartupMode
     let fixedOwnerTokenIdentifier: String?
 
+    var observesNetworkRecovery: Bool {
+        startupMode == .live
+    }
+
     init(arguments: [String]) {
         let fixedOwnerTokenIdentifier = Self.argument(
             after: "--uitest-sync-owner",
