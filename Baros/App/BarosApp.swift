@@ -108,6 +108,7 @@ struct BarosApp: App {
             .modelContainer(modelContainer)
             .environment(Clerk.shared)
             .environment(syncScheduler)
+            .environment(currentOwnerCoordinator)
             .environment(
                 \.syncRecoveryAction,
                 SyncRecoveryAction { trigger in

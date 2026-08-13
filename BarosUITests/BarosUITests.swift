@@ -9,6 +9,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3))
         app.buttons["StartBlankWorkoutButton"].tap()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
         XCTAssertTrue(app.buttons["Current"].exists)
     }
 
@@ -1291,6 +1292,105 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertFalse(app.textFields["SetWeightField-0-1"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.textFields["SetWeightField-0-0"].exists)
+    }
+
+    @MainActor
+    func testSignedOutEmptyHistorySurfacesShowSharedRecoveryPrompt() {
+        let app = makeApp()
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Looking for past workouts?"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Sign in to sync workouts saved to your account and keep future workouts backed up."].exists)
+        XCTAssertTrue(app.buttons["EmptyHistorySignInButton"].exists)
+        XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].exists)
+
+        app.buttons["HistoryTab"].tap()
+        XCTAssertTrue(app.staticTexts["Looking for your workouts?"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["EmptyHistorySignInButton"].exists)
+
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+        XCTAssertTrue(app.staticTexts["Looking for your exercise history?"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["EmptyHistorySignInButton"].exists)
+    }
+
+    @MainActor
+    func testEmptyHistorySignInPresentsExistingAuthAndCancellationReturnsToPrompt() {
+        let app = makeApp()
+        app.launch()
+
+        let signInButton = app.buttons["EmptyHistorySignInButton"]
+        XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
+        signInButton.tap()
+
+        let authView = app.descendants(matching: .any)["EmptyHistoryAuthView"]
+        XCTAssertTrue(authView.waitForExistence(timeout: 5))
+        app.swipeDown()
+
+        XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Looking for past workouts?"].exists)
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
+    @MainActor
+    func testResolvingCurrentOwnerShowsSyncingWithoutSignInOrEmptyStateFlash() {
+        let app = makeApp(extraArguments: ["--uitest-restore-cached-sync-owner"])
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Syncing your workout history…"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
+        XCTAssertFalse(app.staticTexts["No Past Workouts"].exists)
+    }
+
+    @MainActor
+    func testEmptyHistoryShowsSyncingDuringAuthenticatedRecovery() {
+        let app = makeApp(extraArguments: ["--uitest-simulate-empty-history-auth-recovery"])
+        app.launch()
+
+        let signInButton = app.buttons["EmptyHistorySignInButton"]
+        XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
+        signInButton.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["EmptyHistoryAuthView"].waitForExistence(timeout: 5))
+
+        let simulateAuthenticationButton = app.buttons["UITestSimulateEmptyHistoryAuthenticationButton"]
+        XCTAssertTrue(simulateAuthenticationButton.waitForExistence(timeout: 3))
+        simulateAuthenticationButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Syncing your workout history…"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
+        XCTAssertFalse(app.staticTexts["No Past Workouts"].exists)
+
+        XCTAssertTrue(app.staticTexts["No Past Workouts"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Syncing your workout history…"].exists)
+    }
+
+    @MainActor
+    func testActiveCurrentOwnerWithNoRemoteHistoryShowsOrdinaryEmptyState() {
+        let app = makeApp(extraArguments: [
+            "--uitest-sync-owner", "issuer|ui_owner",
+            "--uitest-force-signed-in-auth",
+        ])
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["No Past Workouts"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
+        XCTAssertFalse(app.staticTexts["Syncing your workout history…"].exists)
+    }
+
+    @MainActor
+    func testVisibleUnclaimedLocalHistorySuppressesRecoveryPrompt() {
+        let app = makeApp(completedBenchWorkoutTitles: ["Visible Local History"])
+        app.launch()
+
+        XCTAssertTrue(app.buttons["PastWorkoutButton-0"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
+
+        app.buttons["HistoryTab"].tap()
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
+
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
     }
 
     @MainActor

@@ -78,7 +78,11 @@ struct HistoryView: View {
     @ViewBuilder
     private var workoutContent: some View {
         if completedSessions.isEmpty {
-            EmptyStateView(title: "No Workouts Yet", message: "Finished workouts will appear here.")
+            EmptyHistoryStateView(
+                recoveryTitle: "Looking for your workouts?",
+                emptyTitle: "No Workouts Yet",
+                emptyMessage: "Finished workouts will appear here."
+            )
         } else {
             VStack(spacing: 10) {
                 ForEach(Array(completedSessions.enumerated()), id: \.element.id) { index, session in
@@ -98,7 +102,12 @@ struct HistoryView: View {
     private func exerciseContent(snapshot: ExerciseHistoryViewSnapshot) -> some View {
         let summaries = snapshot.resolvedHistory.summaries
         if summaries.isEmpty {
-            EmptyStateView(title: "No Exercise History", message: "Completed sets will build exercise history.")
+            EmptyHistoryStateView(
+                recoveryTitle: "Looking for your exercise history?",
+                emptyTitle: "No Exercise History",
+                emptyMessage: "Completed sets will build exercise history.",
+                hasVisibleCompletedWorkouts: !completedSessions.isEmpty
+            )
         } else {
             SurfaceCard(padding: 0) {
                 VStack(spacing: 0) {
