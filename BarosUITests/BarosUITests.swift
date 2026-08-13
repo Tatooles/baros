@@ -751,6 +751,12 @@ final class BarosUITests: XCTestCase {
         app.buttons["PastWorkoutButton-0"].tap()
         confirmStartFromPastWorkout(in: app)
 
+        let weightField = app.textFields["SetWeightField-0-0"]
+        XCTAssertTrue(weightField.waitForExistence(timeout: 3))
+        weightField.tap()
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
+
         XCTAssertTrue(app.buttons["ExerciseMenuButton-0"].waitForExistence(timeout: 3))
         app.buttons["ExerciseMenuButton-0"].tap()
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
@@ -758,6 +764,7 @@ final class BarosUITests: XCTestCase {
 
         let footer = app.staticTexts["QuickHistoryLimitFooter"]
         XCTAssertTrue(footer.waitForExistence(timeout: 3))
+        XCTAssertFalse(keyboard.exists)
         XCTAssertTrue(footer.label.contains("Showing 3 of 4 workouts"))
 
         let viewAllButton = app.buttons["QuickHistoryViewAllButton"]
@@ -766,6 +773,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(
             app.descendants(matching: .any)["ExerciseHistoryHeading"].waitForExistence(timeout: 3)
         )
+        XCTAssertFalse(keyboard.waitForExistence(timeout: 1))
     }
 
     @MainActor
