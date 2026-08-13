@@ -61,7 +61,7 @@ struct ProfileAccountCard: View {
                         .frame(minWidth: 36, minHeight: 36)
                         .accessibilityIdentifier("ProfileUserButton")
                 } else {
-                    AccountSignInButton {
+                    AccountSignInButton(title: displayState.actionTitle) {
                         authIsPresented = true
                     }
                     .accessibilityIdentifier("ProfileSignInButton")

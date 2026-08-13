@@ -10,67 +10,16 @@ enum EmptyHistoryPresentation: Equatable {
         currentOwnerState: CurrentOwnerCoordinator.State,
         isSyncing: Bool,
         hasVisibleCompletedWorkouts: Bool = false,
-        isRecoveringAuthentication: Bool = false,
-        isAwaitingInitialRecovery: Bool = false
+        isRecoveringAuthentication: Bool = false
     ) -> Self {
         switch currentOwnerState {
         case .localOnly:
             return hasVisibleCompletedWorkouts ? .ordinaryEmpty : .signInRecovery
-        case .resolving:
-            return isRecoveringAuthentication || isAwaitingInitialRecovery ? .syncing : .ordinaryEmpty
+        case .resolving(let ownerTokenIdentifier):
+            return isRecoveringAuthentication && ownerTokenIdentifier != nil ? .syncing : .ordinaryEmpty
         case .active:
-            return isSyncing || isAwaitingInitialRecovery ? .syncing : .ordinaryEmpty
+            return isRecoveringAuthentication || isSyncing ? .syncing : .ordinaryEmpty
         }
-    }
-}
-
-struct EmptyHistoryRecoveryActivity: Equatable {
-    private(set) var isAwaitingInitialRecovery = false
-
-    mutating func currentOwnerStateDidChange(
-        from oldState: CurrentOwnerCoordinator.State,
-        to newState: CurrentOwnerCoordinator.State,
-        isRecoveringAuthentication: Bool
-    ) {
-        switch newState {
-        case .localOnly:
-            isAwaitingInitialRecovery = false
-        case .resolving:
-            if oldState == .localOnly, isRecoveringAuthentication {
-                isAwaitingInitialRecovery = true
-            }
-        case .active:
-            if oldState == .localOnly, isRecoveringAuthentication {
-                isAwaitingInitialRecovery = true
-            }
-        }
-    }
-
-    mutating func syncDidChange(from wasSyncing: Bool, to isSyncing: Bool) {
-        if isSyncing {
-            isAwaitingInitialRecovery = true
-        } else if wasSyncing {
-            isAwaitingInitialRecovery = false
-        }
-    }
-
-    mutating func authenticationRecoveryDidChange(
-        from wasRecovering: Bool,
-        to isRecovering: Bool,
-        currentOwnerState: CurrentOwnerCoordinator.State,
-        isSyncing: Bool
-    ) {
-        guard wasRecovering,
-              !isRecovering,
-              !isSyncing,
-              case .resolving = currentOwnerState else {
-            return
-        }
-        isAwaitingInitialRecovery = false
-    }
-
-    mutating func syncDidFinish() {
-        isAwaitingInitialRecovery = false
     }
 }
 
@@ -84,9 +33,9 @@ struct EmptyHistoryStateView: View {
     let emptyMessage: String
     var hasVisibleCompletedWorkouts = false
     @State private var authIsPresented = false
-    @State private var recoveryActivity = EmptyHistoryRecoveryActivity()
     #if DEBUG
     @State private var uiTestCurrentOwnerStateOverride: CurrentOwnerCoordinator.State?
+    @State private var uiTestIsRecoveringAuthenticationOverride: Bool?
     #endif
 
     private var presentation: EmptyHistoryPresentation {
@@ -101,8 +50,14 @@ struct EmptyHistoryStateView: View {
             currentOwnerState: currentOwnerState,
             isSyncing: syncScheduler.isSyncing,
             hasVisibleCompletedWorkouts: hasVisibleCompletedWorkouts,
-            isRecoveringAuthentication: currentOwnerCoordinator.isRecoveringAuthentication,
-            isAwaitingInitialRecovery: recoveryActivity.isAwaitingInitialRecovery
+            isRecoveringAuthentication: {
+                #if DEBUG
+                uiTestIsRecoveringAuthenticationOverride
+                    ?? currentOwnerCoordinator.isRecoveringAuthentication
+                #else
+                currentOwnerCoordinator.isRecoveringAuthentication
+                #endif
+            }()
         )
     }
 
@@ -158,34 +113,6 @@ struct EmptyHistoryStateView: View {
                 #endif
             }
         }
-        .onChange(of: currentOwnerCoordinator.state, initial: true) { oldState, newState in
-            recoveryActivity.currentOwnerStateDidChange(
-                from: oldState,
-                to: newState,
-                isRecoveringAuthentication: currentOwnerCoordinator.isRecoveringAuthentication
-            )
-        }
-        .onChange(of: syncScheduler.isSyncing) { wasSyncing, isSyncing in
-            recoveryActivity.syncDidChange(from: wasSyncing, to: isSyncing)
-        }
-        .onChange(of: currentOwnerCoordinator.isRecoveringAuthentication) { wasRecovering, isRecovering in
-            recoveryActivity.authenticationRecoveryDidChange(
-                from: wasRecovering,
-                to: isRecovering,
-                currentOwnerState: currentOwnerCoordinator.state,
-                isSyncing: syncScheduler.isSyncing
-            )
-        }
-        .onChange(of: syncScheduler.lastSyncedAt) { _, lastSyncedAt in
-            if lastSyncedAt != nil {
-                recoveryActivity.syncDidFinish()
-            }
-        }
-        .onChange(of: syncScheduler.lastFailure) { _, lastFailure in
-            if lastFailure != nil {
-                recoveryActivity.syncDidFinish()
-            }
-        }
     }
 
     #if DEBUG
@@ -195,11 +122,7 @@ struct EmptyHistoryStateView: View {
         let resolvingState = CurrentOwnerCoordinator.State.resolving(
             ownerTokenIdentifier: "issuer|ui_test_owner"
         )
-        recoveryActivity.currentOwnerStateDidChange(
-            from: .localOnly,
-            to: resolvingState,
-            isRecoveringAuthentication: true
-        )
+        uiTestIsRecoveringAuthenticationOverride = true
         uiTestCurrentOwnerStateOverride = resolvingState
 
         Task { @MainActor in
@@ -207,13 +130,8 @@ struct EmptyHistoryStateView: View {
             let activeState = CurrentOwnerCoordinator.State.active(
                 ownerTokenIdentifier: "issuer|ui_test_owner"
             )
-            recoveryActivity.currentOwnerStateDidChange(
-                from: resolvingState,
-                to: activeState,
-                isRecoveringAuthentication: true
-            )
             uiTestCurrentOwnerStateOverride = activeState
-            recoveryActivity.syncDidFinish()
+            uiTestIsRecoveringAuthenticationOverride = false
         }
     }
     #endif

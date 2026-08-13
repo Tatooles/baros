@@ -1304,7 +1304,7 @@ final class BarosUITests: XCTestCase {
         let startSignInButton = app.buttons["EmptyHistorySignInButton"]
         XCTAssertTrue(startSignInButton.exists)
         XCTAssertEqual(startSignInButton.label, "Sign in")
-        XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].exists)
+        XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].isHittable)
 
         app.buttons["HistoryTab"].tap()
         XCTAssertTrue(app.staticTexts["Looking for your workouts?"].waitForExistence(timeout: 3))

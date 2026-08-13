@@ -59,6 +59,7 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.authenticationClient.sendAuthenticationState(.unauthenticated)
         try await waitUntil {
             harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
+                && !harness.coordinator.isRecoveringAuthentication
         }
 
         XCTAssertFalse(harness.coordinator.isRecoveringAuthentication)

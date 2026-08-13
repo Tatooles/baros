@@ -1,12 +1,13 @@
 import SwiftUI
 
 struct AccountSignInButton: View {
+    var title = "Sign in"
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Label {
-                Text("Sign in")
+                Text(title)
             } icon: {
                 Image(systemName: "person.crop.circle.badge.plus")
             }
