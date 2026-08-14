@@ -61,24 +61,9 @@ struct ProfileAccountCard: View {
                         .frame(minWidth: 36, minHeight: 36)
                         .accessibilityIdentifier("ProfileUserButton")
                 } else {
-                    Button {
+                    AccountSignInButton(title: displayState.actionTitle) {
                         authIsPresented = true
-                    } label: {
-                        Label {
-                            Text(displayState.actionTitle)
-                        } icon: {
-                            Image(systemName: "person.crop.circle.badge.plus")
-                        }
-                        .font(.system(size: 14, weight: .bold))
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .background(AppTheme.accentGradient)
-                        .foregroundStyle(AppTheme.onAccent)
-                        .clipShape(Capsule())
                     }
-                    .buttonStyle(.plain)
                     .accessibilityIdentifier("ProfileSignInButton")
                 }
             }

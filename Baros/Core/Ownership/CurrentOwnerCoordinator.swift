@@ -57,6 +57,7 @@ final class CurrentOwnerCoordinator {
     }
 
     private(set) var state: State = .resolving(ownerTokenIdentifier: nil)
+    private(set) var isRecoveringAuthentication = false
 
     private let authenticationClient: any CurrentOwnerAuthenticationClient
     private let syncScheduler: SyncScheduler
@@ -65,6 +66,8 @@ final class CurrentOwnerCoordinator {
     private var hasStarted = false
     private var startupTask: Task<Void, Never>?
     private var authenticationStateTask: Task<Void, Never>?
+    private var authenticationRecoveryCount = 0
+    private var isHandlingAuthenticationRecovery = false
     @ObservationIgnored
     private lazy var syncRecoveryCoordinator = SyncRecoveryCoordinator(
         authenticationClient: authenticationClient,
@@ -205,6 +208,13 @@ final class CurrentOwnerCoordinator {
         for trigger: SyncRecoveryCoordinator.Trigger,
         networkRecoveryCandidate: NetworkRecoveryCandidate? = nil
     ) async {
+        authenticationRecoveryCount += 1
+        updateAuthenticationRecoveryActivity()
+        defer {
+            authenticationRecoveryCount -= 1
+            updateAuthenticationRecoveryActivity()
+        }
+
         await clerkSessionProvider.waitUntilLoaded()
         guard !Task.isCancelled else { return }
         if trigger == .networkRecovery {
@@ -245,19 +255,25 @@ final class CurrentOwnerCoordinator {
         guard !Task.isCancelled else { return }
 
         guard clerkSessionProvider.state.hasActiveSession else {
+            setHandlingAuthenticationRecovery(false)
             enterLocalOnlyMode()
             return
         }
 
         let expectedOwnerTokenIdentifier = clerkSessionProvider.state.ownerTokenIdentifier
-        if syncScheduler.currentOwnerTokenIdentifier != expectedOwnerTokenIdentifier {
-            enterResolvingState(ownerTokenIdentifier: expectedOwnerTokenIdentifier)
-        }
-
         switch authenticationState {
-        case .loading, .unauthenticated:
+        case .loading:
+            setHandlingAuthenticationRecovery(true)
+            enterResolvingState(ownerTokenIdentifier: expectedOwnerTokenIdentifier)
+        case .unauthenticated:
+            setHandlingAuthenticationRecovery(false)
             enterResolvingState(ownerTokenIdentifier: expectedOwnerTokenIdentifier)
         case .authenticated(let token):
+            setHandlingAuthenticationRecovery(true)
+            defer { setHandlingAuthenticationRecovery(false) }
+            if syncScheduler.currentOwnerTokenIdentifier != expectedOwnerTokenIdentifier {
+                enterResolvingState(ownerTokenIdentifier: expectedOwnerTokenIdentifier)
+            }
             guard let ownerTokenIdentifier = ClerkJWTIdentityResolver.ownerTokenIdentifier(from: token) else {
                 enterResolvingState(ownerTokenIdentifier: expectedOwnerTokenIdentifier)
                 await authenticationClient.logout()
@@ -294,6 +310,16 @@ final class CurrentOwnerCoordinator {
         }
 
         enterResolvingState(ownerTokenIdentifier: clerkSessionProvider.state.ownerTokenIdentifier)
+    }
+
+    private func updateAuthenticationRecoveryActivity() {
+        isRecoveringAuthentication = authenticationRecoveryCount > 0
+            || isHandlingAuthenticationRecovery
+    }
+
+    private func setHandlingAuthenticationRecovery(_ isHandling: Bool) {
+        isHandlingAuthenticationRecovery = isHandling
+        updateAuthenticationRecoveryActivity()
     }
 
     private func enterResolvingState(ownerTokenIdentifier: String?) {

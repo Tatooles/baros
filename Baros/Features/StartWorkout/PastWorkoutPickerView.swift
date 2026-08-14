@@ -6,9 +6,10 @@ struct PastWorkoutPickerView: View {
 
     var body: some View {
         if sessions.isEmpty {
-            EmptyStateView(
-                title: "No Past Workouts",
-                message: "Finished workouts will appear here as reusable starting points."
+            EmptyHistoryStateView(
+                recoveryTitle: "Looking for past workouts?",
+                emptyTitle: "No Past Workouts",
+                emptyMessage: "Finished workouts will appear here as reusable starting points."
             )
         } else {
             VStack(spacing: 10) {
