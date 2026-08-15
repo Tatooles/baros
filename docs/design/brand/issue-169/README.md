@@ -12,11 +12,16 @@ option 3 of the tight-gap plate study. It establishes the intended direction:
 - tight spacing between the stem and bowls so the mark remains cohesive; and
 - a charcoal, cobalt, and warm-silver visual system.
 
-The current cobalt reference is the more muted blue from the selected study,
-approximately `#1C66C7`. This is a visual target for the concept checkpoint,
-not yet the final production color token.
+The selected muted cobalt is locked at `#1C66C7` for the v1 production
+baseline. Appearance-specific colors and cross-surface roles are recorded in
+the Icon Composer handoff.
 
 This PNG is a design reference, not a production app-icon resource. Before it
 is installed in the app, the selected mark must be rebuilt as maintainable
 vector artwork, optically refined, assigned exact production colors, and
 validated across the required Apple icon appearances and sizes.
+
+The initial vector and Icon Composer handoff lives in
+[`icon-composer/`](icon-composer/brand-spec.md). Its SVG geometry is derived
+only from the centered checkpoint above; later appearance concept sheets are
+not geometry references.

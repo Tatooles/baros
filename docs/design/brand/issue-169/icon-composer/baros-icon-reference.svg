@@ -1,0 +1,16 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Baros Icon Vector Reference</title>
+  <desc>Composite preview of the centered Baros icon geometry. Icon Composer supplies the enclosure and effects.</desc>
+
+  <defs>
+    <linearGradient id="background" x1="512" y1="0" x2="512" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0D1B2A"/>
+      <stop offset="0.7" stop-color="#08121D"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#background)"/>
+
+  <image href="Assets/01-mark.svg" width="1024" height="1024"/>
+  <image href="Assets/02-plates.svg" width="1024" height="1024"/>
+</svg>
