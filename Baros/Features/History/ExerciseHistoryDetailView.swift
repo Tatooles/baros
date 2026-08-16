@@ -45,7 +45,7 @@ struct ExerciseHistoryDetailView: View {
             }
             .padding(AppTheme.shellPadding)
         }
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
     }
 }

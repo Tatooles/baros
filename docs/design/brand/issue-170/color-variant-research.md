@@ -73,28 +73,31 @@ Sources: [Carbon: Color](https://carbondesignsystem.com/elements/color/overview/
 ## Baros implication
 
 Keep `#1768E5` as the canonical dark cobalt anchor and solid accent fill. Keep
-white content on that fill. Define `#2478F2` as a narrowly scoped dark
+white content on that fill. Define `#4D94FF` as a narrowly scoped dark
 foreground/accessibility variant for small inline cobalt text and symbols on
 dark app surfaces.
 
 This is a tonal adjustment within the same cobalt family, not a second primary:
-the two colors have nearly identical HSL hue angles (`216.4°` and `215.5°`).
+the two colors have nearly identical HSL hue angles (`216.4°` and `216.1°`).
 The adjustment changes lightness enough to solve the actual foreground problem:
 
 | Pair | Contrast |
 | --- | ---: |
 | `#1768E5` on `#000000` | `4.15:1` |
 | `#1768E5` on `#0A0C10` | `3.87:1` |
-| `#2478F2` on `#000000` | `5.04:1` |
-| `#2478F2` on `#0A0C10` | `4.70:1` |
+| `#4D94FF` on `#000000` | `7.00:1` |
+| `#4D94FF` on `#0A0C10` | `6.52:1` |
+| `#4D94FF` on `#1C1C1E` | `5.67:1` |
+| `#4D94FF` over the 16% muted cobalt badge on `#1C1C1E` | `4.93:1` |
+| `#4D94FF` on `#2C2C2E` | `4.64:1` |
 | `#FFFFFF` on `#1768E5` | `5.06:1` |
 
 Recommended semantic contract:
 
 - `brandAccentFill`: `#1C66C7` in light appearance and `#1768E5` in dark;
-- `brandAccentForeground`: `#1C66C7` in light appearance and `#2478F2` in dark;
+- `brandAccentForeground`: `#1C66C7` in light appearance and `#4D94FF` in dark;
 - production icon and protected brand geometry/colors remain unchanged;
-- `#2478F2` is documented as a contextual UI value, not marketed as another
+- `#4D94FF` is documented as a contextual UI value, not marketed as another
   primary brand color and not substituted into solid cobalt controls.
 
 This keeps Baros visually homogeneous while avoiding the less professional

@@ -44,14 +44,14 @@ hex value directly.
 | Token | Light | Dark | Usage |
 | --- | --- | --- | --- |
 | `brandAccentFill` | `#1C66C7` | `#1768E5` | Solid primary controls, progress fills, completion marks, and sufficiently large state symbols |
-| `brandAccentForeground` | `#1C66C7` | `#2478F2` | Small inline action text and symbols on light or dark app surfaces |
+| `brandAccentForeground` | `#1C66C7` | `#4D94FF` | Small inline action text and symbols on light or dark app surfaces |
 | `onBrandAccent` | `#FFFFFF` | `#FFFFFF` | Text and symbols on `brandAccentFill` |
-| `brandAccentMuted` | `#1C66C7` at 12% | `#1768E5` at 16% | Soft selected backgrounds, compact badges, and secondary brand actions |
-| `brandFocus` | `#1C66C7` | `#1768E5` | Focus rings and non-text focus indicators; opacity may be reduced when the resulting boundary still reaches the applicable contrast bar |
+| `brandAccentMuted` | `#1C66C7` at 8% | `#1768E5` at 16% | Soft selected backgrounds, compact badges, and secondary brand actions |
+| `brandFocus` | `#1C66C7` | `#4D94FF` | Focus rings and non-text focus indicators on editable fields |
 | `brandAccentGradient` | `#1C66C7` to `#1768E5` | `#1C66C7` to `#1768E5` | Existing high-emphasis branded moments only; white content remains readable across both endpoints |
 | `brandAccentGlow` | `#1C66C7` at 24% | `#1768E5` at 28% | Restrained decoration behind an existing high-emphasis branded control, never a structure or status signal |
 
-`#2478F2` is a dark foreground/accessibility resolution of the cobalt family,
+`#4D94FF` is a dark foreground/accessibility resolution of the cobalt family,
 not another primary brand color. It is not used in the production icon,
 marketing palette, or solid control fills. This distinction follows the
 evidence captured in the
@@ -62,11 +62,13 @@ evidence captured in the
 | Token | Light | Dark | Usage |
 | --- | --- | --- | --- |
 | `appCanvas` | `#F7F6F3` | `#000000` | App-owned full-screen content background |
-| `groupedSurface` | `#FFFFFF` or the equivalent adaptive system grouped surface | `secondarySystemBackground` | Ordinary bounded groups |
+| `groupedSurface` | `#FFFFFF` | `#1C1C1E` | Ordinary bounded groups |
+| `recessedSurface` | `#F2F2F4` | `#242426` | Secondary wells and non-editable summaries inside a justified group |
 | `focusSurfaceTop` | `#FFFFFF` | `#0A0C10` | Top of a selective focused or hero surface |
 | `focusSurfaceBottom` | `#FAFAFA` | `#050608` | Bottom of a selective focused or hero surface |
 | `fieldSurface` | `#ECECF0` | `#2C2C2E` | Actual editable regions |
 | `subtleBorder` | `#09121D` at 9% | `#FFFFFF` at 11% | Necessary card borders and dividers only |
+| `surfaceShadow` | `#000000` at 7% | `#000000` at 18% | Restrained depth cue under a justified grouped or focus surface |
 | `platformGlass` | Native material | Native material | System-owned glass and material-adjacent chrome, without navy or cobalt tinting |
 
 ### System semantic roles
@@ -76,13 +78,16 @@ evidence captured in the
 | `textPrimary` | `label` | Ordinary primary text and symbols |
 | `textSecondary` | `secondaryLabel` | Supporting content |
 | `textTertiary` | `tertiaryLabel` | De-emphasized metadata that still meets its applicable contrast bar |
-| `destructive` | `systemRed` | Destructive actions and error meaning |
-| `success` | `systemGreen` | Successful state |
+| `destructive` | `systemRed` | Solid destructive fills |
+| `destructiveForeground` | `#B42318` light / `#FF6961` dark | Destructive/error text, symbols, and meaningful boundaries on app surfaces |
+| `onDestructive` | `#FFFFFF` | Symbols on a solid destructive fill |
+| `success` | `systemGreen` | Solid successful-state fills |
+| `successForeground` | `#1B6E2A` light / `#4CD964` dark | Success text and symbols on app surfaces |
 | `systemSeparator` | `separator` | System-owned list and presentation boundaries |
 
-System semantic roles intentionally have no fixed cross-appearance hex value.
-The platform owns their appearance and accessibility resolution. Brand colors
-must not override status meaning.
+System text and fill roles remain platform adaptive. The custom destructive
+foreground is a tonal accessibility resolution of red for app-owned surfaces,
+not a new status meaning. Brand colors must not override status meaning.
 
 ## App surface hierarchy
 

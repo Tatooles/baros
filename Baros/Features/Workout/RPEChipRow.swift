@@ -29,11 +29,11 @@ struct RPEChipRow: View {
         } label: {
             Text(title)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isSelected ? AppTheme.onAccent : AppTheme.textPrimary)
+                .foregroundStyle(isSelected ? AppTheme.onBrandAccent : AppTheme.textPrimary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
-                    isSelected ? AnyShapeStyle(AppTheme.accentBright) : AnyShapeStyle(AppTheme.surfaceMuted),
+                    isSelected ? AnyShapeStyle(AppTheme.brandAccentFill) : AnyShapeStyle(AppTheme.recessedSurface),
                     in: Capsule()
                 )
         }

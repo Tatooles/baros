@@ -65,10 +65,10 @@ private struct ExercisePickerList: View {
                 } label: {
                     Label("Create Exercise", systemImage: "plus.circle")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(AppTheme.accentBright)
+                        .foregroundStyle(AppTheme.brandAccentForeground)
                 }
-                .listRowBackground(AppTheme.surface)
-                .listRowSeparatorTint(AppTheme.border)
+                .listRowBackground(AppTheme.groupedSurface)
+                .listRowSeparatorTint(AppTheme.subtleBorder)
             }
 
             Section {
@@ -82,8 +82,8 @@ private struct ExercisePickerList: View {
                     .accessibilityIdentifier(
                         "ExercisePickerRow-\(row.exercise.name)-\(row.exercise.equipment.displayName)"
                     )
-                    .listRowBackground(AppTheme.surface)
-                    .listRowSeparatorTint(AppTheme.border)
+                    .listRowBackground(AppTheme.groupedSurface)
+                    .listRowSeparatorTint(AppTheme.subtleBorder)
                 }
             } header: {
                 HStack {
@@ -103,7 +103,7 @@ private struct ExercisePickerList: View {
                             systemImage: "arrow.up.arrow.down"
                         )
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppTheme.accentBright)
+                        .foregroundStyle(AppTheme.brandAccentForeground)
                     }
                     .accessibilityLabel("Sort: \(sortOrder.displayName)")
                     .accessibilityIdentifier("ExercisePickerSortMenu")
@@ -113,7 +113,7 @@ private struct ExercisePickerList: View {
         }
         .scrollContentBackground(.hidden)
         .contentMargins(.bottom, 24, for: .scrollContent)
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle("Add Exercise")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search exercises")

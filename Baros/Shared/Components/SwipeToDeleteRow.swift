@@ -31,11 +31,11 @@ struct SwipeToDeleteRow<Content: View>: View {
                 if offsetX < -1 {
                     Button(role: .destructive, action: performDelete) {
                         deleteShape
-                            .fill(Color(.systemRed))
+                            .fill(AppTheme.destructive)
                             .overlay(
                                 Image(systemName: "trash.fill")
                                     .font(.body.weight(.semibold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(AppTheme.onDestructive)
                                     .opacity(min(1, (-offsetX - 24) / 24))
                             )
                             .frame(width: max(0, -offsetX - 8))

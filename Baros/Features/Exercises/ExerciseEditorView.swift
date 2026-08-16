@@ -56,12 +56,12 @@ struct ExerciseEditorView: View {
             if let validationMessage {
                 Section {
                     Text(validationMessage)
-                        .foregroundStyle(AppTheme.accentBright)
+                        .foregroundStyle(AppTheme.destructiveForeground)
                 }
             }
         }
         .scrollContentBackground(.hidden)
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle(exercise == nil ? "Create Exercise" : "Edit Exercise")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

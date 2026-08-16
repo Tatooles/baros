@@ -1,11 +1,30 @@
 import SwiftUI
 
+enum SurfaceCardRole {
+    case grouped
+    case focus
+
+    var backgroundStyle: AnyShapeStyle {
+        switch self {
+        case .grouped:
+            AnyShapeStyle(AppTheme.groupedSurface)
+        case .focus:
+            AnyShapeStyle(AppTheme.focusSurface)
+        }
+    }
+}
+
 struct SurfaceCard<Content: View>: View {
+    let role: SurfaceCardRole
     let padding: CGFloat
     @ViewBuilder var content: Content
-    @Environment(\.colorScheme) private var colorScheme
 
-    init(padding: CGFloat = 16, @ViewBuilder content: () -> Content) {
+    init(
+        role: SurfaceCardRole = .grouped,
+        padding: CGFloat = 16,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.role = role
         self.padding = padding
         self.content = content()
     }
@@ -18,18 +37,15 @@ struct SurfaceCard<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial, in: shape)
+            .background(role.backgroundStyle, in: shape)
             // Clip so collapsing content is swallowed by the card edge
             // instead of sliding over it.
             .clipShape(shape)
             .overlay(
-                shape.strokeBorder(
-                    colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05),
-                    lineWidth: 1
-                )
+                shape.strokeBorder(AppTheme.subtleBorder, lineWidth: 1)
             )
             .shadow(
-                color: .black.opacity(colorScheme == .dark ? 0.3 : 0.07),
+                color: AppTheme.surfaceShadow,
                 radius: 14,
                 y: 5
             )
@@ -55,7 +71,7 @@ struct MetricSummaryCard: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
         .background(
-            AppTheme.surfaceMuted,
+            AppTheme.recessedSurface,
             in: RoundedRectangle(cornerRadius: 18, style: .continuous)
         )
     }

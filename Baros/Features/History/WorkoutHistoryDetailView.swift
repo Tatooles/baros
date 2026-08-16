@@ -76,7 +76,7 @@ struct WorkoutHistoryDetailView: View {
                                     Text("Set \(set.orderIndex + 1)")
                                     Spacer()
                                     Text(setSummary(for: set))
-                                        .foregroundStyle(set.isCompleted ? AppTheme.accentBright : AppTheme.textSecondary)
+                                        .foregroundStyle(set.isCompleted ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
                                 }
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundStyle(AppTheme.textSecondary)
@@ -94,12 +94,12 @@ struct WorkoutHistoryDetailView: View {
                     } label: {
                         Text("Delete Workout")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(AppTheme.accentBright)
+                            .foregroundStyle(AppTheme.destructiveForeground)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16)
-                                    .stroke(AppTheme.accentBright.opacity(0.45))
+                                    .stroke(AppTheme.destructiveForeground)
                             )
                     }
                     .buttonStyle(.plain)
@@ -107,7 +107,7 @@ struct WorkoutHistoryDetailView: View {
             }
             .padding(AppTheme.shellPadding)
         }
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle(session.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -172,7 +172,7 @@ struct WorkoutHistoryDetailView: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "lock.fill")
                 .font(.title3.weight(.semibold))
-                .foregroundStyle(AppTheme.accentBright)
+                .foregroundStyle(AppTheme.brandAccentForeground)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -190,7 +190,7 @@ struct WorkoutHistoryDetailView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(AppTheme.accentBright.opacity(0.4))
+                .strokeBorder(AppTheme.brandAccentForeground.opacity(0.4))
         )
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("WorkoutHistoryReadOnlyNotice")

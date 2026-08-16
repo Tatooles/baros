@@ -11,7 +11,7 @@ struct WorkoutHistoryRow: View {
         SurfaceCard {
             HStack(spacing: 14) {
                 Capsule()
-                    .fill(AppTheme.accentGradient)
+                    .fill(AppTheme.brandAccentGradient)
                     .frame(width: 4, height: 64)
 
                 VStack(alignment: .leading, spacing: 4) {

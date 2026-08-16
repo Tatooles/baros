@@ -11,12 +11,12 @@ struct ExerciseHistoryHeading: View {
         HStack(alignment: .top, spacing: 12) {
             if !dynamicTypeSize.isAccessibilitySize {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(AppTheme.accentMuted)
+                    .fill(AppTheme.brandAccentMuted)
                     .frame(width: 48, height: 48)
                     .overlay {
                         Image(systemName: "dumbbell.fill")
                             .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(AppTheme.accentBright)
+                            .foregroundStyle(AppTheme.brandAccentForeground)
                             .accessibilityHidden(true)
                     }
                     .accessibilityHidden(true)
@@ -64,7 +64,7 @@ struct ExerciseHistorySessionGroupCard: View {
                 header
 
                 Divider()
-                    .overlay(AppTheme.border)
+                    .overlay(AppTheme.subtleBorder)
 
                 loggedExerciseEntries
             }
@@ -86,10 +86,10 @@ struct ExerciseHistorySessionGroupCard: View {
 
             Text(setCountLabel(for: group.completedSetCount))
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(AppTheme.accentBright)
+                .foregroundStyle(AppTheme.brandAccentForeground)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(AppTheme.accentMuted)
+                .background(AppTheme.brandAccentMuted)
                 .clipShape(Capsule())
         }
     }
@@ -111,7 +111,7 @@ struct ExerciseHistorySessionGroupCard: View {
 
                 if index < group.loggedExerciseEntries.count - 1 {
                     Divider()
-                        .overlay(AppTheme.border)
+                        .overlay(AppTheme.subtleBorder)
                 }
             }
         }

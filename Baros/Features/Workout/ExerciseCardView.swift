@@ -43,7 +43,7 @@ struct ExerciseCardView: View {
     }
 
     var body: some View {
-        SurfaceCard(padding: 0) {
+        SurfaceCard(role: .focus, padding: 0) {
             VStack(spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Button {
@@ -164,7 +164,7 @@ struct ExerciseCardView: View {
                         if let referenceNotes {
                             VStack(alignment: .leading, spacing: 6) {
                                 Divider()
-                                    .overlay(AppTheme.border)
+                                    .overlay(AppTheme.subtleBorder)
                                     .padding(.bottom, 4)
 
                                 Text("LAST TIME")
@@ -231,13 +231,13 @@ private struct ExerciseNotesDraftField: View {
         .frame(minHeight: 88, alignment: .topLeading)
         .workoutInputTapTarget(focusedField, equals: focusTarget)
         .background(
-            AppTheme.fieldFill,
+            AppTheme.fieldSurface,
             in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
                 .strokeBorder(
-                    focusedField.wrappedValue == focusTarget ? AppTheme.accentBright.opacity(0.7) : .clear,
+                    focusedField.wrappedValue == focusTarget ? AppTheme.brandFocus : .clear,
                     lineWidth: 1.5
                 )
         )

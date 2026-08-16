@@ -17,7 +17,7 @@ making surface depth intentional in light and dark appearances.
    canvas, grouped, focus, field, border, accent, status, and text roles rather
    than choosing screen-specific colors.
 2. Implement the cataloged accent roles: canonical cobalt for fills and
-   `#2478F2` only as the accessible dark foreground for small inline cobalt
+   `#4D94FF` only as the accessible dark foreground for small inline cobalt
    content.
 3. Apply the approved light and dark canvas, grouped, focus, field, border, and
    glass-adjacent hierarchy through shared roles and existing shared

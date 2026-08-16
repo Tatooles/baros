@@ -30,14 +30,14 @@ struct StartWorkoutView: View {
                     SurfaceCard {
                         HStack(spacing: 14) {
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(AppTheme.accentGradient)
+                                .fill(AppTheme.brandAccentGradient)
                                 .frame(width: 56, height: 56)
                                 .overlay {
                                     Image(systemName: "plus")
                                         .font(.title2.weight(.bold))
-                                        .foregroundStyle(AppTheme.onAccent)
+                                        .foregroundStyle(AppTheme.onBrandAccent)
                                 }
-                                .shadow(color: AppTheme.accentGlow, radius: 10, y: 4)
+                                .shadow(color: AppTheme.brandAccentGlow, radius: 10, y: 4)
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Blank Workout")
@@ -67,7 +67,7 @@ struct StartWorkoutView: View {
             }
             .padding(AppTheme.shellPadding)
         }
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .sheet(item: $selectedPastWorkoutSession) { session in
             StartFromPastWorkoutSheet(session: session) {
@@ -120,9 +120,9 @@ private struct StartFromPastWorkoutSheet: View {
         VStack(spacing: 20) {
             Image(systemName: "square.on.square")
                 .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(AppTheme.accentBright)
+                .foregroundStyle(AppTheme.brandAccentForeground)
                 .frame(width: 56, height: 56)
-                .background(AppTheme.accentMuted, in: Circle())
+                .background(AppTheme.brandAccentMuted, in: Circle())
                 .padding(.top, 22)
 
             VStack(spacing: 8) {
@@ -161,7 +161,7 @@ private struct StartFromPastWorkoutSheet: View {
                     .padding(.vertical, 8)
             }
             .buttonStyle(.glassProminent)
-            .tint(AppTheme.accentBright)
+            .tint(AppTheme.brandAccentFill)
             .accessibilityIdentifier("StartFromPastWorkoutConfirmButton")
 
             Button("Cancel") {

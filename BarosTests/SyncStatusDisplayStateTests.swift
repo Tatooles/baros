@@ -56,7 +56,7 @@ final class SyncStatusDisplayStateTests: XCTestCase {
         XCTAssertEqual(state.subtitle, "Cloud sync could not finish. Your data is saved on this iPhone.")
         XCTAssertEqual(state.detailText, "1 failed, 2 waiting. Last synced 1 min ago.")
         XCTAssertEqual(state.trailingText, "Retry")
-        XCTAssertEqual(state.tint, .attention)
+        XCTAssertEqual(state.tint, .destructive)
         XCTAssertTrue(state.canRetry)
         XCTAssertTrue(state.showsGlobalFailureNotice)
         XCTAssertEqual(state.userVisibleFailureMessage, "Cloud sync could not finish. Your data is saved on this iPhone.")

@@ -56,7 +56,7 @@ struct DeleteDataConfirmationView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 30, weight: .semibold))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(AppTheme.destructiveForeground)
 
                     Text(mode.warningText)
                         .font(.body)
@@ -74,7 +74,7 @@ struct DeleteDataConfirmationView: View {
             if case .failed(let message) = coordinator.phase {
                 Section {
                     Text(message)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(AppTheme.destructiveForeground)
                         .accessibilityIdentifier("DeleteDataErrorMessage")
                 }
             }
@@ -103,7 +103,7 @@ struct DeleteDataConfirmationView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle(mode.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(coordinator.phase.isRunning)

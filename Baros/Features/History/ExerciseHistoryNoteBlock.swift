@@ -16,7 +16,7 @@ struct ExerciseHistoryNoteBlock: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(AppTheme.surfaceMuted)
+            .background(AppTheme.recessedSurface)
             .clipShape(RoundedRectangle(cornerRadius: 14))
         }
     }

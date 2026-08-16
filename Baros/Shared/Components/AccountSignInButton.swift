@@ -16,8 +16,8 @@ struct AccountSignInButton: View {
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
-            .background(AppTheme.accentGradient)
-            .foregroundStyle(AppTheme.onAccent)
+            .background(AppTheme.brandAccentGradient)
+            .foregroundStyle(AppTheme.onBrandAccent)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
