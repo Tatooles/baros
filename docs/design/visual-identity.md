@@ -103,10 +103,12 @@ literal inversions.
 | Border or divider | Blue-black at about 9% opacity | White at about 11% opacity | Only when spacing and surface contrast do not establish the boundary |
 | Glass-adjacent chrome | Native platform material | Native platform material | Preserve system material behavior; do not tint glass navy or cobalt |
 
-App-owned custom colors need light, dark, and increased-contrast variants when
-the standard pair does not remain sufficiently distinct. System-owned sheets,
-menus, popovers, and navigation presentations remain adaptive rather than
-being forced onto the branded canvas.
+App-owned custom colors need increased-contrast variants when the standard pair
+does not remain sufficiently distinct. Issue #170 establishes the standard
+light and dark tokens; app-wide Increased Contrast evaluation and any dedicated
+token variants are tracked by the [accessibility audit in #140](https://github.com/Tatooles/baros/issues/140).
+System-owned sheets, menus, popovers, lists, separators, and navigation
+presentations remain adaptive rather than being forced onto the branded canvas.
 
 ## Cobalt roles
 
@@ -155,8 +157,10 @@ the interaction target. An additional decorative card around a heading and
 that field is not. Prefer spacing, alignment, and a restrained divider over
 another rounded rectangle.
 
-For issue #170, Workout Notes is a heading plus one neutral editor directly on
-the canvas; it does not have an additional outer card. Exercise Notes behavior,
+For issue #170's Active Workout surface, Workout Notes is a heading plus one
+neutral editor directly on the canvas; it does not have an additional outer
+card. The completed-workout History editor retains its existing containment
+until that screen receives a holistic surface update. Exercise Notes behavior,
 its progressive disclosure, set-grid treatment, and the Weight/Reps interaction
 model belong to issue #179 and are not changed by this rule in #170.
 
@@ -191,8 +195,9 @@ must not alter the icon package or substitute a generated appearance sheet.
 - Do not rely on cobalt, red, or green as the sole indicator of selection,
   completion, failure, or success. Pair color with text, shape, placement, or a
   symbol.
-- Verify standard and increased contrast in both appearances.
-- Verify Reduce Transparency separately and together with Increase Contrast.
+- Verify the standard tokens in both light and dark appearances for #170.
+- Track app-wide Increased Contrast and combined Reduce Transparency coverage,
+  including any dedicated custom-color variants, through #140.
 - Use a grayscale or Differentiate Without Color pass to find color-only state.
 - Perform a representative enlarged Dynamic Type pass for clipping and lost
   hierarchy.

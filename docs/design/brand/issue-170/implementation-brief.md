@@ -25,8 +25,9 @@ making surface depth intentional in light and dark appearances.
 4. Replace only brand-accent red usage. Preserve destructive/error red and
    success green.
 5. Update the app Accent Color asset to the approved cobalt role.
-6. Remove the redundant outer `SurfaceCard` from Workout Notes while keeping
-   its heading, editor, focus, draft, persistence, and reference-note behavior.
+6. Remove the redundant outer `SurfaceCard` from Active Workout's Workout Notes
+   while keeping its heading, editor, focus, draft, persistence, and
+   reference-note behavior.
 7. Verify that the app target and relevant configurations continue to use the
    production `Baros/AppIcon.icon` package established by #169.
 8. Visually review every surface named by the live issue acceptance criteria.
@@ -62,7 +63,9 @@ not a pixel-perfect #170 specification.
    border, or system-owned material before changing it.
 3. Establish the semantic token values and update shared consumers first.
 4. Migrate remaining in-scope brand-accent uses without per-screen hex values.
-5. Flatten only the Workout Notes outer containment.
+5. Flatten only the Active Workout Notes outer containment. Retain the existing
+   completed-workout History editor containment until a holistic History
+   surface update.
 6. Regenerate the Xcode project and confirm any changed files or tests are
    discovered.
 7. Run focused verification, the full relevant suite, builds, and the visual
@@ -108,8 +111,10 @@ than functioning as a fallback.
   against the actual composited background.
 - Use `3:1` only for applicable large/bold text exceptions or appropriate
   non-text state boundaries; aim toward `7:1` for small custom text.
-- Test light and dark with Increase Contrast.
-- Test Reduce Transparency separately and together with Increase Contrast.
+- Test the standard tokens in light and dark for #170.
+- Defer app-wide Increased Contrast and combined Reduce Transparency coverage,
+  including dedicated custom-color variants, to the accessibility audit in
+  #140.
 - Confirm selected, completed, destructive/error, and success states remain
   understandable in grayscale or with Differentiate Without Color.
 - Perform one representative enlarged Dynamic Type pass.
