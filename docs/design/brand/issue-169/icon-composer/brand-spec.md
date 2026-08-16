@@ -39,8 +39,7 @@ this table and the app/site tokens together.
 
 | Role | Default | Dark | Mono |
 | --- | --- | --- | --- |
-| Background top | `#0D1B2A` | `#0A0C10` | system appearance |
-| Background bottom | `#08121D` | `#050608` | system appearance |
+| Background | `#09121D` | `#080A0D` | system appearance |
 | Primary mark | `#F3EBE7` | `#F7F7F5` | `#FFFFFF` |
 | Plates | `#1C66C7` | `#1768E5` | `#8A8D95` |
 
@@ -50,17 +49,21 @@ this table and the app/site tokens together.
   prominent app controls, marketing-site links, and primary calls to action.
 - **Dark cobalt (`#1768E5`)** — Dark-icon plate override and dark-surface
   accent where the baseline cobalt loses perceived contrast.
-- **Charcoal (`#0D1B2A` and `#08121D`)** — Icon backdrop and branded app/site
-  hero or feature surfaces. It does not replace semantic system backgrounds.
+- **Blue-black (`#09121D`)** — Solid Default icon backdrop and branded
+  app/site hero or feature surfaces. It does not replace semantic system
+  backgrounds.
+- **Near-black (`#080A0D`)** — Solid Dark icon backdrop.
 - **Warm silver (`#F3EBE7`)** — Default icon mark and display content on
-  branded charcoal surfaces. It does not replace semantic system text colors.
+  branded blue-black surfaces. It does not replace semantic system text colors.
 - **Neutral white and gray (`#FFFFFF` and `#8A8D95`)** — Mono hierarchy used
   by Icon Composer to derive clear and tinted appearances.
 
 ## Icon Composer setup
 
 1. Create a new icon document with shared square platforms and watchOS enabled.
-2. Set the canvas background to the Default gradient above.
+2. Set the canvas background to the solid Default color above. Do not recreate
+   the faint raster lighting variation as a gradient; Icon Composer owns any
+   material depth and illumination.
 3. Import `01-mark.svg`, then `02-plates.svg`, without translation or scaling.
 4. Keep the plate layer above the mark layer.
 5. Configure the Default, Dark, and Mono color overrides from the table.
