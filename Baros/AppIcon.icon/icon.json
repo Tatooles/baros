@@ -1,79 +1,60 @@
 {
-  "fill" : {
-    "linear-gradient" : [
-      "display-p3:0.09058,0.09442,0.10217,1.00000",
-      "display-p3:0.05258,0.05634,0.06384,1.00000"
-    ],
-    "orientation" : {
-      "start" : {
-        "x" : 0.5,
-        "y" : 0
-      },
-      "stop" : {
-        "x" : 0.5,
-        "y" : 0.7
+  "fill-specializations" : [
+    {
+      "value" : {
+        "solid" : "srgb:0.03529,0.07059,0.11373,1.00000"
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "solid" : "srgb:0.02961,0.03955,0.05217,1.00000"
       }
     }
-  },
+  ],
   "groups" : [
     {
       "layers" : [
         {
-          "image-name" : "dumbbell.svg",
-          "name" : "dumbbell",
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              0,
-              35
-            ]
-          }
-        }
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
-    },
-    {
-      "layers" : [
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "srgb:0.09020,0.40784,0.89804,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:0.54118,0.55294,0.58431,1.00000"
+              }
+            }
+          ],
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "02-plates.svg",
+          "name" : "02-plates"
+        },
         {
-          "image-name" : "log-dots.svg",
-          "name" : "log-dots",
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              0,
-              35
-            ]
-          }
-        }
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
-    },
-    {
-      "layers" : [
-        {
-          "image-name" : "log-lines.svg",
-          "name" : "log-lines",
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              0,
-              35
-            ]
-          }
+          "blend-mode" : "normal",
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "srgb:0.96863,0.96863,0.96078,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ],
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "01-mark.svg",
+          "name" : "01-mark"
         }
       ],
       "shadow" : {
