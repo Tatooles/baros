@@ -32,6 +32,7 @@ enum AppReleaseCatalog {
             whatsNewSheet: .version1_0
         ),
         AppReleaseDefinition(version: "1.1", whatsNewSheet: nil),
+        AppReleaseDefinition(version: "1.2", whatsNewSheet: nil),
     ]
 
     static func release(for version: String) -> AppReleaseDefinition? {
