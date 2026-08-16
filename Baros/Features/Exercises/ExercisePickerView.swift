@@ -67,7 +67,6 @@ private struct ExercisePickerList: View {
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(AppTheme.brandAccentForeground)
                 }
-                .listRowBackground(AppTheme.groupedSurface)
             }
 
             Section {
@@ -81,7 +80,6 @@ private struct ExercisePickerList: View {
                     .accessibilityIdentifier(
                         "ExercisePickerRow-\(row.exercise.name)-\(row.exercise.equipment.displayName)"
                     )
-                    .listRowBackground(AppTheme.groupedSurface)
                 }
             } header: {
                 HStack {
