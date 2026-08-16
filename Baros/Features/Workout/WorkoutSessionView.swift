@@ -110,9 +110,9 @@ struct WorkoutSessionView: View {
                     } label: {
                         Label("Add Exercise", systemImage: "plus")
                             .font(.headline)
-                            .foregroundStyle(AppTheme.accentBright)
+                            .foregroundStyle(AppTheme.brandAccentForeground)
                             .frame(maxWidth: .infinity, minHeight: 50)
-                            .background(AppTheme.accentMuted, in: Capsule())
+                            .background(AppTheme.brandAccentMuted, in: Capsule())
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -263,7 +263,7 @@ struct WorkoutSessionView: View {
                 }
             }
         }
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $isFinishSheetPresented) {
             FinishWorkoutSheet(session: session, engine: engine)
@@ -423,53 +423,51 @@ private struct WorkoutNotesDraftCard: View {
     @State private var draft: String?
 
     var body: some View {
-        SurfaceCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("WORKOUT NOTES")
+        VStack(alignment: .leading, spacing: 8) {
+            Text("WORKOUT NOTES")
+                .font(.caption2.weight(.bold))
+                .tracking(1.8)
+                .foregroundStyle(AppTheme.textSecondary)
+            TextField(
+                "How did this session feel? Any notes for next time...",
+                text: Binding(
+                    get: { draft ?? notes },
+                    set: { draft = $0 }
+                ),
+                axis: .vertical
+            )
+            .font(.subheadline)
+            .foregroundStyle(AppTheme.textPrimary)
+            .lineLimit(4...6)
+            .focused(focusedField, equals: .workoutNotes)
+            .padding(12)
+            .workoutInputTapTarget(focusedField, equals: .workoutNotes)
+            .background(
+                AppTheme.fieldSurface,
+                in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                    .strokeBorder(
+                        focusedField.wrappedValue == .workoutNotes ? AppTheme.brandFocus : .clear,
+                        lineWidth: 1.5
+                    )
+            )
+            .animation(.easeOut(duration: 0.15), value: focusedField.wrappedValue == .workoutNotes)
+            .id(WorkoutField.workoutNotes)
+
+            if let referenceNotes {
+                Divider()
+                    .padding(.vertical, 4)
+
+                Text("LAST TIME")
                     .font(.caption2.weight(.bold))
-                    .tracking(1.8)
+                    .tracking(1.4)
+                    .foregroundStyle(AppTheme.textTertiary)
+                Text(referenceNotes)
+                    .font(.footnote)
                     .foregroundStyle(AppTheme.textSecondary)
-                TextField(
-                    "How did this session feel? Any notes for next time...",
-                    text: Binding(
-                        get: { draft ?? notes },
-                        set: { draft = $0 }
-                    ),
-                    axis: .vertical
-                )
-                .font(.subheadline)
-                .foregroundStyle(AppTheme.textPrimary)
-                .lineLimit(4...6)
-                .focused(focusedField, equals: .workoutNotes)
-                .padding(12)
-                .workoutInputTapTarget(focusedField, equals: .workoutNotes)
-                .background(
-                    AppTheme.fieldFill,
-                    in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                        .strokeBorder(
-                            focusedField.wrappedValue == .workoutNotes ? AppTheme.accentBright.opacity(0.7) : .clear,
-                            lineWidth: 1.5
-                        )
-                )
-                .animation(.easeOut(duration: 0.15), value: focusedField.wrappedValue == .workoutNotes)
-                .id(WorkoutField.workoutNotes)
-
-                if let referenceNotes {
-                    Divider()
-                        .padding(.vertical, 4)
-
-                    Text("LAST TIME")
-                        .font(.caption2.weight(.bold))
-                        .tracking(1.4)
-                        .foregroundStyle(AppTheme.textTertiary)
-                    Text(referenceNotes)
-                        .font(.footnote)
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .onChange(of: focusedField.wrappedValue) { previousField, newField in

@@ -47,7 +47,7 @@ struct SettingsAccountSection: View {
                     }
                 } icon: {
                     Image(systemName: "stethoscope")
-                        .foregroundStyle(AppTheme.accentBright)
+                        .foregroundStyle(AppTheme.brandAccentForeground)
                 }
             }
             .accessibilityIdentifier("SettingsDeveloperDiagnosticsRow")
@@ -96,9 +96,11 @@ struct SettingsAccountSection: View {
         case .secondary:
             return .secondary
         case .attention:
-            return AppTheme.accentBright
+            return AppTheme.brandAccentForeground
+        case .destructive:
+            return AppTheme.destructiveForeground
         case .success:
-            return AppTheme.success
+            return AppTheme.successForeground
         }
     }
 }

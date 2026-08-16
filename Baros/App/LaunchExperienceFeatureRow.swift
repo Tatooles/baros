@@ -11,7 +11,7 @@ struct LaunchExperienceFeatureRow: View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: systemImage)
                 .font(.title3.weight(.semibold))
-                .foregroundStyle(AppTheme.accentBright)
+                .foregroundStyle(AppTheme.brandAccentForeground)
                 .frame(width: 28)
                 .accessibilityHidden(true)
 

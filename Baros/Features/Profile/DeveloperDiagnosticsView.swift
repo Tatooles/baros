@@ -97,7 +97,7 @@ struct DeveloperDiagnosticsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle("Developer Diagnostics")
         .navigationBarTitleDisplayMode(.inline)
         .task {

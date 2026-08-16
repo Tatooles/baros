@@ -79,7 +79,7 @@ struct ExerciseQuickHistorySheet: View {
                                     showFullHistory(historyRoute)
                                 }
                                 .buttonStyle(.plain)
-                                .foregroundStyle(AppTheme.accentBright)
+                                .foregroundStyle(AppTheme.brandAccentForeground)
                                 .accessibilityIdentifier("QuickHistoryViewAllButton")
                             }
                             .font(.footnote.weight(.medium))
@@ -90,7 +90,7 @@ struct ExerciseQuickHistorySheet: View {
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.vertical, 16)
             }
-            .background(AppTheme.subtleBackground.ignoresSafeArea())
+            .background(AppTheme.canvasBackground.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

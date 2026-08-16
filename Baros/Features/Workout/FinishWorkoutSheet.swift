@@ -90,7 +90,7 @@ struct FinishWorkoutSheet: View {
                     .padding(.vertical, 8)
             }
             .buttonStyle(.glassProminent)
-            .tint(AppTheme.accentBright)
+            .tint(AppTheme.brandAccentFill)
             .accessibilityIdentifier("SaveWorkoutButton")
 
             Button("Keep Going") {
@@ -106,7 +106,7 @@ struct FinishWorkoutSheet: View {
             } label: {
                 Text("Discard Workout")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.accentBright)
+                    .foregroundStyle(AppTheme.destructiveForeground)
             }
             .padding(.bottom, 8)
         }

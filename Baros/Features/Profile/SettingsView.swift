@@ -43,7 +43,7 @@ struct SettingsView: View {
             appInfoSection
         }
         .scrollContentBackground(.hidden)
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .alert(item: $alert) { alert in

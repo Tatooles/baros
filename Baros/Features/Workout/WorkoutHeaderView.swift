@@ -16,7 +16,7 @@ struct WorkoutHeaderView: View {
             HStack(spacing: 10) {
                 HStack(spacing: 7) {
                     Circle()
-                        .fill(AppTheme.accentBright)
+                        .fill(AppTheme.brandAccentFill)
                         .frame(width: 7, height: 7)
                     Text(AppTheme.formatDuration(elapsedSeconds))
                         .font(.subheadline.weight(.semibold).monospacedDigit())
@@ -32,7 +32,7 @@ struct WorkoutHeaderView: View {
                 HStack(spacing: 10) {
                     ProgressView(value: progressValue)
                         .progressViewStyle(.linear)
-                        .tint(AppTheme.accentBright)
+                        .tint(AppTheme.brandAccentFill)
                     Text("\(completedSets)/\(totalSets)")
                         .font(.subheadline.weight(.semibold).monospacedDigit())
                         .foregroundStyle(AppTheme.textSecondary)
@@ -58,7 +58,7 @@ struct WorkoutHeaderView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.body.weight(.semibold))
                     }
-                    .foregroundStyle(AppTheme.accentBright)
+                    .foregroundStyle(AppTheme.brandAccentForeground)
                     .padding(.horizontal, 12)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Capsule())

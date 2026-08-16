@@ -67,11 +67,11 @@ struct ReorderExercisesSheet: View {
                     .frame(minHeight: 68)
                     .background(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(AppTheme.surface)
+                            .fill(AppTheme.groupedSurface)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(AppTheme.border)
+                            .stroke(AppTheme.subtleBorder)
                     )
                     .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .accessibilityElement(children: .combine)
@@ -85,7 +85,7 @@ struct ReorderExercisesSheet: View {
                 .onMove(perform: moveExercises)
             }
             .scrollContentBackground(.hidden)
-            .background(AppTheme.subtleBackground.ignoresSafeArea())
+            .background(AppTheme.canvasBackground.ignoresSafeArea())
             .accessibilityIdentifier("ReorderExercisesList")
             .environment(\.editMode, $editMode)
             .navigationTitle("Reorder Exercises")

@@ -4,46 +4,76 @@ import UIKit
 enum AppTheme {
     // MARK: Backgrounds
 
-    static let background = dynamicColor(
-        light: UIColor(red: 0.949, green: 0.945, blue: 0.941, alpha: 1),
-        dark: UIColor(red: 0.051, green: 0.051, blue: 0.055, alpha: 1)
+    static let appCanvas = dynamicColor(
+        light: uiColor(0xF7F6F3),
+        dark: uiColor(0x000000)
     )
-    static let backgroundTop = dynamicColor(
-        light: UIColor(red: 0.973, green: 0.965, blue: 0.957, alpha: 1),
-        dark: UIColor(red: 0.094, green: 0.090, blue: 0.094, alpha: 1)
+    static let groupedSurface = dynamicColor(
+        light: uiColor(0xFFFFFF),
+        dark: uiColor(0x1C1C1E)
+    )
+    static let recessedSurface = dynamicColor(
+        light: uiColor(0xF2F2F4),
+        dark: uiColor(0x242426)
+    )
+    static let fieldSurface = dynamicColor(
+        light: uiColor(0xECECF0),
+        dark: uiColor(0x2C2C2E)
+    )
+    static let subtleBorder = dynamicColor(
+        light: uiColor(0x09121D, alpha: 0.09),
+        dark: uiColor(0xFFFFFF, alpha: 0.11)
+    )
+    static let surfaceShadow = dynamicColor(
+        light: uiColor(0x000000, alpha: 0.07),
+        dark: uiColor(0x000000, alpha: 0.18)
     )
 
-    /// Opaque surface for contexts where glass/material isn't appropriate.
-    static let surface = Color(.secondarySystemGroupedBackground)
-    /// Recessed fill for grouped content inside a card.
-    static let surfaceMuted = Color(.tertiarySystemFill)
-    /// Recessed fill for input fields inside a card.
-    static let surfaceStrong = Color(.quaternarySystemFill)
-    /// Fill for editable fields inside a card — stronger than surfaceMuted so
-    /// inputs read as the primary content.
-    static let fieldFill = Color(.secondarySystemFill)
+    static let focusSurface = LinearGradient(
+        colors: [
+            dynamicColor(light: uiColor(0xFFFFFF), dark: uiColor(0x0A0C10)),
+            dynamicColor(light: uiColor(0xFAFAFA), dark: uiColor(0x050608)),
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
 
-    static let border = Color(.separator).opacity(0.5)
-    static let borderStrong = Color(.separator)
+    static let canvasBackground = appCanvas
 
     // MARK: Accent
 
-    static let accent = dynamicColor(
-        light: UIColor(red: 0.753, green: 0.224, blue: 0.169, alpha: 1),
-        dark: UIColor(red: 0.753, green: 0.224, blue: 0.169, alpha: 1)
+    static let brandAccentFill = dynamicColor(
+        light: uiColor(0x1C66C7),
+        dark: uiColor(0x1768E5)
     )
-    static let accentBright = dynamicColor(
-        light: UIColor(red: 0.835, green: 0.247, blue: 0.188, alpha: 1),
-        dark: UIColor(red: 0.910, green: 0.298, blue: 0.239, alpha: 1)
+    static let brandAccentForeground = dynamicColor(
+        light: uiColor(0x1C66C7),
+        dark: uiColor(0x4D94FF)
     )
-    static let accentMuted = accent.opacity(0.18)
-    static let accentGlow = accent.opacity(0.34)
+    static let brandAccentMuted = dynamicColor(
+        light: uiColor(0x1C66C7, alpha: 0.08),
+        dark: uiColor(0x1768E5, alpha: 0.16)
+    )
+    static let brandFocus = brandAccentForeground
+    static let brandAccentGlow = dynamicColor(
+        light: uiColor(0x1C66C7, alpha: 0.24),
+        dark: uiColor(0x1768E5, alpha: 0.28)
+    )
+    static let destructive = Color(.systemRed)
+    static let destructiveForeground = dynamicColor(
+        light: uiColor(0xB42318),
+        dark: uiColor(0xFF6961)
+    )
     static let success = Color(.systemGreen)
+    static let successForeground = dynamicColor(
+        light: uiColor(0x1B6E2A),
+        dark: uiColor(0x4CD964)
+    )
 
-    /// Foreground for content sitting on `accent`/`accentGradient` fills. Fixed
-    /// white rather than the adaptive label color, since the accent red reads
-    /// well with white in both light and dark appearance.
-    static let onAccent = Color.white
+    /// Foreground for content sitting on `brandAccentFill` or
+    /// `brandAccentGradient`.
+    static let onBrandAccent = Color.white
+    static let onDestructive = Color.white
 
     // MARK: Text
 
@@ -51,17 +81,10 @@ enum AppTheme {
     static let textSecondary = Color(.secondaryLabel)
     static let textTertiary = Color(.tertiaryLabel)
 
-    static let accentGradient = LinearGradient(
-        colors: [accent, accentBright],
+    static let brandAccentGradient = LinearGradient(
+        colors: [Color(uiColor(0x1C66C7)), Color(uiColor(0x1768E5))],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
-    )
-
-    /// Soft page background that content floats above.
-    static let subtleBackground = LinearGradient(
-        colors: [backgroundTop, background],
-        startPoint: .top,
-        endPoint: .bottom
     )
 
     // MARK: Metrics
@@ -82,5 +105,14 @@ enum AppTheme {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark ? dark : light
         })
+    }
+
+    private static func uiColor(_ hex: UInt32, alpha: CGFloat = 1) -> UIColor {
+        UIColor(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: alpha
+        )
     }
 }

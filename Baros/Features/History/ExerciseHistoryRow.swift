@@ -8,12 +8,12 @@ struct ExerciseHistoryRow: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(AppTheme.accentMuted)
+                    .fill(AppTheme.brandAccentMuted)
                     .frame(width: 48, height: 48)
                     .overlay {
                         Image(systemName: "dumbbell.fill")
                             .font(.system(size: 19))
-                            .foregroundStyle(AppTheme.accentBright)
+                            .foregroundStyle(AppTheme.brandAccentForeground)
                     }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -42,7 +42,7 @@ struct ExerciseHistoryRow: View {
 
             if showsDivider {
                 Rectangle()
-                    .fill(AppTheme.border)
+                    .fill(AppTheme.subtleBorder)
                     .frame(height: 1)
                     .padding(.leading, 14)
             }

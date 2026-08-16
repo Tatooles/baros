@@ -48,7 +48,7 @@ struct ExerciseLibraryView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle("Exercises")
         .searchable(text: $searchText)
         .toolbar {

@@ -59,11 +59,11 @@ struct WorkoutExerciseHeaderContent: View {
 
             Text("\(progress.completed)/\(progress.total)")
                 .font(.footnote.weight(.bold).monospacedDigit())
-                .foregroundStyle(progress.isComplete ? AppTheme.accentBright : AppTheme.textSecondary)
+                .foregroundStyle(progress.isComplete ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
-                    progress.isComplete ? AnyShapeStyle(AppTheme.accentMuted) : AnyShapeStyle(AppTheme.surfaceMuted),
+                    progress.isComplete ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(AppTheme.recessedSurface),
                     in: Capsule()
                 )
         }
@@ -104,12 +104,12 @@ struct WorkoutTitleField<Focus: Hashable>: View {
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             .workoutInputTapTarget(focusedField, equals: focusTarget)
             .background(
-                isFocused ? AnyShapeStyle(AppTheme.fieldFill) : AnyShapeStyle(Color.clear),
+                isFocused ? AnyShapeStyle(AppTheme.fieldSurface) : AnyShapeStyle(Color.clear),
                 in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                    .strokeBorder(isFocused ? AppTheme.accentBright.opacity(0.7) : .clear, lineWidth: 1.5)
+                    .strokeBorder(isFocused ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
             )
             .animation(.easeOut(duration: 0.15), value: isFocused)
             .id(focusTarget)
@@ -154,7 +154,7 @@ struct LabeledWorkoutTitleField<Focus: Hashable>: View {
                 } label: {
                     Image(systemName: "pencil")
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(isFocused ? AppTheme.accentBright : AppTheme.textSecondary)
+                        .foregroundStyle(isFocused ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                         .accessibilityIdentifier(editAffordanceIdentifier)
@@ -169,12 +169,12 @@ struct LabeledWorkoutTitleField<Focus: Hashable>: View {
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             .workoutInputTapTarget(focusedField, equals: focusTarget)
             .background(
-                AppTheme.fieldFill,
+                AppTheme.fieldSurface,
                 in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                    .strokeBorder(isFocused ? AppTheme.accentBright.opacity(0.7) : .clear, lineWidth: 1.5)
+                    .strokeBorder(isFocused ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
             )
             .animation(.easeOut(duration: 0.15), value: isFocused)
             .id(focusTarget)
@@ -207,13 +207,13 @@ struct WorkoutNumericTextField<Focus: Hashable>: View {
             .frame(maxWidth: .infinity)
             .workoutInputTapTarget(focusedField, equals: focusTarget)
             .background(
-                AppTheme.fieldFill,
+                AppTheme.fieldSurface,
                 in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
                     .strokeBorder(
-                        focusedField.wrappedValue == focusTarget ? AppTheme.accentBright.opacity(0.7) : .clear,
+                        focusedField.wrappedValue == focusTarget ? AppTheme.brandFocus : .clear,
                         lineWidth: 1.5
                     )
             )
@@ -246,13 +246,13 @@ struct WorkoutNotesField<Focus: Hashable>: View {
                     .padding(12)
                     .workoutInputTapTarget(focusedField, equals: focusTarget)
                     .background(
-                        AppTheme.fieldFill,
+                        AppTheme.fieldSurface,
                         in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
                             .strokeBorder(
-                                focusedField.wrappedValue == focusTarget ? AppTheme.accentBright.opacity(0.7) : .clear,
+                                focusedField.wrappedValue == focusTarget ? AppTheme.brandFocus : .clear,
                                 lineWidth: 1.5
                             )
                     )
@@ -273,7 +273,7 @@ struct WorkoutAddRowButton: View {
         Button(action: action) {
             Label(title, systemImage: "plus")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppTheme.accentBright)
+                .foregroundStyle(AppTheme.brandAccentForeground)
                 .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())

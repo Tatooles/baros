@@ -110,7 +110,7 @@ struct AppShellView: View {
             }
             .tag(AppTab.profile)
         }
-        .tint(AppTheme.accentBright)
+        .tint(AppTheme.brandAccentForeground)
         .safeAreaInset(edge: .bottom) {
             if shouldShowGlobalSyncFailureBanner {
                 GlobalSyncFailureBanner(
@@ -206,7 +206,7 @@ private struct GlobalSyncFailureBanner: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "exclamationmark.icloud")
-                    .foregroundStyle(AppTheme.accentBright)
+                    .foregroundStyle(AppTheme.destructiveForeground)
                     .font(.title3.weight(.semibold))
                     .accessibilityHidden(true)
 
@@ -235,7 +235,7 @@ private struct GlobalSyncFailureBanner: View {
             HStack(spacing: 8) {
                 Button("Retry", action: retry)
                     .buttonStyle(.glassProminent)
-                    .tint(AppTheme.accentBright)
+                    .tint(AppTheme.brandAccentFill)
                     .accessibilityIdentifier("GlobalSyncRetryButton")
                 Button("Details", action: details)
                     .buttonStyle(.glass)
@@ -247,7 +247,7 @@ private struct GlobalSyncFailureBanner: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(AppTheme.accentBright.opacity(0.4))
+                .strokeBorder(AppTheme.destructiveForeground)
         )
         .gesture(
             DragGesture(minimumDistance: 20)

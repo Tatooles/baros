@@ -43,10 +43,10 @@ struct ProfileView: View {
                     if AppEnvironmentConfiguration.current.environment == .development {
                         Text("DEV")
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(AppTheme.accentBright)
+                            .foregroundStyle(AppTheme.brandAccentForeground)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(AppTheme.accentBright.opacity(0.12), in: Capsule())
+                            .background(AppTheme.brandAccentMuted, in: Capsule())
                             .accessibilityIdentifier("ProfileEnvironmentBadge")
                     }
                     #endif
@@ -86,7 +86,7 @@ struct ProfileView: View {
             }
             .padding(AppTheme.shellPadding)
         }
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(for: ProfileRoute.self) { route in
             switch route {
@@ -173,9 +173,9 @@ private struct SettingsRouteView: View {
                 )
             } else {
                 ProgressView()
-                    .tint(AppTheme.accentBright)
+                    .tint(AppTheme.brandAccentFill)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(AppTheme.subtleBackground.ignoresSafeArea())
+                    .background(AppTheme.canvasBackground.ignoresSafeArea())
             }
         }
         .task(id: syncScheduler.currentOwnerTokenIdentifier) {

@@ -51,7 +51,7 @@ struct CompletedWorkoutEditView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 28)
             }
-            .background(AppTheme.subtleBackground.ignoresSafeArea())
+            .background(AppTheme.canvasBackground.ignoresSafeArea())
             .navigationTitle("Edit Workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -153,7 +153,7 @@ struct CompletedWorkoutEditView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "clock")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppTheme.accentBright)
+                        .foregroundStyle(AppTheme.brandAccentForeground)
                     Text("Duration")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppTheme.textSecondary)
@@ -168,7 +168,7 @@ struct CompletedWorkoutEditView: View {
                 .padding(.horizontal, 14)
                 .frame(minHeight: 48)
                 .background(
-                    AppTheme.fieldFill,
+                    AppTheme.fieldSurface,
                     in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
                 )
             }
@@ -280,7 +280,7 @@ struct CompletedWorkoutEditView: View {
                 } label: {
                     Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
                         .font(.title2)
-                        .foregroundStyle(isCompleted ? AppTheme.accentBright : AppTheme.textTertiary)
+                        .foregroundStyle(isCompleted ? AppTheme.brandAccentFill : AppTheme.textTertiary)
                         .frame(width: 44, height: 44)
                         .contentShape(Circle())
                 }
@@ -297,7 +297,7 @@ struct CompletedWorkoutEditView: View {
                 } label: {
                     Image(systemName: "trash")
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(AppTheme.accentBright)
+                        .foregroundStyle(AppTheme.destructiveForeground)
                         .frame(width: 34, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -491,7 +491,7 @@ private struct CompletedWorkoutDurationEditor: View {
                         )
 
                         Divider()
-                            .overlay(AppTheme.border)
+                            .overlay(AppTheme.subtleBorder)
 
                         durationStepper(
                             title: "Minutes",
@@ -516,7 +516,7 @@ private struct CompletedWorkoutDurationEditor: View {
                 Spacer()
             }
             .padding(AppTheme.shellPadding)
-            .background(AppTheme.subtleBackground.ignoresSafeArea())
+            .background(AppTheme.canvasBackground.ignoresSafeArea())
             .navigationTitle("Duration")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -562,7 +562,7 @@ private struct CompletedWorkoutDurationEditor: View {
                     .font(.title2)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(AppTheme.accentBright)
+            .foregroundStyle(AppTheme.brandAccentForeground)
             .accessibilityIdentifier(decrementIdentifier)
 
             Text("\(value)")
@@ -575,7 +575,7 @@ private struct CompletedWorkoutDurationEditor: View {
                     .font(.title2)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(AppTheme.accentBright)
+            .foregroundStyle(AppTheme.brandAccentForeground)
             .accessibilityIdentifier(incrementIdentifier)
 
             if let quickIncrement, let quickIncrementIdentifier {
@@ -597,10 +597,10 @@ private struct CompletedWorkoutDurationEditor: View {
         Button(action: action) {
             Text(title)
                 .font(.subheadline.weight(.bold).monospacedDigit())
-                .foregroundStyle(AppTheme.accentBright)
+                .foregroundStyle(AppTheme.brandAccentForeground)
                 .frame(width: 34, height: 34)
                 .background(
-                    AppTheme.accentMuted,
+                    AppTheme.brandAccentMuted,
                     in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
                 )
         }

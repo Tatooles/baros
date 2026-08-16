@@ -48,7 +48,7 @@ struct SetRowView: View {
             } label: {
                 Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
-                    .foregroundStyle(set.isCompleted ? AppTheme.accentBright : AppTheme.textTertiary)
+                    .foregroundStyle(set.isCompleted ? AppTheme.brandAccentFill : AppTheme.textTertiary)
                     .symbolEffect(.bounce, value: set.isCompleted)
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
@@ -136,10 +136,10 @@ struct SetRowView: View {
             } label: {
                 Text("@\(WorkoutFormatters.number(rpe))")
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(AppTheme.accentBright)
+                    .foregroundStyle(AppTheme.brandAccentForeground)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(AppTheme.accentMuted, in: Capsule())
+                    .background(AppTheme.brandAccentMuted, in: Capsule())
                     .offset(x: -4, y: 4)
             }
             .buttonStyle(.plain)

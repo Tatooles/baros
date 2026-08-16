@@ -6,7 +6,7 @@ struct LoadingStateView: View {
     var body: some View {
         VStack(spacing: 12) {
             ProgressView()
-                .tint(AppTheme.accentBright)
+                .tint(AppTheme.brandAccentFill)
             Text(title)
                 .foregroundStyle(AppTheme.textSecondary)
         }
@@ -45,7 +45,7 @@ struct ErrorStateView: View {
             VStack(spacing: 12) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 28))
-                    .foregroundStyle(AppTheme.accentBright)
+                    .foregroundStyle(AppTheme.destructiveForeground)
                 Text(title)
                     .font(.system(size: 20, weight: .bold))
                 Text(message)
@@ -53,7 +53,7 @@ struct ErrorStateView: View {
                     .foregroundStyle(AppTheme.textSecondary)
                 Button("Retry", action: retry)
                     .buttonStyle(.borderedProminent)
-                    .tint(AppTheme.accentBright)
+                    .tint(AppTheme.brandAccentFill)
             }
             .frame(maxWidth: .infinity)
         }

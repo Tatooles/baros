@@ -13,7 +13,7 @@ struct WhatsNewVersion1_0View: View {
                 VStack(spacing: 12) {
                     Image(systemName: "figure.strengthtraining.traditional")
                         .font(.system(size: 52, weight: .semibold))
-                        .foregroundStyle(AppTheme.accentBright)
+                        .foregroundStyle(AppTheme.brandAccentForeground)
                         .accessibilityHidden(true)
 
                     Text("What's new in Baros")
@@ -54,7 +54,7 @@ struct WhatsNewVersion1_0View: View {
             .padding(.horizontal, AppTheme.shellPadding + 8)
             .padding(.bottom, AppTheme.shellPadding)
         }
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .safeAreaInset(edge: .bottom) {
             Button(action: onDismiss) {
                 Text("Got It")
@@ -62,7 +62,7 @@ struct WhatsNewVersion1_0View: View {
             }
             .buttonStyle(.glassProminent)
             .controlSize(.large)
-            .tint(AppTheme.accentBright)
+            .tint(AppTheme.brandAccentFill)
             .padding(.horizontal, AppTheme.shellPadding + 8)
             .padding(.vertical, AppTheme.shellPadding)
             .accessibilityIdentifier("LaunchExperiencePrimaryButton")

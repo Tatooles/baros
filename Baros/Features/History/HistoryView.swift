@@ -57,7 +57,7 @@ struct HistoryView: View {
             }
             .padding(AppTheme.shellPadding)
         }
-        .background(AppTheme.subtleBackground.ignoresSafeArea())
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(for: HistoryRoute.self) { route in
             switch route {
@@ -69,7 +69,7 @@ struct HistoryView: View {
                         title: "No Exercise History",
                         message: "Completed sets for this exercise will appear here."
                     )
-                    .background(AppTheme.subtleBackground.ignoresSafeArea())
+                    .background(AppTheme.canvasBackground.ignoresSafeArea())
                 }
             }
         }

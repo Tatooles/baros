@@ -12,6 +12,7 @@ struct SyncStatusDisplayState {
     enum Tint: Equatable {
         case secondary
         case attention
+        case destructive
         case success
     }
 
@@ -85,7 +86,7 @@ struct SyncStatusDisplayState {
                     ?? fallbackDetailText,
                 trailingText: "Retry",
                 systemImage: "exclamationmark.icloud",
-                tint: .attention,
+                tint: .destructive,
                 canRetry: true,
                 showsGlobalFailureNotice: true,
                 failureNoticeTitle: failureCopy.noticeTitle,

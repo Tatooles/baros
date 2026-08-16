@@ -106,14 +106,14 @@ struct PrivacyDataSection: View {
                 Label {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(deletionAction.title)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(AppTheme.destructiveForeground)
                         Text(deletionAction.detail)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 } icon: {
                     Image(systemName: deletionAction.systemImage)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(AppTheme.destructiveForeground)
                 }
             }
             .accessibilityIdentifier(deletionAction.accessibilityIdentifier)
