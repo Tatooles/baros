@@ -81,7 +81,9 @@ struct ExerciseCardView: View {
                             showsRemoveConfirmation = true
                         } label: {
                             Label("Remove Exercise", systemImage: "trash")
+                                .foregroundStyle(AppTheme.destructiveForeground)
                         }
+                        .tint(AppTheme.destructiveForeground)
                         .accessibilityIdentifier("RemoveExerciseButton-\(exerciseIndex)")
                     } label: {
                         Image(systemName: "ellipsis")
