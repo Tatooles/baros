@@ -67,6 +67,7 @@ enum UITestFixtureSeeder {
             exerciseSnapshotName: "Bench Press",
             exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
             exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
+            notes: "Previous exercise narrative",
             createdAt: startedAt,
             updatedAt: endedAt,
             sets: [set]
@@ -76,6 +77,7 @@ enum UITestFixtureSeeder {
             startedAt: startedAt,
             endedAt: endedAt,
             durationSeconds: 3_600,
+            notes: "Previous workout narrative",
             status: .completed,
             source: .blank,
             createdAt: startedAt,

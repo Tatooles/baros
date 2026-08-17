@@ -186,6 +186,11 @@ struct LabeledWorkoutTitleField<Focus: Hashable>: View {
     }
 }
 
+enum WorkoutNumericFieldPresentation {
+    case well
+    case grid
+}
+
 struct WorkoutNumericTextField<Focus: Hashable>: View {
     let placeholder: String
     @Binding var text: String
@@ -194,6 +199,7 @@ struct WorkoutNumericTextField<Focus: Hashable>: View {
     var focusedField: FocusState<Focus?>.Binding
     let accessibilityIdentifier: String
     var verticalPadding: CGFloat = 12
+    var presentation: WorkoutNumericFieldPresentation = .well
 
     var body: some View {
         TextField(placeholder, text: $text)
@@ -203,23 +209,40 @@ struct WorkoutNumericTextField<Focus: Hashable>: View {
             .fontDesign(.rounded)
             .foregroundStyle(AppTheme.textPrimary)
             .focused(focusedField, equals: focusTarget)
+            .padding(.horizontal, presentation == .grid ? 4 : 0)
             .padding(.vertical, verticalPadding)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .workoutInputTapTarget(focusedField, equals: focusTarget)
-            .background(
-                AppTheme.fieldSurface,
-                in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                    .strokeBorder(
-                        focusedField.wrappedValue == focusTarget ? AppTheme.brandFocus : .clear,
-                        lineWidth: 1.5
-                    )
-            )
+            .background {
+                switch presentation {
+                case .well:
+                    RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                        .fill(AppTheme.fieldSurface)
+                case .grid:
+                    Rectangle()
+                        .fill(isFocused ? AppTheme.brandAccentMuted.opacity(0.45) : .clear)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if presentation == .grid, isFocused {
+                    Rectangle()
+                        .fill(AppTheme.brandFocus)
+                        .frame(height: 2)
+                }
+            }
+            .overlay {
+                if presentation == .well {
+                    RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                        .strokeBorder(isFocused ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
+                }
+            }
             .animation(.easeOut(duration: 0.15), value: focusedField.wrappedValue == focusTarget)
             .accessibilityIdentifier(accessibilityIdentifier)
             .id(focusTarget)
+    }
+
+    private var isFocused: Bool {
+        focusedField.wrappedValue == focusTarget
     }
 }
 

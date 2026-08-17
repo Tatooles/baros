@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SetRowView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let set: LoggedSet
     let exerciseIndex: Int
     let index: Int
@@ -25,11 +26,32 @@ struct SetRowView: View {
     }
 
     private var rowContent: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                accessibilityRowContent
+            } else {
+                standardRowContent
+            }
+        }
+        .onChange(of: focusedField.wrappedValue) { previousField, newField in
+            let ownFields: [WorkoutField] = [.setWeight(set.id), .setReps(set.id)]
+            if let previousField, ownFields.contains(previousField), previousField != newField {
+                commitDraftsIfNeeded()
+            }
+        }
+        .onDisappear {
+            // Rows can leave the tree mid-edit (collapse, delete, finish); the
+            // focus-change commit no longer fires for them, so flush here.
+            commitDraftsIfNeeded()
+        }
+    }
+
+    private var standardRowContent: some View {
         HStack(spacing: 10) {
             Text("\(index + 1)")
                 .font(.subheadline.weight(.semibold).monospacedDigit())
                 .foregroundStyle(AppTheme.textTertiary)
-                .frame(width: 18)
+                .frame(width: 28)
 
             previousColumn
 
@@ -57,16 +79,79 @@ struct SetRowView: View {
             .accessibilityLabel(set.isCompleted ? "Mark set incomplete" : "Mark set complete")
             .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
         }
-        .onChange(of: focusedField.wrappedValue) { previousField, newField in
-            let ownFields: [WorkoutField] = [.setWeight(set.id), .setReps(set.id)]
-            if let previousField, ownFields.contains(previousField), previousField != newField {
-                commitDraftsIfNeeded()
+    }
+
+    private var accessibilityRowContent: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 12) {
+                Text("Set \(index + 1)")
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(AppTheme.textPrimary)
+
+                previousColumn
+
+                Button {
+                    completeButtonTapped()
+                } label: {
+                    Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .font(.title2)
+                        .foregroundStyle(set.isCompleted ? AppTheme.brandAccentFill : AppTheme.textTertiary)
+                        .symbolEffect(.bounce, value: set.isCompleted)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(set.isCompleted ? "Mark set incomplete" : "Mark set complete")
+                .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("SetAccessibilityTopRow-\(exerciseIndex)-\(index)")
+
+            HStack(alignment: .top, spacing: 12) {
+                labeledNumericField(
+                    label: weightUnit.fieldLabel,
+                    labelIdentifier: "SetWeightLabel-\(exerciseIndex)-\(index)",
+                    placeholder: weightUnit.fieldPlaceholder,
+                    text: weightBinding,
+                    keyboard: .decimalPad,
+                    focusTarget: .setWeight(set.id),
+                    accessibilityIdentifier: "SetWeightField-\(exerciseIndex)-\(index)"
+                )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("REPS")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.textTertiary)
+                        .accessibilityIdentifier("SetRepsLabel-\(exerciseIndex)-\(index)")
+                    repsField
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("SetAccessibilityBottomRow-\(exerciseIndex)-\(index)")
         }
-        .onDisappear {
-            // Rows can leave the tree mid-edit (collapse, delete, finish); the
-            // focus-change commit no longer fires for them, so flush here.
-            commitDraftsIfNeeded()
+    }
+
+    private func labeledNumericField(
+        label: String,
+        labelIdentifier: String,
+        placeholder: String,
+        text: Binding<String>,
+        keyboard: UIKeyboardType,
+        focusTarget: WorkoutField,
+        accessibilityIdentifier: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.textTertiary)
+                .accessibilityIdentifier(labelIdentifier)
+            numericField(
+                placeholder: placeholder,
+                text: text,
+                keyboard: keyboard,
+                focusTarget: focusTarget,
+                accessibilityIdentifier: accessibilityIdentifier
+            )
         }
     }
 
@@ -161,7 +246,9 @@ struct SetRowView: View {
             keyboard: keyboard,
             focusTarget: focusTarget,
             focusedField: focusedField,
-            accessibilityIdentifier: accessibilityIdentifier
+            accessibilityIdentifier: accessibilityIdentifier,
+            verticalPadding: 8,
+            presentation: .grid
         )
     }
 

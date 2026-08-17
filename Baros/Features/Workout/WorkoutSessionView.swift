@@ -24,6 +24,7 @@ struct WorkoutSessionView: View {
     @State private var pendingScrollTarget: UUID?
     @State private var recentlyAddedExerciseID: UUID?
     @State private var collapsedExerciseIDs: Set<UUID> = []
+    @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
     @State private var rpeEditingSourceField: WorkoutField?
@@ -85,6 +86,7 @@ struct WorkoutSessionView: View {
                             exerciseIndex: exerciseIndex,
                             engine: engine,
                             isCollapsed: isCollapsedBinding(for: loggedExercise),
+                            isNoteRevealed: isNoteRevealedBinding(for: loggedExercise),
                             focusedField: $focusedField,
                             weightUnit: weightUnit,
                             previousSets: cachedPreviousSets[loggedExercise.id] ?? [],
@@ -120,7 +122,6 @@ struct WorkoutSessionView: View {
 
                     WorkoutNotesDraftCard(
                         notes: session.notes,
-                        referenceNotes: referenceNotes,
                         focusedField: $focusedField
                     ) { draft in
                         try? engine.updateWorkoutNotes(draft, session: session, context: modelContext)
@@ -285,13 +286,12 @@ struct WorkoutSessionView: View {
         }
     }
 
-    private var referenceNotes: String? {
-        let trimmed = session.referenceNotes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
     private var focusOrder: [WorkoutField] {
-        WorkoutFocusNavigator.focusOrder(for: session, collapsedExerciseIDs: collapsedExerciseIDs)
+        WorkoutFocusNavigator.focusOrder(
+            for: session,
+            collapsedExerciseIDs: collapsedExerciseIDs,
+            revealedExerciseNoteIDs: revealedExerciseNoteIDs
+        )
     }
 
     // The lookup scans completed history, so it is cached in @State and
@@ -355,9 +355,26 @@ struct WorkoutSessionView: View {
             get: { collapsedExerciseIDs.contains(loggedExercise.id) },
             set: { isCollapsed in
                 if isCollapsed {
+                    if focusedField == .exerciseNotes(loggedExercise.id) {
+                        focusedField = nil
+                    }
+                    revealedExerciseNoteIDs.remove(loggedExercise.id)
                     collapsedExerciseIDs.insert(loggedExercise.id)
                 } else {
                     collapsedExerciseIDs.remove(loggedExercise.id)
+                }
+            }
+        )
+    }
+
+    private func isNoteRevealedBinding(for loggedExercise: LoggedExercise) -> Binding<Bool> {
+        Binding(
+            get: { revealedExerciseNoteIDs.contains(loggedExercise.id) },
+            set: { isRevealed in
+                if isRevealed {
+                    revealedExerciseNoteIDs.insert(loggedExercise.id)
+                } else {
+                    revealedExerciseNoteIDs.remove(loggedExercise.id)
                 }
             }
         )
@@ -417,7 +434,6 @@ private struct WorkoutTitleDraftField: View {
 /// contract as WorkoutTitleDraftField.
 private struct WorkoutNotesDraftCard: View {
     let notes: String
-    let referenceNotes: String?
     var focusedField: FocusState<WorkoutField?>.Binding
     let commit: (String) -> Void
     @State private var draft: String?
@@ -456,19 +472,6 @@ private struct WorkoutNotesDraftCard: View {
             .animation(.easeOut(duration: 0.15), value: focusedField.wrappedValue == .workoutNotes)
             .id(WorkoutField.workoutNotes)
 
-            if let referenceNotes {
-                Divider()
-                    .padding(.vertical, 4)
-
-                Text("LAST TIME")
-                    .font(.caption2.weight(.bold))
-                    .tracking(1.4)
-                    .foregroundStyle(AppTheme.textTertiary)
-                Text(referenceNotes)
-                    .font(.footnote)
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .onChange(of: focusedField.wrappedValue) { previousField, newField in
             if previousField == .workoutNotes, newField != .workoutNotes {

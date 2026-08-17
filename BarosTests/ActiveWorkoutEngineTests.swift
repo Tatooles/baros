@@ -95,7 +95,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(copiedSets.map(\.rpe), [nil, nil])
     }
 
-    func testStartingFromPastCopiesTitleAndShowsPreviousNotesAsReferenceOnly() throws {
+    func testStartingFromPastLeavesReferenceNotesNil() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let exercise = Exercise(name: "Overhead Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .shoulders)
@@ -117,9 +117,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
 
         XCTAssertEqual(newSession.title, "Push Day")
         XCTAssertEqual(newSession.notes, "")
-        XCTAssertEqual(newSession.referenceNotes, "Shoulders felt rough")
+        XCTAssertNil(newSession.referenceNotes)
         XCTAssertEqual(newSession.loggedExercises.first?.notes, "")
-        XCTAssertEqual(newSession.loggedExercises.first?.referenceNotes, "Used wrist wraps")
+        XCTAssertNil(newSession.loggedExercises.first?.referenceNotes)
     }
 
     func testStartingFromPastReturnsExistingActiveSessionWithoutCloning() throws {

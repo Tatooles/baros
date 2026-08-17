@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class WorkoutFocusNavigatorTests: XCTestCase {
-    func testFocusOrderTraversesWholeWorkout() throws {
+    func testFocusOrderSkipsEmptyExerciseNotes() throws {
         let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
         let firstExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
         let secondExercise = LoggedExercise(orderIndex: 1, exerciseSnapshotName: "Row")
@@ -23,10 +23,8 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
             .setReps(firstSet.id),
             .setWeight(secondSet.id),
             .setReps(secondSet.id),
-            .exerciseNotes(firstExercise.id),
             .setWeight(thirdSet.id),
             .setReps(thirdSet.id),
-            .exerciseNotes(secondExercise.id),
             .workoutNotes
         ]
 
@@ -64,6 +62,33 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         )
     }
 
+    func testFocusOrderIncludesExistingAndExplicitlyRevealedNotes() {
+        let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
+        let existingNoteExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press", notes: "Pause reps")
+        let revealedEmptyExercise = LoggedExercise(orderIndex: 1, exerciseSnapshotName: "Row", notes: "  \n")
+        let firstSet = LoggedSet(orderIndex: 0)
+        let secondSet = LoggedSet(orderIndex: 0)
+        existingNoteExercise.sets = [firstSet]
+        revealedEmptyExercise.sets = [secondSet]
+        session.loggedExercises = [existingNoteExercise, revealedEmptyExercise]
+
+        let order = WorkoutFocusNavigator.focusOrder(
+            for: session,
+            revealedExerciseNoteIDs: [revealedEmptyExercise.id]
+        )
+
+        XCTAssertEqual(order, [
+            .workoutTitle,
+            .setWeight(firstSet.id),
+            .setReps(firstSet.id),
+            .exerciseNotes(existingNoteExercise.id),
+            .setWeight(secondSet.id),
+            .setReps(secondSet.id),
+            .exerciseNotes(revealedEmptyExercise.id),
+            .workoutNotes,
+        ])
+    }
+
     func testFocusOrderSkipsFieldsForCollapsedExercises() {
         let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
         let firstExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
@@ -83,7 +108,6 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
             .workoutTitle,
             .setWeight(secondSet.id),
             .setReps(secondSet.id),
-            .exerciseNotes(secondExercise.id),
             .workoutNotes
         ]
 

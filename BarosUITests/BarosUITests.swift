@@ -435,6 +435,11 @@ final class BarosUITests: XCTestCase {
         addBenchPress(in: app)
         dismissKeyboardIfNeeded(in: app)
 
+        let addNoteButton = app.buttons["AddExerciseNoteButton-0"]
+        XCTAssertTrue(addNoteButton.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.textFields["ExerciseNotesField-0"].exists)
+        addNoteButton.tap()
+
         let notesField = app.textFields["ExerciseNotesField-0"]
         for _ in 0..<6 where !notesField.exists || !notesField.isHittable {
             app.swipeUp()
@@ -449,6 +454,105 @@ final class BarosUITests: XCTestCase {
         let doneButton = app.buttons["DismissKeyboardButton"]
         XCTAssertTrue(doneButton.waitForExistence(timeout: 3))
         XCTAssertLessThan(notesField.frame.maxY, doneButton.frame.minY - 8)
+    }
+
+    @MainActor
+    func testEmptyExerciseNoteRevealsFocusesAndHidesOnlyAfterClearedNoteLosesFocus() {
+        let app = makeApp()
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        addBenchPress(in: app)
+        dismissKeyboardIfNeeded(in: app)
+
+        let addNoteButton = app.buttons["AddExerciseNoteButton-0"]
+        XCTAssertTrue(addNoteButton.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.textFields["ExerciseNotesField-0"].exists)
+
+        addNoteButton.tap()
+        let notesField = app.textFields["ExerciseNotesField-0"]
+        XCTAssertTrue(notesField.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+
+        notesField.typeText("Pause reps")
+        app.buttons["DismissKeyboardButton"].tap()
+        XCTAssertTrue(notesField.exists)
+
+        replaceText(in: notesField, with: "")
+        XCTAssertTrue(notesField.exists)
+        app.buttons["DismissKeyboardButton"].tap()
+
+        XCTAssertFalse(notesField.waitForExistence(timeout: 1))
+        XCTAssertTrue(addNoteButton.waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testAccessibilityDynamicTypeUsesBorderlessTwoRowSetLayout() {
+        let app = makeApp(extraArguments: [
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL",
+        ])
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        addBenchPress(in: app)
+        dismissKeyboardIfNeeded(in: app)
+
+        let topRow = app.descendants(matching: .any)["SetAccessibilityTopRow-0-0"]
+        let bottomRow = app.descendants(matching: .any)["SetAccessibilityBottomRow-0-0"]
+        XCTAssertTrue(topRow.waitForExistence(timeout: 3))
+        XCTAssertTrue(bottomRow.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["SetWeightLabel-0-0"].exists)
+        XCTAssertTrue(app.staticTexts["SetRepsLabel-0-0"].exists)
+        XCTAssertGreaterThanOrEqual(bottomRow.frame.minY, topRow.frame.maxY)
+        XCTAssertLessThanOrEqual(bottomRow.frame.maxX, app.windows.firstMatch.frame.maxX)
+    }
+
+    @MainActor
+    func testEmptyRevealedExerciseNoteReturnsToCompactStateAfterCollapse() {
+        let app = makeApp()
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        addBenchPress(in: app)
+        dismissKeyboardIfNeeded(in: app)
+        app.buttons["AddExerciseNoteButton-0"].tap()
+        XCTAssertTrue(app.textFields["ExerciseNotesField-0"].waitForExistence(timeout: 3))
+
+        app.buttons["ExerciseHeader-0"].tap()
+        app.buttons["ExerciseHeader-0"].tap()
+
+        XCTAssertFalse(app.textFields["ExerciseNotesField-0"].exists)
+        XCTAssertTrue(app.buttons["AddExerciseNoteButton-0"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testExistingExerciseNotePersistsAcrossBackgroundAndRelaunch() {
+        let app = makeDiskBackedResetApp()
+        app.launch()
+
+        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        addBenchPress(in: app)
+        dismissKeyboardIfNeeded(in: app)
+        app.buttons["AddExerciseNoteButton-0"].tap()
+        let notesField = app.textFields["ExerciseNotesField-0"]
+        XCTAssertTrue(notesField.waitForExistence(timeout: 3))
+        notesField.typeText("Pause reps")
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(notesField.waitForExistence(timeout: 3))
+        XCTAssertEqual(notesField.value as? String, "Pause reps")
+        app.terminate()
+
+        let relaunchedApp = makeDiskBackedApp()
+        relaunchedApp.launch()
+        let relaunchedNotesField = relaunchedApp.textFields["ExerciseNotesField-0"]
+        XCTAssertTrue(relaunchedNotesField.waitForExistence(timeout: 3))
+        XCTAssertEqual(relaunchedNotesField.value as? String, "Pause reps")
     }
 
     @MainActor
@@ -703,6 +807,22 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(app.textFields["SetRepsField-0-0"].value as? String, "5")
         XCTAssertTrue(app.buttons["SetCompletionButton-0-0"].exists)
         XCTAssertEqual(app.buttons["SetCompletionButton-0-0"].label, "Mark set complete")
+    }
+
+    @MainActor
+    func testStartingFromPastWorkoutDoesNotShowNarrativeReferenceNotes() {
+        let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
+        app.launch()
+
+        app.buttons["WorkoutTab"].tap()
+        XCTAssertTrue(app.buttons["PastWorkoutButton-0"].waitForExistence(timeout: 3))
+        app.buttons["PastWorkoutButton-0"].tap()
+        confirmStartFromPastWorkout(in: app)
+
+        XCTAssertTrue(app.buttons["SetPreviousValue-0-0"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["LAST TIME"].exists)
+        XCTAssertFalse(app.staticTexts["Previous exercise narrative"].exists)
+        XCTAssertFalse(app.staticTexts["Previous workout narrative"].exists)
     }
 
     @MainActor

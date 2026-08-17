@@ -89,7 +89,6 @@ final class ActiveWorkoutEngine {
             status: .active,
             source: .pastWorkout,
             sourceSessionID: pastSession.id,
-            referenceNotes: pastSession.notes,
             createdAt: now,
             updatedAt: now,
             syncOwnerTokenIdentifier: ownerTokenIdentifier
@@ -105,7 +104,6 @@ final class ActiveWorkoutEngine {
                 exerciseSnapshotName: pastLoggedExercise.exerciseSnapshotName,
                 exerciseSnapshotEquipmentRaw: resolvedEquipmentRaw,
                 exerciseSnapshotPrimaryMuscleGroupRaw: resolvedPrimaryMuscleGroupRaw,
-                referenceNotes: pastLoggedExercise.notes,
                 sourceLoggedExerciseID: pastLoggedExercise.id,
                 createdAt: now,
                 updatedAt: now
