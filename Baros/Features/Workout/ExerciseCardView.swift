@@ -275,7 +275,7 @@ private struct ExerciseNotesDraftField: View {
             Text("EXERCISE NOTE")
                 .font(.caption2.weight(.bold))
                 .tracking(1.4)
-                .foregroundStyle(isFocused ? AppTheme.brandFocus : AppTheme.textTertiary)
+                .foregroundStyle(isFocused ? AppTheme.brandAccentForeground : AppTheme.textTertiary)
 
             TextField(
                 "Exercise notes...",

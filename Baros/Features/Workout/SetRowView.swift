@@ -53,7 +53,7 @@ struct SetRowView: View {
                 .foregroundStyle(AppTheme.textTertiary)
                 .frame(width: 28)
 
-            previousColumn
+            previousColumn()
 
             numericField(
                 placeholder: weightUnit.fieldPlaceholder,
@@ -76,7 +76,13 @@ struct SetRowView: View {
                     .font(.headline.monospacedDigit())
                     .foregroundStyle(AppTheme.textPrimary)
 
-                previousColumn
+                labeledColumn(
+                    label: "PREVIOUS",
+                    labelIdentifier: "SetPreviousLabel-\(exerciseIndex)-\(index)"
+                ) {
+                    previousColumn(accessibilityLabelIncludesContext: false)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 completionButton
             }
@@ -84,21 +90,23 @@ struct SetRowView: View {
             .accessibilityIdentifier("SetAccessibilityTopRow-\(exerciseIndex)-\(index)")
 
             HStack(alignment: .top, spacing: 12) {
-                labeledNumericField(
+                labeledColumn(
                     label: weightUnit.fieldLabel,
-                    labelIdentifier: "SetWeightLabel-\(exerciseIndex)-\(index)",
-                    placeholder: weightUnit.fieldPlaceholder,
-                    text: weightBinding,
-                    keyboard: .decimalPad,
-                    focusTarget: .setWeight(set.id),
-                    accessibilityIdentifier: "SetWeightField-\(exerciseIndex)-\(index)"
-                )
+                    labelIdentifier: "SetWeightLabel-\(exerciseIndex)-\(index)"
+                ) {
+                    numericField(
+                        placeholder: weightUnit.fieldPlaceholder,
+                        text: weightBinding,
+                        keyboard: .decimalPad,
+                        focusTarget: .setWeight(set.id),
+                        accessibilityIdentifier: "SetWeightField-\(exerciseIndex)-\(index)"
+                    )
+                }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("REPS")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.textTertiary)
-                        .accessibilityIdentifier("SetRepsLabel-\(exerciseIndex)-\(index)")
+                labeledColumn(
+                    label: "REPS",
+                    labelIdentifier: "SetRepsLabel-\(exerciseIndex)-\(index)"
+                ) {
                     repsField
                 }
             }
@@ -107,27 +115,17 @@ struct SetRowView: View {
         }
     }
 
-    private func labeledNumericField(
+    private func labeledColumn<Content: View>(
         label: String,
         labelIdentifier: String,
-        placeholder: String,
-        text: Binding<String>,
-        keyboard: UIKeyboardType,
-        focusTarget: WorkoutField,
-        accessibilityIdentifier: String
+        @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(AppTheme.textTertiary)
                 .accessibilityIdentifier(labelIdentifier)
-            numericField(
-                placeholder: placeholder,
-                text: text,
-                keyboard: keyboard,
-                focusTarget: focusTarget,
-                accessibilityIdentifier: accessibilityIdentifier
-            )
+            content()
         }
     }
 
@@ -165,7 +163,7 @@ struct SetRowView: View {
         return commit
     }
 
-    private var previousColumn: some View {
+    private func previousColumn(accessibilityLabelIncludesContext: Bool = true) -> some View {
         Button {
             guard let previous, !set.isCompleted else { return }
             fillFromPrevious(previous)
@@ -181,7 +179,15 @@ struct SetRowView: View {
         .buttonStyle(.plain)
         .disabled(previous == nil || set.isCompleted)
         .accessibilityIdentifier("SetPreviousValue-\(exerciseIndex)-\(index)")
-        .accessibilityLabel(previous == nil ? "No previous set" : "Previous: \(previousText)")
+        .accessibilityLabel(previousAccessibilityLabel(includesContext: accessibilityLabelIncludesContext))
+    }
+
+    private func previousAccessibilityLabel(includesContext: Bool) -> String {
+        if let previous {
+            let value = previous.displayText(weightUnit: weightUnit)
+            return includesContext ? "Previous: \(value)" : value
+        }
+        return includesContext ? "No previous set" : "No value"
     }
 
     private var previousText: String {

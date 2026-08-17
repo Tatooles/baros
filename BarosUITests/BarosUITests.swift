@@ -486,6 +486,7 @@ final class BarosUITests: XCTestCase {
         let bottomRow = app.descendants(matching: .any)["SetAccessibilityBottomRow-0-0"]
         XCTAssertTrue(topRow.waitForExistence(timeout: 3))
         XCTAssertTrue(bottomRow.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["SetPreviousLabel-0-0"].exists)
         XCTAssertTrue(app.staticTexts["SetWeightLabel-0-0"].exists)
         XCTAssertTrue(app.staticTexts["SetRepsLabel-0-0"].exists)
         XCTAssertGreaterThanOrEqual(bottomRow.frame.minY, topRow.frame.maxY)
