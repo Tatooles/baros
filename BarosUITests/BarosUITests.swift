@@ -460,6 +460,8 @@ final class BarosUITests: XCTestCase {
         addNoteButton.tap()
         let notesField = app.textFields["ExerciseNotesField-0"]
         XCTAssertTrue(notesField.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["EXERCISE NOTE"].exists)
+        XCTAssertEqual(notesField.label, "Exercise note")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
 
         notesField.typeText("Pause reps")

@@ -271,36 +271,30 @@ private struct ExerciseNotesDraftField: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("EXERCISE NOTE")
-                .font(.caption2.weight(.bold))
-                .tracking(1.4)
-                .foregroundStyle(isFocused ? AppTheme.brandAccentForeground : AppTheme.textTertiary)
-
-            TextField(
-                "Exercise notes...",
-                text: Binding(
-                    get: { draft ?? notes },
-                    set: { draft = $0 }
-                ),
-                axis: .vertical
-            )
-            .textFieldStyle(.plain)
-            .font(.body)
-            .foregroundStyle(AppTheme.textPrimary)
-            .lineLimit(1...6)
-            .focused(focusedField, equals: focusTarget)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 10)
-            .frame(minHeight: 44, alignment: .topLeading)
-            .workoutInputTapTarget(focusedField, equals: focusTarget)
-            .background(
-                isFocused ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(Color.clear),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
-            .accessibilityIdentifier("ExerciseNotesField-\(exerciseIndex)")
-            .id(focusTarget)
-        }
+        TextField(
+            "Exercise notes...",
+            text: Binding(
+                get: { draft ?? notes },
+                set: { draft = $0 }
+            ),
+            axis: .vertical
+        )
+        .textFieldStyle(.plain)
+        .font(.body)
+        .foregroundStyle(AppTheme.textPrimary)
+        .lineLimit(1...6)
+        .focused(focusedField, equals: focusTarget)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 10)
+        .frame(minHeight: 44, alignment: .topLeading)
+        .workoutInputTapTarget(focusedField, equals: focusTarget)
+        .background(
+            isFocused ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(Color.clear),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .accessibilityLabel("Exercise note")
+        .accessibilityIdentifier("ExerciseNotesField-\(exerciseIndex)")
+        .id(focusTarget)
         .padding(.horizontal, 16)
         .animation(.easeOut(duration: 0.15), value: isFocused)
         .onChange(of: focusedField.wrappedValue) { previousField, newField in
