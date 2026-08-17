@@ -3,10 +3,12 @@ import SwiftUI
 
 struct ExerciseCardView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let loggedExercise: LoggedExercise
     let exerciseIndex: Int
     @Bindable var engine: ActiveWorkoutEngine
     @Binding var isCollapsed: Bool
+    @Binding var isNoteRevealed: Bool
     var focusedField: FocusState<WorkoutField?>.Binding
     let weightUnit: MeasurementUnit
     let previousSets: [PreviousSetPerformance]
@@ -21,6 +23,7 @@ struct ExerciseCardView: View {
         exerciseIndex: Int,
         engine: ActiveWorkoutEngine,
         isCollapsed: Binding<Bool>,
+        isNoteRevealed: Binding<Bool>,
         focusedField: FocusState<WorkoutField?>.Binding,
         weightUnit: MeasurementUnit,
         previousSets: [PreviousSetPerformance],
@@ -33,6 +36,7 @@ struct ExerciseCardView: View {
         self.exerciseIndex = exerciseIndex
         self.engine = engine
         self._isCollapsed = isCollapsed
+        self._isNoteRevealed = isNoteRevealed
         self.focusedField = focusedField
         self.weightUnit = weightUnit
         self.previousSets = previousSets
@@ -117,17 +121,32 @@ struct ExerciseCardView: View {
                 if !isCollapsed {
                     let previousSetsForRows = previousSets
                     VStack(spacing: 14) {
-                        HStack(spacing: 10) {
-                            Color.clear.frame(width: 18)
-                            WorkoutSetColumnHeader(title: "PREVIOUS")
-                            WorkoutSetColumnHeader(title: weightUnit.fieldLabel)
-                            WorkoutSetColumnHeader(title: "REPS")
-                            Color.clear.frame(width: 44)
+                        if !dynamicTypeSize.isAccessibilitySize {
+                            HStack(spacing: 10) {
+                                Text("SET")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(AppTheme.textTertiary)
+                                    .frame(width: 28)
+                                WorkoutSetColumnHeader(title: "PREVIOUS")
+                                WorkoutSetColumnHeader(title: weightUnit.fieldLabel)
+                                WorkoutSetColumnHeader(title: "REPS")
+                                Text("COMPLETE")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(AppTheme.textTertiary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.65)
+                                    .frame(width: 44)
+                            }
+                            .padding(.horizontal, 16)
                         }
-                        .padding(.horizontal, 16)
 
-                        VStack(spacing: 10) {
+                        VStack(spacing: 0) {
                             ForEach(Array(loggedExercise.sortedSets.enumerated()), id: \.element.id) { index, set in
+                                if index > 0 {
+                                    Divider()
+                                        .overlay(AppTheme.subtleBorder)
+                                        .padding(.horizontal, 16)
+                                }
                                 SetRowView(
                                     set: set,
                                     exerciseIndex: exerciseIndex,
@@ -140,45 +159,27 @@ struct ExerciseCardView: View {
                                 )
                                     .padding(.horizontal, 16)
                             }
+
+                            Divider()
+                                .overlay(AppTheme.subtleBorder)
                         }
 
-                        WorkoutAddRowButton(
-                            title: "Add Set",
-                            accessibilityIdentifier: "AddSetButton-\(exerciseIndex)"
-                        ) {
-                            withAnimation(.spring(response: 0.26, dampingFraction: 0.85)) {
-                                if let set = try? engine.addSet(to: loggedExercise, context: modelContext) {
-                                    focusedField.wrappedValue = set.weight == nil ? .setWeight(set.id) : nil
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 16)
-
-                        ExerciseNotesDraftField(
-                            notes: loggedExercise.notes,
-                            exerciseID: loggedExercise.id,
-                            exerciseIndex: exerciseIndex,
-                            focusedField: focusedField
-                        ) { draft in
-                            try? engine.updateExerciseNotes(draft, loggedExercise: loggedExercise, context: modelContext)
-                        }
-
-                        if let referenceNotes {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Divider()
-                                    .overlay(AppTheme.subtleBorder)
-                                    .padding(.bottom, 4)
-
-                                Text("LAST TIME")
-                                    .font(.caption2.weight(.bold))
-                                    .tracking(1.4)
-                                    .foregroundStyle(AppTheme.textTertiary)
-                                Text(referenceNotes)
-                                    .font(.footnote)
-                                    .foregroundStyle(AppTheme.textSecondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
+                        exerciseActions
                             .padding(.horizontal, 16)
+
+                        if isNoteVisible {
+                            Divider()
+                                .overlay(AppTheme.subtleBorder)
+
+                            ExerciseNotesDraftField(
+                                notes: loggedExercise.notes,
+                                exerciseID: loggedExercise.id,
+                                exerciseIndex: exerciseIndex,
+                                isRevealed: $isNoteRevealed,
+                                focusedField: focusedField
+                            ) { draft in
+                                try? engine.updateExerciseNotes(draft, loggedExercise: loggedExercise, context: modelContext)
+                            }
                         }
                     }
                     // Content stays put and fades while the clipped card edge
@@ -190,9 +191,60 @@ struct ExerciseCardView: View {
         }
     }
 
-    private var referenceNotes: String? {
-        let trimmed = loggedExercise.referenceNotes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
+    private var exerciseActions: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    addSetButton
+                    addExerciseNoteButton
+                }
+            } else {
+                HStack(spacing: 12) {
+                    addSetButton
+                    Spacer(minLength: 8)
+                    addExerciseNoteButton
+                }
+            }
+        }
+    }
+
+    private var addSetButton: some View {
+        WorkoutAddRowButton(
+            title: "Add Set",
+            accessibilityIdentifier: "AddSetButton-\(exerciseIndex)"
+        ) {
+            withAnimation(.spring(response: 0.26, dampingFraction: 0.85)) {
+                if let set = try? engine.addSet(to: loggedExercise, context: modelContext) {
+                    focusedField.wrappedValue = set.weight == nil ? .setWeight(set.id) : nil
+                }
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    @ViewBuilder
+    private var addExerciseNoteButton: some View {
+        if !isNoteVisible {
+            Button {
+                isNoteRevealed = true
+                Task { @MainActor in
+                    await Task.yield()
+                    focusedField.wrappedValue = .exerciseNotes(loggedExercise.id)
+                }
+            } label: {
+                Label("Add exercise note", systemImage: "note.text.badge.plus")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("AddExerciseNoteButton-\(exerciseIndex)")
+        }
+    }
+
+    private var isNoteVisible: Bool {
+        isNoteRevealed || !loggedExercise.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     static func setProgress(for loggedExercise: LoggedExercise) -> WorkoutExerciseProgress {
@@ -209,6 +261,7 @@ private struct ExerciseNotesDraftField: View {
     let notes: String
     let exerciseID: UUID
     let exerciseIndex: Int
+    @Binding var isRevealed: Bool
     var focusedField: FocusState<WorkoutField?>.Binding
     let commit: (String) -> Void
     @State private var draft: String?
@@ -226,34 +279,31 @@ private struct ExerciseNotesDraftField: View {
             ),
             axis: .vertical
         )
+        .textFieldStyle(.plain)
         .font(.body)
         .foregroundStyle(AppTheme.textPrimary)
+        .lineLimit(1...6)
         .focused(focusedField, equals: focusTarget)
-        .padding(14)
-        .frame(minHeight: 88, alignment: .topLeading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 10)
+        .frame(minHeight: 44, alignment: .topLeading)
         .workoutInputTapTarget(focusedField, equals: focusTarget)
         .background(
-            AppTheme.fieldSurface,
-            in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+            isFocused ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(Color.clear),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                .strokeBorder(
-                    focusedField.wrappedValue == focusTarget ? AppTheme.brandFocus : .clear,
-                    lineWidth: 1.5
-                )
-        )
-        .animation(.easeOut(duration: 0.15), value: focusedField.wrappedValue == focusTarget)
-        .padding(.horizontal, 16)
+        .accessibilityLabel("Exercise note")
         .accessibilityIdentifier("ExerciseNotesField-\(exerciseIndex)")
         .id(focusTarget)
+        .padding(.horizontal, 16)
+        .animation(.easeOut(duration: 0.15), value: isFocused)
         .onChange(of: focusedField.wrappedValue) { previousField, newField in
             if previousField == focusTarget, newField != focusTarget {
-                commitIfNeeded()
+                commitAndUpdateDisclosure()
             }
         }
         .onDisappear {
-            commitIfNeeded()
+            commitAndUpdateDisclosure()
         }
     }
 
@@ -261,5 +311,21 @@ private struct ExerciseNotesDraftField: View {
         guard let draft else { return }
         commit(draft)
         self.draft = nil
+    }
+
+    private func commitAndUpdateDisclosure() {
+        let shouldHide = currentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        commitIfNeeded()
+        if shouldHide {
+            isRevealed = false
+        }
+    }
+
+    private var currentText: String {
+        draft ?? notes
+    }
+
+    private var isFocused: Bool {
+        focusedField.wrappedValue == focusTarget
     }
 }

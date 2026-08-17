@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SetRowView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let set: LoggedSet
     let exerciseIndex: Int
     let index: Int
@@ -25,37 +26,12 @@ struct SetRowView: View {
     }
 
     private var rowContent: some View {
-        HStack(spacing: 10) {
-            Text("\(index + 1)")
-                .font(.subheadline.weight(.semibold).monospacedDigit())
-                .foregroundStyle(AppTheme.textTertiary)
-                .frame(width: 18)
-
-            previousColumn
-
-            numericField(
-                placeholder: weightUnit.fieldPlaceholder,
-                text: weightBinding,
-                keyboard: .decimalPad,
-                focusTarget: .setWeight(set.id),
-                accessibilityIdentifier: "SetWeightField-\(exerciseIndex)-\(index)"
-            )
-
-            repsField
-
-            Button {
-                completeButtonTapped()
-            } label: {
-                Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
-                    .foregroundStyle(set.isCompleted ? AppTheme.brandAccentFill : AppTheme.textTertiary)
-                    .symbolEffect(.bounce, value: set.isCompleted)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                accessibilityRowContent
+            } else {
+                standardRowContent
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(set.isCompleted ? "Mark set incomplete" : "Mark set complete")
-            .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
         }
         .onChange(of: focusedField.wrappedValue) { previousField, newField in
             let ownFields: [WorkoutField] = [.setWeight(set.id), .setReps(set.id)]
@@ -68,6 +44,105 @@ struct SetRowView: View {
             // focus-change commit no longer fires for them, so flush here.
             commitDraftsIfNeeded()
         }
+    }
+
+    private var standardRowContent: some View {
+        HStack(spacing: 10) {
+            Text("\(index + 1)")
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(AppTheme.textTertiary)
+                .frame(width: 28)
+
+            previousColumn()
+
+            numericField(
+                placeholder: weightUnit.fieldPlaceholder,
+                text: weightBinding,
+                keyboard: .decimalPad,
+                focusTarget: .setWeight(set.id),
+                accessibilityIdentifier: "SetWeightField-\(exerciseIndex)-\(index)"
+            )
+
+            repsField
+
+            completionButton
+        }
+    }
+
+    private var accessibilityRowContent: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 12) {
+                Text("Set \(index + 1)")
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(AppTheme.textPrimary)
+
+                labeledColumn(
+                    label: "PREVIOUS",
+                    labelIdentifier: "SetPreviousLabel-\(exerciseIndex)-\(index)"
+                ) {
+                    previousColumn(accessibilityLabelIncludesContext: false)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                completionButton
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("SetAccessibilityTopRow-\(exerciseIndex)-\(index)")
+
+            HStack(alignment: .top, spacing: 12) {
+                labeledColumn(
+                    label: weightUnit.fieldLabel,
+                    labelIdentifier: "SetWeightLabel-\(exerciseIndex)-\(index)"
+                ) {
+                    numericField(
+                        placeholder: weightUnit.fieldPlaceholder,
+                        text: weightBinding,
+                        keyboard: .decimalPad,
+                        focusTarget: .setWeight(set.id),
+                        accessibilityIdentifier: "SetWeightField-\(exerciseIndex)-\(index)"
+                    )
+                }
+
+                labeledColumn(
+                    label: "REPS",
+                    labelIdentifier: "SetRepsLabel-\(exerciseIndex)-\(index)"
+                ) {
+                    repsField
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("SetAccessibilityBottomRow-\(exerciseIndex)-\(index)")
+        }
+    }
+
+    private func labeledColumn<Content: View>(
+        label: String,
+        labelIdentifier: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.textTertiary)
+                .accessibilityIdentifier(labelIdentifier)
+            content()
+        }
+    }
+
+    private var completionButton: some View {
+        Button {
+            completeButtonTapped()
+        } label: {
+            Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
+                .font(.title2)
+                .foregroundStyle(set.isCompleted ? AppTheme.brandAccentFill : AppTheme.textTertiary)
+                .symbolEffect(.bounce, value: set.isCompleted)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(set.isCompleted ? "Mark set incomplete" : "Mark set complete")
+        .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
     }
 
     /// Typing stages values in view-local drafts; this is the single point that
@@ -88,7 +163,7 @@ struct SetRowView: View {
         return commit
     }
 
-    private var previousColumn: some View {
+    private func previousColumn(accessibilityLabelIncludesContext: Bool = true) -> some View {
         Button {
             guard let previous, !set.isCompleted else { return }
             fillFromPrevious(previous)
@@ -104,7 +179,15 @@ struct SetRowView: View {
         .buttonStyle(.plain)
         .disabled(previous == nil || set.isCompleted)
         .accessibilityIdentifier("SetPreviousValue-\(exerciseIndex)-\(index)")
-        .accessibilityLabel(previous == nil ? "No previous set" : "Previous: \(previousText)")
+        .accessibilityLabel(previousAccessibilityLabel(includesContext: accessibilityLabelIncludesContext))
+    }
+
+    private func previousAccessibilityLabel(includesContext: Bool) -> String {
+        if let previous {
+            let value = previous.displayText(weightUnit: weightUnit)
+            return includesContext ? "Previous: \(value)" : value
+        }
+        return includesContext ? "No previous set" : "No value"
     }
 
     private var previousText: String {
@@ -161,7 +244,9 @@ struct SetRowView: View {
             keyboard: keyboard,
             focusTarget: focusTarget,
             focusedField: focusedField,
-            accessibilityIdentifier: accessibilityIdentifier
+            accessibilityIdentifier: accessibilityIdentifier,
+            verticalPadding: 8,
+            presentation: .grid
         )
     }
 

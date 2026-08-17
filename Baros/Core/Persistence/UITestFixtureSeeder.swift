@@ -82,6 +82,7 @@ enum UITestFixtureSeeder {
             startedAt: startedAt,
             endedAt: endedAt,
             durationSeconds: 3_600,
+            notes: "Previous workout narrative",
             status: .completed,
             source: .blank,
             createdAt: startedAt,

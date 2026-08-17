@@ -3,7 +3,8 @@ import Foundation
 enum WorkoutFocusNavigator {
     static func focusOrder(
         for session: WorkoutSession,
-        collapsedExerciseIDs: Set<UUID> = []
+        collapsedExerciseIDs: Set<UUID> = [],
+        revealedExerciseNoteIDs: Set<UUID> = []
     ) -> [WorkoutField] {
         var fields: [WorkoutField] = [.workoutTitle]
 
@@ -14,7 +15,10 @@ enum WorkoutFocusNavigator {
                 fields.append(.setWeight(set.id))
                 fields.append(.setReps(set.id))
             }
-            fields.append(.exerciseNotes(loggedExercise.id))
+            if revealedExerciseNoteIDs.contains(loggedExercise.id)
+                || !loggedExercise.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                fields.append(.exerciseNotes(loggedExercise.id))
+            }
         }
 
         fields.append(.workoutNotes)
