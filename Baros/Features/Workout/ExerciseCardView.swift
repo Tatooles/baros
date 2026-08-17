@@ -123,19 +123,11 @@ struct ExerciseCardView: View {
                     VStack(spacing: 14) {
                         if !dynamicTypeSize.isAccessibilitySize {
                             HStack(spacing: 10) {
-                                Text("SET")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(AppTheme.textTertiary)
-                                    .frame(width: 28)
+                                Color.clear.frame(width: 28)
                                 WorkoutSetColumnHeader(title: "PREVIOUS")
                                 WorkoutSetColumnHeader(title: weightUnit.fieldLabel)
                                 WorkoutSetColumnHeader(title: "REPS")
-                                Text("COMPLETE")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(AppTheme.textTertiary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.65)
-                                    .frame(width: 44)
+                                Color.clear.frame(width: 44)
                             }
                             .padding(.horizontal, 16)
                         }

@@ -569,6 +569,16 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testStandardSetHeaderOmitsSelfExplanatoryColumns() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+
+        XCTAssertFalse(app.staticTexts["SET"].exists)
+        XCTAssertFalse(app.staticTexts["COMPLETE"].exists)
+    }
+
+    @MainActor
     func testFinalStandardSetRowDoesNotHaveExtraBottomSpacing() {
         let app = makeApp()
         app.launch()
