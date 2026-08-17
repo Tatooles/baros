@@ -498,10 +498,7 @@ final class BarosUITests: XCTestCase {
         app.launch()
         startBlankWorkoutWithBenchPress(in: app)
 
-        app.buttons["AddSetButton-0"].tap()
-        dismissKeyboardIfNeeded(in: app)
-        app.buttons["AddSetButton-0"].tap()
-        dismissKeyboardIfNeeded(in: app)
+        addSets(2, in: app)
 
         let windowFrame = app.windows.firstMatch.frame
         for setIndex in 0..<3 {
@@ -516,6 +513,21 @@ final class BarosUITests: XCTestCase {
             XCTAssertLessThan(repsField.frame.maxX, completionButton.frame.minX)
             XCTAssertLessThanOrEqual(completionButton.frame.maxX, windowFrame.maxX)
         }
+    }
+
+    @MainActor
+    func testFinalStandardSetRowDoesNotHaveExtraBottomSpacing() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+
+        addSets(2, in: app)
+
+        let finalCompletionButton = app.buttons["SetCompletionButton-0-2"]
+        let addSetButton = app.buttons["AddSetButton-0"]
+        XCTAssertTrue(finalCompletionButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(addSetButton.exists)
+        XCTAssertLessThanOrEqual(addSetButton.frame.minY - finalCompletionButton.frame.maxY, 16)
     }
 
     @MainActor
@@ -1822,6 +1834,14 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         addBenchPress(in: app)
         dismissKeyboardIfNeeded(in: app)
+    }
+
+    @MainActor
+    private func addSets(_ count: Int, in app: XCUIApplication) {
+        for _ in 0..<count {
+            app.buttons["AddSetButton-0"].tap()
+            dismissKeyboardIfNeeded(in: app)
+        }
     }
 
     @MainActor

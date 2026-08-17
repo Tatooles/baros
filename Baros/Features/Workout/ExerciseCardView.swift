@@ -159,10 +159,10 @@ struct ExerciseCardView: View {
                                 )
                                     .padding(.horizontal, 16)
                             }
-                        }
 
-                        Divider()
-                            .overlay(AppTheme.subtleBorder)
+                            Divider()
+                                .overlay(AppTheme.subtleBorder)
+                        }
 
                         exerciseActions
                             .padding(.horizontal, 16)
