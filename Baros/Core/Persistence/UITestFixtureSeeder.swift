@@ -4,6 +4,7 @@ import SwiftData
 #if DEBUG
 enum UITestFixtureSeeder {
     static let completedBenchWorkoutArgument = "--uitest-seed-completed-bench-workout"
+    static let historyExerciseNoteArgument = "--uitest-seed-history-exercise-note"
     static let exerciseHistoryPerformanceArgument = "--uitest-seed-exercise-history-performance"
 
     static func seedFixtures(
@@ -14,6 +15,9 @@ enum UITestFixtureSeeder {
         for title in values(after: completedBenchWorkoutArgument, in: arguments) {
             try seedCompletedBenchWorkout(
                 title: title,
+                exerciseNotes: arguments.contains(historyExerciseNoteArgument)
+                    ? "Pause at the bottom\nKeep wrists stacked"
+                    : "",
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context
             )
@@ -29,6 +33,7 @@ enum UITestFixtureSeeder {
 
     static func seedCompletedBenchWorkout(
         title: String,
+        exerciseNotes: String = "",
         ownerTokenIdentifier: String? = nil,
         context: ModelContext
     ) throws {
@@ -67,7 +72,7 @@ enum UITestFixtureSeeder {
             exerciseSnapshotName: "Bench Press",
             exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
             exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
-            notes: "Previous exercise narrative",
+            notes: exerciseNotes,
             createdAt: startedAt,
             updatedAt: endedAt,
             sets: [set]

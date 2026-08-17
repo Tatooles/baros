@@ -830,7 +830,10 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testStartingFromPastWorkoutDoesNotShowNarrativeReferenceNotes() {
-        let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
+        let app = makeApp(
+            extraArguments: ["--uitest-seed-history-exercise-note"],
+            completedBenchWorkoutTitles: ["Past Push"]
+        )
         app.launch()
 
         app.buttons["WorkoutTab"].tap()
@@ -840,13 +843,20 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["SetPreviousValue-0-0"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.staticTexts["LAST TIME"].exists)
-        XCTAssertFalse(app.staticTexts["Previous exercise narrative"].exists)
+        XCTAssertFalse(app.staticTexts["Pause at the bottom\nKeep wrists stacked"].exists)
         XCTAssertFalse(app.staticTexts["Previous workout narrative"].exists)
     }
 
     @MainActor
-    func testQuickExerciseHistoryHeadingShowsPerformanceSummary() {
-        let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
+    func testQuickExerciseHistoryShowsPerformanceSummaryAndFlattenedExerciseNotes() {
+        let app = makeApp(
+            extraArguments: [
+                "--uitest-seed-history-exercise-note",
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+            ],
+            completedBenchWorkoutTitles: ["Past Push"]
+        )
         app.launch()
 
         app.buttons["WorkoutTab"].tap()
@@ -875,6 +885,15 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Done"].exists)
         XCTAssertTrue(app.buttons["Full History"].exists)
         XCTAssertFalse(app.staticTexts["QuickHistoryLimitFooter"].exists)
+        let setLabel = app.staticTexts["Set 1"]
+        let noteText = app.staticTexts["ExerciseHistoryNoteText"]
+        XCTAssertTrue(setLabel.waitForExistence(timeout: 3))
+        XCTAssertTrue(noteText.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["ExerciseHistoryNoteLabel"].exists)
+        XCTAssertEqual(noteText.label, "Exercise note")
+        XCTAssertEqual(noteText.value as? String, "Pause at the bottom\nKeep wrists stacked")
+        XCTAssertEqual(noteText.frame.minX, setLabel.frame.minX, accuracy: 1)
+        XCTAssertGreaterThan(noteText.frame.height, setLabel.frame.height)
         app.buttons["Done"].tap()
         XCTAssertFalse(keyboard.waitForExistence(timeout: 1))
     }
