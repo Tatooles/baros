@@ -157,12 +157,14 @@ the interaction target. An additional decorative card around a heading and
 that field is not. Prefer spacing, alignment, and a restrained divider over
 another rounded rectangle.
 
-For issue #170's Active Workout surface, Workout Notes is a heading plus one
-neutral editor directly on the canvas; it does not have an additional outer
-card. The completed-workout History editor retains its existing containment
-until that screen receives a holistic surface update. Exercise Notes behavior,
-its progressive disclosure, set-grid treatment, and the Weight/Reps interaction
-model belong to issue #179 and are not changed by this rule in #170.
+On the Active Workout surface, optional Workout Notes and Exercise Notes use
+progressive disclosure. When empty, each is represented by its named add-note
+action. Existing or explicitly revealed notes use a flat editor that is clear
+at rest and uses `brandAccentMuted` as its focus treatment. Visible headings are
+omitted because the action, placeholder, and placement already establish
+context; each editor retains an explicit accessibility label. The
+completed-workout History editor retains its existing containment until that
+screen receives a holistic surface update.
 
 ## Typography
 

@@ -4,8 +4,14 @@ import XCTest
 
 @MainActor
 final class WorkoutFocusNavigatorTests: XCTestCase {
-    func testFocusOrderSkipsEmptyExerciseNotes() throws {
-        let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
+    func testFocusOrderSkipsEmptyExerciseAndWorkoutNotes() throws {
+        let session = WorkoutSession(
+            title: "Workout",
+            startedAt: .now,
+            notes: "  \n",
+            status: .active,
+            source: .blank
+        )
         let firstExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
         let secondExercise = LoggedExercise(orderIndex: 1, exerciseSnapshotName: "Row")
         let firstSet = LoggedSet(orderIndex: 0)
@@ -24,11 +30,25 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
             .setWeight(secondSet.id),
             .setReps(secondSet.id),
             .setWeight(thirdSet.id),
-            .setReps(thirdSet.id),
-            .workoutNotes
+            .setReps(thirdSet.id)
         ]
 
         XCTAssertEqual(order, expectedOrder)
+    }
+
+    func testFocusOrderIncludesExistingWorkoutNote() {
+        let session = WorkoutSession(
+            title: "Workout",
+            startedAt: .now,
+            notes: "Felt strong",
+            status: .active,
+            source: .blank
+        )
+
+        XCTAssertEqual(
+            WorkoutFocusNavigator.focusOrder(for: session),
+            [.workoutTitle, .workoutNotes]
+        )
     }
 
     func testAdjacentFocusTraversesExerciseNotesBetweenExercises() {
@@ -74,7 +94,8 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
 
         let order = WorkoutFocusNavigator.focusOrder(
             for: session,
-            revealedExerciseNoteIDs: [revealedEmptyExercise.id]
+            revealedExerciseNoteIDs: [revealedEmptyExercise.id],
+            isWorkoutNoteRevealed: true
         )
 
         XCTAssertEqual(order, [
@@ -107,8 +128,7 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         let expectedOrder: [WorkoutField] = [
             .workoutTitle,
             .setWeight(secondSet.id),
-            .setReps(secondSet.id),
-            .workoutNotes
+            .setReps(secondSet.id)
         ]
 
         XCTAssertEqual(order, expectedOrder)

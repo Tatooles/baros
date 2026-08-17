@@ -4,7 +4,8 @@ enum WorkoutFocusNavigator {
     static func focusOrder(
         for session: WorkoutSession,
         collapsedExerciseIDs: Set<UUID> = [],
-        revealedExerciseNoteIDs: Set<UUID> = []
+        revealedExerciseNoteIDs: Set<UUID> = [],
+        isWorkoutNoteRevealed: Bool = false
     ) -> [WorkoutField] {
         var fields: [WorkoutField] = [.workoutTitle]
 
@@ -21,7 +22,10 @@ enum WorkoutFocusNavigator {
             }
         }
 
-        fields.append(.workoutNotes)
+        if isWorkoutNoteRevealed
+            || !session.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields.append(.workoutNotes)
+        }
         return fields
     }
 

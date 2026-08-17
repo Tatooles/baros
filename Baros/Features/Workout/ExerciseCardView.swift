@@ -170,16 +170,20 @@ struct ExerciseCardView: View {
                         if isNoteVisible {
                             Divider()
                                 .overlay(AppTheme.subtleBorder)
+                                .padding(.horizontal, 16)
 
-                            ExerciseNotesDraftField(
+                            WorkoutProgressiveNoteDraftField(
                                 notes: loggedExercise.notes,
-                                exerciseID: loggedExercise.id,
-                                exerciseIndex: exerciseIndex,
+                                placeholder: "Exercise notes...",
+                                accessibilityLabel: "Exercise note",
+                                accessibilityIdentifier: "ExerciseNotesField-\(exerciseIndex)",
+                                focusTarget: .exerciseNotes(loggedExercise.id),
                                 isRevealed: $isNoteRevealed,
                                 focusedField: focusedField
                             ) { draft in
                                 try? engine.updateExerciseNotes(draft, loggedExercise: loggedExercise, context: modelContext)
                             }
+                            .padding(.horizontal, 16)
                         }
                     }
                     // Content stays put and fades while the clipped card edge
@@ -225,21 +229,13 @@ struct ExerciseCardView: View {
     @ViewBuilder
     private var addExerciseNoteButton: some View {
         if !isNoteVisible {
-            Button {
-                isNoteRevealed = true
-                Task { @MainActor in
-                    await Task.yield()
-                    focusedField.wrappedValue = .exerciseNotes(loggedExercise.id)
-                }
-            } label: {
-                Label("Add exercise note", systemImage: "note.text.badge.plus")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.brandAccentForeground)
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("AddExerciseNoteButton-\(exerciseIndex)")
+            WorkoutProgressiveNoteAddButton(
+                title: "Add exercise note",
+                accessibilityIdentifier: "AddExerciseNoteButton-\(exerciseIndex)",
+                focusTarget: .exerciseNotes(loggedExercise.id),
+                isRevealed: $isNoteRevealed,
+                focusedField: focusedField
+            )
         }
     }
 
@@ -251,81 +247,5 @@ struct ExerciseCardView: View {
         let visibleSets = loggedExercise.sortedSets
         let completed = visibleSets.filter(\.isCompleted).count
         return WorkoutExerciseProgress(completed: completed, total: visibleSets.count)
-    }
-}
-
-/// Owns the exercise-notes draft so keystrokes re-render only this leaf, not
-/// the whole card. Commits (one model write + save) when focus leaves the
-/// field or the field disappears (e.g. the card collapses mid-edit).
-private struct ExerciseNotesDraftField: View {
-    let notes: String
-    let exerciseID: UUID
-    let exerciseIndex: Int
-    @Binding var isRevealed: Bool
-    var focusedField: FocusState<WorkoutField?>.Binding
-    let commit: (String) -> Void
-    @State private var draft: String?
-
-    private var focusTarget: WorkoutField {
-        .exerciseNotes(exerciseID)
-    }
-
-    var body: some View {
-        TextField(
-            "Exercise notes...",
-            text: Binding(
-                get: { draft ?? notes },
-                set: { draft = $0 }
-            ),
-            axis: .vertical
-        )
-        .textFieldStyle(.plain)
-        .font(.body)
-        .foregroundStyle(AppTheme.textPrimary)
-        .lineLimit(1...6)
-        .focused(focusedField, equals: focusTarget)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 10)
-        .frame(minHeight: 44, alignment: .topLeading)
-        .workoutInputTapTarget(focusedField, equals: focusTarget)
-        .background(
-            isFocused ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(Color.clear),
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-        )
-        .accessibilityLabel("Exercise note")
-        .accessibilityIdentifier("ExerciseNotesField-\(exerciseIndex)")
-        .id(focusTarget)
-        .padding(.horizontal, 16)
-        .animation(.easeOut(duration: 0.15), value: isFocused)
-        .onChange(of: focusedField.wrappedValue) { previousField, newField in
-            if previousField == focusTarget, newField != focusTarget {
-                commitAndUpdateDisclosure()
-            }
-        }
-        .onDisappear {
-            commitAndUpdateDisclosure()
-        }
-    }
-
-    private func commitIfNeeded() {
-        guard let draft else { return }
-        commit(draft)
-        self.draft = nil
-    }
-
-    private func commitAndUpdateDisclosure() {
-        let shouldHide = currentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        commitIfNeeded()
-        if shouldHide {
-            isRevealed = false
-        }
-    }
-
-    private var currentText: String {
-        draft ?? notes
-    }
-
-    private var isFocused: Bool {
-        focusedField.wrappedValue == focusTarget
     }
 }
