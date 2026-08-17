@@ -1,0 +1,3 @@
+# Present Active Workout as a minimizable session
+
+Baros keeps a permanent History, Home, Profile tab set with Home selected by default, and presents an Active Workout as a focused full-height session above those destinations. The native system grabber minimizes without ending the workout; while minimized, a native expanded bottom accessory exposes workout status and reopens the session while preserving the underlying tab, whereas terminal lifecycle transitions return Home. This keeps tab selection truthful and stable instead of using a conditional or dual-purpose Workout tab; Baros retains iOS 26.0 through one localized compatibility boundary and defers inline accessory adaptation and any workout utility bar.
