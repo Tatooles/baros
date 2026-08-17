@@ -100,13 +100,13 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
 
         XCTAssertEqual(order, [
             .workoutTitle,
+            .workoutNotes,
             .setWeight(firstSet.id),
             .setReps(firstSet.id),
             .exerciseNotes(existingNoteExercise.id),
             .setWeight(secondSet.id),
             .setReps(secondSet.id),
             .exerciseNotes(revealedEmptyExercise.id),
-            .workoutNotes,
         ])
     }
 

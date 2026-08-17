@@ -141,72 +141,60 @@ struct ExerciseCardView: View {
                         }
 
                         VStack(spacing: 0) {
-                            ForEach(Array(loggedExercise.sortedSets.enumerated()), id: \.element.id) { index, set in
-                                if index > 0 {
-                                    Divider()
-                                        .overlay(AppTheme.subtleBorder)
+                            VStack(spacing: 0) {
+                                ForEach(Array(loggedExercise.sortedSets.enumerated()), id: \.element.id) { index, set in
+                                    if index > 0 {
+                                        Divider()
+                                            .overlay(AppTheme.subtleBorder)
+                                            .padding(.horizontal, 16)
+                                    }
+                                    SetRowView(
+                                        set: set,
+                                        exerciseIndex: exerciseIndex,
+                                        index: index,
+                                        engine: engine,
+                                        focusedField: focusedField,
+                                        weightUnit: weightUnit,
+                                        previous: index < previousSetsForRows.count ? previousSetsForRows[index] : nil,
+                                        onEditRPE: onEditRPE
+                                    )
                                         .padding(.horizontal, 16)
                                 }
-                                SetRowView(
-                                    set: set,
-                                    exerciseIndex: exerciseIndex,
-                                    index: index,
-                                    engine: engine,
-                                    focusedField: focusedField,
-                                    weightUnit: weightUnit,
-                                    previous: index < previousSetsForRows.count ? previousSetsForRows[index] : nil,
-                                    onEditRPE: onEditRPE
-                                )
+
+                                Divider()
+                                    .overlay(AppTheme.subtleBorder)
                                     .padding(.horizontal, 16)
                             }
 
+                            addSetButton
+                                .padding(.horizontal, 4)
+
                             Divider()
                                 .overlay(AppTheme.subtleBorder)
                         }
 
-                        exerciseActions
-                            .padding(.horizontal, 16)
-
-                        if isNoteVisible {
-                            Divider()
-                                .overlay(AppTheme.subtleBorder)
-                                .padding(.horizontal, 16)
-
-                            WorkoutProgressiveNoteDraftField(
-                                notes: loggedExercise.notes,
-                                placeholder: "Exercise notes...",
-                                accessibilityLabel: "Exercise note",
-                                accessibilityIdentifier: "ExerciseNotesField-\(exerciseIndex)",
-                                focusTarget: .exerciseNotes(loggedExercise.id),
-                                isRevealed: $isNoteRevealed,
-                                focusedField: focusedField
-                            ) { draft in
-                                try? engine.updateExerciseNotes(draft, loggedExercise: loggedExercise, context: modelContext)
-                            }
-                            .padding(.horizontal, 16)
+                        WorkoutProgressiveNoteControl(
+                            notes: loggedExercise.notes,
+                            addTitle: "Add exercise note",
+                            addSystemImage: "note.text.badge.plus",
+                            placeholder: "Exercise notes...",
+                            accessibilityLabel: "Exercise note",
+                            addAccessibilityIdentifier: "AddExerciseNoteButton-\(exerciseIndex)",
+                            fieldAccessibilityIdentifier: "ExerciseNotesField-\(exerciseIndex)",
+                            addAccessibilityHint: nil,
+                            addButtonHorizontalPadding: 0,
+                            focusTarget: .exerciseNotes(loggedExercise.id),
+                            isRevealed: $isNoteRevealed,
+                            focusedField: focusedField
+                        ) { draft in
+                            try? engine.updateExerciseNotes(draft, loggedExercise: loggedExercise, context: modelContext)
                         }
+                        .padding(.horizontal, 16)
                     }
                     // Content stays put and fades while the clipped card edge
                     // swallows it; a .move transition here reads as jank.
                     .transition(.opacity)
                     .padding(.bottom, 16)
-                }
-            }
-        }
-    }
-
-    private var exerciseActions: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 4) {
-                    addSetButton
-                    addExerciseNoteButton
-                }
-            } else {
-                HStack(spacing: 12) {
-                    addSetButton
-                    Spacer(minLength: 8)
-                    addExerciseNoteButton
                 }
             }
         }
@@ -223,24 +211,6 @@ struct ExerciseCardView: View {
                 }
             }
         }
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    @ViewBuilder
-    private var addExerciseNoteButton: some View {
-        if !isNoteVisible {
-            WorkoutProgressiveNoteAddButton(
-                title: "Add exercise note",
-                accessibilityIdentifier: "AddExerciseNoteButton-\(exerciseIndex)",
-                focusTarget: .exerciseNotes(loggedExercise.id),
-                isRevealed: $isNoteRevealed,
-                focusedField: focusedField
-            )
-        }
-    }
-
-    private var isNoteVisible: Bool {
-        isNoteRevealed || !loggedExercise.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     static func setProgress(for loggedExercise: LoggedExercise) -> WorkoutExerciseProgress {

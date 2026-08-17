@@ -163,6 +163,8 @@ action. Existing or explicitly revealed notes use a flat editor that is clear
 at rest and uses `brandAccentMuted` as its focus treatment. Visible headings are
 omitted because the action, placeholder, and placement already establish
 context; each editor retains an explicit accessibility label. The
+workout-level action and editor live with the workout identity below the date,
+while each exercise-level control remains inside its exercise group. The
 completed-workout History editor retains its existing containment until that
 screen receives a holistic surface update.
 

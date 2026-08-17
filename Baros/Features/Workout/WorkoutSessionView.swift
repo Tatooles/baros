@@ -38,11 +38,9 @@ struct WorkoutSessionView: View {
         // dismissal and clamps the scroll offset (a visible jump), so each
         // tier is the minimum the state needs. Full room is only for
         // positioning a newly added exercise near the top of the viewport.
-        // The workout notes editor is the last element, so editing it needs
-        // enough room to clear the floating keyboard accessory buttons,
-        // which sit ~48pt above the keyboard's safe-area inset. Mid-list
-        // fields always have real content below them, so keyboard avoidance
-        // reveals them with no extra room at all.
+        // Title and workout-note editing keep modest keyboard-navigation
+        // room. Mid-list fields always have real content below them, so
+        // keyboard avoidance reveals them with no extra room at all.
         if recentlyAddedExerciseID != nil { return 120 }
         switch focusedField {
         case .workoutTitle, .workoutNotes:
@@ -78,6 +76,25 @@ struct WorkoutSessionView: View {
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(AppTheme.textSecondary)
                             .padding(.horizontal, 12)
+                            .accessibilityIdentifier("WorkoutDate")
+
+                        WorkoutProgressiveNoteControl(
+                            notes: session.notes,
+                            addTitle: "Add workout note",
+                            addSystemImage: "square.and.pencil",
+                            placeholder: "Notes about today's workout",
+                            accessibilityLabel: "Workout note",
+                            addAccessibilityIdentifier: "AddWorkoutNoteButton",
+                            fieldAccessibilityIdentifier: "WorkoutNotesField",
+                            addAccessibilityHint: "Adds a note for the whole workout.",
+                            addButtonHorizontalPadding: 8,
+                            focusTarget: .workoutNotes,
+                            isRevealed: $isWorkoutNoteRevealed,
+                            focusedField: $focusedField
+                        ) { draft in
+                            try? engine.updateWorkoutNotes(draft, session: session, context: modelContext)
+                        }
+                        .padding(.horizontal, 4)
                     }
                     .padding(.horizontal, 4)
 
@@ -120,14 +137,6 @@ struct WorkoutSessionView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("AddExerciseButton")
-
-                    WorkoutNotesDraftControl(
-                        notes: session.notes,
-                        isRevealed: $isWorkoutNoteRevealed,
-                        focusedField: $focusedField
-                    ) { draft in
-                        try? engine.updateWorkoutNotes(draft, session: session, context: modelContext)
-                    }
                 }
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
@@ -430,46 +439,6 @@ private struct WorkoutTitleDraftField: View {
         guard let draft else { return }
         commit(draft)
         self.draft = nil
-    }
-}
-
-/// Owns the workout-notes draft; same leaf-scoped commit-on-focus-loss
-/// contract as WorkoutTitleDraftField.
-private struct WorkoutNotesDraftControl: View {
-    let notes: String
-    @Binding var isRevealed: Bool
-    var focusedField: FocusState<WorkoutField?>.Binding
-    let commit: (String) -> Void
-
-    var body: some View {
-        Group {
-            if isNoteVisible {
-                WorkoutProgressiveNoteDraftField(
-                    notes: notes,
-                    placeholder: "How did this session feel? Any notes for next time...",
-                    accessibilityLabel: "Workout note",
-                    accessibilityIdentifier: "WorkoutNotesField",
-                    focusTarget: .workoutNotes,
-                    isRevealed: $isRevealed,
-                    focusedField: focusedField,
-                    commit: commit
-                )
-            } else {
-                WorkoutProgressiveNoteAddButton(
-                    title: "Add workout note",
-                    accessibilityIdentifier: "AddWorkoutNoteButton",
-                    focusTarget: .workoutNotes,
-                    isRevealed: $isRevealed,
-                    focusedField: focusedField
-                )
-                .padding(.horizontal, 8)
-            }
-        }
-        .animation(.easeOut(duration: 0.15), value: isNoteVisible)
-    }
-
-    private var isNoteVisible: Bool {
-        isRevealed || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

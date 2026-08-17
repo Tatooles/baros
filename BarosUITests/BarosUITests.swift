@@ -396,6 +396,23 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutNoteActionAppearsBetweenWorkoutDateAndFirstExercise() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+
+        let workoutDate = app.staticTexts["WorkoutDate"]
+        let addNoteButton = app.buttons["AddWorkoutNoteButton"]
+        let firstExercise = app.buttons["ExerciseHeader-0"]
+        XCTAssertTrue(workoutDate.waitForExistence(timeout: 3))
+        XCTAssertTrue(addNoteButton.exists)
+        XCTAssertTrue(app.staticTexts["Add workout note"].exists)
+        XCTAssertTrue(firstExercise.exists)
+        XCTAssertGreaterThanOrEqual(addNoteButton.frame.minY, workoutDate.frame.maxY)
+        XCTAssertLessThanOrEqual(addNoteButton.frame.maxY, firstExercise.frame.minY)
+    }
+
+    @MainActor
     func testWorkoutNotesScrollsAboveKeyboardToolbarWhenFocused() {
         let app = makeApp()
         app.launch()
@@ -563,7 +580,20 @@ final class BarosUITests: XCTestCase {
         let addSetButton = app.buttons["AddSetButton-0"]
         XCTAssertTrue(finalCompletionButton.waitForExistence(timeout: 3))
         XCTAssertTrue(addSetButton.exists)
-        XCTAssertLessThanOrEqual(addSetButton.frame.minY - finalCompletionButton.frame.maxY, 16)
+        XCTAssertLessThanOrEqual(addSetButton.frame.minY - finalCompletionButton.frame.maxY, 8)
+    }
+
+    @MainActor
+    func testAddExerciseNoteActionFollowsSetSection() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+
+        let addSetButton = app.buttons["AddSetButton-0"]
+        let addNoteButton = app.buttons["AddExerciseNoteButton-0"]
+        XCTAssertTrue(addSetButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(addNoteButton.exists)
+        XCTAssertGreaterThanOrEqual(addNoteButton.frame.minY, addSetButton.frame.maxY)
     }
 
     @MainActor

@@ -8,6 +8,10 @@ enum WorkoutFocusNavigator {
         isWorkoutNoteRevealed: Bool = false
     ) -> [WorkoutField] {
         var fields: [WorkoutField] = [.workoutTitle]
+        if isWorkoutNoteRevealed
+            || !session.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields.append(.workoutNotes)
+        }
 
         for loggedExercise in session.sortedLoggedExercises {
             guard !collapsedExerciseIDs.contains(loggedExercise.id) else { continue }
@@ -22,10 +26,6 @@ enum WorkoutFocusNavigator {
             }
         }
 
-        if isWorkoutNoteRevealed
-            || !session.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            fields.append(.workoutNotes)
-        }
         return fields
     }
 
