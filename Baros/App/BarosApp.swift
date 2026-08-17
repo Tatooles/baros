@@ -113,10 +113,7 @@ struct BarosApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AppShellView(
-                navigationState: navigationState,
-                activeWorkoutEngine: activeWorkoutEngine
-            )
+            Issue47AccessoryPrototypeView()
             .modelContainer(modelContainer)
             .environment(Clerk.shared)
             .environment(syncScheduler)
