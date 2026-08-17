@@ -744,15 +744,14 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Full History"].exists)
         XCTAssertFalse(app.staticTexts["QuickHistoryLimitFooter"].exists)
         let setLabel = app.staticTexts["Set 1"]
-        let noteLabel = app.staticTexts["ExerciseHistoryNoteLabel"]
         let noteText = app.staticTexts["ExerciseHistoryNoteText"]
         XCTAssertTrue(setLabel.waitForExistence(timeout: 3))
-        XCTAssertTrue(noteLabel.waitForExistence(timeout: 3))
         XCTAssertTrue(noteText.waitForExistence(timeout: 3))
-        XCTAssertEqual(noteLabel.label, "Exercise Notes")
-        XCTAssertEqual(noteText.label, "Pause at the bottom\nKeep wrists stacked")
-        XCTAssertEqual(noteLabel.frame.minX, setLabel.frame.minX, accuracy: 1)
-        XCTAssertGreaterThan(noteText.frame.height, noteLabel.frame.height)
+        XCTAssertFalse(app.staticTexts["ExerciseHistoryNoteLabel"].exists)
+        XCTAssertEqual(noteText.label, "Exercise note")
+        XCTAssertEqual(noteText.value as? String, "Pause at the bottom\nKeep wrists stacked")
+        XCTAssertEqual(noteText.frame.minX, setLabel.frame.minX, accuracy: 1)
+        XCTAssertGreaterThan(noteText.frame.height, setLabel.frame.height)
         app.buttons["Done"].tap()
         XCTAssertFalse(keyboard.waitForExistence(timeout: 1))
     }

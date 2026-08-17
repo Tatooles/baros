@@ -10,17 +10,13 @@ struct ExerciseHistoryNoteBlock: View {
                     .overlay(AppTheme.subtleBorder)
                     .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Exercise Notes")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(AppTheme.textPrimary)
-                        .accessibilityIdentifier("ExerciseHistoryNoteLabel")
-                    Text(displayNote)
-                        .font(.subheadline)
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("ExerciseHistoryNoteText")
-                }
+                Text(displayNote)
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Exercise note")
+                    .accessibilityValue(displayNote)
+                    .accessibilityIdentifier("ExerciseHistoryNoteText")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .contain)
