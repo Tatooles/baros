@@ -220,7 +220,7 @@ struct WorkoutNumericTextField<Focus: Hashable>: View {
                         .fill(AppTheme.fieldSurface)
                 case .grid:
                     Rectangle()
-                        .fill(isFocused ? AppTheme.brandAccentMuted.opacity(0.45) : .clear)
+                        .fill(isFocused ? AppTheme.brandAccentMuted : .clear)
                 }
             }
             .overlay(alignment: .bottom) {

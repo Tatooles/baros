@@ -65,19 +65,7 @@ struct SetRowView: View {
 
             repsField
 
-            Button {
-                completeButtonTapped()
-            } label: {
-                Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
-                    .foregroundStyle(set.isCompleted ? AppTheme.brandAccentFill : AppTheme.textTertiary)
-                    .symbolEffect(.bounce, value: set.isCompleted)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(set.isCompleted ? "Mark set incomplete" : "Mark set complete")
-            .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
+            completionButton
         }
     }
 
@@ -90,19 +78,7 @@ struct SetRowView: View {
 
                 previousColumn
 
-                Button {
-                    completeButtonTapped()
-                } label: {
-                    Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .font(.title2)
-                        .foregroundStyle(set.isCompleted ? AppTheme.brandAccentFill : AppTheme.textTertiary)
-                        .symbolEffect(.bounce, value: set.isCompleted)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(set.isCompleted ? "Mark set incomplete" : "Mark set complete")
-                .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
+                completionButton
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("SetAccessibilityTopRow-\(exerciseIndex)-\(index)")
@@ -153,6 +129,22 @@ struct SetRowView: View {
                 accessibilityIdentifier: accessibilityIdentifier
             )
         }
+    }
+
+    private var completionButton: some View {
+        Button {
+            completeButtonTapped()
+        } label: {
+            Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
+                .font(.title2)
+                .foregroundStyle(set.isCompleted ? AppTheme.brandAccentFill : AppTheme.textTertiary)
+                .symbolEffect(.bounce, value: set.isCompleted)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(set.isCompleted ? "Mark set incomplete" : "Mark set complete")
+        .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
     }
 
     /// Typing stages values in view-local drafts; this is the single point that

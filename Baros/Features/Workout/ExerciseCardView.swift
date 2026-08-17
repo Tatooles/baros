@@ -295,7 +295,7 @@ private struct ExerciseNotesDraftField: View {
             .frame(minHeight: 44, alignment: .topLeading)
             .workoutInputTapTarget(focusedField, equals: focusTarget)
             .background(
-                isFocused ? AnyShapeStyle(AppTheme.brandAccentMuted.opacity(0.45)) : AnyShapeStyle(Color.clear),
+                isFocused ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(Color.clear),
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
             .accessibilityIdentifier("ExerciseNotesField-\(exerciseIndex)")
@@ -305,14 +305,11 @@ private struct ExerciseNotesDraftField: View {
         .animation(.easeOut(duration: 0.15), value: isFocused)
         .onChange(of: focusedField.wrappedValue) { previousField, newField in
             if previousField == focusTarget, newField != focusTarget {
-                commitIfNeeded()
-                if currentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    isRevealed = false
-                }
+                commitAndUpdateDisclosure()
             }
         }
         .onDisappear {
-            commitIfNeeded()
+            commitAndUpdateDisclosure()
         }
     }
 
@@ -320,6 +317,14 @@ private struct ExerciseNotesDraftField: View {
         guard let draft else { return }
         commit(draft)
         self.draft = nil
+    }
+
+    private func commitAndUpdateDisclosure() {
+        let shouldHide = currentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        commitIfNeeded()
+        if shouldHide {
+            isRevealed = false
+        }
     }
 
     private var currentText: String {
