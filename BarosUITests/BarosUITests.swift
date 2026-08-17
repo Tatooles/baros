@@ -161,37 +161,6 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testWorkoutHistoryExerciseNoteUsesParentAlignedMultilineLayoutAtAccessibilitySize() {
-        let app = makeApp(
-            extraArguments: [
-                "--uitest-seed-history-exercise-note",
-                "-UIPreferredContentSizeCategoryName",
-                "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
-            ],
-            completedBenchWorkoutTitles: ["History Notes"]
-        )
-        app.launch()
-
-        app.buttons["HistoryTab"].tap()
-        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
-        app.buttons["WorkoutHistoryButton-0"].tap()
-
-        let setSummary = app.staticTexts
-            .matching(identifier: "WorkoutHistorySetSummary-0-0")
-            .matching(NSPredicate(format: "label == %@", "Set 1"))
-            .firstMatch
-        let noteLabel = app.staticTexts["ExerciseHistoryNoteLabel"]
-        let noteText = app.staticTexts["ExerciseHistoryNoteText"]
-        XCTAssertTrue(setSummary.waitForExistence(timeout: 3))
-        XCTAssertTrue(noteLabel.waitForExistence(timeout: 3))
-        XCTAssertTrue(noteText.waitForExistence(timeout: 3))
-        XCTAssertEqual(noteLabel.label, "Exercise Notes")
-        XCTAssertEqual(noteText.label, "Pause at the bottom\nKeep wrists stacked")
-        XCTAssertEqual(noteLabel.frame.minX, setSummary.frame.minX, accuracy: 1)
-        XCTAssertGreaterThan(noteText.frame.height, noteLabel.frame.height)
-    }
-
-    @MainActor
     func testFirstRunWelcomeAppearsOnce() {
         let firstLaunch = makeDiskBackedResetApp(extraArguments: ["--uitest-reset-first-run-experience"])
         firstLaunch.launch()
@@ -737,8 +706,15 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testQuickExerciseHistoryHeadingShowsPerformanceSummary() {
-        let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
+    func testQuickExerciseHistoryShowsPerformanceSummaryAndFlattenedExerciseNotes() {
+        let app = makeApp(
+            extraArguments: [
+                "--uitest-seed-history-exercise-note",
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+            ],
+            completedBenchWorkoutTitles: ["Past Push"]
+        )
         app.launch()
 
         app.buttons["WorkoutTab"].tap()
@@ -767,6 +743,16 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Done"].exists)
         XCTAssertTrue(app.buttons["Full History"].exists)
         XCTAssertFalse(app.staticTexts["QuickHistoryLimitFooter"].exists)
+        let setLabel = app.staticTexts["Set 1"]
+        let noteLabel = app.staticTexts["ExerciseHistoryNoteLabel"]
+        let noteText = app.staticTexts["ExerciseHistoryNoteText"]
+        XCTAssertTrue(setLabel.waitForExistence(timeout: 3))
+        XCTAssertTrue(noteLabel.waitForExistence(timeout: 3))
+        XCTAssertTrue(noteText.waitForExistence(timeout: 3))
+        XCTAssertEqual(noteLabel.label, "Exercise Notes")
+        XCTAssertEqual(noteText.label, "Pause at the bottom\nKeep wrists stacked")
+        XCTAssertEqual(noteLabel.frame.minX, setLabel.frame.minX, accuracy: 1)
+        XCTAssertGreaterThan(noteText.frame.height, noteLabel.frame.height)
         app.buttons["Done"].tap()
         XCTAssertFalse(keyboard.waitForExistence(timeout: 1))
     }
