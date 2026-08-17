@@ -15,6 +15,162 @@ extension View {
     }
 }
 
+struct WorkoutProgressiveNoteAddButton<Focus: Hashable>: View {
+    let title: String
+    let systemImage: String
+    let accessibilityIdentifier: String
+    let focusTarget: Focus
+    @Binding var isRevealed: Bool
+    var focusedField: FocusState<Focus?>.Binding
+
+    var body: some View {
+        Button {
+            isRevealed = true
+            Task { @MainActor in
+                await Task.yield()
+                focusedField.wrappedValue = focusTarget
+            }
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppTheme.brandAccentForeground)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+struct WorkoutProgressiveNoteDraftField<Focus: Hashable>: View {
+    let notes: String
+    let placeholder: String
+    let accessibilityLabel: String
+    let accessibilityIdentifier: String
+    let focusTarget: Focus
+    @Binding var isRevealed: Bool
+    var focusedField: FocusState<Focus?>.Binding
+    let commit: (String) -> Void
+    @State private var draft: String?
+
+    var body: some View {
+        TextField(
+            placeholder,
+            text: Binding(
+                get: { draft ?? notes },
+                set: { draft = $0 }
+            ),
+            axis: .vertical
+        )
+        .textFieldStyle(.plain)
+        .font(.body)
+        .foregroundStyle(AppTheme.textPrimary)
+        .lineLimit(1...6)
+        .focused(focusedField, equals: focusTarget)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 10)
+        .frame(minHeight: 44, alignment: .topLeading)
+        .workoutInputTapTarget(focusedField, equals: focusTarget)
+        .background(
+            isFocused ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(Color.clear),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .animation(.easeOut(duration: 0.15), value: isFocused)
+        .accessibilityLabel(Text(verbatim: accessibilityLabel))
+        .accessibilityIdentifier(accessibilityIdentifier)
+        .id(focusTarget)
+        .onChange(of: focusedField.wrappedValue) { previousField, newField in
+            if previousField == focusTarget, newField != focusTarget {
+                commitAndUpdateDisclosure()
+            }
+        }
+        .onDisappear {
+            commitAndUpdateDisclosure()
+        }
+    }
+
+    private func commitIfNeeded() {
+        guard let draft else { return }
+        commit(draft)
+        self.draft = nil
+    }
+
+    private func commitAndUpdateDisclosure() {
+        let shouldHide = currentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        commitIfNeeded()
+        if shouldHide {
+            isRevealed = false
+        }
+    }
+
+    private var currentText: String {
+        draft ?? notes
+    }
+
+    private var isFocused: Bool {
+        focusedField.wrappedValue == focusTarget
+    }
+}
+
+struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
+    let notes: String
+    let addTitle: String
+    let addSystemImage: String
+    let placeholder: String
+    let accessibilityLabel: String
+    let addAccessibilityIdentifier: String
+    let fieldAccessibilityIdentifier: String
+    let addAccessibilityHint: String?
+    let addButtonHorizontalPadding: CGFloat
+    let focusTarget: Focus
+    @Binding var isRevealed: Bool
+    var focusedField: FocusState<Focus?>.Binding
+    let commit: (String) -> Void
+
+    var body: some View {
+        Group {
+            if isNoteVisible {
+                WorkoutProgressiveNoteDraftField(
+                    notes: notes,
+                    placeholder: placeholder,
+                    accessibilityLabel: accessibilityLabel,
+                    accessibilityIdentifier: fieldAccessibilityIdentifier,
+                    focusTarget: focusTarget,
+                    isRevealed: $isRevealed,
+                    focusedField: focusedField,
+                    commit: commit
+                )
+            } else {
+                addButton
+                    .padding(.horizontal, addButtonHorizontalPadding)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: isNoteVisible)
+    }
+
+    @ViewBuilder
+    private var addButton: some View {
+        let button = WorkoutProgressiveNoteAddButton(
+            title: addTitle,
+            systemImage: addSystemImage,
+            accessibilityIdentifier: addAccessibilityIdentifier,
+            focusTarget: focusTarget,
+            isRevealed: $isRevealed,
+            focusedField: focusedField
+        )
+
+        if let addAccessibilityHint {
+            button.accessibilityHint(Text(verbatim: addAccessibilityHint))
+        } else {
+            button
+        }
+    }
+
+    private var isNoteVisible: Bool {
+        isRevealed || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 struct WorkoutExerciseProgress {
     var completed: Int
     var total: Int

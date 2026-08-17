@@ -25,6 +25,7 @@ struct WorkoutSessionView: View {
     @State private var recentlyAddedExerciseID: UUID?
     @State private var collapsedExerciseIDs: Set<UUID> = []
     @State private var revealedExerciseNoteIDs: Set<UUID> = []
+    @State private var isWorkoutNoteRevealed = false
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
     @State private var rpeEditingSourceField: WorkoutField?
@@ -37,11 +38,9 @@ struct WorkoutSessionView: View {
         // dismissal and clamps the scroll offset (a visible jump), so each
         // tier is the minimum the state needs. Full room is only for
         // positioning a newly added exercise near the top of the viewport.
-        // The workout notes card is the last element, so editing it needs
-        // enough room to clear the floating keyboard accessory buttons,
-        // which sit ~48pt above the keyboard's safe-area inset. Mid-list
-        // fields always have real content below them, so keyboard avoidance
-        // reveals them with no extra room at all.
+        // Title and workout-note editing keep modest keyboard-navigation
+        // room. Mid-list fields always have real content below them, so
+        // keyboard avoidance reveals them with no extra room at all.
         if recentlyAddedExerciseID != nil { return 120 }
         switch focusedField {
         case .workoutTitle, .workoutNotes:
@@ -77,6 +76,25 @@ struct WorkoutSessionView: View {
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(AppTheme.textSecondary)
                             .padding(.horizontal, 12)
+                            .accessibilityIdentifier("WorkoutDate")
+
+                        WorkoutProgressiveNoteControl(
+                            notes: session.notes,
+                            addTitle: "Add workout note",
+                            addSystemImage: "square.and.pencil",
+                            placeholder: "Notes about today's workout",
+                            accessibilityLabel: "Workout note",
+                            addAccessibilityIdentifier: "AddWorkoutNoteButton",
+                            fieldAccessibilityIdentifier: "WorkoutNotesField",
+                            addAccessibilityHint: "Adds a note for the whole workout.",
+                            addButtonHorizontalPadding: 8,
+                            focusTarget: .workoutNotes,
+                            isRevealed: $isWorkoutNoteRevealed,
+                            focusedField: $focusedField
+                        ) { draft in
+                            try? engine.updateWorkoutNotes(draft, session: session, context: modelContext)
+                        }
+                        .padding(.horizontal, 4)
                     }
                     .padding(.horizontal, 4)
 
@@ -119,13 +137,6 @@ struct WorkoutSessionView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("AddExerciseButton")
-
-                    WorkoutNotesDraftCard(
-                        notes: session.notes,
-                        focusedField: $focusedField
-                    ) { draft in
-                        try? engine.updateWorkoutNotes(draft, session: session, context: modelContext)
-                    }
                 }
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
@@ -290,7 +301,8 @@ struct WorkoutSessionView: View {
         WorkoutFocusNavigator.focusOrder(
             for: session,
             collapsedExerciseIDs: collapsedExerciseIDs,
-            revealedExerciseNoteIDs: revealedExerciseNoteIDs
+            revealedExerciseNoteIDs: revealedExerciseNoteIDs,
+            isWorkoutNoteRevealed: isWorkoutNoteRevealed
         )
     }
 
@@ -413,68 +425,6 @@ private struct WorkoutTitleDraftField: View {
         )
         .onChange(of: focusedField.wrappedValue) { previousField, newField in
             if previousField == .workoutTitle, newField != .workoutTitle {
-                commitIfNeeded()
-            }
-        }
-        .onDisappear {
-            // The view can leave the tree mid-edit (tab switch, active session
-            // replaced); the focus-change commit no longer fires then.
-            commitIfNeeded()
-        }
-    }
-
-    private func commitIfNeeded() {
-        guard let draft else { return }
-        commit(draft)
-        self.draft = nil
-    }
-}
-
-/// Owns the workout-notes draft; same leaf-scoped commit-on-focus-loss
-/// contract as WorkoutTitleDraftField.
-private struct WorkoutNotesDraftCard: View {
-    let notes: String
-    var focusedField: FocusState<WorkoutField?>.Binding
-    let commit: (String) -> Void
-    @State private var draft: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("WORKOUT NOTES")
-                .font(.caption2.weight(.bold))
-                .tracking(1.8)
-                .foregroundStyle(AppTheme.textSecondary)
-            TextField(
-                "How did this session feel? Any notes for next time...",
-                text: Binding(
-                    get: { draft ?? notes },
-                    set: { draft = $0 }
-                ),
-                axis: .vertical
-            )
-            .font(.subheadline)
-            .foregroundStyle(AppTheme.textPrimary)
-            .lineLimit(4...6)
-            .focused(focusedField, equals: .workoutNotes)
-            .padding(12)
-            .workoutInputTapTarget(focusedField, equals: .workoutNotes)
-            .background(
-                AppTheme.fieldSurface,
-                in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                    .strokeBorder(
-                        focusedField.wrappedValue == .workoutNotes ? AppTheme.brandFocus : .clear,
-                        lineWidth: 1.5
-                    )
-            )
-            .animation(.easeOut(duration: 0.15), value: focusedField.wrappedValue == .workoutNotes)
-            .id(WorkoutField.workoutNotes)
-
-        }
-        .onChange(of: focusedField.wrappedValue) { previousField, newField in
-            if previousField == .workoutNotes, newField != .workoutNotes {
                 commitIfNeeded()
             }
         }
