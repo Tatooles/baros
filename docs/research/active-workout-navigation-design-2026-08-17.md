@@ -18,9 +18,12 @@ The accessory uses the accepted status-rich treatment: workout name, minute-leve
 | Start or relaunch with an Active Workout | Full-height workout session | Home remains underneath |
 | Minimize | Session closes; accessory appears | Reveal the tab underneath |
 | Reopen from History or Profile | Session appears above that tab | Preserve the selected tab |
-| Finish, discard, or owner change | Session and accessory disappear | Select Home |
+| Finish or discard | Session and accessory disappear | Select Home |
+| Visible Active Workout becomes unavailable after a Current Owner change | Session and accessory disappear | Select Home |
 
 The minimized state is not restored across process relaunch. If an Active Workout exists at launch, Baros presents it directly as required by #174.
+
+Issue #47 owns the presentation response when the currently visible Active Workout changes or disappears; it does not define how Active Workouts persist across Current Owner transitions. Issue #188 separately owns the device-wide single-Active-Workout invariant and the requirement to finish or discard before a user-initiated sign-out or account change.
 
 ## Native presentation
 
@@ -75,4 +78,4 @@ Apple's sheet guidance identifies the grabber as both a visual resizability affo
 
 ## Scope boundary
 
-Issue #47 owns the permanent tab shell, Active Workout presentation, minimize/reopen behavior, accessory, and lifecycle selection mechanics. Issue #174 owns Home and the Start Workout flow. Inline accessory adaptation and a workout-specific bottom utility bar are future refinements.
+Issue #47 owns the permanent tab shell, Active Workout presentation, minimize/reopen behavior, accessory, and lifecycle selection mechanics. Issue #174 owns Home and the Start Workout flow. Issue #188 owns Active Workout resolution across sign-out and Current Owner transitions. Inline accessory adaptation and a workout-specific bottom utility bar are future refinements.
