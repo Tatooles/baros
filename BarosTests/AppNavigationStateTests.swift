@@ -130,11 +130,13 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertEqual(navigationState.selectedTab, .home)
         XCTAssertFalse(navigationState.isActiveWorkoutPresented)
         XCTAssertFalse(navigationState.showsActiveWorkoutAccessory)
+        XCTAssertTrue(navigationState.showsSuppressedActiveWorkoutReturnAction)
 
         navigationState.presentActiveWorkout()
         navigationState.minimizeActiveWorkout()
 
         XCTAssertTrue(navigationState.showsActiveWorkoutAccessory)
+        XCTAssertFalse(navigationState.showsSuppressedActiveWorkoutReturnAction)
     }
 
     func testExplicitReturnRequestedBeforeDelayedWorkoutAppearsPresentsIt() {

@@ -25,44 +25,31 @@ struct StartWorkoutView: View {
                     .foregroundStyle(AppTheme.textPrimary)
                     .accessibilityIdentifier("StartWorkoutTitle")
 
-                Button {
-                    startBlankWorkout()
-                } label: {
-                    SurfaceCard {
-                        HStack(spacing: 14) {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(AppTheme.brandAccentGradient)
-                                .frame(width: 56, height: 56)
-                                .overlay {
-                                    Image(systemName: "plus")
-                                        .font(.title2.weight(.bold))
-                                        .foregroundStyle(AppTheme.onBrandAccent)
-                                }
-                                .shadow(color: AppTheme.brandAccentGlow, radius: 10, y: 4)
+                if navigationState.showsSuppressedActiveWorkoutReturnAction {
+                    workoutActionButton(
+                        title: "Return to Workout",
+                        subtitle: "Continue your active session.",
+                        systemImage: "arrow.up.forward.app.fill",
+                        accessibilityIdentifier: "ReturnToActiveWorkoutButton",
+                        performWorkoutAction: presentWorkout
+                    )
+                } else {
+                    workoutActionButton(
+                        title: "Blank Workout",
+                        subtitle: "Start logging sets from scratch.",
+                        systemImage: "plus",
+                        accessibilityIdentifier: "StartBlankWorkoutButton",
+                        performWorkoutAction: startBlankWorkout
+                    )
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Blank Workout")
-                                    .font(.title3.weight(.bold))
-                                    .foregroundStyle(AppTheme.textPrimary)
-                                Text("Start logging sets from scratch.")
-                                    .font(.footnote.weight(.medium))
-                                    .foregroundStyle(AppTheme.textSecondary)
-                            }
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Use Past Workout")
+                            .font(.headline)
+                            .foregroundStyle(AppTheme.textPrimary)
 
-                            Spacer()
+                        PastWorkoutPickerView(sessions: completedSessions) { session in
+                            selectedPastWorkoutSession = session
                         }
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("StartBlankWorkoutButton")
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Use Past Workout")
-                        .font(.headline)
-                        .foregroundStyle(AppTheme.textPrimary)
-
-                    PastWorkoutPickerView(sessions: completedSessions) { session in
-                        selectedPastWorkoutSession = session
                     }
                 }
             }
@@ -75,6 +62,43 @@ struct StartWorkoutView: View {
                 startWorkout(fromPast: session)
             }
         }
+    }
+
+    private func workoutActionButton(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        accessibilityIdentifier: String,
+        performWorkoutAction: @escaping () -> Void
+    ) -> some View {
+        Button(action: performWorkoutAction) {
+            SurfaceCard {
+                HStack(spacing: 14) {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(AppTheme.brandAccentGradient)
+                        .frame(width: 56, height: 56)
+                        .overlay {
+                            Image(systemName: systemImage)
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(AppTheme.onBrandAccent)
+                        }
+                        .shadow(color: AppTheme.brandAccentGlow, radius: 10, y: 4)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(AppTheme.textPrimary)
+                        Text(subtitle)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+
+                    Spacer()
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 
     private func startBlankWorkout() {

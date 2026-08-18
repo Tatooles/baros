@@ -202,9 +202,15 @@ final class BarosUITests: XCTestCase {
         currentOwnerChangeButton.tap()
 
         XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].exists)
         XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
-        app.terminate()
+        let returnToWorkoutButton = app.buttons["ReturnToActiveWorkoutButton"]
+        XCTAssertTrue(returnToWorkoutButton.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["StartBlankWorkoutButton"].exists)
+        XCTAssertFalse(app.staticTexts["Use Past Workout"].exists)
+
+        returnToWorkoutButton.tap()
+
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
     }
 
     @MainActor

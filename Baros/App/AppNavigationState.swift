@@ -84,6 +84,10 @@ final class AppNavigationState {
         activeWorkoutID != nil && !isActiveWorkoutPresented && !suppressesActiveWorkoutAccessory
     }
 
+    var showsSuppressedActiveWorkoutReturnAction: Bool {
+        activeWorkoutID != nil && !isActiveWorkoutPresented && suppressesActiveWorkoutAccessory
+    }
+
     init(
         selectedTab: AppTab = .home,
         historyMode: HistoryMode = .workouts,
