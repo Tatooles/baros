@@ -25,7 +25,7 @@ struct StartWorkoutView: View {
                     .foregroundStyle(AppTheme.textPrimary)
                     .accessibilityIdentifier("StartWorkoutTitle")
 
-                if navigationState.showsSuppressedActiveWorkoutReturnAction {
+                if navigationState.showsActiveWorkoutReturnAction {
                     workoutActionButton(
                         title: "Return to Workout",
                         subtitle: "Continue your active session.",

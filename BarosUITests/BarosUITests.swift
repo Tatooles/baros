@@ -74,7 +74,9 @@ final class BarosUITests: XCTestCase {
         app.buttons["HomeTab"].tap()
         XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].exists)
-        app.buttons["StartBlankWorkoutButton"].tap()
+        XCTAssertFalse(app.buttons["StartBlankWorkoutButton"].exists)
+        XCTAssertFalse(app.staticTexts["Use Past Workout"].exists)
+        app.buttons["ReturnToActiveWorkoutButton"].tap()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
     }
 

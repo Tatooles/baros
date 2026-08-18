@@ -84,8 +84,8 @@ final class AppNavigationState {
         activeWorkoutID != nil && !isActiveWorkoutPresented && !suppressesActiveWorkoutAccessory
     }
 
-    var showsSuppressedActiveWorkoutReturnAction: Bool {
-        activeWorkoutID != nil && !isActiveWorkoutPresented && suppressesActiveWorkoutAccessory
+    var showsActiveWorkoutReturnAction: Bool {
+        activeWorkoutID != nil && !isActiveWorkoutPresented
     }
 
     init(
