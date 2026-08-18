@@ -122,6 +122,8 @@ struct AppShellView: View {
                             }
                             #endif
                         }
+                        .padding(.top, 16)
+                        .background(AppTheme.canvasBackground.ignoresSafeArea())
                     }
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
