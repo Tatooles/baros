@@ -164,13 +164,13 @@ struct AppShellView: View {
                 ) {
                     activeWorkoutAccessory
                 }
-        } else if navigationState.showsActiveWorkoutAccessory, activeSession != nil {
-            tabs
-                .tabViewBottomAccessory {
-                    activeWorkoutAccessory
-                }
         } else {
             tabs
+                .tabViewBottomAccessory {
+                    if navigationState.showsActiveWorkoutAccessory, activeSession != nil {
+                        activeWorkoutAccessory
+                    }
+                }
         }
     }
 
