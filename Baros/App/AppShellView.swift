@@ -192,11 +192,10 @@ struct AppShellView: View {
             .tag(AppTab.history)
 
             NavigationStack {
-                HomeView(
-                    activeSession: activeSession,
-                    returnToActiveWorkout: { navigationState.presentActiveWorkout() },
+                StartWorkoutView(
                     navigationState: navigationState,
-                    activeWorkoutEngine: activeWorkoutEngine
+                    activeWorkoutEngine: activeWorkoutEngine,
+                    presentWorkout: { navigationState.presentActiveWorkout() }
                 )
             }
             .tabItem {

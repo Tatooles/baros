@@ -13,34 +13,28 @@ enum WorkoutFormatters {
         return "\(String(format: "%02d", minutes)):\(String(format: "%02d", remainder))"
     }
 
-    static func elapsedMinuteDescription(_ seconds: Int) -> String {
-        let totalMinutes = max(0, seconds) / 60
-        let hours = totalMinutes / 60
-        let minutes = totalMinutes % 60
-
-        if hours > 0 {
-            return "\(hours) hr \(String(format: "%02d", minutes)) min elapsed"
-        }
-
-        return "\(minutes) min elapsed"
+    static func elapsedDescription(_ seconds: Int) -> String {
+        elapsedCompactDescription(seconds) + " elapsed"
     }
 
-    static func elapsedMinuteCompactDescription(_ seconds: Int) -> String {
-        elapsedMinuteDescription(seconds).replacingOccurrences(of: " elapsed", with: "")
+    static func elapsedCompactDescription(_ seconds: Int) -> String {
+        duration(max(0, seconds))
     }
 
-    static func elapsedMinuteAccessibilityDescription(_ seconds: Int) -> String {
-        let totalMinutes = max(0, seconds) / 60
-        let hours = totalMinutes / 60
-        let minutes = totalMinutes % 60
+    static func elapsedAccessibilityDescription(_ seconds: Int) -> String {
+        let elapsedSeconds = max(0, seconds)
+        let hours = elapsedSeconds / 3_600
+        let minutes = (elapsedSeconds % 3_600) / 60
+        let seconds = elapsedSeconds % 60
         var parts: [String] = []
 
         if hours > 0 {
             parts.append("\(hours) \(hours == 1 ? "hour" : "hours")")
         }
-        if minutes > 0 || hours == 0 {
+        if minutes > 0 {
             parts.append("\(minutes) \(minutes == 1 ? "minute" : "minutes")")
         }
+        parts.append("\(seconds) \(seconds == 1 ? "second" : "seconds")")
 
         return parts.joined(separator: ", ") + " elapsed"
     }

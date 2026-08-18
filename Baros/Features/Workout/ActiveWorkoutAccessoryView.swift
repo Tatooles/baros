@@ -6,7 +6,7 @@ struct ActiveWorkoutAccessoryView: View {
     let returnToActiveWorkout: () -> Void
 
     var body: some View {
-        TimelineView(.periodic(from: session.startedAt, by: 60)) { timeline in
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
             let metrics = WorkoutMetrics(session: session, now: timeline.date)
 
             Button(action: returnToActiveWorkout) {
@@ -14,7 +14,7 @@ struct ActiveWorkoutAccessoryView: View {
                     if dynamicTypeSize.isAccessibilitySize {
                         Text(
                             "\(session.title) · "
-                                + WorkoutFormatters.elapsedMinuteCompactDescription(metrics.durationSeconds)
+                                + WorkoutFormatters.elapsedCompactDescription(metrics.durationSeconds)
                         )
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(AppTheme.textPrimary)
@@ -34,7 +34,7 @@ struct ActiveWorkoutAccessoryView: View {
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(AppTheme.textPrimary)
                                     .fixedSize(horizontal: false, vertical: true)
-                                Text(WorkoutFormatters.elapsedMinuteDescription(metrics.durationSeconds))
+                                Text(WorkoutFormatters.elapsedDescription(metrics.durationSeconds))
                                     .font(.caption)
                                     .foregroundStyle(AppTheme.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -63,7 +63,7 @@ struct ActiveWorkoutAccessoryView: View {
                 .accessibilityLabel("Return to Workout")
                 .accessibilityValue(
                     "\(session.title), "
-                        + "\(WorkoutFormatters.elapsedMinuteAccessibilityDescription(metrics.durationSeconds)), "
+                        + "\(WorkoutFormatters.elapsedAccessibilityDescription(metrics.durationSeconds)), "
                         + "\(metrics.completedSetCount) of \(metrics.totalSetCount) sets completed"
                 )
                 .accessibilityIdentifier("ActiveWorkoutAccessory")

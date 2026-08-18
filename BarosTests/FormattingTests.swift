@@ -11,26 +11,26 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(AppTheme.formatDuration(76), "01:16")
     }
 
-    func testElapsedMinuteDescriptionDropsSeconds() {
-        XCTAssertEqual(WorkoutFormatters.elapsedMinuteDescription(2_339), "38 min elapsed")
+    func testElapsedDescriptionIncludesSeconds() {
+        XCTAssertEqual(WorkoutFormatters.elapsedDescription(2_339), "38:59 elapsed")
     }
 
-    func testElapsedMinuteDescriptionUsesPaddedMinutesAfterAnHour() {
-        XCTAssertEqual(WorkoutFormatters.elapsedMinuteDescription(3_899), "1 hr 04 min elapsed")
+    func testElapsedDescriptionIncludesHoursWithPaddedMinutesAndSeconds() {
+        XCTAssertEqual(WorkoutFormatters.elapsedDescription(3_899), "1:04:59 elapsed")
     }
 
-    func testElapsedMinuteCompactDescriptionOmitsRedundantSuffix() {
-        XCTAssertEqual(WorkoutFormatters.elapsedMinuteCompactDescription(2_339), "38 min")
-        XCTAssertEqual(WorkoutFormatters.elapsedMinuteCompactDescription(3_899), "1 hr 04 min")
+    func testElapsedCompactDescriptionOmitsRedundantSuffix() {
+        XCTAssertEqual(WorkoutFormatters.elapsedCompactDescription(2_339), "38:59")
+        XCTAssertEqual(WorkoutFormatters.elapsedCompactDescription(3_899), "1:04:59")
     }
 
-    func testElapsedMinuteAccessibilityDescriptionUsesSpokenUnits() {
-        XCTAssertEqual(WorkoutFormatters.elapsedMinuteAccessibilityDescription(0), "0 minutes elapsed")
-        XCTAssertEqual(WorkoutFormatters.elapsedMinuteAccessibilityDescription(60), "1 minute elapsed")
-        XCTAssertEqual(WorkoutFormatters.elapsedMinuteAccessibilityDescription(3_600), "1 hour elapsed")
+    func testElapsedAccessibilityDescriptionUsesSpokenUnitsIncludingSeconds() {
+        XCTAssertEqual(WorkoutFormatters.elapsedAccessibilityDescription(0), "0 seconds elapsed")
+        XCTAssertEqual(WorkoutFormatters.elapsedAccessibilityDescription(60), "1 minute, 0 seconds elapsed")
+        XCTAssertEqual(WorkoutFormatters.elapsedAccessibilityDescription(3_600), "1 hour, 0 seconds elapsed")
         XCTAssertEqual(
-            WorkoutFormatters.elapsedMinuteAccessibilityDescription(3_840),
-            "1 hour, 4 minutes elapsed"
+            WorkoutFormatters.elapsedAccessibilityDescription(3_899),
+            "1 hour, 4 minutes, 59 seconds elapsed"
         )
     }
 
