@@ -122,7 +122,6 @@ struct AppShellView: View {
                             }
                             #endif
                         }
-                        .padding(.top, 16)
                     }
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
