@@ -154,6 +154,34 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testOwnerScopedActiveWorkoutWinsAfterDelayedOwnerResolution() {
+        let owner = "issuer|ui_owner"
+        let firstLaunch = makeDiskBackedResetApp(extraArguments: [
+            "--uitest-sync-owner", owner,
+        ])
+        firstLaunch.launch()
+        startBlankWorkout(in: firstLaunch)
+        replaceText(in: firstLaunch.textFields["WorkoutTitle"], with: "Owner Launch Priority")
+        dismissKeyboardIfNeeded(in: firstLaunch)
+        firstLaunch.terminate()
+
+        let relaunchedApp = makeDiskBackedApp(
+            extraArguments: [
+                "--uitest-sync-owner", owner,
+                "--uitest-delay-current-owner-start",
+                "--uitest-reset-first-run-experience",
+            ],
+            skipsFirstRunExperience: false
+        )
+        relaunchedApp.launch()
+
+        let title = relaunchedApp.textFields["WorkoutTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertEqual(title.value as? String, "Owner Launch Priority")
+        XCTAssertFalse(relaunchedApp.staticTexts["LaunchExperienceTitle"].exists)
+    }
+
+    @MainActor
     func testCurrentOwnerChangeDismissesWorkoutAndFallsBackHome() {
         let app = makeApp(extraArguments: ["--uitest-active-workout-current-owner-change-control"])
         app.launch()

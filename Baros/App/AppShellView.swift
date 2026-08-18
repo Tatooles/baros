@@ -4,12 +4,14 @@ import SwiftUI
 struct AppShellView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(\.syncRecoveryAction) private var syncRecoveryAction
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     private let firstRunStore = FirstRunExperienceStore()
     @State private var dismissedSyncFailureSignature: String?
     @State private var launchPresentation: LaunchExperiencePresentation?
+    @State private var hasMadeLaunchExperienceDecision = false
     @State private var prepareActiveWorkoutForMinimization: (() -> Void)?
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \SyncOutboxEntry.updatedAt, order: .reverse) private var outboxEntries: [SyncOutboxEntry]
@@ -141,12 +143,16 @@ struct AppShellView: View {
                 }
             }
             .onChange(of: activeSession?.id, initial: true) { _, sessionID in
+                if sessionID != nil {
+                    launchPresentation = nil
+                }
                 navigationState.reconcileActiveWorkout(sessionID: sessionID)
+                chooseLaunchExperienceIfReady()
+            }
+            .onChange(of: currentOwnerCoordinator.state, initial: true) { _, _ in
+                chooseLaunchExperienceIfReady()
             }
             .task {
-                if activeSession == nil {
-                    presentLaunchExperienceIfNeeded()
-                }
                 activeWorkoutEngine.loadActiveSession(
                     ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
                     context: modelContext
@@ -252,6 +258,23 @@ struct AppShellView: View {
 
         if launchPresentation == nil, state.hasCompletedOnboarding {
             firstRunStore.markAppVersionProcessed(currentAppVersion)
+        }
+    }
+
+    private func chooseLaunchExperienceIfReady() {
+        guard !hasMadeLaunchExperienceDecision else { return }
+
+        switch LaunchExperienceCoordinator.decision(
+            currentOwnerState: currentOwnerCoordinator.state,
+            activeWorkoutID: activeSession?.id
+        ) {
+        case .deferUntilOwnerScopeResolves:
+            return
+        case .skipForActiveWorkout:
+            hasMadeLaunchExperienceDecision = true
+        case .evaluateStore:
+            hasMadeLaunchExperienceDecision = true
+            presentLaunchExperienceIfNeeded()
         }
     }
 

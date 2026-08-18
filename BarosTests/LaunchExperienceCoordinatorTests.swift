@@ -2,6 +2,53 @@ import XCTest
 @testable import Baros
 
 final class LaunchExperienceCoordinatorTests: XCTestCase {
+    func testLaunchPresentationWaitsForOwnerScopeResolution() {
+        XCTAssertEqual(
+            LaunchExperienceCoordinator.decision(
+                currentOwnerState: .resolving(ownerTokenIdentifier: nil),
+                activeWorkoutID: nil
+            ),
+            .deferUntilOwnerScopeResolves
+        )
+        XCTAssertEqual(
+            LaunchExperienceCoordinator.decision(
+                currentOwnerState: .resolving(ownerTokenIdentifier: "issuer|owner"),
+                activeWorkoutID: nil
+            ),
+            .evaluateStore
+        )
+        XCTAssertEqual(
+            LaunchExperienceCoordinator.decision(
+                currentOwnerState: .active(ownerTokenIdentifier: "issuer|owner"),
+                activeWorkoutID: nil
+            ),
+            .evaluateStore
+        )
+        XCTAssertEqual(
+            LaunchExperienceCoordinator.decision(
+                currentOwnerState: .localOnly,
+                activeWorkoutID: nil
+            ),
+            .evaluateStore
+        )
+    }
+
+    func testActiveWorkoutAlwaysDefersLaunchPresentation() {
+        for currentOwnerState in [
+            CurrentOwnerCoordinator.State.resolving(ownerTokenIdentifier: "issuer|owner"),
+            .active(ownerTokenIdentifier: "issuer|owner"),
+            .localOnly,
+        ] {
+            XCTAssertEqual(
+                LaunchExperienceCoordinator.decision(
+                    currentOwnerState: currentOwnerState,
+                    activeWorkoutID: UUID()
+                ),
+                .skipForActiveWorkout
+            )
+        }
+    }
+
     func testNewUserReceivesOnboardingInsteadOfCurrentReleaseHighlights() throws {
         let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.0"))
 

@@ -10,6 +10,7 @@ struct BarosApp: App {
     private let convexClient: ConvexClientWithAuth<String>
     private let uiTestSyncOwner: String?
     private let uiTestSyncFailureMessage: String?
+    private let delaysCurrentOwnerStartForUITesting: Bool
     private let observesNetworkRecovery: Bool
     private let networkRecoveryActivity: NetworkRecoveryActivity
     private let networkPathObserver: NetworkPathObserver<
@@ -28,6 +29,9 @@ struct BarosApp: App {
         self.convexClient = convexClient
 
         let arguments = ProcessInfo.processInfo.arguments
+        delaysCurrentOwnerStartForUITesting = arguments.contains(
+            "--uitest-delay-current-owner-start"
+        )
         #if DEBUG
         if arguments.contains("--uitest-disable-animations") {
             UIView.setAnimationsEnabled(false)
@@ -144,6 +148,9 @@ struct BarosApp: App {
             }
             #endif
             .task {
+                if delaysCurrentOwnerStartForUITesting {
+                    try? await Task.sleep(for: .milliseconds(500))
+                }
                 currentOwnerCoordinator.start()
                 networkRecoveryActivity.setActive(scenePhase == .active)
                 if observesNetworkRecovery {
