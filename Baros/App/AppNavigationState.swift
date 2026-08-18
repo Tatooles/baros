@@ -76,6 +76,7 @@ final class AppNavigationState {
     private(set) var isActiveWorkoutPresented: Bool
     private var hasReconciledActiveWorkout: Bool
     private var suppressesActiveWorkoutAccessory: Bool
+    private var requestsNextActiveWorkoutPresentation: Bool
 
     var showsActiveWorkoutAccessory: Bool {
         activeWorkoutID != nil && !isActiveWorkoutPresented && !suppressesActiveWorkoutAccessory
@@ -95,6 +96,7 @@ final class AppNavigationState {
         isActiveWorkoutPresented = false
         hasReconciledActiveWorkout = false
         suppressesActiveWorkoutAccessory = false
+        requestsNextActiveWorkoutPresentation = false
     }
 
     func reconcileActiveWorkout(sessionID: UUID?) {
@@ -115,12 +117,16 @@ final class AppNavigationState {
         switch (previousSessionID, sessionID) {
         case (nil, .some):
             selectedTab = .home
-            isActiveWorkoutPresented = true
-            suppressesActiveWorkoutAccessory = false
+            let shouldPresent = requestsNextActiveWorkoutPresentation || !suppressesActiveWorkoutAccessory
+            isActiveWorkoutPresented = shouldPresent
+            if shouldPresent {
+                suppressesActiveWorkoutAccessory = false
+            }
+            requestsNextActiveWorkoutPresentation = false
         case (.some, nil):
             selectedTab = .home
             isActiveWorkoutPresented = false
-            suppressesActiveWorkoutAccessory = false
+            suppressesActiveWorkoutAccessory = true
         case (.some, .some):
             selectedTab = .home
             isActiveWorkoutPresented = false
@@ -131,7 +137,11 @@ final class AppNavigationState {
     }
 
     func presentActiveWorkout() {
-        guard activeWorkoutID != nil else { return }
+        guard activeWorkoutID != nil else {
+            requestsNextActiveWorkoutPresentation = true
+            return
+        }
+        requestsNextActiveWorkoutPresentation = false
         suppressesActiveWorkoutAccessory = false
         isActiveWorkoutPresented = true
     }

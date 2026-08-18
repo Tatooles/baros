@@ -115,6 +115,42 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertFalse(navigationState.showsActiveWorkoutAccessory)
     }
 
+    func testDelayedReplacementAfterCurrentOwnerChangeStaysDismissedUntilExplicitReturn() {
+        let navigationState = AppNavigationState()
+        navigationState.reconcileActiveWorkout(sessionID: UUID())
+        navigationState.selectedTab = .history
+
+        navigationState.reconcileActiveWorkout(sessionID: nil)
+
+        let replacementSessionID = UUID()
+        navigationState.reconcileActiveWorkout(sessionID: replacementSessionID)
+
+        XCTAssertEqual(navigationState.activeWorkoutID, replacementSessionID)
+        XCTAssertEqual(navigationState.selectedTab, .home)
+        XCTAssertFalse(navigationState.isActiveWorkoutPresented)
+        XCTAssertFalse(navigationState.showsActiveWorkoutAccessory)
+
+        navigationState.presentActiveWorkout()
+        navigationState.minimizeActiveWorkout()
+
+        XCTAssertTrue(navigationState.showsActiveWorkoutAccessory)
+    }
+
+    func testExplicitReturnRequestedBeforeDelayedWorkoutAppearsPresentsIt() {
+        let navigationState = AppNavigationState()
+        navigationState.reconcileActiveWorkout(sessionID: UUID())
+        navigationState.reconcileActiveWorkout(sessionID: nil)
+
+        navigationState.presentActiveWorkout()
+
+        let replacementSessionID = UUID()
+        navigationState.reconcileActiveWorkout(sessionID: replacementSessionID)
+
+        XCTAssertEqual(navigationState.activeWorkoutID, replacementSessionID)
+        XCTAssertTrue(navigationState.isActiveWorkoutPresented)
+        XCTAssertFalse(navigationState.showsActiveWorkoutAccessory)
+    }
+
     func testVisibleActiveWorkoutChangingDismissesOldPresentationAndReturnsHome() {
         let navigationState = AppNavigationState()
         navigationState.reconcileActiveWorkout(sessionID: UUID())
