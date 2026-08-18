@@ -11,6 +11,29 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(AppTheme.formatDuration(76), "01:16")
     }
 
+    func testElapsedMinuteDescriptionDropsSeconds() {
+        XCTAssertEqual(WorkoutFormatters.elapsedMinuteDescription(2_339), "38 min elapsed")
+    }
+
+    func testElapsedMinuteDescriptionUsesPaddedMinutesAfterAnHour() {
+        XCTAssertEqual(WorkoutFormatters.elapsedMinuteDescription(3_899), "1 hr 04 min elapsed")
+    }
+
+    func testElapsedMinuteCompactDescriptionOmitsRedundantSuffix() {
+        XCTAssertEqual(WorkoutFormatters.elapsedMinuteCompactDescription(2_339), "38 min")
+        XCTAssertEqual(WorkoutFormatters.elapsedMinuteCompactDescription(3_899), "1 hr 04 min")
+    }
+
+    func testElapsedMinuteAccessibilityDescriptionUsesSpokenUnits() {
+        XCTAssertEqual(WorkoutFormatters.elapsedMinuteAccessibilityDescription(0), "0 minutes elapsed")
+        XCTAssertEqual(WorkoutFormatters.elapsedMinuteAccessibilityDescription(60), "1 minute elapsed")
+        XCTAssertEqual(WorkoutFormatters.elapsedMinuteAccessibilityDescription(3_600), "1 hour elapsed")
+        XCTAssertEqual(
+            WorkoutFormatters.elapsedMinuteAccessibilityDescription(3_840),
+            "1 hour, 4 minutes elapsed"
+        )
+    }
+
     func testDateFormatterIncludesWeekdayMonthAndDay() {
         let date = Calendar.current.date(from: DateComponents(year: 2026, month: 4, day: 21)) ?? .now
         XCTAssertTrue(AppTheme.formatDate(date).contains("April"))

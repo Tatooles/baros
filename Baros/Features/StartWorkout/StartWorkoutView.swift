@@ -6,6 +6,7 @@ struct StartWorkoutView: View {
     @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
+    let onWorkoutStarted: () -> Void
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @State private var selectedPastWorkoutSession: WorkoutSession?
 
@@ -82,7 +83,8 @@ struct StartWorkoutView: View {
                 ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
                 context: modelContext
             )
-            navigationState.selectedTab = .workout
+            navigationState.selectedTab = .home
+            onWorkoutStarted()
         } catch {
             activeWorkoutEngine.lastErrorMessage = error.localizedDescription
         }
@@ -96,7 +98,8 @@ struct StartWorkoutView: View {
                 context: modelContext
             )
             selectedPastWorkoutSession = nil
-            navigationState.selectedTab = .workout
+            navigationState.selectedTab = .home
+            onWorkoutStarted()
             return nil
         } catch {
             let message = error.localizedDescription
