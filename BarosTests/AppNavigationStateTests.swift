@@ -59,29 +59,30 @@ final class AppNavigationStateTests: XCTestCase {
 
     func testOpeningAndMinimizingAccessoryPreservesHistoryOrProfileSelectionAndPaths() {
         let exerciseRoute = ExerciseHistoryRoute(exerciseID: UUID(), name: "Bench Press")
+        let workoutID = UUID()
 
         for selectedTab in [AppTab.history, .profile] {
             let navigationState = AppNavigationState()
             navigationState.reconcileActiveWorkout(sessionID: UUID())
             navigationState.minimizeActiveWorkout()
             navigationState.selectedTab = selectedTab
-            navigationState.historyPath = [.exercise(exerciseRoute)]
-            navigationState.profilePath = [.settings]
+            navigationState.historyPath = [.workout(workoutID), .exercise(exerciseRoute)]
+            navigationState.profilePath = [.exerciseLibrary]
 
             navigationState.presentActiveWorkout()
 
             XCTAssertEqual(navigationState.selectedTab, selectedTab)
             XCTAssertTrue(navigationState.isActiveWorkoutPresented)
             XCTAssertFalse(navigationState.showsActiveWorkoutAccessory)
-            XCTAssertEqual(navigationState.historyPath, [.exercise(exerciseRoute)])
-            XCTAssertEqual(navigationState.profilePath, [.settings])
+            XCTAssertEqual(navigationState.historyPath, [.workout(workoutID), .exercise(exerciseRoute)])
+            XCTAssertEqual(navigationState.profilePath, [.exerciseLibrary])
 
             navigationState.minimizeActiveWorkout()
 
             XCTAssertEqual(navigationState.selectedTab, selectedTab)
             XCTAssertTrue(navigationState.showsActiveWorkoutAccessory)
-            XCTAssertEqual(navigationState.historyPath, [.exercise(exerciseRoute)])
-            XCTAssertEqual(navigationState.profilePath, [.settings])
+            XCTAssertEqual(navigationState.historyPath, [.workout(workoutID), .exercise(exerciseRoute)])
+            XCTAssertEqual(navigationState.profilePath, [.exerciseLibrary])
         }
     }
 

@@ -34,7 +34,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testActiveWorkoutMinimizesReopensAndPreservesProfilePath() {
+    func testActiveWorkoutMinimizesReopensAndPreservesDestinationPath() {
         let app = makeApp()
         app.launch()
         startBlankWorkout(in: app)
@@ -61,14 +61,14 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [tickingExpectation], timeout: 2.5), .completed)
 
         app.buttons["ProfileTab"].tap()
-        app.buttons["ProfileSettingsLink"].tap()
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+        app.buttons["ProfileExerciseLibraryLink"].tap()
+        XCTAssertTrue(app.navigationBars["Exercises"].waitForExistence(timeout: 3))
 
         accessory.tap()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         minimizeActiveWorkout(in: app)
 
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["Exercises"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].exists)
 
         app.buttons["HomeTab"].tap()

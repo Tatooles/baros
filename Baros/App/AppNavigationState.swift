@@ -59,11 +59,13 @@ enum HistoryMode: String, CaseIterable, Identifiable {
 }
 
 enum HistoryRoute: Hashable {
+    case workout(UUID)
     case exercise(ExerciseHistoryRoute)
 }
 
 enum ProfileRoute: Hashable {
     case settings
+    case exerciseLibrary
 }
 
 @Observable
