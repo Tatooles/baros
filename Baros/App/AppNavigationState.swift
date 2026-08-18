@@ -75,9 +75,10 @@ final class AppNavigationState {
     private(set) var activeWorkoutID: UUID?
     private(set) var isActiveWorkoutPresented: Bool
     private var hasReconciledActiveWorkout: Bool
+    private var suppressesActiveWorkoutAccessory: Bool
 
     var showsActiveWorkoutAccessory: Bool {
-        activeWorkoutID != nil && !isActiveWorkoutPresented
+        activeWorkoutID != nil && !isActiveWorkoutPresented && !suppressesActiveWorkoutAccessory
     }
 
     init(
@@ -93,6 +94,7 @@ final class AppNavigationState {
         activeWorkoutID = nil
         isActiveWorkoutPresented = false
         hasReconciledActiveWorkout = false
+        suppressesActiveWorkoutAccessory = false
     }
 
     func reconcileActiveWorkout(sessionID: UUID?) {
@@ -101,6 +103,7 @@ final class AppNavigationState {
             activeWorkoutID = sessionID
             selectedTab = .home
             isActiveWorkoutPresented = sessionID != nil
+            suppressesActiveWorkoutAccessory = false
             return
         }
 
@@ -113,9 +116,15 @@ final class AppNavigationState {
         case (nil, .some):
             selectedTab = .home
             isActiveWorkoutPresented = true
-        case (.some, nil), (.some, .some):
+            suppressesActiveWorkoutAccessory = false
+        case (.some, nil):
             selectedTab = .home
             isActiveWorkoutPresented = false
+            suppressesActiveWorkoutAccessory = false
+        case (.some, .some):
+            selectedTab = .home
+            isActiveWorkoutPresented = false
+            suppressesActiveWorkoutAccessory = true
         case (nil, nil):
             break
         }
@@ -123,6 +132,7 @@ final class AppNavigationState {
 
     func presentActiveWorkout() {
         guard activeWorkoutID != nil else { return }
+        suppressesActiveWorkoutAccessory = false
         isActiveWorkoutPresented = true
     }
 

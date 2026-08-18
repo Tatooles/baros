@@ -126,6 +126,11 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertEqual(navigationState.activeWorkoutID, replacementSessionID)
         XCTAssertEqual(navigationState.selectedTab, .home)
         XCTAssertFalse(navigationState.isActiveWorkoutPresented)
+        XCTAssertFalse(navigationState.showsActiveWorkoutAccessory)
+
+        navigationState.presentActiveWorkout()
+        navigationState.minimizeActiveWorkout()
+
         XCTAssertTrue(navigationState.showsActiveWorkoutAccessory)
     }
 
