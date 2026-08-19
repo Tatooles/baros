@@ -163,6 +163,12 @@ final class AppNavigationState {
         historyPath = [.exercise(route)]
     }
 
+    func openWorkoutHistory(_ sessionID: UUID) {
+        selectedTab = .history
+        historyMode = .workouts
+        historyPath = [.workout(sessionID)]
+    }
+
     func openSyncSettings() {
         selectedTab = .profile
         profilePath = [.settings]

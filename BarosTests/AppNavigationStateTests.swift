@@ -185,6 +185,17 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertEqual(navigationState.historyPath, [.exercise(route)])
     }
 
+    func testOpenWorkoutHistoryFromHomeSelectsWorkoutHistoryAndStoresRoute() {
+        let navigationState = AppNavigationState(selectedTab: .home, historyMode: .exercises)
+        let workoutID = UUID()
+
+        navigationState.openWorkoutHistory(workoutID)
+
+        XCTAssertEqual(navigationState.selectedTab, .history)
+        XCTAssertEqual(navigationState.historyMode, .workouts)
+        XCTAssertEqual(navigationState.historyPath, [.workout(workoutID)])
+    }
+
     func testClearHistoryPathRemovesRoute() {
         let route = ExerciseHistoryRoute(exerciseID: UUID(), name: "Bench Press")
         let navigationState = AppNavigationState(selectedTab: .history, historyMode: .exercises)

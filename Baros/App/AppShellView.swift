@@ -201,9 +201,10 @@ struct AppShellView: View {
             .tag(AppTab.history)
 
             NavigationStack {
-                StartWorkoutView(
+                HomeView(
                     navigationState: navigationState,
                     activeWorkoutEngine: activeWorkoutEngine,
+                    activeSession: activeSession,
                     presentWorkout: { navigationState.presentActiveWorkout() }
                 )
             }
