@@ -13,6 +13,32 @@ enum WorkoutFormatters {
         return "\(String(format: "%02d", minutes)):\(String(format: "%02d", remainder))"
     }
 
+    static func elapsedDescription(_ seconds: Int) -> String {
+        elapsedCompactDescription(seconds) + " elapsed"
+    }
+
+    static func elapsedCompactDescription(_ seconds: Int) -> String {
+        duration(max(0, seconds))
+    }
+
+    static func elapsedAccessibilityDescription(_ seconds: Int) -> String {
+        let elapsedSeconds = max(0, seconds)
+        let hours = elapsedSeconds / 3_600
+        let minutes = (elapsedSeconds % 3_600) / 60
+        let seconds = elapsedSeconds % 60
+        var parts: [String] = []
+
+        if hours > 0 {
+            parts.append("\(hours) \(hours == 1 ? "hour" : "hours")")
+        }
+        if minutes > 0 {
+            parts.append("\(minutes) \(minutes == 1 ? "minute" : "minutes")")
+        }
+        parts.append("\(seconds) \(seconds == 1 ? "second" : "seconds")")
+
+        return parts.joined(separator: ", ") + " elapsed"
+    }
+
     static func date(_ date: Date) -> String {
         date.formatted(.dateTime.weekday(.wide).month(.wide).day())
     }

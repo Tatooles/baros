@@ -61,6 +61,16 @@ struct HistoryView: View {
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(for: HistoryRoute.self) { route in
             switch route {
+            case .workout(let sessionID):
+                if let session = completedSessions.first(where: { $0.id == sessionID }) {
+                    WorkoutHistoryDetailView(session: session)
+                } else {
+                    EmptyStateView(
+                        title: "Workout Unavailable",
+                        message: "This workout is no longer available in History."
+                    )
+                    .background(AppTheme.canvasBackground.ignoresSafeArea())
+                }
             case .exercise(let exerciseRoute):
                 if let summary = exerciseHistorySnapshot.resolvedHistory.summary(for: exerciseRoute) {
                     ExerciseHistoryDetailView(summary: summary)
@@ -86,9 +96,7 @@ struct HistoryView: View {
         } else {
             VStack(spacing: 10) {
                 ForEach(Array(completedSessions.enumerated()), id: \.element.id) { index, session in
-                    NavigationLink {
-                        WorkoutHistoryDetailView(session: session)
-                    } label: {
+                    NavigationLink(value: HistoryRoute.workout(session.id)) {
                         WorkoutHistoryRow(session: session)
                     }
                     .buttonStyle(.plain)
@@ -112,9 +120,7 @@ struct HistoryView: View {
             SurfaceCard(padding: 0) {
                 VStack(spacing: 0) {
                     ForEach(Array(summaries.enumerated()), id: \.element.id) { index, summary in
-                        NavigationLink {
-                            ExerciseHistoryDetailView(summary: summary)
-                        } label: {
+                        NavigationLink(value: HistoryRoute.exercise(ExerciseHistoryRoute(summary: summary))) {
                             ExerciseHistoryRow(
                                 summary: summary,
                                 showsDivider: index < summaries.count - 1

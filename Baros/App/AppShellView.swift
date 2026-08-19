@@ -4,12 +4,15 @@ import SwiftUI
 struct AppShellView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(\.syncRecoveryAction) private var syncRecoveryAction
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     private let firstRunStore = FirstRunExperienceStore()
     @State private var dismissedSyncFailureSignature: String?
     @State private var launchPresentation: LaunchExperiencePresentation?
+    @State private var hasMadeLaunchExperienceDecision = false
+    @State private var prepareActiveWorkoutForMinimization: (() -> Void)?
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \SyncOutboxEntry.updatedAt, order: .reverse) private var outboxEntries: [SyncOutboxEntry]
 
@@ -78,72 +81,174 @@ struct AppShellView: View {
     }
 
     var body: some View {
+        tabShell
+            .tint(AppTheme.brandAccentForeground)
+            .tabBarMinimizeBehavior(.never)
+            .safeAreaInset(edge: .bottom) {
+                if shouldShowGlobalSyncFailureBanner {
+                    GlobalSyncFailureBanner(
+                        title: syncDisplayState.failureNoticeTitle ?? "Cloud sync failed",
+                        message: syncDisplayState.failureNoticeMessage ?? "Your data is saved on this iPhone.",
+                        retry: { syncRecoveryAction(.manualRetry) },
+                        details: { navigationState.openSyncSettings() },
+                        dismiss: { dismissGlobalSyncFailureBanner() }
+                    )
+                    .padding(.horizontal, AppTheme.shellPadding)
+                    .padding(.bottom, 8)
+                }
+            }
+            .sheet(isPresented: activeWorkoutPresentationBinding) {
+                if let activeSession {
+                    NavigationStack {
+                        ZStack(alignment: .topTrailing) {
+                            WorkoutSessionView(
+                                session: activeSession,
+                                engine: activeWorkoutEngine,
+                                navigationState: navigationState,
+                                onMinimizePreparationChanged: { action in
+                                    prepareActiveWorkoutForMinimization = action
+                                }
+                            )
+
+                            #if DEBUG
+                            if ProcessInfo.processInfo.arguments.contains("--uitest-active-workout-current-owner-change-control") {
+                                Button("Simulate Current Owner Change") {
+                                    let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
+                                    activeSession.syncOwnerTokenIdentifier = "issuer|uitest_replacement_owner"
+                                    activeSession.touch()
+                                    try? modelContext.save()
+                                    Task { @MainActor in
+                                        try? await Task.sleep(for: .milliseconds(500))
+                                        _ = try? activeWorkoutEngine.startBlankWorkout(
+                                            ownerTokenIdentifier: ownerTokenIdentifier,
+                                            context: modelContext
+                                        )
+                                    }
+                                }
+                                .font(.caption2)
+                                .accessibilityIdentifier("UITestActiveWorkoutCurrentOwnerChangeButton")
+                            }
+                            #endif
+                        }
+                        .padding(.top, 16)
+                        .background(AppTheme.canvasBackground.ignoresSafeArea())
+                    }
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .accessibilityIdentifier("ActiveWorkoutSheet")
+                }
+            }
+            .sheet(item: $launchPresentation) { presentation in
+                LaunchExperienceSheet(presentation: presentation) {
+                    switch presentation {
+                    case .onboarding:
+                        completeLaunchPresentation(presentation)
+                    case .whatsNew:
+                        launchPresentation = nil
+                    }
+                }
+                .onDisappear {
+                    markWhatsNewSeenIfNeeded(presentation)
+                }
+            }
+            .onChange(of: activeSession?.id, initial: true) { _, sessionID in
+                if sessionID != nil {
+                    launchPresentation = nil
+                }
+                navigationState.reconcileActiveWorkout(sessionID: sessionID)
+                chooseLaunchExperienceIfReady()
+            }
+            .onChange(of: currentOwnerCoordinator.state, initial: true) { _, _ in
+                chooseLaunchExperienceIfReady()
+            }
+            .task {
+                activeWorkoutEngine.loadActiveSession(
+                    ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                    context: modelContext
+                )
+            }
+            .accessibilityDynamicTypeForUITesting()
+    }
+
+    @ViewBuilder
+    private var tabShell: some View {
+        if #available(iOS 26.1, *) {
+            tabs
+                .tabViewBottomAccessory(
+                    isEnabled: navigationState.showsActiveWorkoutAccessory && activeSession != nil
+                ) {
+                    activeWorkoutAccessory
+                }
+        } else if navigationState.showsActiveWorkoutAccessory, activeSession != nil {
+            tabs
+                .tabViewBottomAccessory {
+                    activeWorkoutAccessory
+                }
+        } else {
+            tabs
+        }
+    }
+
+    private var tabs: some View {
         TabView(selection: $navigationState.selectedTab) {
             NavigationStack(path: $navigationState.historyPath) {
                 HistoryView(navigationState: navigationState)
             }
             .tabItem {
-                Label(AppTab.history.title(isWorkoutActive: activeSession != nil), systemImage: AppTab.history.symbolName(isWorkoutActive: activeSession != nil))
+                Label(AppTab.history.title, systemImage: AppTab.history.symbolName)
                     .accessibilityIdentifier(AppTab.history.accessibilityIdentifier)
             }
             .tag(AppTab.history)
 
             NavigationStack {
-                if let activeSession {
-                    WorkoutSessionView(session: activeSession, engine: activeWorkoutEngine, navigationState: navigationState)
-                } else {
-                    StartWorkoutView(navigationState: navigationState, activeWorkoutEngine: activeWorkoutEngine)
-                }
+                StartWorkoutView(
+                    navigationState: navigationState,
+                    activeWorkoutEngine: activeWorkoutEngine,
+                    presentWorkout: { navigationState.presentActiveWorkout() }
+                )
             }
             .tabItem {
-                Label(AppTab.workout.title(isWorkoutActive: activeSession != nil), systemImage: AppTab.workout.symbolName(isWorkoutActive: activeSession != nil))
-                    .accessibilityIdentifier(AppTab.workout.accessibilityIdentifier)
+                Label(AppTab.home.title, systemImage: AppTab.home.symbolName)
+                    .accessibilityIdentifier(AppTab.home.accessibilityIdentifier)
             }
-            .tag(AppTab.workout)
+            .tag(AppTab.home)
 
             NavigationStack(path: $navigationState.profilePath) {
                 ProfileView(navigationState: navigationState)
             }
             .tabItem {
-                Label(AppTab.profile.title(isWorkoutActive: activeSession != nil), systemImage: AppTab.profile.symbolName(isWorkoutActive: activeSession != nil))
+                Label(AppTab.profile.title, systemImage: AppTab.profile.symbolName)
                     .accessibilityIdentifier(AppTab.profile.accessibilityIdentifier)
             }
             .tag(AppTab.profile)
         }
-        .tint(AppTheme.brandAccentForeground)
-        .safeAreaInset(edge: .bottom) {
-            if shouldShowGlobalSyncFailureBanner {
-                GlobalSyncFailureBanner(
-                    title: syncDisplayState.failureNoticeTitle ?? "Cloud sync failed",
-                    message: syncDisplayState.failureNoticeMessage ?? "Your data is saved on this iPhone.",
-                    retry: { syncRecoveryAction(.manualRetry) },
-                    details: { navigationState.openSyncSettings() },
-                    dismiss: { dismissGlobalSyncFailureBanner() }
-                )
-                .padding(.horizontal, AppTheme.shellPadding)
-                .padding(.bottom, 8)
-            }
+    }
+
+    @ViewBuilder
+    private var activeWorkoutAccessory: some View {
+        if let activeSession {
+            ActiveWorkoutAccessoryView(
+                session: activeSession,
+                returnToActiveWorkout: { navigationState.presentActiveWorkout() }
+            )
+            .accessibilityDynamicTypeForUITesting()
         }
-        .sheet(item: $launchPresentation) { presentation in
-            LaunchExperienceSheet(presentation: presentation) {
-                switch presentation {
-                case .onboarding:
-                    completeLaunchPresentation(presentation)
-                case .whatsNew:
-                    launchPresentation = nil
+    }
+
+    private var activeWorkoutPresentationBinding: Binding<Bool> {
+        Binding(
+            get: {
+                navigationState.isActiveWorkoutPresented && activeSession != nil
+            },
+            set: { isPresented in
+                if isPresented {
+                    navigationState.presentActiveWorkout()
+                } else {
+                    prepareActiveWorkoutForMinimization?()
+                    navigationState.minimizeActiveWorkout()
                 }
             }
-            .onDisappear {
-                markWhatsNewSeenIfNeeded(presentation)
-            }
-        }
-        .task {
-            presentLaunchExperienceIfNeeded()
-            activeWorkoutEngine.loadActiveSession(
-                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
-                context: modelContext
-            )
-        }
+        )
     }
 
     private func presentLaunchExperienceIfNeeded() {
@@ -161,6 +266,23 @@ struct AppShellView: View {
 
         if launchPresentation == nil, state.hasCompletedOnboarding {
             firstRunStore.markAppVersionProcessed(currentAppVersion)
+        }
+    }
+
+    private func chooseLaunchExperienceIfReady() {
+        guard !hasMadeLaunchExperienceDecision else { return }
+
+        switch LaunchExperienceCoordinator.decision(
+            currentOwnerState: currentOwnerCoordinator.state,
+            activeWorkoutID: activeSession?.id
+        ) {
+        case .deferUntilOwnerScopeResolves:
+            return
+        case .skipForActiveWorkout:
+            hasMadeLaunchExperienceDecision = true
+        case .evaluateStore:
+            hasMadeLaunchExperienceDecision = true
+            presentLaunchExperienceIfNeeded()
         }
     }
 
@@ -192,6 +314,21 @@ struct AppShellView: View {
             currentFailureSignature: currentSyncFailureSignature,
             dismissedFailureSignature: dismissedSyncFailureSignature
         )
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func accessibilityDynamicTypeForUITesting() -> some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--uitest-accessibility-dynamic-type") {
+            dynamicTypeSize(.accessibility3)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }
 

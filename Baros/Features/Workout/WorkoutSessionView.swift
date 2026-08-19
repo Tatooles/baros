@@ -16,6 +16,7 @@ struct WorkoutSessionView: View {
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
     @Bindable var navigationState: AppNavigationState
+    let onMinimizePreparationChanged: ((() -> Void)?) -> Void
     @State private var isFinishSheetPresented = false
     @State private var isReorderExercisesPresented = false
     @State private var isAddExercisePresented = false
@@ -212,71 +213,84 @@ struct WorkoutSessionView: View {
                 }
             }
             .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    if rpeEditingSetID != nil {
-                        RPEChipRow(
-                            selected: editingSet?.rpe,
-                            onSelect: { value in
-                                let nextField = rpeNextFocusedField
-                                if let set = editingSet {
-                                    try? RPEChipSelectionAction.apply(
-                                        value: value,
-                                        to: set,
-                                        engine: engine,
-                                        context: modelContext
-                                    )
+                if !isChildPresentationActive {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        if rpeEditingSetID != nil {
+                            RPEChipRow(
+                                selected: editingSet?.rpe,
+                                onSelect: { value in
+                                    let nextField = rpeNextFocusedField
+                                    if let set = editingSet {
+                                        try? RPEChipSelectionAction.apply(
+                                            value: value,
+                                            to: set,
+                                            engine: engine,
+                                            context: modelContext
+                                        )
+                                    }
+                                    rpeEditingSetID = nil
+                                    rpeEditingSourceField = nil
+                                    focusedField = nextField
                                 }
-                                rpeEditingSetID = nil
-                                rpeEditingSourceField = nil
-                                focusedField = nextField
+                            )
+                        } else {
+                            let previousField = previousFocusedField
+                            let nextField = nextFocusedField
+
+                            Button {
+                                focusedField = previousField
+                            } label: {
+                                Image(systemName: "chevron.up")
+                                    .font(.system(size: 16, weight: .semibold))
                             }
-                        )
-                    } else {
-                        let previousField = previousFocusedField
-                        let nextField = nextFocusedField
+                            .disabled(previousField == nil)
+                            .accessibilityLabel("Previous field")
+                            .accessibilityIdentifier("PreviousWorkoutFieldButton")
 
-                        Button {
-                            focusedField = previousField
-                        } label: {
-                            Image(systemName: "chevron.up")
+                            Button {
+                                focusedField = nextField
+                            } label: {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 16, weight: .semibold))
+                            }
+                            .disabled(nextField == nil)
+                            .accessibilityLabel("Next field")
+                            .accessibilityIdentifier("NextWorkoutFieldButton")
+
+                            if let focusedSetID {
+                                Button("RPE") {
+                                    rpeEditingSourceField = focusedField
+                                    rpeEditingSetID = focusedSetID
+                                }
                                 .font(.system(size: 16, weight: .semibold))
-                        }
-                        .disabled(previousField == nil)
-                        .accessibilityLabel("Previous field")
-                        .accessibilityIdentifier("PreviousWorkoutFieldButton")
+                                .accessibilityIdentifier("RPEToolbarButton")
+                            }
 
-                        Button {
-                            focusedField = nextField
-                        } label: {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 16, weight: .semibold))
-                        }
-                        .disabled(nextField == nil)
-                        .accessibilityLabel("Next field")
-                        .accessibilityIdentifier("NextWorkoutFieldButton")
+                            Spacer()
 
-                        if let focusedSetID {
-                            Button("RPE") {
-                                rpeEditingSourceField = focusedField
-                                rpeEditingSetID = focusedSetID
+                            Button("Done") {
+                                focusedField = nil
                             }
                             .font(.system(size: 16, weight: .semibold))
-                            .accessibilityIdentifier("RPEToolbarButton")
+                            .accessibilityIdentifier("DismissKeyboardButton")
                         }
-
-                        Spacer()
-
-                        Button("Done") {
-                            focusedField = nil
-                        }
-                        .font(.system(size: 16, weight: .semibold))
-                        .accessibilityIdentifier("DismissKeyboardButton")
                     }
                 }
             }
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            onMinimizePreparationChanged {
+                // Resigning focus commits leaf-owned drafts before the shell
+                // transitions this session into its minimized presentation.
+                focusedField = nil
+            }
+        }
+        .onDisappear {
+            focusedField = nil
+            onMinimizePreparationChanged(nil)
+        }
         .sheet(isPresented: $isFinishSheetPresented) {
             FinishWorkoutSheet(session: session, engine: engine)
         }
@@ -293,6 +307,7 @@ struct WorkoutSessionView: View {
             ExerciseQuickHistorySheet(loggedExercise: loggedExercise) { route in
                 selectedHistoryExercise = nil
                 navigationState.openExerciseHistory(route)
+                navigationState.minimizeActiveWorkout()
             }
         }
     }
@@ -304,6 +319,13 @@ struct WorkoutSessionView: View {
             revealedExerciseNoteIDs: revealedExerciseNoteIDs,
             isWorkoutNoteRevealed: isWorkoutNoteRevealed
         )
+    }
+
+    private var isChildPresentationActive: Bool {
+        isFinishSheetPresented
+            || isReorderExercisesPresented
+            || isAddExercisePresented
+            || selectedHistoryExercise != nil
     }
 
     // The lookup scans completed history, so it is cached in @State and

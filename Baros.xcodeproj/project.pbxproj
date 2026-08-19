@@ -46,6 +46,7 @@
 		39057CB1EBD3BBFD990B4153 /* HealthSyncStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18C499291D7F51CAEC64DFAD /* HealthSyncStatus.swift */; };
 		3B102A2F46EC7D19CF0BD7EF /* ActiveWorkoutSetInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1598E2E96C211E5ED0716E5F /* ActiveWorkoutSetInputTests.swift */; };
 		3DC2DB798A446DFCBE2C5FF4 /* StartWorkoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01145DEAABDE8F611140DFB /* StartWorkoutView.swift */; };
+		3E37A2D5CB00D5A5F7A69FB7 /* ActiveWorkoutAccessoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D80A5E794B9F11690E9AE977 /* ActiveWorkoutAccessoryView.swift */; };
 		4078390E82E1F1CA7B02984E /* UserSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F032CF58B2DF043F43B807 /* UserSettings.swift */; };
 		40BD09DD19D5FAEFD93B4EC7 /* ClerkConvex in Frameworks */ = {isa = PBXBuildFile; productRef = F16DCEE085204D1243D6FA51 /* ClerkConvex */; };
 		40FF979E029CAD7AF6E5941C /* PrivacyDataSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60B82293267E557A062BB1F1 /* PrivacyDataSection.swift */; };
@@ -338,6 +339,7 @@
 		D5B1C1F38DF42492AC05C7CF /* PastWorkoutPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PastWorkoutPickerView.swift; sourceTree = "<group>"; };
 		D6104353AF638F995F19F4E6 /* WorkoutMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutMetrics.swift; sourceTree = "<group>"; };
 		D64F2D46BF17E313012C72CE /* WorkoutExportFileWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutExportFileWriter.swift; sourceTree = "<group>"; };
+		D80A5E794B9F11690E9AE977 /* ActiveWorkoutAccessoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveWorkoutAccessoryView.swift; sourceTree = "<group>"; };
 		D9A749A4674CD381222EFD74 /* BarosApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarosApp.swift; sourceTree = "<group>"; };
 		D9CE7F7E0638F5912C43E56E /* ActiveWorkoutSetInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveWorkoutSetInput.swift; sourceTree = "<group>"; };
 		DA9615ADEE1BFA19E6244260 /* BarosTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BarosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -616,6 +618,7 @@
 		810DD6BEE0AF06C0B81F4BE0 /* Workout */ = {
 			isa = PBXGroup;
 			children = (
+				D80A5E794B9F11690E9AE977 /* ActiveWorkoutAccessoryView.swift */,
 				772D55D5C90198551AF34F90 /* ActiveWorkoutEngine.swift */,
 				D9CE7F7E0638F5912C43E56E /* ActiveWorkoutSetInput.swift */,
 				B6795620478217A9EB5FD5B3 /* AddExerciseSheet.swift */,
@@ -958,6 +961,7 @@
 				0A26468DAB35148EE53DC05D /* AccountDeletionFactory.swift in Sources */,
 				9C91EF78450734AFBF0FF735 /* AccountDisplayState.swift in Sources */,
 				B7D859D6B8E81E7705AFA98D /* AccountSignInButton.swift in Sources */,
+				3E37A2D5CB00D5A5F7A69FB7 /* ActiveWorkoutAccessoryView.swift in Sources */,
 				4802E59329C0EE7E45EE2484 /* ActiveWorkoutEngine.swift in Sources */,
 				BC03970C1FC9927EAE811311 /* ActiveWorkoutSetInput.swift in Sources */,
 				074D7EEC71998629B1ADC44E /* ActivityView.swift in Sources */,

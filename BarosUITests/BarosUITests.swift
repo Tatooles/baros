@@ -7,10 +7,230 @@ final class BarosUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3))
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
-        XCTAssertTrue(app.buttons["Current"].exists)
+        XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].isHittable)
+        XCTAssertFalse(app.buttons["WorkoutTab"].exists)
+        XCTAssertTrue(app.buttons["HomeTab"].exists)
+    }
+
+    @MainActor
+    func testPermanentTabsAreHistoryHomeProfileWithHomeSelected() {
+        let app = makeApp()
+        app.launch()
+
+        let historyTab = app.buttons["HistoryTab"]
+        let homeTab = app.buttons["HomeTab"]
+        let profileTab = app.buttons["ProfileTab"]
+        XCTAssertTrue(historyTab.waitForExistence(timeout: 3))
+        XCTAssertTrue(homeTab.exists)
+        XCTAssertTrue(profileTab.exists)
+        XCTAssertLessThan(historyTab.frame.minX, homeTab.frame.minX)
+        XCTAssertLessThan(homeTab.frame.minX, profileTab.frame.minX)
+        XCTAssertTrue(homeTab.isSelected)
+        XCTAssertFalse(app.buttons["WorkoutTab"].exists)
+        XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].exists)
+        XCTAssertFalse(app.staticTexts["HomeTitle"].exists)
+    }
+
+    @MainActor
+    func testActiveWorkoutMinimizesReopensAndPreservesDestinationPath() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkout(in: app)
+
+        let workoutTitle = app.textFields["WorkoutTitle"]
+        XCTAssertTrue(workoutTitle.waitForExistence(timeout: 3))
+        replaceText(in: workoutTitle, with: "Accessory Push")
+        minimizeActiveWorkout(in: app)
+
+        let accessory = app.buttons["ActiveWorkoutAccessory"]
+        XCTAssertTrue(accessory.waitForExistence(timeout: 3))
+        XCTAssertEqual(accessory.label, "Return to Workout")
+        let value = accessory.value as? String ?? ""
+        XCTAssertTrue(value.contains("Accessory Push"))
+        XCTAssertTrue(value.contains("elapsed"))
+        XCTAssertTrue(value.contains("second"))
+        XCTAssertTrue(value.contains("0 of 0 sets completed"))
+        let tickingExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                (accessory.value as? String) != value
+            },
+            object: accessory
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [tickingExpectation], timeout: 2.5), .completed)
+
+        app.buttons["ProfileTab"].tap()
+        app.buttons["ProfileExerciseLibraryLink"].tap()
+        XCTAssertTrue(app.navigationBars["Exercises"].waitForExistence(timeout: 3))
+
+        accessory.tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        minimizeActiveWorkout(in: app)
+
+        XCTAssertTrue(app.navigationBars["Exercises"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].exists)
+
+        app.buttons["HomeTab"].tap()
+        XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].exists)
+        XCTAssertFalse(app.buttons["StartBlankWorkoutButton"].exists)
+        XCTAssertFalse(app.staticTexts["Use Past Workout"].exists)
+        app.buttons["ReturnToActiveWorkoutButton"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testMinimizingCommitsFocusedWorkoutTitleDraft() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkout(in: app)
+
+        let workoutTitle = app.textFields["WorkoutTitle"]
+        XCTAssertTrue(workoutTitle.waitForExistence(timeout: 3))
+        replaceText(in: workoutTitle, with: "Focused Draft")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+
+        let sheetGrabber = app.buttons["Sheet Grabber"]
+        XCTAssertTrue(sheetGrabber.waitForExistence(timeout: 3))
+        let grabber = sheetGrabber.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let lowerScreen = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92))
+        grabber.press(forDuration: 0.1, thenDragTo: lowerScreen)
+
+        let accessory = app.buttons["ActiveWorkoutAccessory"]
+        XCTAssertTrue(accessory.waitForExistence(timeout: 3))
+        accessory.tap()
+        XCTAssertTrue(workoutTitle.waitForExistence(timeout: 3))
+        XCTAssertEqual(workoutTitle.value as? String, "Focused Draft")
+    }
+
+    @MainActor
+    func testFinishAndDiscardDismissWorkoutAndReturnHome() {
+        let app = makeApp()
+        app.launch()
+
+        startBlankWorkout(in: app)
+        openFinishWorkoutSheet(in: app)
+        XCTAssertTrue(app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3))
+        app.buttons["SaveWorkoutButton"].tap()
+        XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
+
+        startBlankWorkout(in: app)
+        openFinishWorkoutSheet(in: app)
+        app.buttons["Discard Workout"].tap()
+        let discardButton = app.alerts.buttons["Discard"]
+        XCTAssertTrue(discardButton.waitForExistence(timeout: 3))
+        discardButton.tap()
+        XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
+    }
+
+    @MainActor
+    func testMinimizedStateDoesNotPersistAcrossRelaunch() {
+        let app = makeDiskBackedResetApp()
+        app.launch()
+        startBlankWorkout(in: app)
+        replaceText(in: app.textFields["WorkoutTitle"], with: "Relaunch Active")
+        minimizeActiveWorkout(in: app)
+        XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitForExistence(timeout: 3))
+        app.terminate()
+
+        let relaunchedApp = makeDiskBackedApp()
+        relaunchedApp.launch()
+        let title = relaunchedApp.textFields["WorkoutTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertEqual(title.value as? String, "Relaunch Active")
+        XCTAssertFalse(relaunchedApp.buttons["ActiveWorkoutAccessory"].exists)
+    }
+
+    @MainActor
+    func testRelaunchWithActiveWorkoutDefersFirstRunPresentation() {
+        let firstLaunch = makeDiskBackedResetApp()
+        firstLaunch.launch()
+        startBlankWorkout(in: firstLaunch)
+        replaceText(in: firstLaunch.textFields["WorkoutTitle"], with: "Relaunch Priority")
+        dismissKeyboardIfNeeded(in: firstLaunch)
+        firstLaunch.terminate()
+
+        let relaunchedApp = makeDiskBackedApp(
+            extraArguments: ["--uitest-reset-first-run-experience"],
+            skipsFirstRunExperience: false
+        )
+        relaunchedApp.launch()
+
+        let title = relaunchedApp.textFields["WorkoutTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertEqual(title.value as? String, "Relaunch Priority")
+        XCTAssertFalse(relaunchedApp.staticTexts["LaunchExperienceTitle"].exists)
+    }
+
+    @MainActor
+    func testOwnerScopedActiveWorkoutWinsAfterDelayedOwnerResolution() {
+        let owner = "issuer|ui_owner"
+        let firstLaunch = makeDiskBackedResetApp(extraArguments: [
+            "--uitest-sync-owner", owner,
+        ])
+        firstLaunch.launch()
+        startBlankWorkout(in: firstLaunch)
+        replaceText(in: firstLaunch.textFields["WorkoutTitle"], with: "Owner Launch Priority")
+        dismissKeyboardIfNeeded(in: firstLaunch)
+        firstLaunch.terminate()
+
+        let relaunchedApp = makeDiskBackedApp(
+            extraArguments: [
+                "--uitest-sync-owner", owner,
+                "--uitest-delay-current-owner-start",
+                "--uitest-reset-first-run-experience",
+            ],
+            skipsFirstRunExperience: false
+        )
+        relaunchedApp.launch()
+
+        let title = relaunchedApp.textFields["WorkoutTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertEqual(title.value as? String, "Owner Launch Priority")
+        XCTAssertFalse(relaunchedApp.staticTexts["LaunchExperienceTitle"].exists)
+    }
+
+    @MainActor
+    func testCurrentOwnerChangeDismissesWorkoutAndFallsBackHome() {
+        let app = makeApp(extraArguments: ["--uitest-active-workout-current-owner-change-control"])
+        app.launch()
+        startBlankWorkout(in: app)
+
+        let currentOwnerChangeButton = app.buttons["UITestActiveWorkoutCurrentOwnerChangeButton"]
+        XCTAssertTrue(currentOwnerChangeButton.waitForExistence(timeout: 3))
+        currentOwnerChangeButton.tap()
+
+        XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
+        let returnToWorkoutButton = app.buttons["ReturnToActiveWorkoutButton"]
+        XCTAssertTrue(returnToWorkoutButton.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["StartBlankWorkoutButton"].exists)
+        XCTAssertFalse(app.staticTexts["Use Past Workout"].exists)
+
+        returnToWorkoutButton.tap()
+
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testAccessoryAtAccessibilityTextSizeKeepsFullSemanticValueAndSimplifiesVisibleContent() {
+        let app = makeApp(extraArguments: [
+            "--uitest-accessibility-dynamic-type",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL",
+        ])
+        app.launch()
+        startBlankWorkout(in: app)
+        minimizeActiveWorkout(in: app)
+
+        let accessory = app.buttons["ActiveWorkoutAccessory"]
+        XCTAssertTrue(accessory.waitForExistence(timeout: 3))
+        XCTAssertEqual(accessory.label, "Return to Workout")
+        XCTAssertTrue((accessory.value as? String ?? "").contains("0 of 0 sets completed"))
+        XCTAssertGreaterThanOrEqual(accessory.frame.height, 44)
     }
 
     @MainActor
@@ -18,7 +238,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp(completedBenchWorkoutTitles: ["Existing Editable"])
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         let activeTitleField = app.textFields["WorkoutTitle"]
         XCTAssertTrue(activeTitleField.waitForExistence(timeout: 3))
         let activeTitleAffordance = app.buttons["WorkoutTitleEditAffordance"]
@@ -27,6 +247,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         dismissKeyboardIfNeeded(in: app)
 
+        minimizeActiveWorkout(in: app)
         app.buttons["HistoryTab"].tap()
         XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
         app.buttons["WorkoutHistoryButton-0"].tap()
@@ -47,7 +268,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
 
         openFinishWorkoutSheet(in: app)
@@ -71,7 +292,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
 
         openFinishWorkoutSheet(in: app)
@@ -96,7 +317,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
 
         openFinishWorkoutSheet(in: app)
@@ -121,13 +342,14 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
 
         openFinishWorkoutSheet(in: app)
         XCTAssertTrue(app.buttons["KeepGoingButton"].waitForExistence(timeout: 3))
         app.buttons["KeepGoingButton"].tap()
 
+        minimizeActiveWorkout(in: app)
         app.buttons["HistoryTab"].tap()
         XCTAssertTrue(app.staticTexts["HistoryTitle"].waitForExistence(timeout: 3))
 
@@ -135,7 +357,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["ProfileEnvironmentBadge"].exists)
 
-        app.buttons["WorkoutTab"].tap()
+        app.buttons["ActiveWorkoutAccessory"].tap()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
     }
 
@@ -231,7 +453,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
 
         app.buttons["AddExerciseButton"].tap()
@@ -267,7 +489,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         app.buttons["AddExerciseButton"].tap()
         XCTAssertTrue(app.navigationBars["Add Exercise"].waitForExistence(timeout: 3))
@@ -295,7 +517,7 @@ final class BarosUITests: XCTestCase {
         let app = makeDiskBackedResetApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         app.buttons["AddExerciseButton"].tap()
 
@@ -325,7 +547,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
 
         addExercise("ExercisePickerRow-Back Squat-Barbell", in: app)
@@ -361,14 +583,18 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
 
         addExercise("ExercisePickerRow-Back Squat-Barbell", in: app)
         dismissKeyboardIfNeeded(in: app)
         addExercise("ExercisePickerRow-Bench Press-Barbell", in: app)
         dismissKeyboardIfNeeded(in: app)
-        addExercise("ExercisePickerRow-Conventional Deadlift-Barbell", in: app)
+        addExercise(
+            "ExercisePickerRow-Conventional Deadlift-Barbell",
+            searchText: "Conventional Deadlift",
+            in: app
+        )
         dismissKeyboardIfNeeded(in: app)
         addExercise("ExercisePickerRow-Overhead Press-Barbell", in: app)
         dismissKeyboardIfNeeded(in: app)
@@ -879,8 +1105,8 @@ final class BarosUITests: XCTestCase {
             in: app
         )
 
-        app.buttons["WorkoutTab"].tap()
-        app.buttons["StartBlankWorkoutButton"].tap()
+        app.buttons["HomeTab"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         addExercise("ExercisePickerRow-Variant Bench-Dumbbell", in: app)
         dismissKeyboardIfNeeded(in: app)
@@ -897,7 +1123,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
         app.launch()
 
-        app.buttons["WorkoutTab"].tap()
+        app.buttons["HomeTab"].tap()
         XCTAssertTrue(app.buttons["PastWorkoutButton-0"].waitForExistence(timeout: 3))
         app.buttons["PastWorkoutButton-0"].tap()
         confirmStartFromPastWorkout(in: app)
@@ -924,7 +1150,7 @@ final class BarosUITests: XCTestCase {
         )
         app.launch()
 
-        app.buttons["WorkoutTab"].tap()
+        app.buttons["HomeTab"].tap()
         XCTAssertTrue(app.buttons["PastWorkoutButton-0"].waitForExistence(timeout: 3))
         app.buttons["PastWorkoutButton-0"].tap()
         confirmStartFromPastWorkout(in: app)
@@ -947,7 +1173,7 @@ final class BarosUITests: XCTestCase {
         )
         app.launch()
 
-        app.buttons["WorkoutTab"].tap()
+        app.buttons["HomeTab"].tap()
         XCTAssertTrue(app.buttons["PastWorkoutButton-0"].waitForExistence(timeout: 3))
         app.buttons["PastWorkoutButton-0"].tap()
         confirmStartFromPastWorkout(in: app)
@@ -993,7 +1219,7 @@ final class BarosUITests: XCTestCase {
         )
         app.launch()
 
-        app.buttons["WorkoutTab"].tap()
+        app.buttons["HomeTab"].tap()
         XCTAssertTrue(app.buttons["PastWorkoutButton-0"].waitForExistence(timeout: 3))
         app.buttons["PastWorkoutButton-0"].tap()
         confirmStartFromPastWorkout(in: app)
@@ -1020,6 +1246,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(
             app.descendants(matching: .any)["ExerciseHistoryHeading"].waitForExistence(timeout: 3)
         )
+        XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitForExistence(timeout: 3))
         XCTAssertFalse(keyboard.waitForExistence(timeout: 1))
     }
 
@@ -1028,7 +1255,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
         app.launch()
 
-        app.buttons["WorkoutTab"].tap()
+        app.buttons["HomeTab"].tap()
         XCTAssertTrue(app.buttons["PastWorkoutButton-0"].waitForExistence(timeout: 3))
         app.buttons["PastWorkoutButton-0"].tap()
 
@@ -1060,11 +1287,10 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         addExercise("ExercisePickerRow-Bench Press-Barbell", in: app)
         dismissKeyboardIfNeeded(in: app)
-        app.buttons["WorkoutTab"].tap()
 
         let firstSetCompletionButton = app.buttons["SetCompletionButton-0-0"]
         XCTAssertTrue(firstSetCompletionButton.waitForExistence(timeout: 3))
@@ -1116,8 +1342,8 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 10))
         let initialMetrics = try settledExerciseHistoryMetrics(in: app)
 
-        app.buttons["WorkoutTab"].tap()
-        app.buttons["StartBlankWorkoutButton"].tap()
+        app.buttons["HomeTab"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 5))
         addBenchPress(in: app)
         dismissKeyboardIfNeeded(in: app)
@@ -1134,6 +1360,7 @@ final class BarosUITests: XCTestCase {
             "Active Workout field changes rebuilt unchanged completed Exercise History"
         )
 
+        minimizeActiveWorkout(in: app)
         app.buttons["HistoryTab"].tap()
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 10))
         let beforeForeground = try settledExerciseHistoryMetrics(in: app)
@@ -1173,7 +1400,12 @@ final class BarosUITests: XCTestCase {
         app.buttons["HistoryTab"].tap()
         XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
         app.buttons["WorkoutHistoryButton-0"].tap()
-        XCTAssertTrue(app.staticTexts["83.91"].waitForExistence(timeout: 3))
+        let workoutSetSummary = app.staticTexts
+            .matching(identifier: "WorkoutHistorySetSummary-0-0")
+            .matching(NSPredicate(format: "label CONTAINS %@", "83.91"))
+            .firstMatch
+        XCTAssertTrue(workoutSetSummary.waitForExistence(timeout: 3))
+        XCTAssertTrue(workoutSetSummary.label.contains("83.91"))
 
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
@@ -1192,8 +1424,8 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.segmentedControls["WeightUnitPicker"].waitForExistence(timeout: 3))
         app.segmentedControls["WeightUnitPicker"].buttons["Kilograms"].tap()
 
-        app.buttons["WorkoutTab"].tap()
-        app.buttons["StartBlankWorkoutButton"].tap()
+        app.buttons["HomeTab"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         addBenchPress(in: app)
 
@@ -1213,6 +1445,7 @@ final class BarosUITests: XCTestCase {
         dismissKeyboardIfNeeded(in: app)
         XCTAssertEqual(secondWeightField.value as? String, "100")
 
+        minimizeActiveWorkout(in: app)
         app.buttons["ProfileTab"].tap()
         if !app.segmentedControls["WeightUnitPicker"].waitForExistence(timeout: 1) {
             app.buttons["ProfileSettingsLink"].tap()
@@ -1220,7 +1453,8 @@ final class BarosUITests: XCTestCase {
         }
         app.segmentedControls["WeightUnitPicker"].buttons["Pounds"].tap()
 
-        app.buttons["WorkoutTab"].tap()
+        app.buttons["HomeTab"].tap()
+        app.buttons["ActiveWorkoutAccessory"].tap()
         XCTAssertEqual(app.textFields["SetWeightField-0-0"].value as? String, "220.46")
         XCTAssertEqual(app.textFields["SetWeightField-0-1"].value as? String, "220.46")
     }
@@ -1380,9 +1614,9 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["ProfileAccountSubtitle"].label.contains("workouts backed up"))
         XCTAssertTrue(app.buttons["ProfileSignInButton"].exists)
 
-        app.buttons["WorkoutTab"].tap()
+        app.buttons["HomeTab"].tap()
         XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].waitForExistence(timeout: 3))
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
     }
 
@@ -1520,7 +1754,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
 
         addExercise("ExercisePickerRow-Bench Press-Barbell", in: app)
@@ -1544,7 +1778,6 @@ final class BarosUITests: XCTestCase {
     func testSignedOutEmptyHistorySurfacesShowSharedRecoveryPrompt() {
         let app = makeApp()
         app.launch()
-
         XCTAssertTrue(app.staticTexts["Looking for past workouts?"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Sign in to sync workouts saved to your account and keep future workouts backed up."].exists)
         let startSignInButton = app.buttons["EmptyHistorySignInButton"]
@@ -1565,7 +1798,6 @@ final class BarosUITests: XCTestCase {
     func testEmptyHistorySignInPresentsExistingAuthAndCancellationReturnsToPrompt() {
         let app = makeApp()
         app.launch()
-
         let signInButton = app.buttons["EmptyHistorySignInButton"]
         XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
         signInButton.tap()
@@ -1583,7 +1815,6 @@ final class BarosUITests: XCTestCase {
     func testIdleResolvingCurrentOwnerFallsBackWithoutShowingSignIn() {
         let app = makeApp(extraArguments: ["--uitest-restore-cached-sync-owner"])
         app.launch()
-
         XCTAssertTrue(app.staticTexts["No Past Workouts"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
         XCTAssertFalse(app.staticTexts["Syncing your workout history…"].exists)
@@ -1593,7 +1824,6 @@ final class BarosUITests: XCTestCase {
     func testEmptyHistoryShowsSyncingDuringAuthenticatedRecovery() {
         let app = makeApp(extraArguments: ["--uitest-simulate-empty-history-auth-recovery"])
         app.launch()
-
         let signInButton = app.buttons["EmptyHistorySignInButton"]
         XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
         signInButton.tap()
@@ -1618,7 +1848,6 @@ final class BarosUITests: XCTestCase {
             "--uitest-force-signed-in-auth",
         ])
         app.launch()
-
         XCTAssertTrue(app.staticTexts["No Past Workouts"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
         XCTAssertFalse(app.staticTexts["Syncing your workout history…"].exists)
@@ -1628,7 +1857,6 @@ final class BarosUITests: XCTestCase {
     func testVisibleUnclaimedLocalHistorySuppressesRecoveryPrompt() {
         let app = makeApp(completedBenchWorkoutTitles: ["Visible Local History"])
         app.launch()
-
         XCTAssertTrue(app.buttons["PastWorkoutButton-0"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
 
@@ -1777,6 +2005,31 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    private func startBlankWorkout(in app: XCUIApplication) {
+        XCTAssertTrue(app.staticTexts["StartWorkoutTitle"].waitForExistence(timeout: 3))
+        let blankWorkoutButton = app.buttons["StartBlankWorkoutButton"]
+        XCTAssertTrue(blankWorkoutButton.waitForExistence(timeout: 3))
+        blankWorkoutButton.tap()
+    }
+
+    @MainActor
+    private func minimizeActiveWorkout(in app: XCUIApplication) {
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        dismissKeyboardIfNeeded(in: app)
+
+        let sheetGrabber = app.buttons["Sheet Grabber"]
+        XCTAssertTrue(sheetGrabber.waitForExistence(timeout: 3))
+        XCTAssertEqual(sheetGrabber.value as? String, "Expanded")
+        let grabber = sheetGrabber.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let lowerScreen = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92))
+        grabber.press(forDuration: 0.1, thenDragTo: lowerScreen)
+
+        let accessory = app.buttons["ActiveWorkoutAccessory"]
+        XCTAssertTrue(accessory.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
+    }
+
+    @MainActor
     private func confirmStartFromPastWorkout(in app: XCUIApplication) {
         XCTAssertTrue(app.buttons["StartFromPastWorkoutConfirmButton"].waitForExistence(timeout: 3))
         app.buttons["StartFromPastWorkoutConfirmButton"].tap()
@@ -1827,7 +2080,7 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     private func createCompletedBenchWorkout(in app: XCUIApplication, title: String? = nil) {
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         if let title {
             replaceText(in: app.textFields["WorkoutTitle"], with: title)
@@ -1853,8 +2106,8 @@ final class BarosUITests: XCTestCase {
         rpe: String,
         in app: XCUIApplication
     ) {
-        app.buttons["WorkoutTab"].tap()
-        app.buttons["StartBlankWorkoutButton"].tap()
+        app.buttons["HomeTab"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         replaceText(in: app.textFields["WorkoutTitle"], with: title)
         addExercise(exerciseRowIdentifier, in: app)
@@ -1876,7 +2129,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         addBenchPress(in: app)
         fillFirstBenchSet(in: app)
@@ -1906,7 +2159,7 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     private func startBlankWorkoutWithBenchPress(in app: XCUIApplication) {
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         addBenchPress(in: app)
         dismissKeyboardIfNeeded(in: app)
@@ -1914,7 +2167,7 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     private func startBlankWorkoutAndRevealWorkoutNote(in app: XCUIApplication) -> XCUIElement {
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
 
         let addNoteButton = app.buttons["AddWorkoutNoteButton"]
@@ -1955,13 +2208,30 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    private func addExercise(_ exerciseRowIdentifier: String, in app: XCUIApplication) {
+    private func addExercise(
+        _ exerciseRowIdentifier: String,
+        searchText: String? = nil,
+        in app: XCUIApplication
+    ) {
         let addButton = app.buttons["AddExerciseButton"]
 
         for _ in 0..<8 {
             if addButton.exists && addButton.isHittable {
                 addButton.tap()
                 if app.navigationBars["Add Exercise"].waitForExistence(timeout: 1) {
+                    if let searchText {
+                        let searchField = app.searchFields.firstMatch
+                        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+                        searchField.tap()
+                        XCTAssertFalse(app.buttons["NextWorkoutFieldButton"].exists)
+                        searchField.typeText(searchText)
+
+                        let exerciseButton = app.buttons[exerciseRowIdentifier]
+                        XCTAssertTrue(exerciseButton.waitForExistence(timeout: 3))
+                        exerciseButton.tap()
+                        return
+                    }
+
                     for _ in 0..<8 {
                         let exerciseButton = app.buttons[exerciseRowIdentifier]
                         let navigationBar = app.navigationBars["Add Exercise"]

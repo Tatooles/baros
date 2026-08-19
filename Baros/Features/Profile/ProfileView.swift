@@ -76,9 +76,7 @@ struct ProfileView: View {
                     .accessibilityIdentifier("ProfileSettingsLink")
                 }
 
-                NavigationLink {
-                    ExerciseLibraryView()
-                } label: {
+                NavigationLink(value: ProfileRoute.exerciseLibrary) {
                     settingsRow(title: "Exercise Library", systemImage: "dumbbell")
                 }
                 .buttonStyle(.plain)
@@ -94,6 +92,8 @@ struct ProfileView: View {
                 SettingsRouteView {
                     navigationState.profilePath = []
                 }
+            case .exerciseLibrary:
+                ExerciseLibraryView()
             }
         }
         .task(id: syncScheduler.currentOwnerTokenIdentifier) {

@@ -3,28 +3,28 @@ import Observation
 
 enum AppTab: String, CaseIterable, Identifiable {
     case history
-    case workout
+    case home
     case profile
 
     var id: String { rawValue }
 
-    func title(isWorkoutActive: Bool) -> String {
+    var title: String {
         switch self {
         case .history:
             return "History"
-        case .workout:
-            return isWorkoutActive ? "Current" : "Start"
+        case .home:
+            return "Home"
         case .profile:
             return "Profile"
         }
     }
 
-    func symbolName(isWorkoutActive: Bool) -> String {
+    var symbolName: String {
         switch self {
         case .history:
-            return "clock"
-        case .workout:
-            return isWorkoutActive ? "timer" : "plus.circle"
+            return "clock.arrow.circlepath"
+        case .home:
+            return "house.fill"
         case .profile:
             return "person"
         }
@@ -34,8 +34,8 @@ enum AppTab: String, CaseIterable, Identifiable {
         switch self {
         case .history:
             return "HistoryTab"
-        case .workout:
-            return "WorkoutTab"
+        case .home:
+            return "HomeTab"
         case .profile:
             return "ProfileTab"
         }
@@ -59,11 +59,13 @@ enum HistoryMode: String, CaseIterable, Identifiable {
 }
 
 enum HistoryRoute: Hashable {
+    case workout(UUID)
     case exercise(ExerciseHistoryRoute)
 }
 
 enum ProfileRoute: Hashable {
     case settings
+    case exerciseLibrary
 }
 
 @Observable
@@ -72,9 +74,22 @@ final class AppNavigationState {
     var historyMode: HistoryMode
     var historyPath: [HistoryRoute]
     var profilePath: [ProfileRoute]
+    private(set) var activeWorkoutID: UUID?
+    private(set) var isActiveWorkoutPresented: Bool
+    private var hasReconciledActiveWorkout: Bool
+    private var suppressesActiveWorkoutAccessory: Bool
+    private var requestsNextActiveWorkoutPresentation: Bool
+
+    var showsActiveWorkoutAccessory: Bool {
+        activeWorkoutID != nil && !isActiveWorkoutPresented && !suppressesActiveWorkoutAccessory
+    }
+
+    var showsActiveWorkoutReturnAction: Bool {
+        activeWorkoutID != nil && !isActiveWorkoutPresented
+    }
 
     init(
-        selectedTab: AppTab = .workout,
+        selectedTab: AppTab = .home,
         historyMode: HistoryMode = .workouts,
         historyPath: [HistoryRoute] = [],
         profilePath: [ProfileRoute] = []
@@ -83,6 +98,63 @@ final class AppNavigationState {
         self.historyMode = historyMode
         self.historyPath = historyPath
         self.profilePath = profilePath
+        activeWorkoutID = nil
+        isActiveWorkoutPresented = false
+        hasReconciledActiveWorkout = false
+        suppressesActiveWorkoutAccessory = false
+        requestsNextActiveWorkoutPresentation = false
+    }
+
+    func reconcileActiveWorkout(sessionID: UUID?) {
+        guard hasReconciledActiveWorkout else {
+            hasReconciledActiveWorkout = true
+            activeWorkoutID = sessionID
+            selectedTab = .home
+            isActiveWorkoutPresented = sessionID != nil
+            suppressesActiveWorkoutAccessory = false
+            return
+        }
+
+        let previousSessionID = activeWorkoutID
+        guard previousSessionID != sessionID else { return }
+
+        activeWorkoutID = sessionID
+
+        switch (previousSessionID, sessionID) {
+        case (nil, .some):
+            selectedTab = .home
+            let shouldPresent = requestsNextActiveWorkoutPresentation || !suppressesActiveWorkoutAccessory
+            isActiveWorkoutPresented = shouldPresent
+            if shouldPresent {
+                suppressesActiveWorkoutAccessory = false
+            }
+            requestsNextActiveWorkoutPresentation = false
+        case (.some, nil):
+            selectedTab = .home
+            isActiveWorkoutPresented = false
+            suppressesActiveWorkoutAccessory = true
+        case (.some, .some):
+            selectedTab = .home
+            isActiveWorkoutPresented = false
+            suppressesActiveWorkoutAccessory = true
+        case (nil, nil):
+            break
+        }
+    }
+
+    func presentActiveWorkout() {
+        guard activeWorkoutID != nil else {
+            requestsNextActiveWorkoutPresentation = true
+            return
+        }
+        requestsNextActiveWorkoutPresentation = false
+        suppressesActiveWorkoutAccessory = false
+        isActiveWorkoutPresented = true
+    }
+
+    func minimizeActiveWorkout() {
+        guard activeWorkoutID != nil else { return }
+        isActiveWorkoutPresented = false
     }
 
     func openExerciseHistory(_ route: ExerciseHistoryRoute) {
