@@ -44,6 +44,7 @@ struct ExerciseLibraryView: View {
                     } label: {
                         Label("Remove", systemImage: "trash")
                     }
+                    .tint(AppTheme.destructive)
                 }
             }
         }
