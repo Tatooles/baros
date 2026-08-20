@@ -80,8 +80,11 @@ final class AppNavigationState {
     private var suppressesActiveWorkoutAccessory: Bool
     private var requestsNextActiveWorkoutPresentation: Bool
 
-    var showsActiveWorkoutAccessory: Bool {
-        activeWorkoutID != nil && !isActiveWorkoutPresented && !suppressesActiveWorkoutAccessory
+    /// The accessory stays mounted while the Active Workout is presented, covered by the
+    /// presentation rather than removed, so the tab bar keeps a stable width across present and
+    /// minimize. Use `showsActiveWorkoutReturnAction` for "the workout is minimized" instead.
+    var mountsActiveWorkoutAccessory: Bool {
+        activeWorkoutID != nil && !suppressesActiveWorkoutAccessory
     }
 
     var showsActiveWorkoutReturnAction: Bool {
