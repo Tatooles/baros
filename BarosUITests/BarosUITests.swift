@@ -227,7 +227,10 @@ final class BarosUITests: XCTestCase {
         let title = relaunchedApp.textFields["WorkoutTitle"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         XCTAssertEqual(title.value as? String, "Relaunch Active")
-        XCTAssertFalse(relaunchedApp.buttons["ActiveWorkoutAccessory"].exists)
+        // The native accessory host stays mounted to preserve the tab bar's width, but its return
+        // action is hidden from accessibility while the workout presentation covers it.
+        let coveredAccessory = relaunchedApp.buttons["ActiveWorkoutAccessory"]
+        XCTAssertFalse(coveredAccessory.exists)
     }
 
     @MainActor

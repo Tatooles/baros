@@ -8,7 +8,7 @@ Baros uses three permanent native tabs in this order: **History, Home, Profile**
 
 An Active Workout is a focused, full-height session presented above the tab shell. The native sheet grabber is its only visible minimize control. Minimizing keeps the workout active and reveals a native bottom accessory; tapping that accessory returns to the same workout.
 
-The accessory uses the accepted status-rich treatment: workout name, minute-level elapsed time, and completed/total set progress. Its entire surface is one **Return to Workout** action.
+The accessory uses the accepted status-rich treatment: workout name, second-level elapsed time, and completed/total set progress. Its entire surface is one **Return to Workout** action.
 
 ## Navigation model
 
