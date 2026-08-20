@@ -141,7 +141,9 @@ final class BarosUITests: XCTestCase {
         let title = relaunchedApp.textFields["WorkoutTitle"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         XCTAssertEqual(title.value as? String, "Relaunch Active")
-        XCTAssertFalse(relaunchedApp.buttons["ActiveWorkoutAccessory"].exists)
+        // The accessory stays mounted behind the presentation, so absence is not the signal here.
+        // Presenting the workout is, and a covered accessory must not be reachable.
+        XCTAssertFalse(relaunchedApp.buttons["ActiveWorkoutAccessory"].isHittable)
     }
 
     @MainActor

@@ -175,11 +175,11 @@ struct AppShellView: View {
         if #available(iOS 26.1, *) {
             tabs
                 .tabViewBottomAccessory(
-                    isEnabled: navigationState.showsActiveWorkoutAccessory && activeSession != nil
+                    isEnabled: navigationState.mountsActiveWorkoutAccessory && activeSession != nil
                 ) {
                     activeWorkoutAccessory
                 }
-        } else if navigationState.showsActiveWorkoutAccessory, activeSession != nil {
+        } else if navigationState.mountsActiveWorkoutAccessory, activeSession != nil {
             tabs
                 .tabViewBottomAccessory {
                     activeWorkoutAccessory
