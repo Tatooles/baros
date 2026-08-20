@@ -3,10 +3,13 @@ import SwiftUI
 struct ActiveWorkoutAccessoryView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let session: WorkoutSession
+    let showsReturnAction: Bool
     let returnToActiveWorkout: () -> Void
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+        TimelineView(
+            .animation(minimumInterval: 1, paused: !showsReturnAction)
+        ) { timeline in
             let metrics = WorkoutMetrics(session: session, now: timeline.date)
 
             Button(action: returnToActiveWorkout) {
@@ -67,8 +70,10 @@ struct ActiveWorkoutAccessoryView: View {
                         + "\(metrics.completedSetCount) of \(metrics.totalSetCount) sets completed"
                 )
                 .accessibilityIdentifier("ActiveWorkoutAccessory")
+                .accessibilityHidden(!showsReturnAction)
             }
             .buttonStyle(.plain)
+            .allowsHitTesting(showsReturnAction)
         }
     }
 }

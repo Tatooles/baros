@@ -229,6 +229,7 @@ struct AppShellView: View {
         if let activeSession {
             ActiveWorkoutAccessoryView(
                 session: activeSession,
+                showsReturnAction: navigationState.showsActiveWorkoutReturnAction,
                 returnToActiveWorkout: { navigationState.presentActiveWorkout() }
             )
             .accessibilityDynamicTypeForUITesting()
