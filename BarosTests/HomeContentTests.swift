@@ -7,7 +7,7 @@ final class HomeContentTests: XCTestCase {
         let presentation = HomePrimaryWorkoutPresentation(activeSession: nil, now: date(2026, 8, 19))
 
         XCTAssertEqual(presentation.title, "Start Workout")
-        XCTAssertEqual(presentation.detail, "Start blank or repeat a past workout")
+        XCTAssertNil(presentation.detail)
         XCTAssertEqual(presentation.accessibilityIdentifier, "StartWorkoutButton")
     }
 

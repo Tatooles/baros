@@ -9,7 +9,7 @@ struct HomePrimaryWorkoutPresentation: Equatable {
     init(activeSession: WorkoutSession?, now: Date) {
         guard let activeSession else {
             title = "Start Workout"
-            detail = "Start blank or repeat a past workout"
+            detail = nil
             accessibilityIdentifier = "StartWorkoutButton"
             isActive = false
             return

@@ -87,6 +87,14 @@ private struct HomeStartSheetPresentation: Identifiable {
 }
 
 private struct HomePrimaryWorkoutButton: View {
+    private struct Layout {
+        let systemImage: String
+        let iconDimension: CGFloat
+        let minimumHeight: CGFloat
+        let verticalPadding: CGFloat
+        let titleFont: Font
+    }
+
     let presentation: HomePrimaryWorkoutPresentation
     let action: () -> Void
 
@@ -94,26 +102,50 @@ private struct HomePrimaryWorkoutButton: View {
         RoundedRectangle(cornerRadius: 28, style: .continuous)
     }
 
+    private var layout: Layout {
+        if presentation.isActive {
+            return Layout(
+                systemImage: "figure.strengthtraining.traditional",
+                iconDimension: 50,
+                minimumHeight: 112,
+                verticalPadding: 19,
+                titleFont: .title2.weight(.bold)
+            )
+        }
+
+        return Layout(
+            systemImage: "plus",
+            iconDimension: 50,
+            minimumHeight: 100,
+            verticalPadding: 16,
+            titleFont: .title3.weight(.bold)
+        )
+    }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 16) {
-                Image(systemName: presentation.isActive ? "figure.strengthtraining.traditional" : "plus")
+                Image(systemName: layout.systemImage)
                     .font(.title2.weight(.bold))
                     .foregroundStyle(AppTheme.onBrandAccent)
-                    .frame(width: 50, height: 50)
-                    .background(AppTheme.onBrandAccent.opacity(0.14), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .frame(width: layout.iconDimension, height: layout.iconDimension)
+                    .background(AppTheme.brandAccentGradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(AppTheme.onBrandAccent.opacity(0.2), lineWidth: 1)
+                    }
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 7) {
                     Text(presentation.title)
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(AppTheme.onBrandAccent)
+                        .font(layout.titleFont)
+                        .foregroundStyle(AppTheme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let detail = presentation.detail {
                         Text(detail)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(AppTheme.onBrandAccent.opacity(0.76))
+                            .foregroundStyle(AppTheme.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -122,14 +154,19 @@ private struct HomePrimaryWorkoutButton: View {
 
                 Image(systemName: "chevron.right")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(AppTheme.onBrandAccent.opacity(0.82))
+                    .foregroundStyle(AppTheme.brandAccentForeground)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 19)
-            .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-            .background(AppTheme.brandAccentGradient, in: shape)
-            .overlay(shape.strokeBorder(AppTheme.onBrandAccent.opacity(0.22), lineWidth: 1))
+            .padding(.vertical, layout.verticalPadding)
+            .frame(maxWidth: .infinity, minHeight: layout.minimumHeight, alignment: .leading)
+            .background(AppTheme.focusSurface, in: shape)
+            .overlay(shape.strokeBorder(AppTheme.brandAccentForeground.opacity(0.9), lineWidth: 3))
+            .overlay {
+                shape
+                    .inset(by: 4)
+                    .strokeBorder(AppTheme.brandAccentForeground.opacity(0.12), lineWidth: 1)
+            }
             .shadow(color: AppTheme.brandAccentGlow, radius: 18, y: 8)
             .contentShape(shape)
             .accessibilityElement(children: .ignore)

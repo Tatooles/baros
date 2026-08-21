@@ -93,7 +93,7 @@ final class BarosUITests: XCTestCase {
         let startWorkoutButton = app.buttons["StartWorkoutButton"]
         XCTAssertTrue(startWorkoutButton.waitForExistence(timeout: 3))
         XCTAssertTrue(startWorkoutButton.isHittable)
-        XCTAssertGreaterThanOrEqual(startWorkoutButton.frame.height, 122)
+        XCTAssertGreaterThanOrEqual(startWorkoutButton.frame.height, 96)
         XCTAssertTrue(app.descendants(matching: .any)["HomeWeeklyActivity"].exists)
 
         startWorkoutButton.tap()
