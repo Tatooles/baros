@@ -133,6 +133,7 @@ struct AppShellView: View {
                         .padding(.top, 16)
                         .background(AppTheme.canvasBackground.ignoresSafeArea())
                     }
+                    .tint(AppTheme.brandAccentForeground)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
                     .accessibilityIdentifier("ActiveWorkoutSheet")
