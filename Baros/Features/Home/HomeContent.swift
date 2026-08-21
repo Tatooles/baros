@@ -4,12 +4,14 @@ struct HomePrimaryWorkoutPresentation: Equatable {
     let title: String
     let detail: String?
     let accessibilityIdentifier: String
+    let isActive: Bool
 
     init(activeSession: WorkoutSession?, now: Date) {
         guard let activeSession else {
             title = "Start Workout"
-            detail = nil
+            detail = "Start blank or repeat a past workout"
             accessibilityIdentifier = "StartWorkoutButton"
+            isActive = false
             return
         }
 
@@ -17,6 +19,7 @@ struct HomePrimaryWorkoutPresentation: Equatable {
         detail = "\(activeSession.title) · "
             + WorkoutFormatters.homeElapsedDescription(activeSession.effectiveDurationSeconds(now: now))
         accessibilityIdentifier = "ReturnToActiveWorkoutButton"
+        isActive = true
     }
 }
 
@@ -32,7 +35,7 @@ struct HomeContent {
     let completedSessions: [WorkoutSession]
     let weeklyActivity: HomeWeeklyActivity
 
-    var recentWorkout: WorkoutSession? {
+    var lastWorkout: WorkoutSession? {
         completedSessions.first
     }
 

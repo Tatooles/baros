@@ -31,13 +31,12 @@ struct HomeStartWorkoutSheet: View {
                 .navigationDestination(for: HomeStartRoute.self) { route in
                     switch route {
                     case .pastWorkouts:
-                        HomePastWorkoutsView(content: content, cancel: { dismiss() })
+                        HomePastWorkoutsView(content: content)
                     case .review(let sessionID):
                         if let session = content.completedSessions.first(where: { $0.id == sessionID }) {
                             HomePastWorkoutReviewView(
                                 session: session,
-                                startWorkout: { startWorkout(fromPast: session) },
-                                cancel: { dismiss() }
+                                startWorkout: { startWorkout(fromPast: session) }
                             )
                         } else {
                             EmptyStateView(
@@ -49,8 +48,10 @@ struct HomeStartWorkoutSheet: View {
                     }
                 }
         }
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
         .presentationDetents([.medium, .large], selection: $selectedDetent)
         .presentationDragIndicator(.visible)
+        .presentationBackground(AppTheme.canvasBackground)
         .onChange(of: path) { _, newPath in
             selectedDetent = newPath.isEmpty ? .medium : .large
         }
@@ -69,6 +70,7 @@ struct HomeStartWorkoutSheet: View {
             Button(action: startBlankWorkout) {
                 HomeStartChoiceRow(
                     title: "Blank Workout",
+                    detail: "Add exercises as you go",
                     systemImage: "plus",
                     trailingText: nil
                 )
@@ -79,6 +81,7 @@ struct HomeStartWorkoutSheet: View {
             NavigationLink(value: HomeStartRoute.pastWorkouts) {
                 HomeStartChoiceRow(
                     title: "Use Past Workout",
+                    detail: "Review and repeat a completed workout",
                     systemImage: "clock.arrow.circlepath",
                     trailingText: content.completedSessions.isEmpty ? "None yet" : nil
                 )
@@ -135,6 +138,7 @@ struct HomeStartWorkoutSheet: View {
 
 private struct HomeStartChoiceRow: View {
     let title: String
+    let detail: String
     let systemImage: String
     let trailingText: String?
 
@@ -148,9 +152,16 @@ private struct HomeStartChoiceRow: View {
                     .background(AppTheme.brandAccentMuted, in: RoundedRectangle(cornerRadius: 14))
                     .accessibilityHidden(true)
 
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(AppTheme.textPrimary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(AppTheme.textPrimary)
+
+                    Text(detail)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 Spacer(minLength: 8)
 
@@ -172,7 +183,6 @@ private struct HomeStartChoiceRow: View {
 
 private struct HomePastWorkoutsView: View {
     let content: HomeContent
-    let cancel: () -> Void
     @State private var searchText = ""
 
     private var results: [WorkoutSession] {
@@ -204,12 +214,6 @@ private struct HomePastWorkoutsView: View {
         .navigationTitle("Use Past Workout")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search workouts")
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel", action: cancel)
-                    .accessibilityIdentifier("StartWorkoutCancelButton")
-            }
-        }
         .accessibilityIdentifier("PastWorkoutsList")
     }
 }
@@ -217,7 +221,6 @@ private struct HomePastWorkoutsView: View {
 private struct HomePastWorkoutReviewView: View {
     let session: WorkoutSession
     let startWorkout: () -> Void
-    let cancel: () -> Void
 
     private var metrics: WorkoutMetrics {
         WorkoutMetrics(session: session)
@@ -263,13 +266,6 @@ private struct HomePastWorkoutReviewView: View {
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle("Review Workout")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel", action: cancel)
-                    .accessibilityIdentifier("StartWorkoutCancelButton")
-            }
-        }
-        .accessibilityIdentifier("PastWorkoutReview")
     }
 }
 

@@ -46,9 +46,9 @@ struct HomeView: View {
 
                     HomeWeeklyActivityView(activity: content.weeklyActivity)
 
-                    if let recentWorkout = content.recentWorkout {
-                        HomeRecentWorkoutView(session: recentWorkout) {
-                            navigationState.openWorkoutHistory(recentWorkout.id)
+                    if let lastWorkout = content.lastWorkout {
+                        HomeLastWorkoutView(session: lastWorkout) {
+                            navigationState.openWorkoutHistory(lastWorkout.id)
                         }
                     }
                 }
@@ -90,12 +90,23 @@ private struct HomePrimaryWorkoutButton: View {
     let presentation: HomePrimaryWorkoutPresentation
     let action: () -> Void
 
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 28, style: .continuous)
+    }
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 18) {
+            HStack(spacing: 16) {
+                Image(systemName: presentation.isActive ? "figure.strengthtraining.traditional" : "plus")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(AppTheme.onBrandAccent)
+                    .frame(width: 50, height: 50)
+                    .background(AppTheme.onBrandAccent.opacity(0.14), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .accessibilityHidden(true)
+
                 VStack(alignment: .leading, spacing: 7) {
                     Text(presentation.title)
-                        .font(.title.weight(.bold))
+                        .font(.title2.weight(.bold))
                         .foregroundStyle(AppTheme.onBrandAccent)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -110,19 +121,17 @@ private struct HomePrimaryWorkoutButton: View {
                 Spacer(minLength: 8)
 
                 Image(systemName: "chevron.right")
-                    .font(.title2.weight(.semibold))
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(AppTheme.onBrandAccent.opacity(0.82))
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 22)
-            .frame(maxWidth: .infinity, minHeight: 122, alignment: .leading)
-            .background(
-                AppTheme.brandAccentGradient,
-                in: RoundedRectangle(cornerRadius: 32, style: .continuous)
-            )
-            .shadow(color: AppTheme.brandAccentGlow, radius: 20, y: 9)
-            .contentShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+            .padding(.horizontal, 20)
+            .padding(.vertical, 19)
+            .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+            .background(AppTheme.brandAccentGradient, in: shape)
+            .overlay(shape.strokeBorder(AppTheme.onBrandAccent.opacity(0.22), lineWidth: 1))
+            .shadow(color: AppTheme.brandAccentGlow, radius: 18, y: 8)
+            .contentShape(shape)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(presentation.title)
             .accessibilityValue(presentation.detail ?? "")
@@ -207,24 +216,114 @@ private struct HomeWeekDayView: View {
     }
 }
 
-private struct HomeRecentWorkoutView: View {
+private struct HomeLastWorkoutView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let session: WorkoutSession
     let openWorkout: () -> Void
 
+    private var metrics: WorkoutMetrics {
+        WorkoutMetrics(session: session)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Recent Workout")
-                .font(.title3.weight(.bold))
-                .foregroundStyle(AppTheme.textPrimary)
+        Button(action: openWorkout) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Last Workout")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(AppTheme.textPrimary)
+
+                    Spacer()
+
+                    Text("View")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(AppTheme.brandAccentForeground)
+                }
                 .padding(.horizontal, 2)
 
-            Button(action: openWorkout) {
-                WorkoutHistoryRow(session: session)
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(alignment: .top, spacing: 12) {
+                            Capsule()
+                                .fill(AppTheme.brandAccentFill)
+                                .frame(width: 4, height: 48)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(session.title)
+                                    .font(.headline)
+                                    .foregroundStyle(AppTheme.textPrimary)
+
+                                Text(WorkoutFormatters.compactDate(session.startedAt))
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(AppTheme.textSecondary)
+                            }
+
+                            Spacer(minLength: 8)
+
+                            Image(systemName: "chevron.right")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppTheme.textTertiary)
+                                .padding(.top, 4)
+                                .accessibilityHidden(true)
+                        }
+
+                        Group {
+                            if dynamicTypeSize.isAccessibilitySize {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    workoutMetadata
+                                }
+                            } else {
+                                HStack(spacing: 12) {
+                                    workoutMetadata
+                                }
+                            }
+                        }
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(AppTheme.textTertiary)
+
+                        Divider()
+
+                        VStack(spacing: 10) {
+                            ForEach(session.sortedLoggedExercises.prefix(3)) { loggedExercise in
+                                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                    Text(loggedExercise.exerciseSnapshotName)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(AppTheme.textPrimary)
+                                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                                        .fixedSize(horizontal: false, vertical: true)
+
+                                    Spacer(minLength: 8)
+
+                                    let setCount = loggedExercise.sortedSets.lazy.filter(\.isCompleted).count
+                                    Text("\(setCount) \(setCount == 1 ? "set" : "sets")")
+                                        .font(.footnote.weight(.medium))
+                                        .foregroundStyle(AppTheme.textSecondary)
+                                }
+                            }
+
+                            let remainingExerciseCount = max(session.sortedLoggedExercises.count - 3, 0)
+                            if remainingExerciseCount > 0 {
+                                Text("+ \(remainingExerciseCount) more")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(AppTheme.brandAccentForeground)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("HomeRecentWorkoutButton")
         }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("HomeLastWorkoutButton")
         .padding(.top, 25)
         .padding(.bottom, 12)
+    }
+
+    @ViewBuilder
+    private var workoutMetadata: some View {
+        Label(AppTheme.formatDuration(metrics.durationSeconds), systemImage: "clock")
+        Text("\(session.visibleExerciseCount) exercises")
+        Text("\(metrics.completedSetCount) sets")
     }
 }

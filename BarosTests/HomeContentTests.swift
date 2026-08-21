@@ -7,7 +7,7 @@ final class HomeContentTests: XCTestCase {
         let presentation = HomePrimaryWorkoutPresentation(activeSession: nil, now: date(2026, 8, 19))
 
         XCTAssertEqual(presentation.title, "Start Workout")
-        XCTAssertNil(presentation.detail)
+        XCTAssertEqual(presentation.detail, "Start blank or repeat a past workout")
         XCTAssertEqual(presentation.accessibilityIdentifier, "StartWorkoutButton")
     }
 
@@ -71,7 +71,7 @@ final class HomeContentTests: XCTestCase {
         )
 
         XCTAssertEqual(content.completedSessions.map(\.id), [newest.id, recentlyEditedOlder.id])
-        XCTAssertEqual(content.recentWorkout?.id, newest.id)
+        XCTAssertEqual(content.lastWorkout?.id, newest.id)
     }
 
     func testContentAppliesCurrentOwnerVisibilityToEveryHomeCollection() {
@@ -95,7 +95,7 @@ final class HomeContentTests: XCTestCase {
         )
 
         XCTAssertEqual(content.completedSessions.map(\.id), [ownerA.id, unclaimed.id])
-        XCTAssertEqual(content.recentWorkout?.id, ownerA.id)
+        XCTAssertEqual(content.lastWorkout?.id, ownerA.id)
         XCTAssertEqual(content.weeklyActivity.completedWorkoutCount, 2)
     }
 
