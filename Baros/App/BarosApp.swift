@@ -19,6 +19,7 @@ struct BarosApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var navigationState = AppNavigationState()
     @State private var activeWorkoutEngine = ActiveWorkoutEngine()
+    @State private var workoutLiveActivityCoordinator = WorkoutLiveActivityCoordinator()
     @State private var syncScheduler: SyncScheduler
     @State private var currentOwnerCoordinator: CurrentOwnerCoordinator
 
@@ -119,7 +120,8 @@ struct BarosApp: App {
         WindowGroup {
             AppShellView(
                 navigationState: navigationState,
-                activeWorkoutEngine: activeWorkoutEngine
+                activeWorkoutEngine: activeWorkoutEngine,
+                workoutLiveActivityCoordinator: workoutLiveActivityCoordinator
             )
             .modelContainer(modelContainer)
             .environment(Clerk.shared)

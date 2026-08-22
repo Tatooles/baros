@@ -1,0 +1,3 @@
+# Treat Workout Live Activity as a disposable Active Workout projection
+
+A Workout Live Activity mirrors the currently visible Active Workout, uses that workout's identifier for reconciliation and re-entry, and never becomes a source of workout state. Baros updates it from local persisted state without remote push updates or state-changing controls, and removes it when the workout ends or ceases to be visible to the Current Owner. This preserves offline continuity and owner privacy while accepting that dismissal, system expiration, or ActivityKit failure may remove the glanceable presentation without changing the workout.
