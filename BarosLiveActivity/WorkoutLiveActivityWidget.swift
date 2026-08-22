@@ -74,9 +74,34 @@ struct WorkoutLiveActivityWidget: Widget {
 }
 
 private struct WorkoutLiveActivityLockScreenView: View {
+    private struct LayoutMetrics {
+        let metricSpacing: CGFloat
+        let trailingMetricWidth: CGFloat
+        let elapsedTimerMinimumScaleFactor: CGFloat
+        let showsSecondaryCaptions: Bool
+    }
+
     let context: ActivityViewContext<WorkoutLiveActivityAttributes>
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+
+    private var layoutMetrics: LayoutMetrics {
+        if dynamicTypeSize.isAccessibilitySize {
+            LayoutMetrics(
+                metricSpacing: 12,
+                trailingMetricWidth: 76,
+                elapsedTimerMinimumScaleFactor: 0.7,
+                showsSecondaryCaptions: false
+            )
+        } else {
+            LayoutMetrics(
+                metricSpacing: 18,
+                trailingMetricWidth: 92,
+                elapsedTimerMinimumScaleFactor: 1,
+                showsSecondaryCaptions: true
+            )
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -111,7 +136,7 @@ private struct WorkoutLiveActivityLockScreenView: View {
                         .truncationMode(.tail)
                 }
 
-                HStack(alignment: .center, spacing: 18) {
+                HStack(alignment: .center, spacing: layoutMetrics.metricSpacing) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(
                             timerInterval: context.attributes.startedAt...Date.distantFuture,
@@ -120,9 +145,10 @@ private struct WorkoutLiveActivityLockScreenView: View {
                         )
                             .font(.system(.title, design: .rounded).monospacedDigit().weight(.bold))
                             .foregroundStyle(BarosBrand.brandForeground)
-                            .minimumScaleFactor(1)
+                            .lineLimit(1)
+                            .minimumScaleFactor(layoutMetrics.elapsedTimerMinimumScaleFactor)
 
-                        if !dynamicTypeSize.isAccessibilitySize {
+                        if layoutMetrics.showsSecondaryCaptions {
                             Text("ELAPSED TIME")
                                 .font(.system(size: 9, weight: .bold))
                                 .tracking(1.2)
@@ -130,21 +156,24 @@ private struct WorkoutLiveActivityLockScreenView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
 
                     if context.state.totalSetCount == 0 {
                         Text("No sets yet")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(BarosBrand.brandForeground.opacity(0.8))
-                            .frame(width: 92)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.8)
+                            .frame(width: layoutMetrics.trailingMetricWidth)
                             .frame(minHeight: 64)
                     } else {
                         WorkoutLiveActivityProgressDial(
                             completed: context.state.completedSetCount,
                             total: context.state.totalSetCount,
                             diameter: 68,
-                            showsCaption: !dynamicTypeSize.isAccessibilitySize
+                            showsCaption: layoutMetrics.showsSecondaryCaptions
                         )
-                        .frame(width: 92)
+                        .frame(width: layoutMetrics.trailingMetricWidth)
                     }
                 }
             }

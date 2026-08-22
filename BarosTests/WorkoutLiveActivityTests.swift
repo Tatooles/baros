@@ -58,6 +58,42 @@ final class WorkoutLiveActivityTests: XCTestCase {
         )
     }
 
+    func testSynchronizationDefersNilSnapshotWhileCurrentOwnerIsResolvingWithoutAValidatedOwner() {
+        let snapshot = WorkoutLiveActivitySnapshot(
+            session: WorkoutSession(
+                title: "Workout",
+                startedAt: Date(timeIntervalSince1970: 1_000),
+                status: .active,
+                source: .blank
+            )
+        )
+
+        XCTAssertFalse(
+            WorkoutLiveActivitySynchronizationPolicy.shouldSynchronize(
+                snapshot: nil,
+                currentOwnerState: .resolving(ownerTokenIdentifier: nil)
+            )
+        )
+        XCTAssertTrue(
+            WorkoutLiveActivitySynchronizationPolicy.shouldSynchronize(
+                snapshot: snapshot,
+                currentOwnerState: .resolving(ownerTokenIdentifier: nil)
+            )
+        )
+        XCTAssertTrue(
+            WorkoutLiveActivitySynchronizationPolicy.shouldSynchronize(
+                snapshot: nil,
+                currentOwnerState: .localOnly
+            )
+        )
+        XCTAssertTrue(
+            WorkoutLiveActivitySynchronizationPolicy.shouldSynchronize(
+                snapshot: nil,
+                currentOwnerState: .active(ownerTokenIdentifier: "issuer|owner")
+            )
+        )
+    }
+
     func testReconciliationWithoutActiveWorkoutEndsEveryActivity() {
         let first = WorkoutLiveActivityRecord(
             activityID: "first",

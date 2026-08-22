@@ -1,5 +1,18 @@
 import SwiftUI
 
+enum WorkoutLiveActivitySynchronizationPolicy {
+    static func shouldSynchronize(
+        snapshot: WorkoutLiveActivitySnapshot?,
+        currentOwnerState: CurrentOwnerCoordinator.State
+    ) -> Bool {
+        guard snapshot == nil else { return true }
+        if case .resolving(ownerTokenIdentifier: nil) = currentOwnerState {
+            return false
+        }
+        return true
+    }
+}
+
 private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
@@ -12,15 +25,16 @@ private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onChange(of: snapshot, initial: true) { _, snapshot in
-                coordinator.synchronize(snapshot: snapshot)
+                synchronizeIfOwnerReady(snapshot: snapshot)
                 openPendingWorkoutIfReady()
             }
-            .onChange(of: currentOwnerCoordinator.state, initial: true) { _, _ in
+            .onChange(of: currentOwnerCoordinator.state) { _, _ in
+                synchronizeIfOwnerReady(snapshot: snapshot)
                 openPendingWorkoutIfReady()
             }
             .onChange(of: scenePhase) { _, newScenePhase in
                 guard newScenePhase == .active else { return }
-                coordinator.synchronize(
+                synchronizeIfOwnerReady(
                     snapshot: snapshot,
                     allowsRequestRetry: true
                 )
@@ -38,6 +52,22 @@ private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
                     break
                 }
             }
+    }
+
+    private func synchronizeIfOwnerReady(
+        snapshot: WorkoutLiveActivitySnapshot?,
+        allowsRequestRetry: Bool = false
+    ) {
+        guard WorkoutLiveActivitySynchronizationPolicy.shouldSynchronize(
+            snapshot: snapshot,
+            currentOwnerState: currentOwnerCoordinator.state
+        ) else {
+            return
+        }
+        coordinator.synchronize(
+            snapshot: snapshot,
+            allowsRequestRetry: allowsRequestRetry
+        )
     }
 
     private func openPendingWorkoutIfReady() {
