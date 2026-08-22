@@ -18,6 +18,7 @@ struct HomeStartWorkoutSheet: View {
     @State private var actionError: HomeStartWorkoutActionError?
     @State private var sheetHeight: CGFloat = 0
     @State private var pendingRoute: HomeStartRoute?
+    @State private var pendingExpansionOriginHeight: CGFloat?
     @State private var pendingNavigationTask: Task<Void, Never>?
 
     var body: some View {
@@ -62,13 +63,17 @@ struct HomeStartWorkoutSheet: View {
         }
         .onChange(of: path) { _, newPath in
             if newPath.isEmpty {
-                pendingNavigationTask?.cancel()
-                pendingRoute = nil
+                cancelPendingNavigation()
                 selectedDetent = .medium
             }
         }
+        .onChange(of: selectedDetent) { _, newDetent in
+            if newDetent == .medium, pendingRoute != nil {
+                cancelPendingNavigation()
+            }
+        }
         .onDisappear {
-            pendingNavigationTask?.cancel()
+            cancelPendingNavigation()
         }
         .alert(item: $actionError) { actionError in
             Alert(
@@ -123,6 +128,7 @@ struct HomeStartWorkoutSheet: View {
 
     private func showPastWorkouts() {
         pendingRoute = .pastWorkouts
+        pendingExpansionOriginHeight = selectedDetent == .large ? nil : sheetHeight
         selectedDetent = .large
         schedulePendingNavigation(afterSettlingAt: sheetHeight)
     }
@@ -136,14 +142,27 @@ struct HomeStartWorkoutSheet: View {
         pendingNavigationTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(80))
             guard !Task.isCancelled,
+                  selectedDetent == .large,
                   abs(sheetHeight - height) < 1,
                   let route = pendingRoute else {
                 return
             }
+            if let originHeight = pendingExpansionOriginHeight,
+               sheetHeight <= originHeight + 1 {
+                return
+            }
 
             pendingRoute = nil
+            pendingExpansionOriginHeight = nil
             path.append(route)
         }
+    }
+
+    private func cancelPendingNavigation() {
+        pendingNavigationTask?.cancel()
+        pendingNavigationTask = nil
+        pendingRoute = nil
+        pendingExpansionOriginHeight = nil
     }
 
     private func startWorkout(fromPast session: WorkoutSession) {
