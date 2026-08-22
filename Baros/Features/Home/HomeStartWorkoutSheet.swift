@@ -51,7 +51,6 @@ struct HomeStartWorkoutSheet: View {
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .presentationDetents([.medium, .large], selection: $selectedDetent)
         .presentationDragIndicator(.visible)
-        .presentationBackground(AppTheme.canvasBackground)
         .onChange(of: path) { _, newPath in
             selectedDetent = newPath.isEmpty ? .medium : .large
         }
