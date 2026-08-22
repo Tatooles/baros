@@ -76,6 +76,7 @@ final class AppNavigationState {
     var profilePath: [ProfileRoute]
     private(set) var activeWorkoutID: UUID?
     private(set) var isActiveWorkoutPresented: Bool
+    private(set) var fullyPresentedActiveWorkoutID: UUID?
     private var hasReconciledActiveWorkout: Bool
     private var suppressesActiveWorkoutAccessory: Bool
     private var requestsNextActiveWorkoutPresentation: Bool
@@ -103,6 +104,7 @@ final class AppNavigationState {
         self.profilePath = profilePath
         activeWorkoutID = nil
         isActiveWorkoutPresented = false
+        fullyPresentedActiveWorkoutID = nil
         hasReconciledActiveWorkout = false
         suppressesActiveWorkoutAccessory = false
         requestsNextActiveWorkoutPresentation = false
@@ -122,6 +124,7 @@ final class AppNavigationState {
         guard previousSessionID != sessionID else { return }
 
         activeWorkoutID = sessionID
+        fullyPresentedActiveWorkoutID = nil
 
         switch (previousSessionID, sessionID) {
         case (nil, .some):
@@ -152,7 +155,13 @@ final class AppNavigationState {
         }
         requestsNextActiveWorkoutPresentation = false
         suppressesActiveWorkoutAccessory = false
+        fullyPresentedActiveWorkoutID = nil
         isActiveWorkoutPresented = true
+    }
+
+    func activeWorkoutPresentationDidFinish() {
+        guard isActiveWorkoutPresented, let activeWorkoutID else { return }
+        fullyPresentedActiveWorkoutID = activeWorkoutID
     }
 
     func minimizeActiveWorkout() {

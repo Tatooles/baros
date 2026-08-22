@@ -68,8 +68,8 @@ struct HomeView: View {
                     }
                 )
             }
-            .onChange(of: navigationState.isActiveWorkoutPresented) { wasPresented, isPresented in
-                if wasPresented && !isPresented {
+            .onChange(of: navigationState.fullyPresentedActiveWorkoutID) { _, presentedSessionID in
+                if presentedSessionID == sessionIDHiddenDuringLaunchHandoff {
                     sessionIDHiddenDuringLaunchHandoff = nil
                 }
             }
