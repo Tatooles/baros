@@ -11,41 +11,38 @@ struct WorkoutLiveActivityWidget: Widget {
                 .activitySystemActionForegroundColor(BarosBrand.brandForeground)
         } dynamicIsland: { context in
             DynamicIsland {
-                DynamicIslandExpandedRegion(.leading) {
-                    HStack(spacing: 8) {
-                        WorkoutLiveActivityMark(size: 28)
+                DynamicIslandExpandedRegion(.bottom) {
+                    HStack(spacing: 10) {
+                        WorkoutLiveActivityMark(size: 24)
+
                         Text(context.state.title)
-                            .font(.caption.weight(.semibold))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(BarosBrand.brandForeground)
                             .lineLimit(1)
-                    }
-                    .accessibilityHidden(true)
-                }
+                            .minimumScaleFactor(0.8)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .layoutPriority(1)
 
-                DynamicIslandExpandedRegion(.trailing) {
-                    WorkoutLiveActivityProgressDial(
-                        completed: context.state.completedSetCount,
-                        total: context.state.totalSetCount,
-                        diameter: 38
-                    )
-                    .accessibilityHidden(true)
-                }
-
-                DynamicIslandExpandedRegion(.bottom) {
-                    VStack(spacing: 2) {
                         Text(
                             timerInterval: context.attributes.startedAt...Date.distantFuture,
                             countsDown: false,
                             showsHours: true
                         )
-                            .font(.title2.monospacedDigit().weight(.bold))
+                            .font(.title3.monospacedDigit().weight(.bold))
                             .foregroundStyle(BarosBrand.brandForeground)
-                        Text("ELAPSED TIME")
-                            .font(.system(size: 8, weight: .bold))
-                            .tracking(1.1)
-                            .foregroundStyle(BarosBrand.brandForeground.opacity(0.62))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .frame(width: 66, alignment: .trailing)
+
+                        WorkoutLiveActivityProgressDial(
+                            completed: context.state.completedSetCount,
+                            total: context.state.totalSetCount,
+                            diameter: 40
+                        )
                     }
                     .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 2)
                     .workoutLiveActivityActionAccessibility(context: context)
                 }
             } compactLeading: {
@@ -222,6 +219,12 @@ private struct WorkoutLiveActivityProgressDial: View {
         return min(1, max(0, Double(completed) / Double(total)))
     }
 
+    private var valueFont: Font {
+        diameter <= 44
+            ? .caption2.monospacedDigit().weight(.bold)
+            : .caption.monospacedDigit().weight(.bold)
+    }
+
     var body: some View {
         ZStack {
             Circle()
@@ -237,8 +240,11 @@ private struct WorkoutLiveActivityProgressDial: View {
                 .accessibilityHidden(true)
             VStack(spacing: 0) {
                 Text("\(completed)/\(total)")
-                    .font(.caption.monospacedDigit().weight(.bold))
+                    .font(valueFont)
                     .foregroundStyle(BarosBrand.brandForeground)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .padding(.horizontal, 5)
                 if showsCaption {
                     Text("SETS")
                         .font(.system(size: 7, weight: .bold))
