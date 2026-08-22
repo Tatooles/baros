@@ -58,6 +58,33 @@ final class WorkoutLiveActivityTests: XCTestCase {
         )
     }
 
+    func testMalformedWorkoutLinkWaitsForInitialCurrentOwnerResolution() {
+        XCTAssertNotNil(
+            WorkoutLiveActivityPendingLink(route: .malformedWorkoutLink)
+        )
+
+        XCTAssertTrue(
+            WorkoutLiveActivityOwnerResolutionPolicy.shouldDeferOwnerSensitiveWork(
+                currentOwnerState: .resolving(ownerTokenIdentifier: nil)
+            )
+        )
+        XCTAssertFalse(
+            WorkoutLiveActivityOwnerResolutionPolicy.shouldDeferOwnerSensitiveWork(
+                currentOwnerState: .resolving(ownerTokenIdentifier: "issuer|owner")
+            )
+        )
+        XCTAssertFalse(
+            WorkoutLiveActivityOwnerResolutionPolicy.shouldDeferOwnerSensitiveWork(
+                currentOwnerState: .localOnly
+            )
+        )
+        XCTAssertFalse(
+            WorkoutLiveActivityOwnerResolutionPolicy.shouldDeferOwnerSensitiveWork(
+                currentOwnerState: .active(ownerTokenIdentifier: "issuer|owner")
+            )
+        )
+    }
+
     func testSynchronizationDefersNilSnapshotWhileCurrentOwnerIsResolvingWithoutAValidatedOwner() {
         let snapshot = WorkoutLiveActivitySnapshot(
             session: WorkoutSession(

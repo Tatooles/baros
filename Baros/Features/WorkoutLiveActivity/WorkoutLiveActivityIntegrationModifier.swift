@@ -1,16 +1,43 @@
 import SwiftUI
 
+enum WorkoutLiveActivityOwnerResolutionPolicy {
+    static func shouldDeferOwnerSensitiveWork(
+        currentOwnerState: CurrentOwnerCoordinator.State
+    ) -> Bool {
+        if case .resolving(ownerTokenIdentifier: nil) = currentOwnerState {
+            return true
+        }
+        return false
+    }
+}
+
 enum WorkoutLiveActivitySynchronizationPolicy {
     static func shouldSynchronize(
         snapshot: WorkoutLiveActivitySnapshot?,
         currentOwnerState: CurrentOwnerCoordinator.State
     ) -> Bool {
         guard snapshot == nil else { return true }
-        if case .resolving(ownerTokenIdentifier: nil) = currentOwnerState {
-            return false
-        }
-        return true
+        return !WorkoutLiveActivityOwnerResolutionPolicy.shouldDeferOwnerSensitiveWork(
+            currentOwnerState: currentOwnerState
+        )
     }
+}
+
+enum WorkoutLiveActivityPendingLink {
+    case workout(UUID)
+    case malformedWorkoutLink
+
+    init?(route: WorkoutLiveActivityLink.Route) {
+        switch route {
+        case let .workout(workoutID):
+            self = .workout(workoutID)
+        case .malformedWorkoutLink:
+            self = .malformedWorkoutLink
+        case .unrelated:
+            return nil
+        }
+    }
+
 }
 
 private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
@@ -20,17 +47,17 @@ private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
     let navigationState: AppNavigationState
     let coordinator: WorkoutLiveActivityCoordinator
     let willHandleWorkoutLiveActivityLink: () -> Void
-    @State private var pendingWorkoutID: UUID?
+    @State private var pendingLink: WorkoutLiveActivityPendingLink?
 
     func body(content: Content) -> some View {
         content
             .onChange(of: snapshot, initial: true) { _, snapshot in
                 synchronizeIfOwnerReady(snapshot: snapshot)
-                openPendingWorkoutIfReady()
+                handlePendingLinkIfReady()
             }
             .onChange(of: currentOwnerCoordinator.state) { _, _ in
                 synchronizeIfOwnerReady(snapshot: snapshot)
-                openPendingWorkoutIfReady()
+                handlePendingLinkIfReady()
             }
             .onChange(of: scenePhase) { _, newScenePhase in
                 guard newScenePhase == .active else { return }
@@ -40,17 +67,11 @@ private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
                 )
             }
             .onOpenURL { url in
-                switch WorkoutLiveActivityLink.route(from: url) {
-                case let .workout(workoutID):
-                    pendingWorkoutID = workoutID
-                    openPendingWorkoutIfReady()
-                case .malformedWorkoutLink:
-                    pendingWorkoutID = nil
-                    willHandleWorkoutLiveActivityLink()
-                    navigationState.returnHomeFromUnopenableWorkoutLiveActivityLink()
-                case .unrelated:
-                    break
-                }
+                guard let pendingLink = WorkoutLiveActivityPendingLink(
+                    route: WorkoutLiveActivityLink.route(from: url)
+                ) else { return }
+                self.pendingLink = pendingLink
+                handlePendingLinkIfReady()
             }
     }
 
@@ -70,18 +91,25 @@ private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
         )
     }
 
-    private func openPendingWorkoutIfReady() {
-        guard let workoutID = pendingWorkoutID else { return }
-        if case .resolving(ownerTokenIdentifier: nil) = currentOwnerCoordinator.state {
-            return
-        }
+    private func handlePendingLinkIfReady() {
+        guard
+            let pendingLink,
+            !WorkoutLiveActivityOwnerResolutionPolicy.shouldDeferOwnerSensitiveWork(
+                currentOwnerState: currentOwnerCoordinator.state
+            )
+        else { return }
 
-        pendingWorkoutID = nil
+        self.pendingLink = nil
         willHandleWorkoutLiveActivityLink()
-        navigationState.openWorkoutLiveActivity(
-            workoutID: workoutID,
-            visibleActiveWorkoutID: snapshot?.workoutID
-        )
+        switch pendingLink {
+        case let .workout(workoutID):
+            navigationState.openWorkoutLiveActivity(
+                workoutID: workoutID,
+                visibleActiveWorkoutID: snapshot?.workoutID
+            )
+        case .malformedWorkoutLink:
+            navigationState.returnHomeFromUnopenableWorkoutLiveActivityLink()
+        }
     }
 }
 
