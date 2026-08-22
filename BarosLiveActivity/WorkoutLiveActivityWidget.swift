@@ -1,0 +1,232 @@
+import ActivityKit
+import SwiftUI
+import WidgetKit
+
+struct WorkoutLiveActivityWidget: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: WorkoutActivityAttributes.self) { context in
+            WorkoutLiveActivityLockScreenView(context: context)
+                .widgetURL(WorkoutActivityAttributes.deepLinkURL(for: context.attributes.workoutID))
+                .activityBackgroundTint(WorkoutLiveActivityStyle.blueBlack)
+                .activitySystemActionForegroundColor(WorkoutLiveActivityStyle.warmSilver)
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    HStack(spacing: 8) {
+                        WorkoutLiveActivityMark(size: 28)
+                        Text(context.state.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                            .lineLimit(1)
+                    }
+                }
+
+                DynamicIslandExpandedRegion(.trailing) {
+                    WorkoutLiveActivityProgressDial(
+                        completed: context.state.completedSetCount,
+                        total: context.state.totalSetCount,
+                        diameter: 38
+                    )
+                }
+
+                DynamicIslandExpandedRegion(.bottom) {
+                    VStack(spacing: 2) {
+                        Text(
+                            timerInterval: context.attributes.startedAt...Date.distantFuture,
+                            countsDown: false,
+                            showsHours: true
+                        )
+                            .font(.title2.monospacedDigit().weight(.bold))
+                            .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                        Text("ELAPSED TIME")
+                            .font(.system(size: 8, weight: .bold))
+                            .tracking(1.1)
+                            .foregroundStyle(WorkoutLiveActivityStyle.warmSilver.opacity(0.62))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Return to Workout")
+                    .accessibilityValue(WorkoutLiveActivityAccessibility.value(context: context))
+                    .accessibilityAddTraits(.isButton)
+                }
+            } compactLeading: {
+                WorkoutLiveActivityMark(size: 22)
+            } compactTrailing: {
+                Text(
+                    timerInterval: context.attributes.startedAt...Date.distantFuture,
+                    countsDown: false,
+                    showsHours: true
+                )
+                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                    .frame(maxWidth: 52)
+            } minimal: {
+                WorkoutLiveActivityMark(size: 22)
+            }
+            .widgetURL(WorkoutActivityAttributes.deepLinkURL(for: context.attributes.workoutID))
+            .keylineTint(WorkoutLiveActivityStyle.cobalt)
+        }
+    }
+}
+
+private struct WorkoutLiveActivityLockScreenView: View {
+    let context: ActivityViewContext<WorkoutActivityAttributes>
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(WorkoutLiveActivityStyle.blueBlack)
+
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            WorkoutLiveActivityStyle.cobalt.opacity(
+                                isLuminanceReduced ? 0.12 : 0.24
+                            ),
+                            WorkoutLiveActivityStyle.cobalt.opacity(0.04),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 250, height: 42)
+                .rotationEffect(.degrees(-8))
+                .blur(radius: 9)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    WorkoutLiveActivityMark(size: 30)
+                    Text(context.state.title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+
+                HStack(alignment: .center, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(
+                            timerInterval: context.attributes.startedAt...Date.distantFuture,
+                            countsDown: false,
+                            showsHours: true
+                        )
+                            .font(.system(.title, design: .rounded).monospacedDigit().weight(.bold))
+                            .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                            .minimumScaleFactor(1)
+
+                        if !dynamicTypeSize.isAccessibilitySize {
+                            Text("ELAPSED TIME")
+                                .font(.system(size: 9, weight: .bold))
+                                .tracking(1.2)
+                                .foregroundStyle(WorkoutLiveActivityStyle.warmSilver.opacity(0.62))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if context.state.totalSetCount == 0 {
+                        Text("No sets yet")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(WorkoutLiveActivityStyle.warmSilver.opacity(0.8))
+                            .frame(width: 92)
+                            .frame(minHeight: 64)
+                    } else {
+                        WorkoutLiveActivityProgressDial(
+                            completed: context.state.completedSetCount,
+                            total: context.state.totalSetCount,
+                            diameter: 68,
+                            showsCaption: !dynamicTypeSize.isAccessibilitySize
+                        )
+                        .frame(width: 92)
+                    }
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 15)
+
+            RoundedRectangle(cornerRadius: 25, style: .continuous)
+                .stroke(WorkoutLiveActivityStyle.cobalt, lineWidth: 2)
+                .shadow(
+                    color: WorkoutLiveActivityStyle.cobalt.opacity(
+                        isLuminanceReduced ? 0 : 0.42
+                    ),
+                    radius: 10
+                )
+                .padding(2)
+                .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Return to Workout")
+        .accessibilityValue(WorkoutLiveActivityAccessibility.value(context: context))
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+private struct WorkoutLiveActivityMark: View {
+    let size: CGFloat
+
+    var body: some View {
+        Image("BarosMark")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .padding(size * 0.14)
+            .background(WorkoutLiveActivityStyle.cobalt, in: RoundedRectangle(cornerRadius: size * 0.28))
+            .accessibilityHidden(true)
+    }
+}
+
+private struct WorkoutLiveActivityProgressDial: View {
+    let completed: Int
+    let total: Int
+    let diameter: CGFloat
+    var showsCaption = false
+
+    private var fraction: Double {
+        guard total > 0 else { return 0 }
+        return min(1, max(0, Double(completed) / Double(total)))
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(WorkoutLiveActivityStyle.warmSilver.opacity(0.18), lineWidth: 4)
+                .accessibilityHidden(true)
+            Circle()
+                .trim(from: 0, to: fraction)
+                .stroke(
+                    WorkoutLiveActivityStyle.cobalt,
+                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .accessibilityHidden(true)
+            VStack(spacing: 0) {
+                Text("\(completed)/\(total)")
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                if showsCaption {
+                    Text("SETS")
+                        .font(.system(size: 7, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(WorkoutLiveActivityStyle.warmSilver.opacity(0.62))
+                }
+            }
+        }
+        .frame(width: diameter, height: diameter)
+    }
+}
+
+private enum WorkoutLiveActivityAccessibility {
+    static func value(context: ActivityViewContext<WorkoutActivityAttributes>) -> Text {
+        Text("\(context.state.title), elapsed time \(timerInterval: context.attributes.startedAt...Date.distantFuture, countsDown: false, showsHours: true), \(context.state.completedSetCount) of \(context.state.totalSetCount) sets complete")
+    }
+}
+
+private enum WorkoutLiveActivityStyle {
+    static let blueBlack = Color(red: 0.02, green: 0.035, blue: 0.06)
+    static let cobalt = Color(red: 0.09, green: 0.41, blue: 0.90)
+    static let warmSilver = Color(red: 0.95, green: 0.92, blue: 0.91)
+}

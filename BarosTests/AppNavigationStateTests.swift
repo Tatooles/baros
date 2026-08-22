@@ -208,6 +208,38 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertTrue(navigationState.mountsActiveWorkoutAccessory)
     }
 
+    func testLiveActivityReturnPresentsMatchingWorkoutOverCurrentWarmTab() {
+        let workoutID = UUID()
+        let navigationState = AppNavigationState()
+        navigationState.reconcileActiveWorkout(sessionID: workoutID)
+        navigationState.minimizeActiveWorkout()
+        navigationState.selectedTab = .profile
+
+        navigationState.openWorkoutLiveActivity(
+            workoutID: workoutID,
+            visibleActiveWorkoutID: workoutID
+        )
+
+        XCTAssertEqual(navigationState.selectedTab, .profile)
+        XCTAssertTrue(navigationState.isActiveWorkoutPresented)
+    }
+
+    func testLiveActivityReturnFallsBackHomeForStaleOrOwnerInvisibleWorkout() {
+        let visibleWorkoutID = UUID()
+        let navigationState = AppNavigationState()
+        navigationState.reconcileActiveWorkout(sessionID: visibleWorkoutID)
+        navigationState.minimizeActiveWorkout()
+        navigationState.selectedTab = .history
+
+        navigationState.openWorkoutLiveActivity(
+            workoutID: UUID(),
+            visibleActiveWorkoutID: visibleWorkoutID
+        )
+
+        XCTAssertEqual(navigationState.selectedTab, .home)
+        XCTAssertFalse(navigationState.isActiveWorkoutPresented)
+    }
+
     func testOpenExerciseHistorySelectsHistoryExercisesAndStoresRoute() {
         let navigationState = AppNavigationState(selectedTab: .home, historyMode: .workouts)
         let route = ExerciseHistoryRoute(exerciseID: UUID(), name: "Bench Press")

@@ -4,16 +4,19 @@ import UIKit
 
 struct AppShellView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(SyncScheduler.self) private var syncScheduler
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(\.syncRecoveryAction) private var syncRecoveryAction
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
+    let workoutLiveActivityCoordinator: WorkoutLiveActivityCoordinator
     private let firstRunStore = FirstRunExperienceStore()
     @State private var dismissedSyncFailureSignature: String?
     @State private var launchPresentation: LaunchExperiencePresentation?
     @State private var hasMadeLaunchExperienceDecision = false
     @State private var prepareActiveWorkoutForMinimization: (() -> Void)?
+    @State private var pendingWorkoutLiveActivityID: UUID?
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \SyncOutboxEntry.updatedAt, order: .reverse) private var outboxEntries: [SyncOutboxEntry]
 
@@ -22,6 +25,10 @@ struct AppShellView: View {
             from: sessions,
             ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
         ).first
+    }
+
+    private var workoutLiveActivitySnapshot: WorkoutLiveActivitySnapshot? {
+        activeSession.map(WorkoutLiveActivitySnapshot.init(session:))
     }
 
     private var activeV1OutboxEntries: [SyncOutboxEntry] {
@@ -164,10 +171,29 @@ struct AppShellView: View {
                     launchPresentation = nil
                 }
                 navigationState.reconcileActiveWorkout(sessionID: sessionID)
+                openPendingWorkoutLiveActivityIfReady()
                 chooseLaunchExperienceIfReady()
             }
             .onChange(of: currentOwnerCoordinator.state, initial: true) { _, _ in
+                openPendingWorkoutLiveActivityIfReady()
                 chooseLaunchExperienceIfReady()
+            }
+            .onChange(of: workoutLiveActivitySnapshot, initial: true) { _, snapshot in
+                workoutLiveActivityCoordinator.synchronize(snapshot: snapshot)
+            }
+            .onChange(of: scenePhase) { _, newScenePhase in
+                guard newScenePhase == .active else { return }
+                workoutLiveActivityCoordinator.synchronize(
+                    snapshot: workoutLiveActivitySnapshot,
+                    allowsRequestRetry: true
+                )
+            }
+            .onOpenURL { url in
+                guard let workoutID = AppLinks.workoutID(fromLiveActivityURL: url) else {
+                    return
+                }
+                pendingWorkoutLiveActivityID = workoutID
+                openPendingWorkoutLiveActivityIfReady()
             }
             .task {
                 activeWorkoutEngine.loadActiveSession(
@@ -294,6 +320,20 @@ struct AppShellView: View {
             hasMadeLaunchExperienceDecision = true
             presentLaunchExperienceIfNeeded()
         }
+    }
+
+    private func openPendingWorkoutLiveActivityIfReady() {
+        guard let workoutID = pendingWorkoutLiveActivityID else { return }
+        if case .resolving(ownerTokenIdentifier: nil) = currentOwnerCoordinator.state {
+            return
+        }
+
+        pendingWorkoutLiveActivityID = nil
+        launchPresentation = nil
+        navigationState.openWorkoutLiveActivity(
+            workoutID: workoutID,
+            visibleActiveWorkoutID: activeSession?.id
+        )
     }
 
     private func completeLaunchPresentation(_ presentation: LaunchExperiencePresentation) {

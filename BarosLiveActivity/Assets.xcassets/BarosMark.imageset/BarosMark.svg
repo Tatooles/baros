@@ -1,0 +1,11 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Baros Icon Mark Layer</title>
+  <desc>Transparent full-canvas layer containing the optically centered B, bar shaft, and endcaps.</desc>
+  <g id="mark" fill="#F3EBE7">
+    <rect id="top-endcap" x="398" y="143" width="70" height="37" rx="7"/>
+    <path id="bar-shaft" d="M391 298H482V322H468V714H482V731H388V714H402V322H391V298Z"/>
+    <path id="upper-bowl" d="M498 298C519 292 542 289 565 289C642 289 699 337 699 408C699 468 656 510 586 510H498V472H586C612 472 630 447 630 408C630 376 610 356 581 356H498V298Z"/>
+    <path id="lower-bowl" d="M498 510H583C658 510 712 553 712 612C712 686 656 747 577 747C548 747 519 736 498 714V678H588C620 678 640 652 640 612C640 575 617 551 583 551H498V510Z"/>
+    <rect id="bottom-endcap" x="400" y="842" width="68" height="35" rx="7"/>
+  </g>
+</svg>
