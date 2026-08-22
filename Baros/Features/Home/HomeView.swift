@@ -178,11 +178,6 @@ private struct HomePrimaryWorkoutButton: View {
             .frame(maxWidth: .infinity, minHeight: layout.minimumHeight, alignment: .leading)
             .background(AppTheme.focusSurface, in: shape)
             .overlay(shape.strokeBorder(AppTheme.brandAccentForeground.opacity(0.9), lineWidth: 3))
-            .overlay {
-                shape
-                    .inset(by: 4)
-                    .strokeBorder(AppTheme.brandAccentForeground.opacity(0.12), lineWidth: 1)
-            }
             .shadow(color: AppTheme.brandAccentGlow, radius: 18, y: 8)
             .contentShape(shape)
             .accessibilityElement(children: .ignore)

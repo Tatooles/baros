@@ -222,10 +222,6 @@ private struct HomePastWorkoutReviewView: View {
     let session: WorkoutSession
     let startWorkout: () -> Void
 
-    private var metrics: WorkoutMetrics {
-        WorkoutMetrics(session: session)
-    }
-
     private var presentation: HomePastWorkoutReviewPresentation {
         HomePastWorkoutReviewPresentation(session: session)
     }
@@ -248,7 +244,7 @@ private struct HomePastWorkoutReviewView: View {
 
                 HStack(spacing: 10) {
                     MetricSummaryCard(title: "Exercises", value: "\(session.visibleExerciseCount)")
-                    MetricSummaryCard(title: "Sets", value: "\(metrics.completedSetCount)")
+                    MetricSummaryCard(title: "Sets", value: "\(presentation.copiedSetCount)")
                 }
 
                 Button(action: startWorkout) {
