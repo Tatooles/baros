@@ -10,6 +10,7 @@ struct HomeView: View {
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @State private var startSheetPresentation: HomeStartSheetPresentation?
     @State private var presentsWorkoutAfterStart = false
+    @State private var sessionIDHiddenDuringLaunchHandoff: UUID?
 
     var body: some View {
         let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
@@ -39,6 +40,7 @@ struct HomeView: View {
                     HomePrimaryWorkoutButton(
                         presentation: HomePrimaryWorkoutPresentation(
                             activeSession: activeSession,
+                            sessionIDHiddenDuringLaunchHandoff: sessionIDHiddenDuringLaunchHandoff,
                             now: timeline.date
                         ),
                         action: primaryWorkoutAction
@@ -60,8 +62,22 @@ struct HomeView: View {
                 HomeStartWorkoutSheet(
                     content: content,
                     activeWorkoutEngine: activeWorkoutEngine,
-                    onWorkoutStarted: { presentsWorkoutAfterStart = true }
+                    onWorkoutStarted: { session in
+                        sessionIDHiddenDuringLaunchHandoff = session.id
+                        presentsWorkoutAfterStart = true
+                    }
                 )
+            }
+            .onChange(of: navigationState.isActiveWorkoutPresented) { wasPresented, isPresented in
+                if wasPresented && !isPresented {
+                    sessionIDHiddenDuringLaunchHandoff = nil
+                }
+            }
+            .onChange(of: activeSession?.id) { _, activeSessionID in
+                guard let sessionIDHiddenDuringLaunchHandoff else { return }
+                if activeSessionID != sessionIDHiddenDuringLaunchHandoff {
+                    self.sessionIDHiddenDuringLaunchHandoff = nil
+                }
             }
         }
     }

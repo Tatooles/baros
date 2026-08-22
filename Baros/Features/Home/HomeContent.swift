@@ -6,8 +6,13 @@ struct HomePrimaryWorkoutPresentation: Equatable {
     let accessibilityIdentifier: String
     let isActive: Bool
 
-    init(activeSession: WorkoutSession?, now: Date) {
-        guard let activeSession else {
+    init(
+        activeSession: WorkoutSession?,
+        sessionIDHiddenDuringLaunchHandoff: UUID? = nil,
+        now: Date
+    ) {
+        guard let activeSession,
+              activeSession.id != sessionIDHiddenDuringLaunchHandoff else {
             title = "Start Workout"
             detail = nil
             accessibilityIdentifier = "StartWorkoutButton"

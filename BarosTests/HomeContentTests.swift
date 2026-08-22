@@ -28,6 +28,24 @@ final class HomeContentTests: XCTestCase {
         XCTAssertEqual(presentation.accessibilityIdentifier, "ReturnToActiveWorkoutButton")
     }
 
+    func testPrimaryWorkoutPresentationStaysInStartStateDuringNewWorkoutLaunchHandoff() {
+        let activeSession = session(
+            title: "Upper Body",
+            startedAt: date(2026, 8, 19, hour: 10),
+            status: .active
+        )
+
+        let presentation = HomePrimaryWorkoutPresentation(
+            activeSession: activeSession,
+            sessionIDHiddenDuringLaunchHandoff: activeSession.id,
+            now: date(2026, 8, 19, hour: 10)
+        )
+
+        XCTAssertEqual(presentation.title, "Start Workout")
+        XCTAssertNil(presentation.detail)
+        XCTAssertEqual(presentation.accessibilityIdentifier, "StartWorkoutButton")
+    }
+
     func testPastWorkoutReviewUsesCompletionDateForCrossMidnightWorkout() {
         let completedWorkout = session(
             title: "Late Workout",

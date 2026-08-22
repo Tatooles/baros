@@ -12,7 +12,7 @@ struct HomeStartWorkoutSheet: View {
     @Environment(SyncScheduler.self) private var syncScheduler
     let content: HomeContent
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
-    let onWorkoutStarted: () -> Void
+    let onWorkoutStarted: (WorkoutSession) -> Void
     @State private var path: [HomeStartRoute] = []
     @State private var selectedDetent: PresentationDetent = .medium
     @State private var actionError: HomeStartWorkoutActionError?
@@ -118,8 +118,8 @@ struct HomeStartWorkoutSheet: View {
 
     private func performStart(_ action: () throws -> WorkoutSession) {
         do {
-            _ = try action()
-            onWorkoutStarted()
+            let session = try action()
+            onWorkoutStarted(session)
             dismiss()
         } catch {
             showActionError(error)
