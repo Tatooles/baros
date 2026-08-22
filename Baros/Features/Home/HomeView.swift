@@ -281,18 +281,10 @@ private struct HomeLastWorkoutView: View {
     var body: some View {
         Button(action: openWorkout) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Last Workout")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(AppTheme.textPrimary)
-
-                    Spacer()
-
-                    Text("View")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(AppTheme.brandAccentForeground)
-                }
-                .padding(.horizontal, 2)
+                Text("Last Workout")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .padding(.horizontal, 2)
 
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: 14) {
