@@ -63,6 +63,7 @@
 		4EE82F1BE09E267AD7B9EA99 /* WorkoutLiveActivityReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F6F8F4E46996A4ABF63257 /* WorkoutLiveActivityReconciler.swift */; };
 		4FC116B818C26AAC7C46BF20 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A0B7EEE0CEBDB12A42E92F89 /* Assets.xcassets */; };
 		50C2DF714064460787238066 /* SyncOutboxClaimEligibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2339D242D03FBB119D5CFFBF /* SyncOutboxClaimEligibility.swift */; };
+		5313F911A8901442046518C4 /* BarosBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC0941499EC84B7040CE8EDF /* BarosBrand.swift */; };
 		53ACC35ABC22408C0439B0B0 /* SyncStatusDisplayState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6666F95B7EA9CA259BB1C94 /* SyncStatusDisplayState.swift */; };
 		55AE3F3DD8171BB9E9D27B8E /* WorkoutFocusNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492AA0196EBA89CBCA8BBE7A /* WorkoutFocusNavigator.swift */; };
 		5664E7A83BB016694A84453A /* ExerciseCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF3F0B83EE6F098794515746 /* ExerciseCategory.swift */; };
@@ -115,6 +116,7 @@
 		9089EA71CB7C4D1A0C4A2FAF /* SyncConflictResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E5509A252C06083154E90D7 /* SyncConflictResolver.swift */; };
 		912D588B86AACB756EE66B37 /* CompletedWorkoutEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B73A1BFB640E17165FD3E49 /* CompletedWorkoutEditView.swift */; };
 		91EB3D646631398A9F52C3DB /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E183433B1845E81797DCE67 /* HistoryView.swift */; };
+		920C6FE31D76F085CA3A6293 /* BarosBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC0941499EC84B7040CE8EDF /* BarosBrand.swift */; };
 		9648E59EF3C2727A04EAC646 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD824F36A386212D32C34A33 /* OnboardingFlow.swift */; };
 		97177B48C539CCF5C870FCAC /* FirstRunExperienceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9193656A64D413E72988A43 /* FirstRunExperienceStore.swift */; };
 		97B994C20A18495D414D987F /* SyncOutboxRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5EECD7D24DA02F3A4711161 /* SyncOutboxRecorderTests.swift */; };
@@ -371,6 +373,7 @@
 		B974F08FC55BB4083C291E93 /* ActiveWorkoutEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveWorkoutEngineTests.swift; sourceTree = "<group>"; };
 		B9D88B27463914E4DA59FDA2 /* ClerkConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClerkConfigurationTests.swift; sourceTree = "<group>"; };
 		BBD155FBDC40811F65E42418 /* AccountDisplayState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDisplayState.swift; sourceTree = "<group>"; };
+		BC0941499EC84B7040CE8EDF /* BarosBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarosBrand.swift; sourceTree = "<group>"; };
 		BDE4314AD2B27E0C681BD5D7 /* StateViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateViews.swift; sourceTree = "<group>"; };
 		BF2386D026311F4720EF90CE /* WorkoutHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutHeaderView.swift; sourceTree = "<group>"; };
 		C0C0EA53E504BE5333F9B619 /* SetKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetKind.swift; sourceTree = "<group>"; };
@@ -493,6 +496,7 @@
 			isa = PBXGroup;
 			children = (
 				2EEACCF1698F0507BC0D57B8 /* AppTheme.swift */,
+				BC0941499EC84B7040CE8EDF /* BarosBrand.swift */,
 			);
 			path = DesignSystem;
 			sourceTree = "<group>";
@@ -1078,6 +1082,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				920C6FE31D76F085CA3A6293 /* BarosBrand.swift in Sources */,
 				133709AB3073D2256EBCC8C3 /* BarosLiveActivityBundle.swift in Sources */,
 				24915F5B9D45D7A97AD80469 /* WorkoutLiveActivityAttributes.swift in Sources */,
 				B5C985A8818BF0A3027CEBE9 /* WorkoutLiveActivityLink.swift in Sources */,
@@ -1105,6 +1110,7 @@
 				2F84C61A372496C48A391E09 /* AppShellView.swift in Sources */,
 				6C4A4A87211FA295C973E273 /* AppTheme.swift in Sources */,
 				F6746554759E782D870C1781 /* BarosApp.swift in Sources */,
+				5313F911A8901442046518C4 /* BarosBrand.swift in Sources */,
 				C7B1EE7CA57E2F295983DBB6 /* BarosSchema.swift in Sources */,
 				0C332CBD89B528BF2308B4B9 /* ClerkAccountDeleter.swift in Sources */,
 				73D9F3AE0137736A81D327FC /* ClerkConfiguration.swift in Sources */,

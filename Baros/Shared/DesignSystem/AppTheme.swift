@@ -42,23 +42,11 @@ enum AppTheme {
 
     // MARK: Accent
 
-    static let brandAccentFill = dynamicColor(
-        light: uiColor(0x1C66C7),
-        dark: uiColor(0x1768E5)
-    )
-    static let brandAccentForeground = dynamicColor(
-        light: uiColor(0x1C66C7),
-        dark: uiColor(0x4D94FF)
-    )
-    static let brandAccentMuted = dynamicColor(
-        light: uiColor(0x1C66C7, alpha: 0.08),
-        dark: uiColor(0x1768E5, alpha: 0.16)
-    )
+    static let brandAccentFill = BarosBrand.cobalt
+    static let brandAccentForeground = BarosBrand.accentForeground
+    static let brandAccentMuted = BarosBrand.accentMuted
     static let brandFocus = brandAccentForeground
-    static let brandAccentGlow = dynamicColor(
-        light: uiColor(0x1C66C7, alpha: 0.24),
-        dark: uiColor(0x1768E5, alpha: 0.28)
-    )
+    static let brandAccentGlow = BarosBrand.accentGlow
     static let destructive = Color(.systemRed)
     static let destructiveForeground = dynamicColor(
         light: uiColor(0xB42318),
@@ -72,7 +60,7 @@ enum AppTheme {
 
     /// Foreground for content sitting on `brandAccentFill` or
     /// `brandAccentGradient`.
-    static let onBrandAccent = Color.white
+    static let onBrandAccent = BarosBrand.onAccent
     static let onDestructive = Color.white
 
     // MARK: Text

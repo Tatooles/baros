@@ -151,15 +151,14 @@ private struct WorkoutLiveActivityLockScreenView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 15)
 
-            RoundedRectangle(cornerRadius: 25, style: .continuous)
-                .stroke(WorkoutLiveActivityStyle.cobalt, lineWidth: 2)
+            ContainerRelativeShape()
+                .strokeBorder(BarosBrand.cobalt, lineWidth: 2)
                 .shadow(
-                    color: WorkoutLiveActivityStyle.cobalt.opacity(
+                    color: BarosBrand.cobalt.opacity(
                         isLuminanceReduced ? 0 : 0.42
                     ),
                     radius: 10
                 )
-                .padding(2)
                 .accessibilityHidden(true)
         }
         .workoutLiveActivityActionAccessibility(context: context)
@@ -170,12 +169,15 @@ private struct WorkoutLiveActivityMark: View {
     let size: CGFloat
 
     var body: some View {
-        Image("BarosMark")
-            .resizable()
-            .scaledToFit()
-            .frame(width: size, height: size)
-            .padding(size * 0.14)
-            .background(WorkoutLiveActivityStyle.cobalt, in: RoundedRectangle(cornerRadius: size * 0.28))
+        ZStack {
+            Image("BarosPlates")
+                .resizable()
+                .scaledToFit()
+            Image("BarosMark")
+                .resizable()
+                .scaledToFit()
+        }
+        .frame(width: size, height: size)
             .accessibilityHidden(true)
     }
 }
@@ -238,7 +240,7 @@ private extension View {
 }
 
 private enum WorkoutLiveActivityStyle {
-    static let blueBlack = Color(red: 0.02, green: 0.035, blue: 0.06)
-    static let cobalt = Color(red: 0.09, green: 0.41, blue: 0.90)
-    static let warmSilver = Color(red: 0.95, green: 0.92, blue: 0.91)
+    static let blueBlack = BarosBrand.blueBlack
+    static let cobalt = BarosBrand.cobalt
+    static let warmSilver = BarosBrand.foreground
 }

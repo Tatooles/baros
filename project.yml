@@ -172,6 +172,7 @@ targets:
     sources:
       - path: BarosLiveActivity
       - path: Baros/Shared/LiveActivity
+      - path: Baros/Shared/DesignSystem/BarosBrand.swift
     settings:
       base:
         PRODUCT_NAME: BarosLiveActivity
