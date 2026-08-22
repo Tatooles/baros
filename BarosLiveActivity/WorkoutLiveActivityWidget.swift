@@ -170,15 +170,15 @@ private struct WorkoutLiveActivityMark: View {
 
     var body: some View {
         ZStack {
-            Image("BarosPlates")
+            Image("BarosMark")
                 .resizable()
                 .scaledToFit()
-            Image("BarosMark")
+            Image("BarosPlates")
                 .resizable()
                 .scaledToFit()
         }
         .frame(width: size, height: size)
-            .accessibilityHidden(true)
+        .accessibilityHidden(true)
     }
 }
 
