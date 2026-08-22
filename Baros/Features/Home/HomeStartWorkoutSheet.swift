@@ -16,6 +16,10 @@ struct HomeStartWorkoutSheet: View {
     @State private var path: [HomeStartRoute] = []
     @State private var selectedDetent: PresentationDetent = .medium
     @State private var actionError: HomeStartWorkoutActionError?
+    @State private var sheetHeight: CGFloat = 0
+    @State private var pendingRoute: HomeStartRoute?
+    @State private var pendingExpansionOriginHeight: CGFloat?
+    @State private var pendingNavigationTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -51,8 +55,25 @@ struct HomeStartWorkoutSheet: View {
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .presentationDetents([.medium, .large], selection: $selectedDetent)
         .presentationDragIndicator(.visible)
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { height in
+            sheetHeight = height
+            schedulePendingNavigation(afterSettlingAt: height)
+        }
         .onChange(of: path) { _, newPath in
-            selectedDetent = newPath.isEmpty ? .medium : .large
+            if newPath.isEmpty {
+                cancelPendingNavigation()
+                selectedDetent = .medium
+            }
+        }
+        .onChange(of: selectedDetent) { _, newDetent in
+            if newDetent == .medium, pendingRoute != nil {
+                cancelPendingNavigation()
+            }
+        }
+        .onDisappear {
+            cancelPendingNavigation()
         }
         .alert(item: $actionError) { actionError in
             Alert(
@@ -77,7 +98,7 @@ struct HomeStartWorkoutSheet: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("StartBlankWorkoutButton")
 
-            NavigationLink(value: HomeStartRoute.pastWorkouts) {
+            Button(action: showPastWorkouts) {
                 HomeStartChoiceRow(
                     title: "Use Past Workout",
                     detail: "Review and repeat a completed workout",
@@ -103,6 +124,45 @@ struct HomeStartWorkoutSheet: View {
                 context: modelContext
             )
         }
+    }
+
+    private func showPastWorkouts() {
+        pendingRoute = .pastWorkouts
+        pendingExpansionOriginHeight = selectedDetent == .large ? nil : sheetHeight
+        selectedDetent = .large
+        schedulePendingNavigation(afterSettlingAt: sheetHeight)
+    }
+
+    private func schedulePendingNavigation(afterSettlingAt height: CGFloat) {
+        guard pendingRoute != nil else { return }
+
+        // Detent selection changes before the system sheet finishes resizing. Debounce
+        // the measured height so navigation starts after the presentation is stable.
+        pendingNavigationTask?.cancel()
+        pendingNavigationTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            guard !Task.isCancelled,
+                  selectedDetent == .large,
+                  abs(sheetHeight - height) < 1,
+                  let route = pendingRoute else {
+                return
+            }
+            if let originHeight = pendingExpansionOriginHeight,
+               sheetHeight <= originHeight + 1 {
+                return
+            }
+
+            pendingRoute = nil
+            pendingExpansionOriginHeight = nil
+            path.append(route)
+        }
+    }
+
+    private func cancelPendingNavigation() {
+        pendingNavigationTask?.cancel()
+        pendingNavigationTask = nil
+        pendingRoute = nil
+        pendingExpansionOriginHeight = nil
     }
 
     private func startWorkout(fromPast session: WorkoutSession) {
