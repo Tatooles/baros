@@ -4,9 +4,9 @@ import WidgetKit
 
 struct WorkoutLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
-        ActivityConfiguration(for: WorkoutActivityAttributes.self) { context in
+        ActivityConfiguration(for: WorkoutLiveActivityAttributes.self) { context in
             WorkoutLiveActivityLockScreenView(context: context)
-                .widgetURL(WorkoutActivityAttributes.deepLinkURL(for: context.attributes.workoutID))
+                .widgetURL(WorkoutLiveActivityLink.url(for: context.attributes.workoutID))
                 .activityBackgroundTint(WorkoutLiveActivityStyle.blueBlack)
                 .activitySystemActionForegroundColor(WorkoutLiveActivityStyle.warmSilver)
         } dynamicIsland: { context in
@@ -19,6 +19,7 @@ struct WorkoutLiveActivityWidget: Widget {
                             .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
                             .lineLimit(1)
                     }
+                    .accessibilityHidden(true)
                 }
 
                 DynamicIslandExpandedRegion(.trailing) {
@@ -27,6 +28,7 @@ struct WorkoutLiveActivityWidget: Widget {
                         total: context.state.totalSetCount,
                         diameter: 38
                     )
+                    .accessibilityHidden(true)
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
@@ -44,13 +46,11 @@ struct WorkoutLiveActivityWidget: Widget {
                             .foregroundStyle(WorkoutLiveActivityStyle.warmSilver.opacity(0.62))
                     }
                     .frame(maxWidth: .infinity)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Return to Workout")
-                    .accessibilityValue(WorkoutLiveActivityAccessibility.value(context: context))
-                    .accessibilityAddTraits(.isButton)
+                    .workoutLiveActivityActionAccessibility(context: context)
                 }
             } compactLeading: {
                 WorkoutLiveActivityMark(size: 22)
+                    .accessibilityHidden(true)
             } compactTrailing: {
                 Text(
                     timerInterval: context.attributes.startedAt...Date.distantFuture,
@@ -60,17 +60,21 @@ struct WorkoutLiveActivityWidget: Widget {
                     .font(.caption2.monospacedDigit().weight(.semibold))
                     .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
                     .frame(maxWidth: 52)
+                    .workoutLiveActivityActionAccessibility(context: context)
             } minimal: {
-                WorkoutLiveActivityMark(size: 22)
+                ZStack {
+                    WorkoutLiveActivityMark(size: 22)
+                }
+                .workoutLiveActivityActionAccessibility(context: context)
             }
-            .widgetURL(WorkoutActivityAttributes.deepLinkURL(for: context.attributes.workoutID))
+            .widgetURL(WorkoutLiveActivityLink.url(for: context.attributes.workoutID))
             .keylineTint(WorkoutLiveActivityStyle.cobalt)
         }
     }
 }
 
 private struct WorkoutLiveActivityLockScreenView: View {
-    let context: ActivityViewContext<WorkoutActivityAttributes>
+    let context: ActivityViewContext<WorkoutLiveActivityAttributes>
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
 
@@ -158,10 +162,7 @@ private struct WorkoutLiveActivityLockScreenView: View {
                 .padding(2)
                 .accessibilityHidden(true)
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Return to Workout")
-        .accessibilityValue(WorkoutLiveActivityAccessibility.value(context: context))
-        .accessibilityAddTraits(.isButton)
+        .workoutLiveActivityActionAccessibility(context: context)
     }
 }
 
@@ -220,8 +221,19 @@ private struct WorkoutLiveActivityProgressDial: View {
 }
 
 private enum WorkoutLiveActivityAccessibility {
-    static func value(context: ActivityViewContext<WorkoutActivityAttributes>) -> Text {
+    static func value(context: ActivityViewContext<WorkoutLiveActivityAttributes>) -> Text {
         Text("\(context.state.title), elapsed time \(timerInterval: context.attributes.startedAt...Date.distantFuture, countsDown: false, showsHours: true), \(context.state.completedSetCount) of \(context.state.totalSetCount) sets complete")
+    }
+}
+
+private extension View {
+    func workoutLiveActivityActionAccessibility(
+        context: ActivityViewContext<WorkoutLiveActivityAttributes>
+    ) -> some View {
+        accessibilityElement(children: .ignore)
+            .accessibilityLabel("Return to Workout")
+            .accessibilityValue(WorkoutLiveActivityAccessibility.value(context: context))
+            .accessibilityAddTraits(.isButton)
     }
 }
 

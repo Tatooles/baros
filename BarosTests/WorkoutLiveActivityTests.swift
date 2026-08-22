@@ -1,3 +1,4 @@
+@preconcurrency import ActivityKit
 import XCTest
 @testable import Baros
 
@@ -30,6 +31,25 @@ final class WorkoutLiveActivityTests: XCTestCase {
         XCTAssertEqual(snapshot.totalSetCount, 2)
     }
 
+    func testLiveActivityLinkRoundTripsStableWorkoutIdentifierAndRejectsOtherRoutes() throws {
+        let workoutID = UUID()
+        let url = WorkoutLiveActivityLink.url(for: workoutID)
+
+        XCTAssertEqual(url.scheme, "baros")
+        XCTAssertEqual(url.host, "active-workout")
+        XCTAssertEqual(WorkoutLiveActivityLink.workoutID(from: url), workoutID)
+        XCTAssertNil(
+            WorkoutLiveActivityLink.workoutID(
+                from: try XCTUnwrap(URL(string: "https://baros.fit/active-workout/\(workoutID)"))
+            )
+        )
+        XCTAssertNil(
+            WorkoutLiveActivityLink.workoutID(
+                from: try XCTUnwrap(URL(string: "baros://active-workout/not-a-uuid"))
+            )
+        )
+    }
+
     func testReconciliationWithoutActiveWorkoutEndsEveryActivity() {
         let first = WorkoutLiveActivityRecord(
             activityID: "first",
@@ -53,7 +73,6 @@ final class WorkoutLiveActivityTests: XCTestCase {
         XCTAssertEqual(Set(plan.activityIDsToEnd), ["first", "second"])
         XCTAssertFalse(plan.shouldRequest)
         XCTAssertFalse(plan.shouldSuppress)
-        XCTAssertTrue(plan.shouldClearStoredState)
     }
 
     func testReconciliationKeepsOneMatchingActivityAndEndsDuplicatesAndStaleActivities() {
@@ -85,7 +104,6 @@ final class WorkoutLiveActivityTests: XCTestCase {
         XCTAssertEqual(Set(plan.activityIDsToEnd), ["duplicate", "stale"])
         XCTAssertFalse(plan.shouldRequest)
         XCTAssertFalse(plan.shouldSuppress)
-        XCTAssertFalse(plan.shouldClearStoredState)
     }
 
     func testReconciliationRequestsOnlyForAFreshUnsuppressedWorkout() {
@@ -130,5 +148,70 @@ final class WorkoutLiveActivityTests: XCTestCase {
             XCTAssertFalse(plan.shouldRequest)
             XCTAssertTrue(plan.shouldSuppress)
         }
+    }
+
+    func testDismissalSuppressionSurvivesOwnerInvisibilityAndClearsForANewWorkout() throws {
+        let suiteName = "WorkoutLiveActivityTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = WorkoutLiveActivityStateStore(defaults: defaults)
+        let dismissedWorkoutID = UUID()
+
+        store.suppress(workoutID: dismissedWorkoutID)
+
+        XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)
+        let ownerInvisiblePlan = WorkoutLiveActivityReconciler.plan(
+            activeWorkoutID: nil,
+            activities: [],
+            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
+            suppressedWorkoutID: store.suppressedWorkoutID
+        )
+        XCTAssertFalse(ownerInvisiblePlan.shouldRequest)
+        XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)
+
+        store.clearState(forWorkoutsOtherThan: dismissedWorkoutID)
+        XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)
+
+        store.clearState(forWorkoutsOtherThan: UUID())
+        XCTAssertNil(store.suppressedWorkoutID)
+        XCTAssertNil(store.successfullyRequestedWorkoutID)
+    }
+
+    func testRequestFailureAllowsOnlyOneForegroundRetryPerWorkout() {
+        let workoutID = UUID()
+        var retryState = WorkoutLiveActivityRequestRetryState()
+        retryState.prepare(for: workoutID)
+        retryState.recordFailure(for: workoutID)
+
+        XCTAssertTrue(retryState.blocksRequest)
+        XCTAssertTrue(retryState.beginRetryIfAvailable(for: workoutID))
+        XCTAssertFalse(retryState.blocksRequest)
+
+        retryState.recordFailure(for: workoutID)
+
+        XCTAssertTrue(retryState.blocksRequest)
+        XCTAssertFalse(retryState.beginRetryIfAvailable(for: workoutID))
+        XCTAssertTrue(retryState.blocksRequest)
+
+        retryState.prepare(for: UUID())
+        XCTAssertFalse(retryState.blocksRequest)
+    }
+
+    func testActivityKitTerminalStatesMapToSuppressedLifecycleStates() {
+        XCTAssertEqual(
+            WorkoutLiveActivityRecord.State(activityState: .active),
+            .active
+        )
+        XCTAssertEqual(
+            WorkoutLiveActivityRecord.State(activityState: .dismissed),
+            .dismissed
+        )
+        XCTAssertEqual(
+            WorkoutLiveActivityRecord.State(activityState: .stale),
+            .stale
+        )
+        XCTAssertFalse(
+            WorkoutLiveActivityRecord.State(activityState: .dismissed).canRemainVisible
+        )
     }
 }

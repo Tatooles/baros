@@ -16,12 +16,12 @@ struct WorkoutLiveActivitySnapshot: Equatable, Sendable {
         totalSetCount = metrics.totalSetCount
     }
 
-    var attributes: WorkoutActivityAttributes {
-        WorkoutActivityAttributes(workoutID: workoutID, startedAt: startedAt)
+    var attributes: WorkoutLiveActivityAttributes {
+        WorkoutLiveActivityAttributes(workoutID: workoutID, startedAt: startedAt)
     }
 
-    var contentState: WorkoutActivityAttributes.ContentState {
-        WorkoutActivityAttributes.ContentState(
+    var contentState: WorkoutLiveActivityAttributes.ContentState {
+        WorkoutLiveActivityAttributes.ContentState(
             title: title,
             completedSetCount: completedSetCount,
             totalSetCount: totalSetCount

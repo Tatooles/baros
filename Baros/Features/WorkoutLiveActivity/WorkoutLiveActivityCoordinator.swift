@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 final class WorkoutLiveActivityCoordinator {
     private let stateStore: WorkoutLiveActivityStateStore
-    private var failedRequestWorkoutID: UUID?
+    private var requestRetryState = WorkoutLiveActivityRequestRetryState()
     private var latestSnapshot: WorkoutLiveActivitySnapshot?
     private var pendingSnapshot: WorkoutLiveActivitySnapshot?
     private var hasPendingSynchronization = false
@@ -22,8 +22,11 @@ final class WorkoutLiveActivityCoordinator {
         latestSnapshot = snapshot
         pendingSnapshot = snapshot
         hasPendingSynchronization = true
-        if allowsRequestRetry {
-            failedRequestWorkoutID = nil
+        if let workoutID = snapshot?.workoutID {
+            requestRetryState.prepare(for: workoutID)
+            if allowsRequestRetry {
+                _ = requestRetryState.beginRetryIfAvailable(for: workoutID)
+            }
         }
 
         guard reconcileTask == nil else { return }
@@ -44,14 +47,12 @@ final class WorkoutLiveActivityCoordinator {
     }
 
     private func reconcile(snapshot: WorkoutLiveActivitySnapshot?) async {
-        let activities = Activity<WorkoutActivityAttributes>.activities
+        let activities = Activity<WorkoutLiveActivityAttributes>.activities
         let records = activities.map(WorkoutLiveActivityRecord.init(activity:))
 
         if let workoutID = snapshot?.workoutID {
             stateStore.clearState(forWorkoutsOtherThan: workoutID)
-            if failedRequestWorkoutID != workoutID {
-                failedRequestWorkoutID = nil
-            }
+            requestRetryState.prepare(for: workoutID)
         }
 
         let plan = WorkoutLiveActivityReconciler.plan(
@@ -61,10 +62,6 @@ final class WorkoutLiveActivityCoordinator {
             suppressedWorkoutID: stateStore.suppressedWorkoutID
         )
 
-        if plan.shouldClearStoredState {
-            stateStore.clear()
-            failedRequestWorkoutID = nil
-        }
         if plan.shouldSuppress, let workoutID = snapshot?.workoutID {
             stateStore.suppress(workoutID: workoutID)
         }
@@ -92,7 +89,7 @@ final class WorkoutLiveActivityCoordinator {
         }
 
         guard plan.shouldRequest,
-              failedRequestWorkoutID != snapshot.workoutID,
+              !requestRetryState.blocksRequest,
               ActivityAuthorizationInfo().areActivitiesEnabled else {
             return
         }
@@ -104,13 +101,14 @@ final class WorkoutLiveActivityCoordinator {
                 pushType: nil
             )
             stateStore.recordSuccessfulRequest(workoutID: snapshot.workoutID)
+            requestRetryState.recordSuccess(for: snapshot.workoutID)
             observeState(of: activity)
         } catch {
-            failedRequestWorkoutID = snapshot.workoutID
+            requestRetryState.recordFailure(for: snapshot.workoutID)
         }
     }
 
-    private func observeState(of activity: Activity<WorkoutActivityAttributes>) {
+    private func observeState(of activity: Activity<WorkoutLiveActivityAttributes>) {
         guard activityStateTasks[activity.id] == nil else { return }
 
         activityStateTasks[activity.id] = Task { [weak self] in
@@ -130,7 +128,9 @@ final class WorkoutLiveActivityCoordinator {
         activityID: String,
         workoutID: UUID
     ) {
-        guard !state.canRemainVisible else { return }
+        guard !WorkoutLiveActivityRecord.State(activityState: state).canRemainVisible else {
+            return
+        }
         stopObserving(activityID: activityID)
 
         guard latestSnapshot?.workoutID == workoutID else { return }
@@ -143,7 +143,7 @@ final class WorkoutLiveActivityCoordinator {
     }
 }
 
-private final class WorkoutLiveActivityStateStore {
+final class WorkoutLiveActivityStateStore {
     private enum Key {
         static let successfullyRequestedWorkoutID = "workoutLiveActivity.successfullyRequestedWorkoutID"
         static let suppressedWorkoutID = "workoutLiveActivity.suppressedWorkoutID"
@@ -182,52 +182,15 @@ private final class WorkoutLiveActivityStateStore {
         }
     }
 
-    func clear() {
-        defaults.removeObject(forKey: Key.successfullyRequestedWorkoutID)
-        defaults.removeObject(forKey: Key.suppressedWorkoutID)
-    }
-
     private func uuid(forKey key: String) -> UUID? {
         defaults.string(forKey: key).flatMap(UUID.init(uuidString:))
     }
 }
 
 private extension WorkoutLiveActivityRecord {
-    init(activity: Activity<WorkoutActivityAttributes>) {
+    init(activity: Activity<WorkoutLiveActivityAttributes>) {
         activityID = activity.id
         workoutID = activity.attributes.workoutID
         state = State(activityState: activity.activityState)
-    }
-}
-
-private extension WorkoutLiveActivityRecord.State {
-    init(activityState: ActivityState) {
-        switch activityState {
-        case .pending:
-            self = .pending
-        case .active:
-            self = .active
-        case .ended:
-            self = .ended
-        case .dismissed:
-            self = .dismissed
-        case .stale:
-            self = .stale
-        @unknown default:
-            self = .ended
-        }
-    }
-}
-
-private extension ActivityState {
-    var canRemainVisible: Bool {
-        switch self {
-        case .pending, .active:
-            return true
-        case .ended, .dismissed, .stale:
-            return false
-        @unknown default:
-            return false
-        }
     }
 }

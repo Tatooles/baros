@@ -1,3 +1,4 @@
+@preconcurrency import ActivityKit
 import Foundation
 
 struct WorkoutLiveActivityRecord: Equatable, Sendable {
@@ -16,6 +17,23 @@ struct WorkoutLiveActivityRecord: Equatable, Sendable {
                 return false
             }
         }
+
+        init(activityState: ActivityState) {
+            switch activityState {
+            case .pending:
+                self = .pending
+            case .active:
+                self = .active
+            case .ended:
+                self = .ended
+            case .dismissed:
+                self = .dismissed
+            case .stale:
+                self = .stale
+            @unknown default:
+                self = .ended
+            }
+        }
     }
 
     let activityID: String
@@ -28,7 +46,6 @@ struct WorkoutLiveActivityReconciliationPlan: Equatable, Sendable {
     let activityIDsToEnd: [String]
     let shouldRequest: Bool
     let shouldSuppress: Bool
-    let shouldClearStoredState: Bool
 }
 
 enum WorkoutLiveActivityReconciler {
@@ -43,8 +60,7 @@ enum WorkoutLiveActivityReconciler {
                 activityIDToKeep: nil,
                 activityIDsToEnd: activities.map(\.activityID),
                 shouldRequest: false,
-                shouldSuppress: false,
-                shouldClearStoredState: true
+                shouldSuppress: false
             )
         }
 
@@ -53,8 +69,7 @@ enum WorkoutLiveActivityReconciler {
                 activityIDToKeep: nil,
                 activityIDsToEnd: activities.map(\.activityID),
                 shouldRequest: false,
-                shouldSuppress: false,
-                shouldClearStoredState: false
+                shouldSuppress: false
             )
         }
 
@@ -71,8 +86,7 @@ enum WorkoutLiveActivityReconciler {
                 activityIDToKeep: activityToKeep.activityID,
                 activityIDsToEnd: activityIDsToEnd,
                 shouldRequest: false,
-                shouldSuppress: false,
-                shouldClearStoredState: false
+                shouldSuppress: false
             )
         }
 
@@ -86,8 +100,45 @@ enum WorkoutLiveActivityReconciler {
             activityIDToKeep: nil,
             activityIDsToEnd: activityIDsToEnd,
             shouldRequest: !shouldSuppress,
-            shouldSuppress: shouldSuppress,
-            shouldClearStoredState: false
+            shouldSuppress: shouldSuppress
         )
+    }
+}
+
+struct WorkoutLiveActivityRequestRetryState: Equatable {
+    private(set) var failedWorkoutID: UUID?
+    private(set) var retriedWorkoutID: UUID?
+
+    var blocksRequest: Bool {
+        failedWorkoutID != nil
+    }
+
+    mutating func prepare(for workoutID: UUID) {
+        if failedWorkoutID != workoutID {
+            failedWorkoutID = nil
+        }
+        if retriedWorkoutID != workoutID {
+            retriedWorkoutID = nil
+        }
+    }
+
+    mutating func recordFailure(for workoutID: UUID) {
+        failedWorkoutID = workoutID
+    }
+
+    mutating func beginRetryIfAvailable(for workoutID: UUID) -> Bool {
+        guard failedWorkoutID == workoutID, retriedWorkoutID != workoutID else {
+            return false
+        }
+
+        failedWorkoutID = nil
+        retriedWorkoutID = workoutID
+        return true
+    }
+
+    mutating func recordSuccess(for workoutID: UUID) {
+        if failedWorkoutID == workoutID {
+            failedWorkoutID = nil
+        }
     }
 }

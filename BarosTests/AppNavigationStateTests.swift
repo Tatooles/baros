@@ -224,6 +224,20 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertTrue(navigationState.isActiveWorkoutPresented)
     }
 
+    func testLiveActivityReturnOnColdLaunchPresentsMatchingWorkoutOverHome() {
+        let workoutID = UUID()
+        let navigationState = AppNavigationState(selectedTab: .profile)
+
+        navigationState.openWorkoutLiveActivity(
+            workoutID: workoutID,
+            visibleActiveWorkoutID: workoutID
+        )
+
+        XCTAssertEqual(navigationState.activeWorkoutID, workoutID)
+        XCTAssertEqual(navigationState.selectedTab, .home)
+        XCTAssertTrue(navigationState.isActiveWorkoutPresented)
+    }
+
     func testLiveActivityReturnFallsBackHomeForStaleOrOwnerInvisibleWorkout() {
         let visibleWorkoutID = UUID()
         let navigationState = AppNavigationState()

@@ -4,7 +4,6 @@ import UIKit
 
 struct AppShellView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(SyncScheduler.self) private var syncScheduler
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(\.syncRecoveryAction) private var syncRecoveryAction
@@ -16,7 +15,6 @@ struct AppShellView: View {
     @State private var launchPresentation: LaunchExperiencePresentation?
     @State private var hasMadeLaunchExperienceDecision = false
     @State private var prepareActiveWorkoutForMinimization: (() -> Void)?
-    @State private var pendingWorkoutLiveActivityID: UUID?
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \SyncOutboxEntry.updatedAt, order: .reverse) private var outboxEntries: [SyncOutboxEntry]
 
@@ -171,30 +169,17 @@ struct AppShellView: View {
                     launchPresentation = nil
                 }
                 navigationState.reconcileActiveWorkout(sessionID: sessionID)
-                openPendingWorkoutLiveActivityIfReady()
                 chooseLaunchExperienceIfReady()
             }
             .onChange(of: currentOwnerCoordinator.state, initial: true) { _, _ in
-                openPendingWorkoutLiveActivityIfReady()
                 chooseLaunchExperienceIfReady()
             }
-            .onChange(of: workoutLiveActivitySnapshot, initial: true) { _, snapshot in
-                workoutLiveActivityCoordinator.synchronize(snapshot: snapshot)
-            }
-            .onChange(of: scenePhase) { _, newScenePhase in
-                guard newScenePhase == .active else { return }
-                workoutLiveActivityCoordinator.synchronize(
-                    snapshot: workoutLiveActivitySnapshot,
-                    allowsRequestRetry: true
-                )
-            }
-            .onOpenURL { url in
-                guard let workoutID = AppLinks.workoutID(fromLiveActivityURL: url) else {
-                    return
-                }
-                pendingWorkoutLiveActivityID = workoutID
-                openPendingWorkoutLiveActivityIfReady()
-            }
+            .workoutLiveActivityIntegration(
+                snapshot: workoutLiveActivitySnapshot,
+                navigationState: navigationState,
+                coordinator: workoutLiveActivityCoordinator,
+                willOpenWorkout: { launchPresentation = nil }
+            )
             .task {
                 activeWorkoutEngine.loadActiveSession(
                     ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
@@ -320,20 +305,6 @@ struct AppShellView: View {
             hasMadeLaunchExperienceDecision = true
             presentLaunchExperienceIfNeeded()
         }
-    }
-
-    private func openPendingWorkoutLiveActivityIfReady() {
-        guard let workoutID = pendingWorkoutLiveActivityID else { return }
-        if case .resolving(ownerTokenIdentifier: nil) = currentOwnerCoordinator.state {
-            return
-        }
-
-        pendingWorkoutLiveActivityID = nil
-        launchPresentation = nil
-        navigationState.openWorkoutLiveActivity(
-            workoutID: workoutID,
-            visibleActiveWorkoutID: activeSession?.id
-        )
     }
 
     private func completeLaunchPresentation(_ presentation: LaunchExperiencePresentation) {
