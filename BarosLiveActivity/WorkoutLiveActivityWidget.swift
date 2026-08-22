@@ -7,8 +7,8 @@ struct WorkoutLiveActivityWidget: Widget {
         ActivityConfiguration(for: WorkoutLiveActivityAttributes.self) { context in
             WorkoutLiveActivityLockScreenView(context: context)
                 .widgetURL(WorkoutLiveActivityLink.url(for: context.attributes.workoutID))
-                .activityBackgroundTint(WorkoutLiveActivityStyle.blueBlack)
-                .activitySystemActionForegroundColor(WorkoutLiveActivityStyle.warmSilver)
+                .activityBackgroundTint(BarosBrand.brandBlueBlack)
+                .activitySystemActionForegroundColor(BarosBrand.brandForeground)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -16,7 +16,7 @@ struct WorkoutLiveActivityWidget: Widget {
                         WorkoutLiveActivityMark(size: 28)
                         Text(context.state.title)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                            .foregroundStyle(BarosBrand.brandForeground)
                             .lineLimit(1)
                     }
                     .accessibilityHidden(true)
@@ -39,11 +39,11 @@ struct WorkoutLiveActivityWidget: Widget {
                             showsHours: true
                         )
                             .font(.title2.monospacedDigit().weight(.bold))
-                            .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                            .foregroundStyle(BarosBrand.brandForeground)
                         Text("ELAPSED TIME")
                             .font(.system(size: 8, weight: .bold))
                             .tracking(1.1)
-                            .foregroundStyle(WorkoutLiveActivityStyle.warmSilver.opacity(0.62))
+                            .foregroundStyle(BarosBrand.brandForeground.opacity(0.62))
                     }
                     .frame(maxWidth: .infinity)
                     .workoutLiveActivityActionAccessibility(context: context)
@@ -58,7 +58,7 @@ struct WorkoutLiveActivityWidget: Widget {
                     showsHours: true
                 )
                     .font(.caption2.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                    .foregroundStyle(BarosBrand.brandForeground)
                     .frame(maxWidth: 52)
                     .workoutLiveActivityActionAccessibility(context: context)
             } minimal: {
@@ -68,7 +68,7 @@ struct WorkoutLiveActivityWidget: Widget {
                 .workoutLiveActivityActionAccessibility(context: context)
             }
             .widgetURL(WorkoutLiveActivityLink.url(for: context.attributes.workoutID))
-            .keylineTint(WorkoutLiveActivityStyle.cobalt)
+            .keylineTint(BarosBrand.brandCobalt)
         }
     }
 }
@@ -81,16 +81,16 @@ private struct WorkoutLiveActivityLockScreenView: View {
     var body: some View {
         ZStack {
             Rectangle()
-                .fill(WorkoutLiveActivityStyle.blueBlack)
+                .fill(BarosBrand.brandBlueBlack)
 
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
-                            WorkoutLiveActivityStyle.cobalt.opacity(
+                            BarosBrand.brandCobalt.opacity(
                                 isLuminanceReduced ? 0.12 : 0.24
                             ),
-                            WorkoutLiveActivityStyle.cobalt.opacity(0.04),
+                            BarosBrand.brandCobalt.opacity(0.04),
                         ],
                         startPoint: .leading,
                         endPoint: .trailing
@@ -106,7 +106,7 @@ private struct WorkoutLiveActivityLockScreenView: View {
                     WorkoutLiveActivityMark(size: 30)
                     Text(context.state.title)
                         .font(.headline.weight(.semibold))
-                        .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                        .foregroundStyle(BarosBrand.brandForeground)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -119,14 +119,14 @@ private struct WorkoutLiveActivityLockScreenView: View {
                             showsHours: true
                         )
                             .font(.system(.title, design: .rounded).monospacedDigit().weight(.bold))
-                            .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                            .foregroundStyle(BarosBrand.brandForeground)
                             .minimumScaleFactor(1)
 
                         if !dynamicTypeSize.isAccessibilitySize {
                             Text("ELAPSED TIME")
                                 .font(.system(size: 9, weight: .bold))
                                 .tracking(1.2)
-                                .foregroundStyle(WorkoutLiveActivityStyle.warmSilver.opacity(0.62))
+                                .foregroundStyle(BarosBrand.brandForeground.opacity(0.62))
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -134,7 +134,7 @@ private struct WorkoutLiveActivityLockScreenView: View {
                     if context.state.totalSetCount == 0 {
                         Text("No sets yet")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(WorkoutLiveActivityStyle.warmSilver.opacity(0.8))
+                            .foregroundStyle(BarosBrand.brandForeground.opacity(0.8))
                             .frame(width: 92)
                             .frame(minHeight: 64)
                     } else {
@@ -152,9 +152,9 @@ private struct WorkoutLiveActivityLockScreenView: View {
             .padding(.vertical, 15)
 
             ContainerRelativeShape()
-                .strokeBorder(BarosBrand.cobalt, lineWidth: 2)
+                .strokeBorder(BarosBrand.brandCobalt, lineWidth: 2)
                 .shadow(
-                    color: BarosBrand.cobalt.opacity(
+                    color: BarosBrand.brandCobalt.opacity(
                         isLuminanceReduced ? 0 : 0.42
                     ),
                     radius: 10
@@ -196,12 +196,12 @@ private struct WorkoutLiveActivityProgressDial: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(WorkoutLiveActivityStyle.warmSilver.opacity(0.18), lineWidth: 4)
+                .stroke(BarosBrand.brandForeground.opacity(0.18), lineWidth: 4)
                 .accessibilityHidden(true)
             Circle()
                 .trim(from: 0, to: fraction)
                 .stroke(
-                    WorkoutLiveActivityStyle.cobalt,
+                    BarosBrand.brandCobalt,
                     style: StrokeStyle(lineWidth: 4, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
@@ -209,12 +209,12 @@ private struct WorkoutLiveActivityProgressDial: View {
             VStack(spacing: 0) {
                 Text("\(completed)/\(total)")
                     .font(.caption.monospacedDigit().weight(.bold))
-                    .foregroundStyle(WorkoutLiveActivityStyle.warmSilver)
+                    .foregroundStyle(BarosBrand.brandForeground)
                 if showsCaption {
                     Text("SETS")
                         .font(.system(size: 7, weight: .bold))
                         .tracking(0.8)
-                        .foregroundStyle(WorkoutLiveActivityStyle.warmSilver.opacity(0.62))
+                        .foregroundStyle(BarosBrand.brandForeground.opacity(0.62))
                 }
             }
         }
@@ -237,10 +237,4 @@ private extension View {
             .accessibilityValue(WorkoutLiveActivityAccessibility.value(context: context))
             .accessibilityAddTraits(.isButton)
     }
-}
-
-private enum WorkoutLiveActivityStyle {
-    static let blueBlack = BarosBrand.blueBlack
-    static let cobalt = BarosBrand.cobalt
-    static let warmSilver = BarosBrand.foreground
 }

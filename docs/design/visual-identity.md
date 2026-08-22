@@ -183,6 +183,12 @@ truth. Do not duplicate its SVG layers or rebuild the icon in an asset catalog.
 Icon Composer owns the mask, enclosure, material, lighting, and platform
 appearance.
 
+System surfaces that call for a standalone logo mark may reuse the transparent
+`01-mark.svg` and `02-plates.svg` geometry by reference, without the app-icon
+background or enclosure. Keep those references linked to `Baros/AppIcon.icon`;
+do not copy the paths, flatten a substitute, or reproduce Icon Composer's
+materials outside the icon package.
+
 Default, Dark, and Mono use identical, optically centered geometry. The
 foreground bounds and optical offset remain as documented in the
 [#169 production handoff](brand/issue-169/README.md). App-wide color changes
