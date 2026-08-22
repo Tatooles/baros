@@ -178,7 +178,7 @@ struct AppShellView: View {
                 snapshot: workoutLiveActivitySnapshot,
                 navigationState: navigationState,
                 coordinator: workoutLiveActivityCoordinator,
-                willOpenWorkout: { launchPresentation = nil }
+                willHandleWorkoutLiveActivityLink: { launchPresentation = nil }
             )
             .task {
                 activeWorkoutEngine.loadActiveSession(

@@ -31,22 +31,30 @@ final class WorkoutLiveActivityTests: XCTestCase {
         XCTAssertEqual(snapshot.totalSetCount, 2)
     }
 
-    func testLiveActivityLinkRoundTripsStableWorkoutIdentifierAndRejectsOtherRoutes() throws {
+    func testLiveActivityLinkRoundTripsStableWorkoutIdentifier() {
         let workoutID = UUID()
         let url = WorkoutLiveActivityLink.url(for: workoutID)
 
         XCTAssertEqual(url.scheme, "baros")
         XCTAssertEqual(url.host, "active-workout")
-        XCTAssertEqual(WorkoutLiveActivityLink.workoutID(from: url), workoutID)
-        XCTAssertNil(
-            WorkoutLiveActivityLink.workoutID(
-                from: try XCTUnwrap(URL(string: "https://baros.fit/active-workout/\(workoutID)"))
-            )
+        XCTAssertEqual(WorkoutLiveActivityLink.route(from: url), .workout(workoutID))
+    }
+
+    func testLiveActivityLinkDistinguishesMalformedWorkoutRouteFromUnrelatedURL() throws {
+        let malformedURL = try XCTUnwrap(
+            URL(string: "baros://active-workout/not-a-uuid")
         )
-        XCTAssertNil(
-            WorkoutLiveActivityLink.workoutID(
-                from: try XCTUnwrap(URL(string: "baros://active-workout/not-a-uuid"))
-            )
+        let unrelatedURL = try XCTUnwrap(
+            URL(string: "baros://settings")
+        )
+
+        XCTAssertEqual(
+            WorkoutLiveActivityLink.route(from: malformedURL),
+            .malformedWorkoutLink
+        )
+        XCTAssertEqual(
+            WorkoutLiveActivityLink.route(from: unrelatedURL),
+            .unrelated
         )
     }
 

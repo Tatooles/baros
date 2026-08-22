@@ -1,6 +1,12 @@
 import Foundation
 
 enum WorkoutLiveActivityLink {
+    enum Route: Equatable {
+        case workout(UUID)
+        case malformedWorkoutLink
+        case unrelated
+    }
+
     private static let scheme = "baros"
     private static let host = "active-workout"
 
@@ -12,15 +18,19 @@ enum WorkoutLiveActivityLink {
         return components.url!
     }
 
-    static func workoutID(from url: URL) -> UUID? {
+    static func route(from url: URL) -> Route {
         guard url.scheme == scheme, url.host == host else {
-            return nil
+            return .unrelated
         }
 
         let pathComponents = url.pathComponents.dropFirst()
-        guard pathComponents.count == 1, let identifier = pathComponents.first else {
-            return nil
+        guard
+            pathComponents.count == 1,
+            let identifier = pathComponents.first,
+            let workoutID = UUID(uuidString: identifier)
+        else {
+            return .malformedWorkoutLink
         }
-        return UUID(uuidString: identifier)
+        return .workout(workoutID)
     }
 }

@@ -174,9 +174,7 @@ final class AppNavigationState {
         visibleActiveWorkoutID: UUID?
     ) {
         guard workoutID == visibleActiveWorkoutID else {
-            selectedTab = .home
-            isActiveWorkoutPresented = false
-            fullyPresentedActiveWorkoutID = nil
+            returnHomeFromUnopenableWorkoutLiveActivityLink()
             return
         }
 
@@ -184,6 +182,12 @@ final class AppNavigationState {
             reconcileActiveWorkout(sessionID: visibleActiveWorkoutID)
         }
         presentActiveWorkout()
+    }
+
+    func returnHomeFromUnopenableWorkoutLiveActivityLink() {
+        selectedTab = .home
+        isActiveWorkoutPresented = false
+        fullyPresentedActiveWorkoutID = nil
     }
 
     func openExerciseHistory(_ route: ExerciseHistoryRoute) {

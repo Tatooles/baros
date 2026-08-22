@@ -254,6 +254,17 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertFalse(navigationState.isActiveWorkoutPresented)
     }
 
+    func testMalformedLiveActivityReturnFallsBackHome() {
+        let navigationState = AppNavigationState()
+        navigationState.reconcileActiveWorkout(sessionID: UUID())
+        navigationState.selectedTab = .profile
+
+        navigationState.returnHomeFromUnopenableWorkoutLiveActivityLink()
+
+        XCTAssertEqual(navigationState.selectedTab, .home)
+        XCTAssertFalse(navigationState.isActiveWorkoutPresented)
+    }
+
     func testOpenExerciseHistorySelectsHistoryExercisesAndStoresRoute() {
         let navigationState = AppNavigationState(selectedTab: .home, historyMode: .workouts)
         let route = ExerciseHistoryRoute(exerciseID: UUID(), name: "Bench Press")

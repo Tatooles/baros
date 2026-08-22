@@ -6,7 +6,7 @@ private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
     let snapshot: WorkoutLiveActivitySnapshot?
     let navigationState: AppNavigationState
     let coordinator: WorkoutLiveActivityCoordinator
-    let willOpenWorkout: () -> Void
+    let willHandleWorkoutLiveActivityLink: () -> Void
     @State private var pendingWorkoutID: UUID?
 
     func body(content: Content) -> some View {
@@ -26,11 +26,17 @@ private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
                 )
             }
             .onOpenURL { url in
-                guard let workoutID = WorkoutLiveActivityLink.workoutID(from: url) else {
-                    return
+                switch WorkoutLiveActivityLink.route(from: url) {
+                case let .workout(workoutID):
+                    pendingWorkoutID = workoutID
+                    openPendingWorkoutIfReady()
+                case .malformedWorkoutLink:
+                    pendingWorkoutID = nil
+                    willHandleWorkoutLiveActivityLink()
+                    navigationState.returnHomeFromUnopenableWorkoutLiveActivityLink()
+                case .unrelated:
+                    break
                 }
-                pendingWorkoutID = workoutID
-                openPendingWorkoutIfReady()
             }
     }
 
@@ -41,7 +47,7 @@ private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
         }
 
         pendingWorkoutID = nil
-        willOpenWorkout()
+        willHandleWorkoutLiveActivityLink()
         navigationState.openWorkoutLiveActivity(
             workoutID: workoutID,
             visibleActiveWorkoutID: snapshot?.workoutID
@@ -54,14 +60,14 @@ extension View {
         snapshot: WorkoutLiveActivitySnapshot?,
         navigationState: AppNavigationState,
         coordinator: WorkoutLiveActivityCoordinator,
-        willOpenWorkout: @escaping () -> Void
+        willHandleWorkoutLiveActivityLink: @escaping () -> Void
     ) -> some View {
         modifier(
             WorkoutLiveActivityIntegrationModifier(
                 snapshot: snapshot,
                 navigationState: navigationState,
                 coordinator: coordinator,
-                willOpenWorkout: willOpenWorkout
+                willHandleWorkoutLiveActivityLink: willHandleWorkoutLiveActivityLink
             )
         )
     }
