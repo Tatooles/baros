@@ -76,7 +76,8 @@ enum WorkoutLiveActivityReconciler {
         let matchingVisibleActivities = activities.filter {
             $0.workoutID == activeWorkoutID && $0.state.canRemainVisible
         }
-        let activityToKeep = matchingVisibleActivities.first
+        let activityToKeep = matchingVisibleActivities.first { $0.state == .active }
+            ?? matchingVisibleActivities.first
         let activityIDsToEnd = activities
             .filter { $0.activityID != activityToKeep?.activityID }
             .map(\.activityID)

@@ -177,6 +177,32 @@ final class WorkoutLiveActivityTests: XCTestCase {
         XCTAssertFalse(plan.shouldSuppress)
     }
 
+    func testReconciliationPrefersAnActiveActivityOverAPendingDuplicate() {
+        let workoutID = UUID()
+        let pending = WorkoutLiveActivityRecord(
+            activityID: "pending",
+            workoutID: workoutID,
+            state: .pending
+        )
+        let active = WorkoutLiveActivityRecord(
+            activityID: "active",
+            workoutID: workoutID,
+            state: .active
+        )
+
+        let plan = WorkoutLiveActivityReconciler.plan(
+            activeWorkoutID: workoutID,
+            activities: [pending, active],
+            successfullyRequestedWorkoutID: workoutID,
+            suppressedWorkoutID: nil
+        )
+
+        XCTAssertEqual(plan.activityIDToKeep, "active")
+        XCTAssertEqual(plan.activityIDsToEnd, ["pending"])
+        XCTAssertFalse(plan.shouldRequest)
+        XCTAssertFalse(plan.shouldSuppress)
+    }
+
     func testReconciliationRequestsOnlyForAFreshUnsuppressedWorkout() {
         let workoutID = UUID()
 
@@ -276,7 +302,7 @@ final class WorkoutLiveActivityTests: XCTestCase {
         XCTAssertTrue(returningOwnerPlan.shouldSuppress)
     }
 
-    func testDismissalSuppressionSurvivesOwnerInvisibilityAndClearsForANewWorkout() throws {
+    func testDismissalSuppressionSurvivesWorkoutCeasingToBeVisibleToCurrentOwnerAndClearsForANewWorkout() throws {
         let suiteName = "WorkoutLiveActivityTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -286,13 +312,13 @@ final class WorkoutLiveActivityTests: XCTestCase {
         store.suppress(workoutID: dismissedWorkoutID)
 
         XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)
-        let ownerInvisiblePlan = WorkoutLiveActivityReconciler.plan(
+        let workoutNotVisibleToCurrentOwnerPlan = WorkoutLiveActivityReconciler.plan(
             activeWorkoutID: nil,
             activities: [],
             successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
             suppressedWorkoutID: store.suppressedWorkoutID
         )
-        XCTAssertFalse(ownerInvisiblePlan.shouldRequest)
+        XCTAssertFalse(workoutNotVisibleToCurrentOwnerPlan.shouldRequest)
         XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)
 
         store.clearSuccessfulRequest()

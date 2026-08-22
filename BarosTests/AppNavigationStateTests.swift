@@ -238,7 +238,7 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertTrue(navigationState.isActiveWorkoutPresented)
     }
 
-    func testLiveActivityReturnFallsBackHomeForStaleOrOwnerInvisibleWorkout() {
+    func testLiveActivityReturnFallsBackHomeForStaleWorkoutOrWorkoutNotVisibleToCurrentOwner() {
         let visibleWorkoutID = UUID()
         let navigationState = AppNavigationState()
         navigationState.reconcileActiveWorkout(sessionID: visibleWorkoutID)
