@@ -107,14 +107,20 @@ enum WorkoutLiveActivityReconciler {
 }
 
 enum WorkoutLiveActivityRequestHistoryPolicy {
-    static func shouldClearSuccessfulRequest(
-        successfullyRequestedWorkoutID: UUID?,
+    static func workoutIDsToClear(
+        activeWorkoutID: UUID?,
+        successfullyRequestedWorkoutIDs: Set<UUID>,
         activities: [WorkoutLiveActivityRecord]
-    ) -> Bool {
-        guard let successfullyRequestedWorkoutID else { return false }
-        return activities.contains {
-            $0.workoutID == successfullyRequestedWorkoutID && $0.state.canRemainVisible
-        }
+    ) -> Set<UUID> {
+        Set(
+            activities.lazy
+                .filter {
+                    $0.workoutID != activeWorkoutID
+                        && $0.state.canRemainVisible
+                        && successfullyRequestedWorkoutIDs.contains($0.workoutID)
+                }
+                .map(\.workoutID)
+        )
     }
 }
 

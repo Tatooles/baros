@@ -50,21 +50,30 @@ final class WorkoutLiveActivityCoordinator {
         let activities = Activity<WorkoutLiveActivityAttributes>.activities
         let records = activities.map(WorkoutLiveActivityRecord.init(activity:))
 
-        if let workoutID = snapshot?.workoutID {
-            stateStore.clearState(forWorkoutsOtherThan: workoutID)
-            requestRetryState.prepare(for: workoutID)
-        } else if WorkoutLiveActivityRequestHistoryPolicy.shouldClearSuccessfulRequest(
-            successfullyRequestedWorkoutID: stateStore.successfullyRequestedWorkoutID,
+        let activeWorkoutID = snapshot?.workoutID
+        if let activeWorkoutID {
+            requestRetryState.prepare(for: activeWorkoutID)
+        }
+
+        let successfulRequestWorkoutIDsToClear =
+            WorkoutLiveActivityRequestHistoryPolicy.workoutIDsToClear(
+            activeWorkoutID: activeWorkoutID,
+            successfullyRequestedWorkoutIDs: stateStore.successfullyRequestedWorkoutIDs,
             activities: records
-        ) {
-            stateStore.clearSuccessfulRequest()
+        )
+        for workoutID in successfulRequestWorkoutIDsToClear {
+            stateStore.clearSuccessfulRequest(workoutID: workoutID)
         }
 
         let plan = WorkoutLiveActivityReconciler.plan(
-            activeWorkoutID: snapshot?.workoutID,
+            activeWorkoutID: activeWorkoutID,
             activities: records,
-            successfullyRequestedWorkoutID: stateStore.successfullyRequestedWorkoutID,
-            suppressedWorkoutID: stateStore.suppressedWorkoutID
+            successfullyRequestedWorkoutID: activeWorkoutID.flatMap {
+                stateStore.hasSuccessfullyRequested(workoutID: $0) ? $0 : nil
+            },
+            suppressedWorkoutID: activeWorkoutID.flatMap {
+                stateStore.isSuppressed(workoutID: $0) ? $0 : nil
+            }
         )
 
         if plan.shouldSuppress, let workoutID = snapshot?.workoutID {
@@ -150,8 +159,8 @@ final class WorkoutLiveActivityCoordinator {
 
 final class WorkoutLiveActivityStateStore {
     private enum Key {
-        static let successfullyRequestedWorkoutID = "workoutLiveActivity.successfullyRequestedWorkoutID"
-        static let suppressedWorkoutID = "workoutLiveActivity.suppressedWorkoutID"
+        static let successfullyRequestedWorkoutIDs = "workoutLiveActivity.successfullyRequestedWorkoutID"
+        static let suppressedWorkoutIDs = "workoutLiveActivity.suppressedWorkoutID"
     }
 
     private let defaults: UserDefaults
@@ -160,39 +169,65 @@ final class WorkoutLiveActivityStateStore {
         self.defaults = defaults
     }
 
-    var successfullyRequestedWorkoutID: UUID? {
-        uuid(forKey: Key.successfullyRequestedWorkoutID)
+    var successfullyRequestedWorkoutIDs: Set<UUID> {
+        uuidSet(forKey: Key.successfullyRequestedWorkoutIDs)
     }
 
-    var suppressedWorkoutID: UUID? {
-        uuid(forKey: Key.suppressedWorkoutID)
+    var suppressedWorkoutIDs: Set<UUID> {
+        uuidSet(forKey: Key.suppressedWorkoutIDs)
+    }
+
+    func hasSuccessfullyRequested(workoutID: UUID) -> Bool {
+        successfullyRequestedWorkoutIDs.contains(workoutID)
+    }
+
+    func isSuppressed(workoutID: UUID) -> Bool {
+        suppressedWorkoutIDs.contains(workoutID)
     }
 
     func recordSuccessfulRequest(workoutID: UUID) {
-        defaults.set(workoutID.uuidString, forKey: Key.successfullyRequestedWorkoutID)
-        defaults.removeObject(forKey: Key.suppressedWorkoutID)
+        var successfullyRequestedWorkoutIDs = successfullyRequestedWorkoutIDs
+        successfullyRequestedWorkoutIDs.insert(workoutID)
+        persist(successfullyRequestedWorkoutIDs, forKey: Key.successfullyRequestedWorkoutIDs)
+
+        var suppressedWorkoutIDs = suppressedWorkoutIDs
+        suppressedWorkoutIDs.remove(workoutID)
+        persist(suppressedWorkoutIDs, forKey: Key.suppressedWorkoutIDs)
     }
 
     func suppress(workoutID: UUID) {
-        defaults.set(workoutID.uuidString, forKey: Key.successfullyRequestedWorkoutID)
-        defaults.set(workoutID.uuidString, forKey: Key.suppressedWorkoutID)
+        var successfullyRequestedWorkoutIDs = successfullyRequestedWorkoutIDs
+        successfullyRequestedWorkoutIDs.insert(workoutID)
+        persist(successfullyRequestedWorkoutIDs, forKey: Key.successfullyRequestedWorkoutIDs)
+
+        var suppressedWorkoutIDs = suppressedWorkoutIDs
+        suppressedWorkoutIDs.insert(workoutID)
+        persist(suppressedWorkoutIDs, forKey: Key.suppressedWorkoutIDs)
     }
 
-    func clearSuccessfulRequest() {
-        defaults.removeObject(forKey: Key.successfullyRequestedWorkoutID)
+    func clearSuccessfulRequest(workoutID: UUID) {
+        var successfullyRequestedWorkoutIDs = successfullyRequestedWorkoutIDs
+        successfullyRequestedWorkoutIDs.remove(workoutID)
+        persist(successfullyRequestedWorkoutIDs, forKey: Key.successfullyRequestedWorkoutIDs)
     }
 
-    func clearState(forWorkoutsOtherThan workoutID: UUID) {
-        if successfullyRequestedWorkoutID != workoutID {
-            defaults.removeObject(forKey: Key.successfullyRequestedWorkoutID)
+    private func uuidSet(forKey key: String) -> Set<UUID> {
+        if let values = defaults.stringArray(forKey: key) {
+            return Set(values.compactMap(UUID.init(uuidString:)))
         }
-        if suppressedWorkoutID != workoutID {
-            defaults.removeObject(forKey: Key.suppressedWorkoutID)
+        if let value = defaults.string(forKey: key),
+           let workoutID = UUID(uuidString: value) {
+            return [workoutID]
         }
+        return []
     }
 
-    private func uuid(forKey key: String) -> UUID? {
-        defaults.string(forKey: key).flatMap(UUID.init(uuidString:))
+    private func persist(_ workoutIDs: Set<UUID>, forKey key: String) {
+        guard !workoutIDs.isEmpty else {
+            defaults.removeObject(forKey: key)
+            return
+        }
+        defaults.set(workoutIDs.map(\.uuidString).sorted(), forKey: key)
     }
 }
 

@@ -196,6 +196,13 @@ private struct WorkoutLiveActivityMark: View {
 
     var body: some View {
         ZStack {
+            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+                .fill(BarosBrand.brandCobalt.opacity(0.22))
+            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+                .strokeBorder(
+                    BarosBrand.brandCobalt.opacity(0.72),
+                    lineWidth: max(0.75, size * 0.04)
+                )
             Image("BarosMark")
                 .resizable()
                 .scaledToFit()

@@ -260,21 +260,55 @@ final class WorkoutLiveActivityTests: XCTestCase {
             state: .active
         )
 
-        if WorkoutLiveActivityRequestHistoryPolicy.shouldClearSuccessfulRequest(
-            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
+        let workoutIDsToClear = WorkoutLiveActivityRequestHistoryPolicy.workoutIDsToClear(
+            activeWorkoutID: nil,
+            successfullyRequestedWorkoutIDs: store.successfullyRequestedWorkoutIDs,
             activities: [visibleActivity]
-        ) {
-            store.clearSuccessfulRequest()
+        )
+        for workoutID in workoutIDsToClear {
+            store.clearSuccessfulRequest(workoutID: workoutID)
         }
 
         let returningOwnerPlan = WorkoutLiveActivityReconciler.plan(
             activeWorkoutID: workoutID,
             activities: [],
-            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
-            suppressedWorkoutID: store.suppressedWorkoutID
+            successfullyRequestedWorkoutID: store.hasSuccessfullyRequested(workoutID: workoutID)
+                ? workoutID
+                : nil,
+            suppressedWorkoutID: store.isSuppressed(workoutID: workoutID)
+                ? workoutID
+                : nil
         )
         XCTAssertTrue(returningOwnerPlan.shouldRequest)
         XCTAssertFalse(returningOwnerPlan.shouldSuppress)
+    }
+
+    func testPrivacyRemovalClearsOnlyVisiblePreviousWorkoutHistoryWhenAnotherWorkoutIsVisible() {
+        let previousWorkoutID = UUID()
+        let visibleWorkoutID = UUID()
+        let alreadyMissingWorkoutID = UUID()
+        let previousActivity = WorkoutLiveActivityRecord(
+            activityID: "previous",
+            workoutID: previousWorkoutID,
+            state: .active
+        )
+        let visibleActivity = WorkoutLiveActivityRecord(
+            activityID: "visible",
+            workoutID: visibleWorkoutID,
+            state: .active
+        )
+
+        let workoutIDsToClear = WorkoutLiveActivityRequestHistoryPolicy.workoutIDsToClear(
+            activeWorkoutID: visibleWorkoutID,
+            successfullyRequestedWorkoutIDs: [
+                previousWorkoutID,
+                visibleWorkoutID,
+                alreadyMissingWorkoutID,
+            ],
+            activities: [previousActivity, visibleActivity]
+        )
+
+        XCTAssertEqual(workoutIDsToClear, [previousWorkoutID])
     }
 
     func testUnobservedDismissalRemainsSuppressedAfterWorkoutCeasesToBeVisibleToCurrentOwner() throws {
@@ -285,60 +319,76 @@ final class WorkoutLiveActivityTests: XCTestCase {
         let workoutID = UUID()
         store.recordSuccessfulRequest(workoutID: workoutID)
 
-        if WorkoutLiveActivityRequestHistoryPolicy.shouldClearSuccessfulRequest(
-            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
+        let workoutIDsToClear = WorkoutLiveActivityRequestHistoryPolicy.workoutIDsToClear(
+            activeWorkoutID: nil,
+            successfullyRequestedWorkoutIDs: store.successfullyRequestedWorkoutIDs,
             activities: []
-        ) {
-            store.clearSuccessfulRequest()
+        )
+        for workoutID in workoutIDsToClear {
+            store.clearSuccessfulRequest(workoutID: workoutID)
         }
 
         let returningOwnerPlan = WorkoutLiveActivityReconciler.plan(
             activeWorkoutID: workoutID,
             activities: [],
-            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
-            suppressedWorkoutID: store.suppressedWorkoutID
+            successfullyRequestedWorkoutID: store.hasSuccessfullyRequested(workoutID: workoutID)
+                ? workoutID
+                : nil,
+            suppressedWorkoutID: store.isSuppressed(workoutID: workoutID)
+                ? workoutID
+                : nil
         )
         XCTAssertFalse(returningOwnerPlan.shouldRequest)
         XCTAssertTrue(returningOwnerPlan.shouldSuppress)
     }
 
-    func testDismissalSuppressionSurvivesWorkoutCeasingToBeVisibleToCurrentOwnerAndClearsForANewWorkout() throws {
+    func testActivityHistoryRemainsKeyedByWorkoutWhenAnotherWorkoutBecomesVisible() throws {
         let suiteName = "WorkoutLiveActivityTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = WorkoutLiveActivityStateStore(defaults: defaults)
         let dismissedWorkoutID = UUID()
+        let visibleWorkoutID = UUID()
 
         store.suppress(workoutID: dismissedWorkoutID)
+        store.recordSuccessfulRequest(workoutID: visibleWorkoutID)
 
-        XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)
-        let workoutNotVisibleToCurrentOwnerPlan = WorkoutLiveActivityReconciler.plan(
-            activeWorkoutID: nil,
-            activities: [],
-            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
-            suppressedWorkoutID: store.suppressedWorkoutID
-        )
-        XCTAssertFalse(workoutNotVisibleToCurrentOwnerPlan.shouldRequest)
-        XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)
+        XCTAssertTrue(store.hasSuccessfullyRequested(workoutID: dismissedWorkoutID))
+        XCTAssertTrue(store.hasSuccessfullyRequested(workoutID: visibleWorkoutID))
+        XCTAssertTrue(store.isSuppressed(workoutID: dismissedWorkoutID))
+        XCTAssertFalse(store.isSuppressed(workoutID: visibleWorkoutID))
 
-        store.clearSuccessfulRequest()
-
-        XCTAssertNil(store.successfullyRequestedWorkoutID)
-        XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)
         let returningOwnerPlan = WorkoutLiveActivityReconciler.plan(
             activeWorkoutID: dismissedWorkoutID,
             activities: [],
-            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
-            suppressedWorkoutID: store.suppressedWorkoutID
+            successfullyRequestedWorkoutID: dismissedWorkoutID,
+            suppressedWorkoutID: dismissedWorkoutID
         )
         XCTAssertFalse(returningOwnerPlan.shouldRequest)
+    }
 
-        store.clearState(forWorkoutsOtherThan: dismissedWorkoutID)
-        XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)
+    func testActivityHistoryPreservesLegacySingleWorkoutIdentifiers() throws {
+        let suiteName = "WorkoutLiveActivityTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let legacyWorkoutID = UUID()
+        let newWorkoutID = UUID()
+        defaults.set(
+            legacyWorkoutID.uuidString,
+            forKey: "workoutLiveActivity.successfullyRequestedWorkoutID"
+        )
+        defaults.set(
+            legacyWorkoutID.uuidString,
+            forKey: "workoutLiveActivity.suppressedWorkoutID"
+        )
+        let store = WorkoutLiveActivityStateStore(defaults: defaults)
 
-        store.clearState(forWorkoutsOtherThan: UUID())
-        XCTAssertNil(store.suppressedWorkoutID)
-        XCTAssertNil(store.successfullyRequestedWorkoutID)
+        store.recordSuccessfulRequest(workoutID: newWorkoutID)
+
+        XCTAssertTrue(store.hasSuccessfullyRequested(workoutID: legacyWorkoutID))
+        XCTAssertTrue(store.hasSuccessfullyRequested(workoutID: newWorkoutID))
+        XCTAssertTrue(store.isSuppressed(workoutID: legacyWorkoutID))
+        XCTAssertFalse(store.isSuppressed(workoutID: newWorkoutID))
     }
 
     func testRequestFailureAllowsOnlyOneForegroundRetryPerWorkout() {
