@@ -221,6 +221,61 @@ final class WorkoutLiveActivityTests: XCTestCase {
         }
     }
 
+    func testWorkoutCanRequestActivityAgainAfterCeasingToBeVisibleToCurrentOwner() throws {
+        let suiteName = "WorkoutLiveActivityTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = WorkoutLiveActivityStateStore(defaults: defaults)
+        let workoutID = UUID()
+        store.recordSuccessfulRequest(workoutID: workoutID)
+        let visibleActivity = WorkoutLiveActivityRecord(
+            activityID: "visible",
+            workoutID: workoutID,
+            state: .active
+        )
+
+        if WorkoutLiveActivityRequestHistoryPolicy.shouldClearSuccessfulRequest(
+            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
+            activities: [visibleActivity]
+        ) {
+            store.clearSuccessfulRequest()
+        }
+
+        let returningOwnerPlan = WorkoutLiveActivityReconciler.plan(
+            activeWorkoutID: workoutID,
+            activities: [],
+            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
+            suppressedWorkoutID: store.suppressedWorkoutID
+        )
+        XCTAssertTrue(returningOwnerPlan.shouldRequest)
+        XCTAssertFalse(returningOwnerPlan.shouldSuppress)
+    }
+
+    func testUnobservedDismissalRemainsSuppressedAfterWorkoutCeasesToBeVisibleToCurrentOwner() throws {
+        let suiteName = "WorkoutLiveActivityTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = WorkoutLiveActivityStateStore(defaults: defaults)
+        let workoutID = UUID()
+        store.recordSuccessfulRequest(workoutID: workoutID)
+
+        if WorkoutLiveActivityRequestHistoryPolicy.shouldClearSuccessfulRequest(
+            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
+            activities: []
+        ) {
+            store.clearSuccessfulRequest()
+        }
+
+        let returningOwnerPlan = WorkoutLiveActivityReconciler.plan(
+            activeWorkoutID: workoutID,
+            activities: [],
+            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
+            suppressedWorkoutID: store.suppressedWorkoutID
+        )
+        XCTAssertFalse(returningOwnerPlan.shouldRequest)
+        XCTAssertTrue(returningOwnerPlan.shouldSuppress)
+    }
+
     func testDismissalSuppressionSurvivesOwnerInvisibilityAndClearsForANewWorkout() throws {
         let suiteName = "WorkoutLiveActivityTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -239,6 +294,18 @@ final class WorkoutLiveActivityTests: XCTestCase {
         )
         XCTAssertFalse(ownerInvisiblePlan.shouldRequest)
         XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)
+
+        store.clearSuccessfulRequest()
+
+        XCTAssertNil(store.successfullyRequestedWorkoutID)
+        XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)
+        let returningOwnerPlan = WorkoutLiveActivityReconciler.plan(
+            activeWorkoutID: dismissedWorkoutID,
+            activities: [],
+            successfullyRequestedWorkoutID: store.successfullyRequestedWorkoutID,
+            suppressedWorkoutID: store.suppressedWorkoutID
+        )
+        XCTAssertFalse(returningOwnerPlan.shouldRequest)
 
         store.clearState(forWorkoutsOtherThan: dismissedWorkoutID)
         XCTAssertEqual(store.suppressedWorkoutID, dismissedWorkoutID)

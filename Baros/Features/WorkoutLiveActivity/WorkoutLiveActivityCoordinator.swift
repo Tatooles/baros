@@ -53,6 +53,11 @@ final class WorkoutLiveActivityCoordinator {
         if let workoutID = snapshot?.workoutID {
             stateStore.clearState(forWorkoutsOtherThan: workoutID)
             requestRetryState.prepare(for: workoutID)
+        } else if WorkoutLiveActivityRequestHistoryPolicy.shouldClearSuccessfulRequest(
+            successfullyRequestedWorkoutID: stateStore.successfullyRequestedWorkoutID,
+            activities: records
+        ) {
+            stateStore.clearSuccessfulRequest()
         }
 
         let plan = WorkoutLiveActivityReconciler.plan(
@@ -171,6 +176,10 @@ final class WorkoutLiveActivityStateStore {
     func suppress(workoutID: UUID) {
         defaults.set(workoutID.uuidString, forKey: Key.successfullyRequestedWorkoutID)
         defaults.set(workoutID.uuidString, forKey: Key.suppressedWorkoutID)
+    }
+
+    func clearSuccessfulRequest() {
+        defaults.removeObject(forKey: Key.successfullyRequestedWorkoutID)
     }
 
     func clearState(forWorkoutsOtherThan workoutID: UUID) {

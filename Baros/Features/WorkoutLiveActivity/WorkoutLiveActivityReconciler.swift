@@ -105,6 +105,18 @@ enum WorkoutLiveActivityReconciler {
     }
 }
 
+enum WorkoutLiveActivityRequestHistoryPolicy {
+    static func shouldClearSuccessfulRequest(
+        successfullyRequestedWorkoutID: UUID?,
+        activities: [WorkoutLiveActivityRecord]
+    ) -> Bool {
+        guard let successfullyRequestedWorkoutID else { return false }
+        return activities.contains {
+            $0.workoutID == successfullyRequestedWorkoutID && $0.state.canRemainVisible
+        }
+    }
+}
+
 struct WorkoutLiveActivityRequestRetryState: Equatable {
     private(set) var failedWorkoutID: UUID?
     private(set) var retriedWorkoutID: UUID?
