@@ -47,6 +47,24 @@ final class AppNavigationStateTests: XCTestCase {
         }
     }
 
+    func testActiveWorkoutPresentationCompletionTracksTheCoveredWorkout() {
+        let navigationState = AppNavigationState()
+        let sessionID = UUID()
+
+        navigationState.reconcileActiveWorkout(sessionID: sessionID)
+
+        XCTAssertNil(navigationState.fullyPresentedActiveWorkoutID)
+
+        navigationState.activeWorkoutPresentationDidFinish()
+
+        XCTAssertEqual(navigationState.fullyPresentedActiveWorkoutID, sessionID)
+
+        navigationState.minimizeActiveWorkout()
+        navigationState.presentActiveWorkout()
+
+        XCTAssertNil(navigationState.fullyPresentedActiveWorkoutID)
+    }
+
     func testMinimizingActiveWorkoutShowsAccessoryOverHome() {
         let navigationState = AppNavigationState()
         navigationState.reconcileActiveWorkout(sessionID: UUID())
@@ -199,6 +217,17 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertEqual(navigationState.selectedTab, .history)
         XCTAssertEqual(navigationState.historyMode, .exercises)
         XCTAssertEqual(navigationState.historyPath, [.exercise(route)])
+    }
+
+    func testOpenWorkoutHistoryFromHomeSelectsWorkoutHistoryAndStoresRoute() {
+        let navigationState = AppNavigationState(selectedTab: .home, historyMode: .exercises)
+        let workoutID = UUID()
+
+        navigationState.openWorkoutHistory(workoutID)
+
+        XCTAssertEqual(navigationState.selectedTab, .history)
+        XCTAssertEqual(navigationState.historyMode, .workouts)
+        XCTAssertEqual(navigationState.historyPath, [.workout(workoutID)])
     }
 
     func testClearHistoryPathRemovesRoute() {

@@ -22,6 +22,10 @@ _Avoid_: Unowned data, hidden owner data
 A workout in progress whose exercises and sets remain editable until the workout is finished or discarded.
 _Avoid_: Workout draft, live session
 
+**Home**:
+Baros's stable starting place for beginning or returning to a workout and reaching the rest of the app. Home remains available whether or not an Active Workout exists.
+_Avoid_: Inactive Workout screen, dashboard
+
 **Exercise Performance**:
 A completed workout in which an exercise has at least one completed set. An exercise counts at most once per workout, even when it appears more than once.
 _Avoid_: Completed set count, exercise appearance

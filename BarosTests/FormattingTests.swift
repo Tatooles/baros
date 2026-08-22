@@ -34,6 +34,12 @@ final class FormattingTests: XCTestCase {
         )
     }
 
+    func testHomeElapsedDescriptionUsesMinuteGranularity() {
+        XCTAssertEqual(WorkoutFormatters.homeElapsedDescription(2_339), "38 min elapsed")
+        XCTAssertEqual(WorkoutFormatters.homeElapsedDescription(3_899), "1 hr 04 min elapsed")
+        XCTAssertEqual(WorkoutFormatters.homeElapsedDescription(-1), "0 min elapsed")
+    }
+
     func testDateFormatterIncludesWeekdayMonthAndDay() {
         let date = Calendar.current.date(from: DateComponents(year: 2026, month: 4, day: 21)) ?? .now
         XCTAssertTrue(AppTheme.formatDate(date).contains("April"))

@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct AppShellView: View {
     @Environment(\.modelContext) private var modelContext
@@ -137,6 +138,12 @@ struct AppShellView: View {
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
                     .accessibilityIdentifier("ActiveWorkoutSheet")
+                    .background {
+                        ActiveWorkoutPresentationCompletionObserver {
+                            navigationState.activeWorkoutPresentationDidFinish()
+                        }
+                        .frame(width: 0, height: 0)
+                    }
                 }
             }
             .sheet(item: $launchPresentation) { presentation in
@@ -202,9 +209,10 @@ struct AppShellView: View {
             .tag(AppTab.history)
 
             NavigationStack {
-                StartWorkoutView(
+                HomeView(
                     navigationState: navigationState,
                     activeWorkoutEngine: activeWorkoutEngine,
+                    activeSession: activeSession,
                     presentWorkout: { navigationState.presentActiveWorkout() }
                 )
             }
@@ -331,6 +339,40 @@ private extension View {
         #else
         self
         #endif
+    }
+}
+
+private struct ActiveWorkoutPresentationCompletionObserver: UIViewControllerRepresentable {
+    let onPresentationCompleted: () -> Void
+
+    func makeUIViewController(context: Context) -> ObserverViewController {
+        ObserverViewController(onPresentationCompleted: onPresentationCompleted)
+    }
+
+    func updateUIViewController(_ viewController: ObserverViewController, context: Context) {
+        viewController.onPresentationCompleted = onPresentationCompleted
+    }
+
+    final class ObserverViewController: UIViewController {
+        var onPresentationCompleted: () -> Void
+        private var hasReportedAppearance = false
+
+        init(onPresentationCompleted: @escaping () -> Void) {
+            self.onPresentationCompleted = onPresentationCompleted
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            guard !hasReportedAppearance else { return }
+            hasReportedAppearance = true
+            onPresentationCompleted()
+        }
     }
 }
 

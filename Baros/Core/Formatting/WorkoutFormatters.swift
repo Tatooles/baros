@@ -39,6 +39,17 @@ enum WorkoutFormatters {
         return parts.joined(separator: ", ") + " elapsed"
     }
 
+    static func homeElapsedDescription(_ seconds: Int) -> String {
+        let elapsedMinutes = max(0, seconds) / 60
+        let hours = elapsedMinutes / 60
+        let minutes = elapsedMinutes % 60
+        guard hours > 0 else {
+            return "\(minutes) min elapsed"
+        }
+
+        return "\(hours) hr \(String(format: "%02d", minutes)) min elapsed"
+    }
+
     static func date(_ date: Date) -> String {
         date.formatted(.dateTime.weekday(.wide).month(.wide).day())
     }
