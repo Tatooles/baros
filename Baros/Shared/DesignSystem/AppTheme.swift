@@ -4,35 +4,39 @@ import UIKit
 enum AppTheme {
     // MARK: Backgrounds
 
-    static let appCanvas = dynamicColor(
-        light: uiColor(0xF7F6F3),
-        dark: uiColor(0x000000)
+    static let appCanvas = BarosAdaptiveColor.dynamic(
+        light: 0xF7F6F3,
+        dark: 0x000000
     )
-    static let groupedSurface = dynamicColor(
-        light: uiColor(0xFFFFFF),
-        dark: uiColor(0x1C1C1E)
+    static let groupedSurface = BarosAdaptiveColor.dynamic(
+        light: 0xFFFFFF,
+        dark: 0x1C1C1E
     )
-    static let recessedSurface = dynamicColor(
-        light: uiColor(0xF2F2F4),
-        dark: uiColor(0x242426)
+    static let recessedSurface = BarosAdaptiveColor.dynamic(
+        light: 0xF2F2F4,
+        dark: 0x242426
     )
-    static let fieldSurface = dynamicColor(
-        light: uiColor(0xECECF0),
-        dark: uiColor(0x2C2C2E)
+    static let fieldSurface = BarosAdaptiveColor.dynamic(
+        light: 0xECECF0,
+        dark: 0x2C2C2E
     )
-    static let subtleBorder = dynamicColor(
-        light: uiColor(0x09121D, alpha: 0.09),
-        dark: uiColor(0xFFFFFF, alpha: 0.11)
+    static let subtleBorder = BarosAdaptiveColor.dynamic(
+        light: 0x09121D,
+        lightAlpha: 0.09,
+        dark: 0xFFFFFF,
+        darkAlpha: 0.11
     )
-    static let surfaceShadow = dynamicColor(
-        light: uiColor(0x000000, alpha: 0.07),
-        dark: uiColor(0x000000, alpha: 0.18)
+    static let surfaceShadow = BarosAdaptiveColor.dynamic(
+        light: 0x000000,
+        lightAlpha: 0.07,
+        dark: 0x000000,
+        darkAlpha: 0.18
     )
 
     static let focusSurface = LinearGradient(
         colors: [
-            dynamicColor(light: uiColor(0xFFFFFF), dark: uiColor(0x0A0C10)),
-            dynamicColor(light: uiColor(0xFAFAFA), dark: uiColor(0x050608)),
+            BarosAdaptiveColor.dynamic(light: 0xFFFFFF, dark: 0x0A0C10),
+            BarosAdaptiveColor.dynamic(light: 0xFAFAFA, dark: 0x050608),
         ],
         startPoint: .top,
         endPoint: .bottom
@@ -42,37 +46,25 @@ enum AppTheme {
 
     // MARK: Accent
 
-    static let brandAccentFill = dynamicColor(
-        light: uiColor(0x1C66C7),
-        dark: uiColor(0x1768E5)
-    )
-    static let brandAccentForeground = dynamicColor(
-        light: uiColor(0x1C66C7),
-        dark: uiColor(0x4D94FF)
-    )
-    static let brandAccentMuted = dynamicColor(
-        light: uiColor(0x1C66C7, alpha: 0.08),
-        dark: uiColor(0x1768E5, alpha: 0.16)
-    )
+    static let brandAccentFill = BarosBrand.brandCobalt
+    static let brandAccentForeground = BarosBrand.brandAccentForeground
+    static let brandAccentMuted = BarosBrand.brandAccentMuted
     static let brandFocus = brandAccentForeground
-    static let brandAccentGlow = dynamicColor(
-        light: uiColor(0x1C66C7, alpha: 0.24),
-        dark: uiColor(0x1768E5, alpha: 0.28)
-    )
+    static let brandAccentGlow = BarosBrand.brandAccentGlow
     static let destructive = Color(.systemRed)
-    static let destructiveForeground = dynamicColor(
-        light: uiColor(0xB42318),
-        dark: uiColor(0xFF6961)
+    static let destructiveForeground = BarosAdaptiveColor.dynamic(
+        light: 0xB42318,
+        dark: 0xFF6961
     )
     static let success = Color(.systemGreen)
-    static let successForeground = dynamicColor(
-        light: uiColor(0x1B6E2A),
-        dark: uiColor(0x4CD964)
+    static let successForeground = BarosAdaptiveColor.dynamic(
+        light: 0x1B6E2A,
+        dark: 0x4CD964
     )
 
     /// Foreground for content sitting on `brandAccentFill` or
     /// `brandAccentGradient`.
-    static let onBrandAccent = Color.white
+    static let onBrandAccent = BarosBrand.onBrandAccent
     static let onDestructive = Color.white
 
     // MARK: Text
@@ -82,7 +74,10 @@ enum AppTheme {
     static let textTertiary = Color(.tertiaryLabel)
 
     static let brandAccentGradient = LinearGradient(
-        colors: [Color(uiColor(0x1C66C7)), Color(uiColor(0x1768E5))],
+        colors: [
+            BarosAdaptiveColor.fixed(0x1C66C7),
+            BarosAdaptiveColor.fixed(0x1768E5),
+        ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
@@ -101,18 +96,4 @@ enum AppTheme {
         WorkoutFormatters.date(date)
     }
 
-    private static func dynamicColor(light: UIColor, dark: UIColor) -> Color {
-        Color(UIColor { traits in
-            traits.userInterfaceStyle == .dark ? dark : light
-        })
-    }
-
-    private static func uiColor(_ hex: UInt32, alpha: CGFloat = 1) -> UIColor {
-        UIColor(
-            red: CGFloat((hex >> 16) & 0xFF) / 255,
-            green: CGFloat((hex >> 8) & 0xFF) / 255,
-            blue: CGFloat(hex & 0xFF) / 255,
-            alpha: alpha
-        )
-    }
 }

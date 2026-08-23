@@ -9,6 +9,7 @@ struct AppShellView: View {
     @Environment(\.syncRecoveryAction) private var syncRecoveryAction
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
+    let workoutLiveActivityCoordinator: WorkoutLiveActivityCoordinator
     private let firstRunStore = FirstRunExperienceStore()
     @State private var dismissedSyncFailureSignature: String?
     @State private var launchPresentation: LaunchExperiencePresentation?
@@ -22,6 +23,10 @@ struct AppShellView: View {
             from: sessions,
             ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
         ).first
+    }
+
+    private var workoutLiveActivitySnapshot: WorkoutLiveActivitySnapshot? {
+        activeSession.map(WorkoutLiveActivitySnapshot.init(session:))
     }
 
     private var activeV1OutboxEntries: [SyncOutboxEntry] {
@@ -169,6 +174,12 @@ struct AppShellView: View {
             .onChange(of: currentOwnerCoordinator.state, initial: true) { _, _ in
                 chooseLaunchExperienceIfReady()
             }
+            .workoutLiveActivityIntegration(
+                snapshot: workoutLiveActivitySnapshot,
+                navigationState: navigationState,
+                coordinator: workoutLiveActivityCoordinator,
+                willHandleWorkoutLiveActivityLink: { launchPresentation = nil }
+            )
             .task {
                 activeWorkoutEngine.loadActiveSession(
                     ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,

@@ -22,6 +22,10 @@ _Avoid_: Unowned data, hidden owner data
 A workout in progress whose exercises and sets remain editable until the workout is finished or discarded.
 _Avoid_: Workout draft, live session
 
+**Workout Live Activity**:
+A disposable iOS system presentation that mirrors a visible Active Workout for glanceable continuity and returns to that workout when selected. It never owns workout state.
+_Avoid_: Live session, Dynamic Island workout, workout state
+
 **Home**:
 Baros's stable starting place for beginning or returning to a workout and reaching the rest of the app. Home remains available whether or not an Active Workout exists.
 _Avoid_: Inactive Workout screen, dashboard

@@ -53,6 +53,7 @@ targets:
         product: ConvexMobile
       - package: Sentry
         product: Sentry
+      - target: BarosLiveActivity
     postBuildScripts:
       - name: Write Build Source Metadata
         basedOnDependencyAnalysis: false
@@ -161,6 +162,31 @@ targets:
       testTargets:
         - BarosTests
         - BarosUITests
+  BarosLiveActivity:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "26.0"
+    attributes:
+      DevelopmentTeam: RJGJJ38RV9
+      ProvisioningStyle: Automatic
+    sources:
+      - path: BarosLiveActivity
+      - path: Baros/Shared/LiveActivity
+      - path: Baros/Shared/DesignSystem/BarosBrand.swift
+    settings:
+      base:
+        PRODUCT_NAME: BarosLiveActivity
+        PRODUCT_BUNDLE_IDENTIFIER: com.kevintatooles.LiftingLog.dev.LiveActivity
+        INFOPLIST_FILE: BarosLiveActivity/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: RJGJJ38RV9
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        TARGETED_DEVICE_FAMILY: 1
+      configs:
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: com.kevintatooles.LiftingLog.LiveActivity
+
   BarosTests:
     type: bundle.unit-test
     platform: iOS
