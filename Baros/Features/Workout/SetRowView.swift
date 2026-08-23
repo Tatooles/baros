@@ -23,6 +23,9 @@ struct SetRowView: View {
         } content: {
             rowContent
         }
+        .sensoryFeedback(trigger: set.isCompleted) { _, isCompleted in
+            isCompleted ? .impact(weight: .light) : nil
+        }
     }
 
     private var rowContent: some View {
