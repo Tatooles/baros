@@ -38,7 +38,7 @@ Workout names, elapsed time, and set counts are not treated as sensitive workout
 
 Use the accepted **Split Metrics** layout:
 
-- Top row: cobalt-backed Baros mark and one-line workout name.
+- Top row: unenclosed canonical Baros mark and one-line workout name.
 - Left column: visually primary running elapsed time with an **ELAPSED TIME** caption.
 - Right column: circular cobalt progress dial containing the completed/total value and **SETS** caption.
 - Whole surface: one **Return to Workout** action, with no visible button or chevron.
@@ -63,13 +63,15 @@ The bright in-bounds edge is the guaranteed signature. Any bloom outside the sys
 
 Use the existing Baros semantic brand roles rather than introducing a second palette: `brandAccentFill`, `brandAccentForeground`, `brandAccentGlow`, the blue-black dark surfaces, and warm-silver foregrounds. Final implementation must verify contrast in normal and reduced-luminance states.
 
+Across Lock Screen and Dynamic Island presentations, use the standalone logo mark defined by the visual identity: the linked transparent warm-silver mark and cobalt plate layers, without the app-icon background or enclosure. Do not add a separate backing fill, badge, or mark-level border.
+
 ## Dynamic Island presentation
 
 Dynamic Island keeps the system-owned black background. The Lock Screen's literal background and slash do not carry into the Island.
 
 - Use a cobalt `keylineTint`—the thin colored outline around the Island—plus luminous cobalt brand and progress elements.
-- Compact presentation shows the cobalt-backed Baros mark and running timer.
-- Minimal presentation shows the same cobalt-backed Baros mark; the timer disappears rather than changing the brand treatment.
+- Compact presentation shows the unenclosed canonical Baros mark and running timer.
+- Minimal presentation shows the same unenclosed canonical Baros mark; the timer disappears rather than changing the brand treatment.
 - Expanded presentation preserves the workout-name, elapsed-time, and circular set-progress hierarchy. Secondary captions may disappear when space is tight.
 
 Do not attempt to replace the Island's black surface with a gradient. Apple permits custom Lock Screen backgrounds but keeps Dynamic Island presentations on an opaque black background; `keylineTint` is the native perimeter treatment. [Apple Human Interface Guidelines: Live Activities](https://developer.apple.com/design/human-interface-guidelines/live-activities) and [Apple: Dynamic Island](https://developer.apple.com/documentation/widgetkit/dynamicisland)
