@@ -81,6 +81,7 @@ private struct WorkoutLiveActivityLockScreenView: View {
     let context: ActivityViewContext<WorkoutLiveActivityAttributes>
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+    @ScaledMetric(relativeTo: .caption2) private var elapsedCaptionFontSize: CGFloat = 9
 
     private var layoutMetrics: LayoutMetrics {
         if dynamicTypeSize.isAccessibilitySize {
@@ -147,7 +148,7 @@ private struct WorkoutLiveActivityLockScreenView: View {
 
                         if layoutMetrics.showsSecondaryCaptions {
                             Text("ELAPSED TIME")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.system(size: elapsedCaptionFontSize, weight: .bold))
                                 .tracking(1.2)
                                 .foregroundStyle(BarosBrand.brandForeground.opacity(0.62))
                         }
@@ -213,6 +214,7 @@ private struct WorkoutLiveActivityProgressDial: View {
     let total: Int
     let diameter: CGFloat
     var showsCaption = false
+    @ScaledMetric(relativeTo: .caption2) private var captionFontSize: CGFloat = 7
 
     private var fraction: Double {
         guard total > 0 else { return 0 }
@@ -247,7 +249,7 @@ private struct WorkoutLiveActivityProgressDial: View {
                     .padding(.horizontal, 5)
                 if showsCaption {
                     Text("SETS")
-                        .font(.system(size: 7, weight: .bold))
+                        .font(.system(size: captionFontSize, weight: .bold))
                         .tracking(0.8)
                         .foregroundStyle(BarosBrand.brandForeground.opacity(0.62))
                 }

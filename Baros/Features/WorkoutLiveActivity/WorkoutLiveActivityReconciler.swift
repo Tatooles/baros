@@ -124,6 +124,23 @@ enum WorkoutLiveActivityRequestHistoryPolicy {
     }
 }
 
+struct WorkoutLiveActivityReconciliationFreshness {
+    struct Token: Equatable, Sendable {
+        fileprivate let value: UInt
+    }
+
+    private var latestValue: UInt = 0
+
+    mutating func beginSynchronization() -> Token {
+        latestValue &+= 1
+        return Token(value: latestValue)
+    }
+
+    func isCurrent(_ token: Token) -> Bool {
+        token.value == latestValue
+    }
+}
+
 struct WorkoutLiveActivityRequestRetryState: Equatable {
     private(set) var failedWorkoutID: UUID?
     private(set) var retriedWorkoutID: UUID?

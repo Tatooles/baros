@@ -3,11 +3,16 @@ import Foundation
 
 @MainActor
 final class WorkoutLiveActivityCoordinator {
+    private struct PendingReconciliation {
+        let snapshot: WorkoutLiveActivitySnapshot?
+        let token: WorkoutLiveActivityReconciliationFreshness.Token
+    }
+
     private let stateStore: WorkoutLiveActivityStateStore
     private var requestRetryState = WorkoutLiveActivityRequestRetryState()
+    private var reconciliationFreshness = WorkoutLiveActivityReconciliationFreshness()
     private var latestSnapshot: WorkoutLiveActivitySnapshot?
-    private var pendingSnapshot: WorkoutLiveActivitySnapshot?
-    private var hasPendingSynchronization = false
+    private var pendingReconciliation: PendingReconciliation?
     private var reconcileTask: Task<Void, Never>?
     private var activityStateTasks: [String: Task<Void, Never>] = [:]
 
@@ -20,8 +25,10 @@ final class WorkoutLiveActivityCoordinator {
         allowsRequestRetry: Bool = false
     ) {
         latestSnapshot = snapshot
-        pendingSnapshot = snapshot
-        hasPendingSynchronization = true
+        pendingReconciliation = PendingReconciliation(
+            snapshot: snapshot,
+            token: reconciliationFreshness.beginSynchronization()
+        )
         if let workoutID = snapshot?.workoutID {
             requestRetryState.prepare(for: workoutID)
             if allowsRequestRetry {
@@ -36,17 +43,21 @@ final class WorkoutLiveActivityCoordinator {
     }
 
     private func drainPendingSnapshots() async {
-        while hasPendingSynchronization {
-            hasPendingSynchronization = false
-            let snapshot = pendingSnapshot
-            pendingSnapshot = nil
-            await reconcile(snapshot: snapshot)
+        while let pendingReconciliation {
+            self.pendingReconciliation = nil
+            await reconcile(
+                snapshot: pendingReconciliation.snapshot,
+                reconciliationToken: pendingReconciliation.token
+            )
         }
 
         reconcileTask = nil
     }
 
-    private func reconcile(snapshot: WorkoutLiveActivitySnapshot?) async {
+    private func reconcile(
+        snapshot: WorkoutLiveActivitySnapshot?,
+        reconciliationToken: WorkoutLiveActivityReconciliationFreshness.Token
+    ) async {
         let activities = Activity<WorkoutLiveActivityAttributes>.activities
         let records = activities.map(WorkoutLiveActivityRecord.init(activity:))
 
@@ -86,9 +97,15 @@ final class WorkoutLiveActivityCoordinator {
             }
             stopObserving(activityID: activityID)
             await activity.end(nil, dismissalPolicy: .immediate)
+            guard reconciliationFreshness.isCurrent(reconciliationToken) else {
+                return
+            }
         }
 
-        guard let snapshot else { return }
+        guard reconciliationFreshness.isCurrent(reconciliationToken),
+              let snapshot else {
+            return
+        }
 
         if let activityID = plan.activityIDToKeep,
            let activity = activities.first(where: { $0.id == activityID }) {

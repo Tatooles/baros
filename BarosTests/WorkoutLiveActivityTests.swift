@@ -121,6 +121,18 @@ final class WorkoutLiveActivityTests: XCTestCase {
         )
     }
 
+    func testNewSynchronizationInvalidatesInFlightReconciliation() {
+        var freshness = WorkoutLiveActivityReconciliationFreshness()
+        let workoutReconciliation = freshness.beginSynchronization()
+
+        XCTAssertTrue(freshness.isCurrent(workoutReconciliation))
+
+        let ownerChangeReconciliation = freshness.beginSynchronization()
+
+        XCTAssertFalse(freshness.isCurrent(workoutReconciliation))
+        XCTAssertTrue(freshness.isCurrent(ownerChangeReconciliation))
+    }
+
     func testReconciliationWithoutActiveWorkoutEndsEveryActivity() {
         let first = WorkoutLiveActivityRecord(
             activityID: "first",
