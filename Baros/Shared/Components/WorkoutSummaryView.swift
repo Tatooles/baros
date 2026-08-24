@@ -12,7 +12,7 @@ struct WorkoutSummaryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(WorkoutFormatters.compactDate(session.startedAt))
-                .font(.system(size: 14, weight: .medium))
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(AppTheme.textSecondary)
                 .accessibilityIdentifier("WorkoutSummaryDate")
 
@@ -22,9 +22,9 @@ struct WorkoutSummaryView: View {
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Notes")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.headline.weight(.bold))
                         Text(session.notes)
-                            .font(.system(size: 14))
+                            .font(.subheadline)
                             .foregroundStyle(AppTheme.textSecondary)
                     }
                 }
@@ -37,10 +37,10 @@ struct WorkoutSummaryView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(loggedExercise.exerciseSnapshotName)
-                                .font(.system(size: 18, weight: .bold))
+                                .font(.title3.weight(.bold))
                             if let metadataDisplayText = loggedExercise.metadataDisplayText {
                                 Text(metadataDisplayText)
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(.caption.weight(.medium))
                                     .foregroundStyle(AppTheme.textSecondary)
                                     .lineLimit(1)
                             }
@@ -60,7 +60,7 @@ struct WorkoutSummaryView: View {
                                         "WorkoutSummarySetSummary-\(loggedExercise.orderIndex)-\(set.orderIndex)"
                                     )
                             }
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.subheadline.weight(.medium))
                             .foregroundStyle(AppTheme.textSecondary)
                         }
 
@@ -95,10 +95,10 @@ struct WorkoutSummaryView: View {
         SurfaceCard {
             VStack(spacing: 4) {
                 Text(value)
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.title3.weight(.bold))
                     .accessibilityIdentifier("WorkoutSummaryMetricValue-\(title)")
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(AppTheme.textSecondary)
             }
             .frame(maxWidth: .infinity)

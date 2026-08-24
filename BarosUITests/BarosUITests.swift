@@ -156,6 +156,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(durationMetric.exists)
         XCTAssertTrue(exerciseMetric.exists)
         XCTAssertTrue(setMetric.exists)
+        XCTAssertGreaterThan(durationMetric.frame.height, 30)
         XCTAssertLessThan(durationMetric.frame.maxY, exerciseMetric.frame.minY)
         XCTAssertLessThan(exerciseMetric.frame.maxY, setMetric.frame.minY)
         let confirmButton = app.buttons["StartFromPastWorkoutConfirmButton"]
