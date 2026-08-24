@@ -79,8 +79,10 @@ struct FinishWorkoutSheet: View {
                         context: modelContext
                     )
                     actionError = nil
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                     dismiss()
                 } catch {
+                    UINotificationFeedbackGenerator().notificationOccurred(.error)
                     actionError = WorkoutActionError(title: "Couldn't Save Workout", message: error.localizedDescription)
                 }
             } label: {
