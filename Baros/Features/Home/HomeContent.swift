@@ -28,16 +28,6 @@ struct HomePrimaryWorkoutPresentation: Equatable {
     }
 }
 
-struct HomePastWorkoutReviewPresentation: Equatable {
-    let completedAt: Date
-    let copiedSetCount: Int
-
-    init(session: WorkoutSession) {
-        completedAt = session.endedAt ?? session.startedAt
-        copiedSetCount = WorkoutMetrics(session: session).totalSetCount
-    }
-}
-
 struct HomeContent {
     let completedSessions: [WorkoutSession]
     let weeklyActivity: HomeWeeklyActivity

@@ -46,43 +46,6 @@ final class HomeContentTests: XCTestCase {
         XCTAssertEqual(presentation.accessibilityIdentifier, "StartWorkoutButton")
     }
 
-    func testPastWorkoutReviewUsesCompletionDateForCrossMidnightWorkout() {
-        let completedWorkout = session(
-            title: "Late Workout",
-            startedAt: date(2026, 8, 18, hour: 23),
-            endedAt: date(2026, 8, 19, hour: 1)
-        )
-
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
-
-        XCTAssertEqual(presentation.completedAt, date(2026, 8, 19, hour: 1))
-    }
-
-    func testPastWorkoutReviewCountsEverySetThatWillBeCopied() {
-        let completedWorkout = WorkoutSession(
-            title: "Push Day",
-            startedAt: date(2026, 8, 19),
-            status: .completed,
-            source: .blank,
-            loggedExercises: [
-                LoggedExercise(
-                    orderIndex: 0,
-                    exerciseSnapshotName: "Bench Press",
-                    sets: [
-                        LoggedSet(orderIndex: 0, isCompleted: true),
-                        LoggedSet(orderIndex: 1, isCompleted: false),
-                    ]
-                ),
-            ]
-        )
-
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
-        let copiedSets = completedWorkout.sortedLoggedExercises.flatMap(\.sortedSets)
-
-        XCTAssertGreaterThan(copiedSets.count, copiedSets.filter(\.isCompleted).count)
-        XCTAssertEqual(presentation.copiedSetCount, copiedSets.count)
-    }
-
     func testContentUsesVisibleCompletedWorkoutsNewestFirstAndKeepsRecencyBasedOnStartDate() {
         let now = date(2026, 8, 19, hour: 12)
         let newest = session(

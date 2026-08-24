@@ -27,6 +27,7 @@
 		133709AB3073D2256EBCC8C3 /* BarosLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0727ACA9304D7A79490879CF /* BarosLiveActivityBundle.swift */; };
 		15918DBC9EBE07ABD6D29670 /* EmptyHistoryPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454FB40586943F2723492FC8 /* EmptyHistoryPresentationTests.swift */; };
 		16F0691C3A8982157BDD1190 /* NetworkPathObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A65700E0767CE0802134900D /* NetworkPathObserver.swift */; };
+		18B8489BD40686438C845898 /* WorkoutSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11BABAD0661FEBB8399384A /* WorkoutSummaryView.swift */; };
 		18D01B6DE3B7EC33317AC025 /* AddExerciseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6795620478217A9EB5FD5B3 /* AddExerciseSheet.swift */; };
 		1BE75AA267FD088A1F025F89 /* PreviousSetPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D3DF0D84D449AEEBB18FD5 /* PreviousSetPerformanceTests.swift */; };
 		1CA3C2D4EB1DE15086129C9C /* SyncObservabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDAF79438867AE4B03C833D2 /* SyncObservabilityTests.swift */; };
@@ -403,6 +404,7 @@
 		DDAF79438867AE4B03C833D2 /* SyncObservabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncObservabilityTests.swift; sourceTree = "<group>"; };
 		DF18349C45B491C4A98201DB /* Baros.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Baros.entitlements; sourceTree = "<group>"; };
 		E0800BEE55FAC603B1A30047 /* CurrentOwnerLaunchConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentOwnerLaunchConfigurationTests.swift; sourceTree = "<group>"; };
+		E11BABAD0661FEBB8399384A /* WorkoutSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSummaryView.swift; sourceTree = "<group>"; };
 		E324D579AB4041EAC8A66D20 /* Baros.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Baros.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E40ADCC7E59A4CF06A873599 /* SettingsMutationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsMutationService.swift; sourceTree = "<group>"; };
 		E5EECD7D24DA02F3A4711161 /* SyncOutboxRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxRecorderTests.swift; sourceTree = "<group>"; };
@@ -478,6 +480,7 @@
 				BDE4314AD2B27E0C681BD5D7 /* StateViews.swift */,
 				DD2BF38D6F76C8271E2051F5 /* SurfaceCard.swift */,
 				78C1E552B94BD12C68370E57 /* SwipeToDeleteRow.swift */,
+				E11BABAD0661FEBB8399384A /* WorkoutSummaryView.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -1222,6 +1225,7 @@
 				5F0FA5782B02EA610D958DF4 /* WorkoutSessionStatus.swift in Sources */,
 				F0CE978782A4DF4A4A6AA034 /* WorkoutSessionView.swift in Sources */,
 				8931EE5E9411ADE7FAF539B4 /* WorkoutSource.swift in Sources */,
+				18B8489BD40686438C845898 /* WorkoutSummaryView.swift in Sources */,
 				9A75ADC7C7E657913D77DA7B /* WorkoutTemplate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

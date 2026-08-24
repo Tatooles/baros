@@ -278,48 +278,40 @@ private struct HomePastWorkoutsView: View {
 }
 
 private struct HomePastWorkoutReviewView: View {
+    @Environment(SyncScheduler.self) private var syncScheduler
     let session: WorkoutSession
     let startWorkout: () -> Void
+    @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
-    private var presentation: HomePastWorkoutReviewPresentation {
-        HomePastWorkoutReviewPresentation(session: session)
+    private var weightUnit: MeasurementUnit {
+        UserSettings.visibleSettingsRecords(
+            from: settingsRecords,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        ).first?.weightUnit ?? .pounds
     }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 20) {
-                VStack(spacing: 7) {
-                    Text(session.title)
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(AppTheme.textPrimary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("StartFromPastWorkoutSheetTitle")
-
-                    Text("Completed \(WorkoutFormatters.compactDate(presentation.completedAt))")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(AppTheme.textSecondary)
-                }
-
-                HStack(spacing: 10) {
-                    MetricSummaryCard(title: "Exercises", value: "\(session.visibleExerciseCount)")
-                    MetricSummaryCard(title: "Sets", value: "\(presentation.copiedSetCount)")
-                }
-
-                Button(action: startWorkout) {
-                    Text("Start Workout")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(AppTheme.brandAccentFill)
-                .accessibilityIdentifier("StartFromPastWorkoutConfirmButton")
-            }
-            .padding(20)
+            WorkoutSummaryView(session: session, weightUnit: weightUnit)
+                .padding(AppTheme.shellPadding)
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
-        .navigationTitle("Review Workout")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Button(action: startWorkout) {
+                Label("Start Workout", systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(AppTheme.brandAccentFill)
+            .accessibilityIdentifier("StartFromPastWorkoutConfirmButton")
+            .padding(.horizontal, AppTheme.shellPadding)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            .background(AppTheme.canvasBackground.ignoresSafeArea())
+        }
+        .navigationTitle(session.title)
         .navigationBarTitleDisplayMode(.inline)
     }
 }

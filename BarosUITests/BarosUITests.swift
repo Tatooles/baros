@@ -79,6 +79,47 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutSummaryMatchesAcrossHistoryAndPastWorkoutReviewInKilograms() {
+        let app = makeApp(
+            extraArguments: ["--uitest-seed-history-exercise-note"],
+            completedBenchWorkoutTitles: ["Past Push"]
+        )
+        app.launch()
+
+        app.buttons["ProfileTab"].tap()
+        app.buttons["ProfileSettingsLink"].tap()
+        let weightUnitPicker = app.segmentedControls["WeightUnitPicker"]
+        XCTAssertTrue(weightUnitPicker.waitForExistence(timeout: 3))
+        weightUnitPicker.buttons["Kilograms"].tap()
+
+        app.buttons["HistoryTab"].tap()
+        let completedWorkout = app.buttons["WorkoutHistoryButton-0"]
+        XCTAssertTrue(completedWorkout.waitForExistence(timeout: 3))
+        completedWorkout.tap()
+        let historySummary = workoutSummarySnapshot(in: app)
+
+        app.navigationBars.buttons.firstMatch.tap()
+        app.buttons["HomeTab"].tap()
+        openFirstPastWorkout(in: app)
+
+        XCTAssertTrue(app.navigationBars["Past Push"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["StartWorkoutCancelButton"].exists)
+        let reviewSummary = workoutSummarySnapshot(in: app)
+        XCTAssertEqual(reviewSummary, historySummary)
+
+        let confirmButton = app.buttons["StartFromPastWorkoutConfirmButton"]
+        XCTAssertTrue(confirmButton.waitForExistence(timeout: 3))
+        if !confirmButton.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(confirmButton.isHittable)
+        confirmButton.tap()
+
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.textFields["WorkoutTitle"].value as? String, "Past Push")
+    }
+
+    @MainActor
     func testHomeSupportsAccessibilityDynamicType() {
         let app = makeApp(
             extraArguments: [
@@ -106,9 +147,17 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["PastWorkoutButton-0"].isHittable)
         app.buttons["PastWorkoutButton-0"].tap()
 
-        XCTAssertTrue(app.staticTexts["StartFromPastWorkoutSheetTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["Accessible Past Workout"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Exercises"].exists)
         XCTAssertTrue(app.staticTexts["Sets"].exists)
+        let durationMetric = app.staticTexts["WorkoutSummaryMetricValue-Duration"]
+        let exerciseMetric = app.staticTexts["WorkoutSummaryMetricValue-Exercises"]
+        let setMetric = app.staticTexts["WorkoutSummaryMetricValue-Sets"]
+        XCTAssertTrue(durationMetric.exists)
+        XCTAssertTrue(exerciseMetric.exists)
+        XCTAssertTrue(setMetric.exists)
+        XCTAssertLessThan(durationMetric.frame.maxY, exerciseMetric.frame.minY)
+        XCTAssertLessThan(exerciseMetric.frame.maxY, setMetric.frame.minY)
         let confirmButton = app.buttons["StartFromPastWorkoutConfirmButton"]
         if !confirmButton.isHittable {
             app.swipeUp()
@@ -461,7 +510,7 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Bench Press"].waitForExistence(timeout: 3))
         let setSummary = app.staticTexts
-            .matching(identifier: "WorkoutHistorySetSummary-0-0")
+            .matching(identifier: "WorkoutSummarySetSummary-0-0")
             .matching(NSPredicate(format: "label == %@", "185 x 5 @ 8 · Done"))
             .firstMatch
         XCTAssertTrue(setSummary.waitForExistence(timeout: 3))
@@ -1480,7 +1529,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
         app.buttons["WorkoutHistoryButton-0"].tap()
         let workoutSetSummary = app.staticTexts
-            .matching(identifier: "WorkoutHistorySetSummary-0-0")
+            .matching(identifier: "WorkoutSummarySetSummary-0-0")
             .matching(NSPredicate(format: "label CONTAINS %@", "83.91"))
             .firstMatch
         XCTAssertTrue(workoutSetSummary.waitForExistence(timeout: 3))
@@ -2110,13 +2159,39 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     private func assertPastWorkoutReview(in app: XCUIApplication, title: String) {
-        let reviewTitle = app.staticTexts["StartFromPastWorkoutSheetTitle"]
-        XCTAssertTrue(reviewTitle.waitForExistence(timeout: 3))
-        XCTAssertEqual(reviewTitle.label, title)
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Exercises"].exists)
         XCTAssertTrue(app.staticTexts["Sets"].exists)
         XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
         XCTAssertFalse(app.buttons["StartWorkoutCancelButton"].exists)
+    }
+
+    @MainActor
+    private func workoutSummarySnapshot(in app: XCUIApplication) -> [String] {
+        let date = app.staticTexts["WorkoutSummaryDate"]
+        let duration = app.staticTexts["WorkoutSummaryMetricValue-Duration"]
+        let exercises = app.staticTexts["WorkoutSummaryMetricValue-Exercises"]
+        let sets = app.staticTexts["WorkoutSummaryMetricValue-Sets"]
+        let setSummary = app.staticTexts["WorkoutSummarySetSummary-0-0"]
+
+        XCTAssertTrue(date.waitForExistence(timeout: 3))
+        XCTAssertTrue(duration.exists)
+        XCTAssertTrue(exercises.exists)
+        XCTAssertTrue(sets.exists)
+        XCTAssertTrue(app.descendants(matching: .any)["WorkoutSummaryNotesCard"].exists)
+        XCTAssertTrue(app.staticTexts["Previous workout narrative"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["WorkoutSummaryExercise-0"].exists)
+        XCTAssertTrue(app.staticTexts["Bench Press"].exists)
+        XCTAssertTrue(app.staticTexts["Barbell • Chest"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["WorkoutSummaryExerciseNote-0"].exists)
+        XCTAssertTrue(app.staticTexts["Pause at the bottom\nKeep wrists stacked"].exists)
+        XCTAssertTrue(setSummary.exists)
+        XCTAssertEqual(duration.label, "1:00:00")
+        XCTAssertEqual(exercises.label, "1")
+        XCTAssertEqual(sets.label, "1")
+        XCTAssertEqual(setSummary.label, "83.91 x 5 @ 8 · Done")
+
+        return [date.label, duration.label, exercises.label, sets.label, setSummary.label]
     }
 
     @MainActor
