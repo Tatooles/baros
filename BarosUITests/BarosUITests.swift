@@ -59,7 +59,9 @@ final class BarosUITests: XCTestCase {
         let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
         app.launch()
 
-        app.buttons["StartWorkoutButton"].tap()
+        let startWorkoutButton = app.buttons["StartWorkoutButton"]
+        XCTAssertTrue(startWorkoutButton.waitForExistence(timeout: 3))
+        startWorkoutButton.tap()
         XCTAssertTrue(app.buttons["StartWorkoutCancelButton"].waitForExistence(timeout: 3))
         app.buttons["UsePastWorkoutButton"].tap()
 
