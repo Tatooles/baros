@@ -111,7 +111,15 @@ final class BarosUITests: XCTestCase {
         let exercise = app.descendants(matching: .any)["PastWorkoutReviewExercise-0"]
         XCTAssertTrue(exercise.exists)
         XCTAssertEqual(exercise.label, "Bench Press, Barbell, 1 set")
-        XCTAssertGreaterThan(exercise.frame.height, 90)
+        let exerciseIdentity = app.descendants(matching: .any)
+            .matching(identifier: "PastWorkoutReviewExercise-0-Identity")
+            .firstMatch
+        let setCount = app.descendants(matching: .any)
+            .matching(identifier: "PastWorkoutReviewExercise-0-SetCount")
+            .firstMatch
+        XCTAssertTrue(exerciseIdentity.exists)
+        XCTAssertTrue(setCount.exists)
+        XCTAssertGreaterThanOrEqual(setCount.frame.minY, exerciseIdentity.frame.maxY)
         let confirmButton = app.buttons["StartFromPastWorkoutConfirmButton"]
         XCTAssertTrue(confirmButton.isHittable)
     }

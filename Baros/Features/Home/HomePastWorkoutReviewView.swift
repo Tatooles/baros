@@ -126,10 +126,7 @@ private struct HomePastWorkoutReviewExerciseRow: View {
 
     private var exerciseIdentity: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(exercise.name)
-                .font(.headline)
-                .foregroundStyle(AppTheme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
+            exerciseName
 
             if let equipment = exercise.equipment {
                 Text(equipment)
@@ -139,7 +136,34 @@ private struct HomePastWorkoutReviewExerciseRow: View {
         }
     }
 
+    @ViewBuilder
+    private var exerciseName: some View {
+        if exposesLayoutRegionsForUITesting {
+            exerciseNameText
+                .accessibilityIdentifier("\(accessibilityIdentifier)-Identity")
+        } else {
+            exerciseNameText
+        }
+    }
+
+    private var exerciseNameText: some View {
+        Text(exercise.name)
+            .font(.headline)
+            .foregroundStyle(AppTheme.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
     private var copiedSetCount: some View {
+        if exposesLayoutRegionsForUITesting {
+            copiedSetCountText
+                .accessibilityIdentifier("\(accessibilityIdentifier)-SetCount")
+        } else {
+            copiedSetCountText
+        }
+    }
+
+    private var copiedSetCountText: some View {
         Text(exercise.copiedSetDescription)
             .font(.body)
             .foregroundStyle(AppTheme.textSecondary)
@@ -151,5 +175,9 @@ private struct HomePastWorkoutReviewExerciseRow: View {
         [exercise.name, exercise.equipment, exercise.copiedSetDescription]
             .compactMap { $0 }
             .joined(separator: ", ")
+    }
+
+    private var exposesLayoutRegionsForUITesting: Bool {
+        ProcessInfo.processInfo.arguments.contains("--uitest-accessibility-dynamic-type")
     }
 }
