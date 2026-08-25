@@ -54,6 +54,7 @@
 		4078390E82E1F1CA7B02984E /* UserSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F032CF58B2DF043F43B807 /* UserSettings.swift */; };
 		40BD09DD19D5FAEFD93B4EC7 /* ClerkConvex in Frameworks */ = {isa = PBXBuildFile; productRef = F16DCEE085204D1243D6FA51 /* ClerkConvex */; };
 		40FF979E029CAD7AF6E5941C /* PrivacyDataSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60B82293267E557A062BB1F1 /* PrivacyDataSection.swift */; };
+		415B459746BBE028B6F138AA /* HomePastWorkoutReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD656B1F611BE5925B97EB6 /* HomePastWorkoutReviewView.swift */; };
 		4456F6EF865E4AE5B81D075A /* SyncCursorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CFF2757B016137FD2F7D3F5 /* SyncCursorState.swift */; };
 		460F374D669ADE8B9FEF1FB7 /* SettingsAccountSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EDF154E94B53790D7C55AAB /* SettingsAccountSection.swift */; };
 		47B405450E38B4E1CF012367 /* LaunchExperienceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BADC0102C079EC0FAAC287B /* LaunchExperienceCoordinator.swift */; };
@@ -316,6 +317,7 @@
 		62D75149FBAE878C25D0D614 /* ExerciseHistoryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryRow.swift; sourceTree = "<group>"; };
 		63D053CC597AD0865A0C84D5 /* WhatsNewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewSheet.swift; sourceTree = "<group>"; };
 		6A02924849ADF947CBA1478E /* AccountDeletionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionCoordinator.swift; sourceTree = "<group>"; };
+		6BD656B1F611BE5925B97EB6 /* HomePastWorkoutReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePastWorkoutReviewView.swift; sourceTree = "<group>"; };
 		71CE928AEA84940F0B7E7AD5 /* SyncStatusDisplayStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStatusDisplayStateTests.swift; sourceTree = "<group>"; };
 		7393C373A9C49F7A8182E8DF /* AccountDisplayStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDisplayStateTests.swift; sourceTree = "<group>"; };
 		73D1C8510D7568DD0249DF51 /* SyncOutboxEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxEntry.swift; sourceTree = "<group>"; };
@@ -486,6 +488,7 @@
 			isa = PBXGroup;
 			children = (
 				41C2D910DEE2996C437643E1 /* HomeContent.swift */,
+				6BD656B1F611BE5925B97EB6 /* HomePastWorkoutReviewView.swift */,
 				27C5D2BF7D584890C7340F92 /* HomeStartWorkoutSheet.swift */,
 				FCF15B15837756D447B0803F /* HomeView.swift */,
 			);
@@ -1149,6 +1152,7 @@
 				39057CB1EBD3BBFD990B4153 /* HealthSyncStatus.swift in Sources */,
 				91EB3D646631398A9F52C3DB /* HistoryView.swift in Sources */,
 				0B28B27745E98C02935138E8 /* HomeContent.swift in Sources */,
+				415B459746BBE028B6F138AA /* HomePastWorkoutReviewView.swift in Sources */,
 				ECF35A9788853245B16A7EBD /* HomeStartWorkoutSheet.swift in Sources */,
 				8D915D827482CBB112214669 /* HomeView.swift in Sources */,
 				47B405450E38B4E1CF012367 /* LaunchExperienceCoordinator.swift in Sources */,
