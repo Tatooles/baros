@@ -107,12 +107,9 @@ final class BarosUITests: XCTestCase {
         app.buttons["PastWorkoutButton-0"].tap()
 
         XCTAssertTrue(app.staticTexts["StartFromPastWorkoutSheetTitle"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["Exercises"].exists)
-        XCTAssertTrue(app.staticTexts["Sets"].exists)
+        XCTAssertTrue(app.staticTexts["PastWorkoutReviewStructureSummary"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["PastWorkoutReviewExercise-0"].exists)
         let confirmButton = app.buttons["StartFromPastWorkoutConfirmButton"]
-        if !confirmButton.isHittable {
-            app.swipeUp()
-        }
         XCTAssertTrue(confirmButton.isHittable)
     }
 
@@ -2113,8 +2110,19 @@ final class BarosUITests: XCTestCase {
         let reviewTitle = app.staticTexts["StartFromPastWorkoutSheetTitle"]
         XCTAssertTrue(reviewTitle.waitForExistence(timeout: 3))
         XCTAssertEqual(reviewTitle.label, title)
-        XCTAssertTrue(app.staticTexts["Exercises"].exists)
-        XCTAssertTrue(app.staticTexts["Sets"].exists)
+        XCTAssertEqual(
+            app.staticTexts["PastWorkoutReviewProvenance"].label,
+            "Based on Nov 14, 2023"
+        )
+        XCTAssertEqual(
+            app.staticTexts["PastWorkoutReviewStructureSummary"].label,
+            "1 exercise · 1 set"
+        )
+        XCTAssertTrue(app.staticTexts["PastWorkoutReviewExercisesHeading"].exists)
+        let exercise = app.descendants(matching: .any)["PastWorkoutReviewExercise-0"]
+        XCTAssertTrue(exercise.exists)
+        XCTAssertEqual(exercise.label, "Bench Press, Barbell, 1 set")
+        XCTAssertTrue(app.buttons["StartFromPastWorkoutConfirmButton"].isHittable)
         XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
         XCTAssertFalse(app.buttons["StartWorkoutCancelButton"].exists)
     }

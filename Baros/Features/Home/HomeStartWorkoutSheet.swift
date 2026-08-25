@@ -277,53 +277,6 @@ private struct HomePastWorkoutsView: View {
     }
 }
 
-private struct HomePastWorkoutReviewView: View {
-    let session: WorkoutSession
-    let startWorkout: () -> Void
-
-    private var presentation: HomePastWorkoutReviewPresentation {
-        HomePastWorkoutReviewPresentation(session: session)
-    }
-
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 20) {
-                VStack(spacing: 7) {
-                    Text(session.title)
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(AppTheme.textPrimary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("StartFromPastWorkoutSheetTitle")
-
-                    Text("Completed \(WorkoutFormatters.compactDate(presentation.completedAt))")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(AppTheme.textSecondary)
-                }
-
-                HStack(spacing: 10) {
-                    MetricSummaryCard(title: "Exercises", value: "\(session.visibleExerciseCount)")
-                    MetricSummaryCard(title: "Sets", value: "\(presentation.copiedSetCount)")
-                }
-
-                Button(action: startWorkout) {
-                    Text("Start Workout")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(AppTheme.brandAccentFill)
-                .accessibilityIdentifier("StartFromPastWorkoutConfirmButton")
-            }
-            .padding(20)
-        }
-        .background(AppTheme.canvasBackground.ignoresSafeArea())
-        .navigationTitle("Review Workout")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
 private struct HomeStartWorkoutActionError: Identifiable {
     let id = UUID()
     let title: String

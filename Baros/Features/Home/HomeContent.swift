@@ -29,12 +29,38 @@ struct HomePrimaryWorkoutPresentation: Equatable {
 }
 
 struct HomePastWorkoutReviewPresentation: Equatable {
+    struct Exercise: Equatable, Identifiable {
+        let id: UUID
+        let name: String
+        let equipment: String?
+        let copiedSetCount: Int
+
+        var copiedSetDescription: String {
+            "\(copiedSetCount) \(copiedSetCount == 1 ? "set" : "sets")"
+        }
+    }
+
     let completedAt: Date
     let copiedSetCount: Int
+    let exercises: [Exercise]
+
+    var structureSummary: String {
+        let exerciseLabel = exercises.count == 1 ? "exercise" : "exercises"
+        let setLabel = copiedSetCount == 1 ? "set" : "sets"
+        return "\(exercises.count) \(exerciseLabel) · \(copiedSetCount) \(setLabel)"
+    }
 
     init(session: WorkoutSession) {
         completedAt = session.endedAt ?? session.startedAt
-        copiedSetCount = WorkoutMetrics(session: session).totalSetCount
+        exercises = session.sortedLoggedExercises.map { loggedExercise in
+            Exercise(
+                id: loggedExercise.id,
+                name: loggedExercise.exerciseSnapshotName,
+                equipment: loggedExercise.snapshotEquipment?.displayName,
+                copiedSetCount: loggedExercise.sortedSets.count
+            )
+        }
+        copiedSetCount = exercises.reduce(0) { $0 + $1.copiedSetCount }
     }
 }
 

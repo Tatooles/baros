@@ -83,6 +83,74 @@ final class HomeContentTests: XCTestCase {
         XCTAssertEqual(presentation.copiedSetCount, copiedSets.count)
     }
 
+    func testPastWorkoutReviewPresentsCopiedExercisesInSourceOrder() {
+        let cableFly = LoggedExercise(
+            orderIndex: 1,
+            exerciseSnapshotName: "Cable Fly",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.cable.rawValue
+        )
+        cableFly.sets = [LoggedSet(orderIndex: 0)]
+        let benchPress = LoggedExercise(
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue
+        )
+        benchPress.sets = [
+            LoggedSet(orderIndex: 0),
+            LoggedSet(orderIndex: 1),
+        ]
+        let completedWorkout = WorkoutSession(
+            title: "Push Day",
+            startedAt: date(2026, 8, 19),
+            status: .completed,
+            source: .blank
+        )
+        completedWorkout.loggedExercises = [cableFly, benchPress]
+
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+
+        XCTAssertEqual(
+            presentation.exercises,
+            [
+                .init(
+                    id: completedWorkout.sortedLoggedExercises[0].id,
+                    name: "Bench Press",
+                    equipment: "Barbell",
+                    copiedSetCount: 2
+                ),
+                .init(
+                    id: completedWorkout.sortedLoggedExercises[1].id,
+                    name: "Cable Fly",
+                    equipment: "Cable",
+                    copiedSetCount: 1
+                ),
+            ]
+        )
+        XCTAssertEqual(presentation.structureSummary, "2 exercises · 3 sets")
+        XCTAssertEqual(presentation.exercises.map(\.copiedSetDescription), ["2 sets", "1 set"])
+    }
+
+    func testPastWorkoutReviewUsesSingularStructureCopy() {
+        let exercise = LoggedExercise(
+            orderIndex: 0,
+            exerciseSnapshotName: "Deadlift",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue
+        )
+        exercise.sets = [LoggedSet(orderIndex: 0)]
+        let completedWorkout = WorkoutSession(
+            title: "Pull Day",
+            startedAt: date(2026, 8, 19),
+            status: .completed,
+            source: .blank
+        )
+        completedWorkout.loggedExercises = [exercise]
+
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+
+        XCTAssertEqual(presentation.structureSummary, "1 exercise · 1 set")
+        XCTAssertEqual(presentation.exercises[0].copiedSetDescription, "1 set")
+    }
+
     func testContentUsesVisibleCompletedWorkoutsNewestFirstAndKeepsRecencyBasedOnStartDate() {
         let now = date(2026, 8, 19, hour: 12)
         let newest = session(
