@@ -108,7 +108,10 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["StartFromPastWorkoutSheetTitle"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["PastWorkoutReviewStructureSummary"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["PastWorkoutReviewExercise-0"].exists)
+        let exercise = app.descendants(matching: .any)["PastWorkoutReviewExercise-0"]
+        XCTAssertTrue(exercise.exists)
+        XCTAssertEqual(exercise.label, "Bench Press, Barbell, 1 set")
+        XCTAssertGreaterThan(exercise.frame.height, 90)
         let confirmButton = app.buttons["StartFromPastWorkoutConfirmButton"]
         XCTAssertTrue(confirmButton.isHittable)
     }

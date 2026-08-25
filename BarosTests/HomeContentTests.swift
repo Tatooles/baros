@@ -58,6 +58,20 @@ final class HomeContentTests: XCTestCase {
         XCTAssertEqual(presentation.completedAt, date(2026, 8, 19, hour: 1))
     }
 
+    func testPastWorkoutReviewFallsBackToStartDateWithoutCompletionDate() {
+        let startedAt = date(2026, 8, 19, hour: 10)
+        let completedWorkout = WorkoutSession(
+            title: "Workout Without End Date",
+            startedAt: startedAt,
+            status: .completed,
+            source: .blank
+        )
+
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+
+        XCTAssertEqual(presentation.completedAt, startedAt)
+    }
+
     func testPastWorkoutReviewCountsEverySetThatWillBeCopied() {
         let completedWorkout = WorkoutSession(
             title: "Push Day",
