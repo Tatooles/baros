@@ -247,3 +247,29 @@ struct PreviousSetPerformance: Equatable {
         }
     }
 }
+
+enum PreviousSetsCacheReloadPolicy {
+    static func shouldReload<ID: Hashable>(
+        insertedIDs: Set<ID>,
+        updatedIDs: Set<ID>,
+        deletedIDs: Set<ID>,
+        activeGraphIDs: Set<ID>,
+        activeStructureChanged: Bool = false,
+        invalidatedAllIdentifiers: Bool = false
+    ) -> Bool {
+        if invalidatedAllIdentifiers
+            || activeStructureChanged
+            || !insertedIDs.isEmpty
+            || !deletedIDs.isEmpty {
+            return true
+        }
+
+        return !updatedIDs.isSubset(of: activeGraphIDs)
+    }
+}
+
+struct PreviousSetsCacheReloadTrigger: Equatable {
+    let sessionID: UUID
+    let ownerTokenIdentifier: String?
+    let lastSyncedAt: Date?
+}

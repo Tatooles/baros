@@ -291,7 +291,6 @@ struct WorkoutSessionView: View {
                     PreviousSetsCacheLoader(session: session) {
                         cachedPreviousSets = $0
                     }
-                    .equatable()
                 }
                 .frame(width: 0, height: 0)
             }
@@ -480,39 +479,165 @@ private struct WorkoutFocusOrderLoader: View, @MainActor Equatable {
     }
 }
 
-/// Owns the completed-history query and cache-key construction so focus-only
-/// updates in the 50-set form cannot scan history.
-private struct PreviousSetsCacheLoader: View, @MainActor Equatable {
+/// Fetches completed history only when one of its inputs changes. A query-backed
+/// child still refreshes its fetch during focus-only SwiftUI updates, so this
+/// loader listens to model saves and ignores value edits confined to the active
+/// workout graph.
+private struct PreviousSetsCacheLoader: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(SyncScheduler.self) private var syncScheduler
-    @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
+    @State private var cache = PreviousSetsCacheLoaderCache()
 
     let session: WorkoutSession
     let onUpdate: ([UUID: [PreviousSetPerformance]]) -> Void
 
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.session.id == rhs.session.id
-    }
-
     var body: some View {
-        let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
-        let cacheKey = PreviousSetPerformance.CacheKey(
-            session: session,
-            sessions: sessions,
-            ownerTokenIdentifier: ownerTokenIdentifier,
+        let reloadTrigger = PreviousSetsCacheReloadTrigger(
+            sessionID: session.id,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
             lastSyncedAt: syncScheduler.lastSyncedAt
         )
 
         Color.clear
-            .onChange(of: cacheKey, initial: true) { _, _ in
-                onUpdate(
-                    PreviousSetPerformance.lastCompletedSetsByExerciseID(
-                        for: session.sortedLoggedExercises,
-                        in: sessions,
-                        ownerTokenIdentifier: ownerTokenIdentifier,
-                        sourceSessionID: session.source == .pastWorkout ? session.sourceSessionID : nil
-                    )
+            .onChange(of: reloadTrigger, initial: true) { _, trigger in
+                cache.reload(
+                    session: session,
+                    context: modelContext,
+                    ownerTokenIdentifier: trigger.ownerTokenIdentifier,
+                    lastSyncedAt: trigger.lastSyncedAt,
+                    onUpdate: onUpdate
                 )
             }
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
+                let changes = PreviousSetsCacheSaveChanges(notification: notification)
+                let activeGraphIDs = cache.activeGraphIDs(for: session)
+                let activeStructureChanged = cache.activeStructureChanged(for: session)
+
+                guard PreviousSetsCacheReloadPolicy.shouldReload(
+                    insertedIDs: changes.insertedIDs,
+                    updatedIDs: changes.updatedIDs,
+                    deletedIDs: changes.deletedIDs,
+                    activeGraphIDs: activeGraphIDs,
+                    activeStructureChanged: activeStructureChanged,
+                    invalidatedAllIdentifiers: changes.invalidatedAllIdentifiers
+                ) else { return }
+
+                cache.reload(
+                    session: session,
+                    context: modelContext,
+                    ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                    lastSyncedAt: syncScheduler.lastSyncedAt,
+                    onUpdate: onUpdate
+                )
+            }
+    }
+}
+
+struct PreviousSetsCacheSaveChanges {
+    let insertedIDs: Set<PersistentIdentifier>
+    let updatedIDs: Set<PersistentIdentifier>
+    let deletedIDs: Set<PersistentIdentifier>
+    let invalidatedAllIdentifiers: Bool
+
+    init(notification: Notification) {
+        insertedIDs = Self.identifiers(for: .insertedIdentifiers, in: notification)
+        updatedIDs = Self.identifiers(for: .updatedIdentifiers, in: notification)
+        deletedIDs = Self.identifiers(for: .deletedIdentifiers, in: notification)
+        invalidatedAllIdentifiers = notification.userInfo?[
+            ModelContext.NotificationKey.invalidatedAllIdentifiers.rawValue
+        ] as? Bool ?? false
+    }
+
+    private static func identifiers(
+        for key: ModelContext.NotificationKey,
+        in notification: Notification
+    ) -> Set<PersistentIdentifier> {
+        let value = notification.userInfo?[key.rawValue]
+        if let identifiers = value as? Set<PersistentIdentifier> {
+            return identifiers
+        }
+        if let identifiers = value as? [PersistentIdentifier] {
+            return Set(identifiers)
+        }
+        return []
+    }
+}
+
+@MainActor
+private final class PreviousSetsCacheLoaderCache {
+    private struct ActiveStructureKey: Equatable {
+        private struct ExerciseEntry: Equatable {
+            let id: UUID
+            let routeID: String
+            let sourceLoggedExerciseID: UUID?
+            let setIDs: [UUID]
+        }
+
+        let sessionID: UUID
+        let sourceSessionID: UUID?
+        private let exerciseEntries: [ExerciseEntry]
+
+        init(session: WorkoutSession) {
+            sessionID = session.id
+            sourceSessionID = session.source == .pastWorkout ? session.sourceSessionID : nil
+            exerciseEntries = session.sortedLoggedExercises.map { loggedExercise in
+                ExerciseEntry(
+                    id: loggedExercise.id,
+                    routeID: ExerciseHistoryRoute(loggedExercise: loggedExercise).id,
+                    sourceLoggedExerciseID: loggedExercise.sourceLoggedExerciseID,
+                    setIDs: loggedExercise.sortedSets.map(\.id)
+                )
+            }
+        }
+    }
+
+    private var activeStructureKey: ActiveStructureKey?
+    private var cacheKey: PreviousSetPerformance.CacheKey?
+
+    func activeGraphIDs(for session: WorkoutSession) -> Set<PersistentIdentifier> {
+        var identifiers: Set<PersistentIdentifier> = [session.persistentModelID]
+        for loggedExercise in session.loggedExercises {
+            identifiers.insert(loggedExercise.persistentModelID)
+            identifiers.formUnion(loggedExercise.sets.map(\.persistentModelID))
+        }
+        return identifiers
+    }
+
+    func activeStructureChanged(for session: WorkoutSession) -> Bool {
+        ActiveStructureKey(session: session) != activeStructureKey
+    }
+
+    func reload(
+        session: WorkoutSession,
+        context: ModelContext,
+        ownerTokenIdentifier: String?,
+        lastSyncedAt: Date?,
+        onUpdate: ([UUID: [PreviousSetPerformance]]) -> Void
+    ) {
+        let descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        guard let sessions = try? context.fetch(descriptor) else { return }
+
+        let nextActiveStructureKey = ActiveStructureKey(session: session)
+        let nextCacheKey = PreviousSetPerformance.CacheKey(
+            session: session,
+            sessions: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            lastSyncedAt: lastSyncedAt
+        )
+        activeStructureKey = nextActiveStructureKey
+        guard nextCacheKey != cacheKey else { return }
+
+        cacheKey = nextCacheKey
+        onUpdate(
+            PreviousSetPerformance.lastCompletedSetsByExerciseID(
+                for: session.sortedLoggedExercises,
+                in: sessions,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                sourceSessionID: session.source == .pastWorkout ? session.sourceSessionID : nil
+            )
+        )
     }
 }
 
