@@ -276,9 +276,11 @@ struct WorkoutSessionView: View {
                 ZStack {
                     WorkoutFocusOrderLoader(
                         session: session,
-                        collapsedExerciseIDs: collapsedExerciseIDs,
-                        revealedExerciseNoteIDs: revealedExerciseNoteIDs,
-                        isWorkoutNoteRevealed: isWorkoutNoteRevealed
+                        inputs: WorkoutFocusNavigator.StructureInputs(
+                            collapsedExerciseIDs: collapsedExerciseIDs,
+                            revealedExerciseNoteIDs: revealedExerciseNoteIDs,
+                            isWorkoutNoteRevealed: isWorkoutNoteRevealed
+                        )
                     ) { order in
                         cachedFocusOrder = order
                         focusTransitionCoordinator.updateFocusOrder(order)
@@ -450,25 +452,19 @@ struct WorkoutSessionView: View {
 /// disclosure changes. Focus-only parent updates do not reconstruct it.
 private struct WorkoutFocusOrderLoader: View, @MainActor Equatable {
     let session: WorkoutSession
-    let collapsedExerciseIDs: Set<UUID>
-    let revealedExerciseNoteIDs: Set<UUID>
-    let isWorkoutNoteRevealed: Bool
+    let inputs: WorkoutFocusNavigator.StructureInputs
     let onUpdate: ([WorkoutField]) -> Void
     @State private var cache = WorkoutFocusOrderCache()
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.session.id == rhs.session.id
-            && lhs.collapsedExerciseIDs == rhs.collapsedExerciseIDs
-            && lhs.revealedExerciseNoteIDs == rhs.revealedExerciseNoteIDs
-            && lhs.isWorkoutNoteRevealed == rhs.isWorkoutNoteRevealed
+            && lhs.inputs == rhs.inputs
     }
 
     var body: some View {
         let structureKey = WorkoutFocusNavigator.StructureKey(
             session: session,
-            collapsedExerciseIDs: collapsedExerciseIDs,
-            revealedExerciseNoteIDs: revealedExerciseNoteIDs,
-            isWorkoutNoteRevealed: isWorkoutNoteRevealed
+            inputs: inputs
         )
 
         Color.clear
@@ -476,9 +472,7 @@ private struct WorkoutFocusOrderLoader: View, @MainActor Equatable {
                 onUpdate(
                     cache.update(
                         for: session,
-                        collapsedExerciseIDs: collapsedExerciseIDs,
-                        revealedExerciseNoteIDs: revealedExerciseNoteIDs,
-                        isWorkoutNoteRevealed: isWorkoutNoteRevealed,
+                        inputs: inputs,
                         structureKey: structureKey
                     )
                 )

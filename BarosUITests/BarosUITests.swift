@@ -350,7 +350,7 @@ final class BarosUITests: XCTestCase {
         let app = makeApp(extraArguments: ["--uitest-disable-animations"])
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         addBenchPress(in: app)
 
@@ -373,7 +373,7 @@ final class BarosUITests: XCTestCase {
         let app = makeDiskBackedResetApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         addBenchPress(in: app)
 
@@ -753,7 +753,6 @@ final class BarosUITests: XCTestCase {
         dismissKeyboardIfNeeded(in: app)
         addExercise("ExercisePickerRow-Bench Press-Barbell", in: app)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
-
         let addedExerciseHeader = app.buttons["ExerciseHeader-1"]
         XCTAssertTrue(addedExerciseHeader.waitForExistence(timeout: 3))
         XCTAssertTrue(
@@ -1092,7 +1091,7 @@ final class BarosUITests: XCTestCase {
         let app = makeDiskBackedResetApp()
         app.launch()
 
-        app.buttons["StartBlankWorkoutButton"].tap()
+        startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
         addBenchPress(in: app)
 

@@ -6,10 +6,7 @@ enum UITestFixtureSeeder {
     static let completedBenchWorkoutArgument = "--uitest-seed-completed-bench-workout"
     static let historyExerciseNoteArgument = "--uitest-seed-history-exercise-note"
     static let exerciseHistoryPerformanceArgument = "--uitest-seed-exercise-history-performance"
-    // Keep the historical profiling argument as the canonical recipe; the descriptive
-    // alias makes ad-hoc focused UI runs self-documenting.
     static let largeActiveWorkoutArgument = "--uitest-seed-large-active-workout"
-    static let activeWorkoutPerformanceArgument = "--uitest-seed-active-workout-performance"
     static let largeActiveWorkoutTitle = "Performance Workout 10x5"
 
     static func seedFixtures(
@@ -35,8 +32,7 @@ enum UITestFixtureSeeder {
             )
         }
 
-        if arguments.contains(largeActiveWorkoutArgument)
-            || arguments.contains(activeWorkoutPerformanceArgument) {
+        if arguments.contains(largeActiveWorkoutArgument) {
             try seedActiveWorkoutPerformanceFixture(
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context
@@ -165,8 +161,7 @@ enum UITestFixtureSeeder {
 
     static func seedActiveWorkoutPerformanceFixture(
         ownerTokenIdentifier: String? = nil,
-        context: ModelContext,
-        now: Date = .now
+        context: ModelContext
     ) throws {
         let exercises = try context.fetch(
             FetchDescriptor<Exercise>(sortBy: [SortDescriptor(\Exercise.name)])
@@ -174,7 +169,7 @@ enum UITestFixtureSeeder {
         let fixtureExercises = Array(exercises.prefix(10))
         guard fixtureExercises.count == 10 else { return }
 
-        let baseDate = now.addingTimeInterval(-30 * 60)
+        let baseDate = Date(timeIntervalSince1970: 1_700_100_000)
         let activeTitle = largeActiveWorkoutTitle
         let existingSessions = try context.fetch(FetchDescriptor<WorkoutSession>())
         guard !existingSessions.contains(where: {
@@ -192,7 +187,7 @@ enum UITestFixtureSeeder {
             exercises: fixtureExercises,
             setCount: 5,
             ownerTokenIdentifier: ownerTokenIdentifier,
-            idPrefix: "00000000-0000-4000-8000-0000001"
+            stableIDSeed: "00000000-0000-4000-8000-0000001"
         )
         context.insert(activeSession)
 
@@ -206,7 +201,7 @@ enum UITestFixtureSeeder {
                 exercises: fixtureExercises,
                 setCount: 5,
                 ownerTokenIdentifier: ownerTokenIdentifier,
-                idPrefix: String(format: "00000000-0000-4000-8001-%07d", sessionIndex + 1)
+                stableIDSeed: String(format: "00000000-0000-4000-8001-%07d", sessionIndex + 1)
             )
             context.insert(completedSession)
         }
@@ -222,13 +217,13 @@ enum UITestFixtureSeeder {
         exercises: [Exercise],
         setCount: Int,
         ownerTokenIdentifier: String?,
-        idPrefix: String
+        stableIDSeed: String
     ) -> WorkoutSession {
         let endedAt = status == .completed ? startedAt.addingTimeInterval(3_600) : nil
         let loggedExercises = exercises.enumerated().map { exerciseIndex, exercise in
             let sets = (0..<setCount).map { setIndex in
                 LoggedSet(
-                    id: stableUUID("\(idPrefix)-\(exerciseIndex)-\(setIndex)"),
+                    id: stableUUID("\(stableIDSeed)-\(exerciseIndex)-\(setIndex)"),
                     orderIndex: setIndex,
                     weight: Double(100 + exerciseIndex),
                     reps: 5,
@@ -240,7 +235,7 @@ enum UITestFixtureSeeder {
                 )
             }
             return LoggedExercise(
-                id: stableUUID("\(idPrefix)-exercise-\(exerciseIndex)"),
+                id: stableUUID("\(stableIDSeed)-exercise-\(exerciseIndex)"),
                 orderIndex: exerciseIndex,
                 exercise: exercise,
                 exerciseSnapshotName: exercise.name,

@@ -1,6 +1,12 @@
 import Foundation
 
 enum WorkoutFocusNavigator {
+    struct StructureInputs: Equatable {
+        var collapsedExerciseIDs: Set<UUID> = []
+        var revealedExerciseNoteIDs: Set<UUID> = []
+        var isWorkoutNoteRevealed = false
+    }
+
     struct StructureKey: Equatable {
         private struct ExerciseEntry: Equatable {
             let id: UUID
@@ -14,44 +20,40 @@ enum WorkoutFocusNavigator {
 
         init(
             session: WorkoutSession,
-            collapsedExerciseIDs: Set<UUID>,
-            revealedExerciseNoteIDs: Set<UUID>,
-            isWorkoutNoteRevealed: Bool
+            inputs: StructureInputs
         ) {
             exerciseEntries = session.sortedLoggedExercises.map { loggedExercise in
                 ExerciseEntry(
                     id: loggedExercise.id,
                     setIDs: loggedExercise.sortedSets.map(\.id),
-                    includesNotes: revealedExerciseNoteIDs.contains(loggedExercise.id)
+                    includesNotes: inputs.revealedExerciseNoteIDs.contains(loggedExercise.id)
                         || !loggedExercise.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 )
             }
-            self.collapsedExerciseIDs = collapsedExerciseIDs
-            includesWorkoutNotes = isWorkoutNoteRevealed
+            collapsedExerciseIDs = inputs.collapsedExerciseIDs
+            includesWorkoutNotes = inputs.isWorkoutNoteRevealed
                 || !session.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
 
     static func focusOrder(
         for session: WorkoutSession,
-        collapsedExerciseIDs: Set<UUID> = [],
-        revealedExerciseNoteIDs: Set<UUID> = [],
-        isWorkoutNoteRevealed: Bool = false
+        inputs: StructureInputs = StructureInputs()
     ) -> [WorkoutField] {
         var fields: [WorkoutField] = [.workoutTitle]
-        if isWorkoutNoteRevealed
+        if inputs.isWorkoutNoteRevealed
             || !session.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             fields.append(.workoutNotes)
         }
 
         for loggedExercise in session.sortedLoggedExercises {
-            guard !collapsedExerciseIDs.contains(loggedExercise.id) else { continue }
+            guard !inputs.collapsedExerciseIDs.contains(loggedExercise.id) else { continue }
 
             for set in loggedExercise.sortedSets {
                 fields.append(.setWeight(set.id))
                 fields.append(.setReps(set.id))
             }
-            if revealedExerciseNoteIDs.contains(loggedExercise.id)
+            if inputs.revealedExerciseNoteIDs.contains(loggedExercise.id)
                 || !loggedExercise.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 fields.append(.exerciseNotes(loggedExercise.id))
             }
@@ -86,20 +88,14 @@ final class WorkoutFocusOrderCache {
     @discardableResult
     func update(
         for session: WorkoutSession,
-        collapsedExerciseIDs: Set<UUID>,
-        revealedExerciseNoteIDs: Set<UUID>,
-        isWorkoutNoteRevealed: Bool
+        inputs: WorkoutFocusNavigator.StructureInputs
     ) -> [WorkoutField] {
         update(
             for: session,
-            collapsedExerciseIDs: collapsedExerciseIDs,
-            revealedExerciseNoteIDs: revealedExerciseNoteIDs,
-            isWorkoutNoteRevealed: isWorkoutNoteRevealed,
+            inputs: inputs,
             structureKey: WorkoutFocusNavigator.StructureKey(
                 session: session,
-                collapsedExerciseIDs: collapsedExerciseIDs,
-                revealedExerciseNoteIDs: revealedExerciseNoteIDs,
-                isWorkoutNoteRevealed: isWorkoutNoteRevealed
+                inputs: inputs
             )
         )
     }
@@ -107,9 +103,7 @@ final class WorkoutFocusOrderCache {
     @discardableResult
     func update(
         for session: WorkoutSession,
-        collapsedExerciseIDs: Set<UUID>,
-        revealedExerciseNoteIDs: Set<UUID>,
-        isWorkoutNoteRevealed: Bool,
+        inputs: WorkoutFocusNavigator.StructureInputs,
         structureKey nextKey: WorkoutFocusNavigator.StructureKey
     ) -> [WorkoutField] {
         guard nextKey != structureKey else { return order }
@@ -117,9 +111,7 @@ final class WorkoutFocusOrderCache {
         structureKey = nextKey
         order = WorkoutFocusNavigator.focusOrder(
             for: session,
-            collapsedExerciseIDs: collapsedExerciseIDs,
-            revealedExerciseNoteIDs: revealedExerciseNoteIDs,
-            isWorkoutNoteRevealed: isWorkoutNoteRevealed
+            inputs: inputs
         )
         rebuildCount += 1
         return order

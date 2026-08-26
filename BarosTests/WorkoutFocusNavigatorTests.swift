@@ -94,8 +94,10 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
 
         let order = WorkoutFocusNavigator.focusOrder(
             for: session,
-            revealedExerciseNoteIDs: [revealedEmptyExercise.id],
-            isWorkoutNoteRevealed: true
+            inputs: .init(
+                revealedExerciseNoteIDs: [revealedEmptyExercise.id],
+                isWorkoutNoteRevealed: true
+            )
         )
 
         XCTAssertEqual(order, [
@@ -122,7 +124,7 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
 
         let order = WorkoutFocusNavigator.focusOrder(
             for: session,
-            collapsedExerciseIDs: [firstExercise.id]
+            inputs: .init(collapsedExerciseIDs: [firstExercise.id])
         )
 
         let expectedOrder: [WorkoutField] = [
@@ -190,15 +192,11 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
 
         let initialOrder = cache.update(
             for: session,
-            collapsedExerciseIDs: [],
-            revealedExerciseNoteIDs: [],
-            isWorkoutNoteRevealed: false
+            inputs: .init()
         )
         _ = cache.update(
             for: session,
-            collapsedExerciseIDs: [],
-            revealedExerciseNoteIDs: [],
-            isWorkoutNoteRevealed: false
+            inputs: .init()
         )
 
         XCTAssertEqual(cache.rebuildCount, 1)
@@ -212,9 +210,7 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         exercise.sets.append(secondSet)
         let addedOrder = cache.update(
             for: session,
-            collapsedExerciseIDs: [],
-            revealedExerciseNoteIDs: [],
-            isWorkoutNoteRevealed: false
+            inputs: .init()
         )
 
         XCTAssertEqual(cache.rebuildCount, 2)
@@ -223,9 +219,7 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         secondSet.markDeleted()
         let removedOrder = cache.update(
             for: session,
-            collapsedExerciseIDs: [],
-            revealedExerciseNoteIDs: [],
-            isWorkoutNoteRevealed: false
+            inputs: .init()
         )
 
         XCTAssertEqual(cache.rebuildCount, 3)
@@ -233,9 +227,11 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
 
         let collapsedOrder = cache.update(
             for: session,
-            collapsedExerciseIDs: [exercise.id],
-            revealedExerciseNoteIDs: [exercise.id],
-            isWorkoutNoteRevealed: true
+            inputs: .init(
+                collapsedExerciseIDs: [exercise.id],
+                revealedExerciseNoteIDs: [exercise.id],
+                isWorkoutNoteRevealed: true
+            )
         )
 
         XCTAssertEqual(cache.rebuildCount, 4)

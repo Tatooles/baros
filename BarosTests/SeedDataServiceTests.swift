@@ -237,11 +237,9 @@ final class SeedDataServiceTests: XCTestCase {
     func testUITestActiveWorkoutPerformanceFixtureCreatesDeterministicWorkload() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
-        let now = Date(timeIntervalSince1970: 1_700_101_800)
-
         try SeedDataService.seedIfNeeded(context: context)
-        try UITestFixtureSeeder.seedActiveWorkoutPerformanceFixture(context: context, now: now)
-        try UITestFixtureSeeder.seedActiveWorkoutPerformanceFixture(context: context, now: now)
+        try UITestFixtureSeeder.seedActiveWorkoutPerformanceFixture(context: context)
+        try UITestFixtureSeeder.seedActiveWorkoutPerformanceFixture(context: context)
 
         let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
         let activeSessions = sessions.filter { $0.status == .active && !$0.isDeleted }
@@ -252,7 +250,6 @@ final class SeedDataServiceTests: XCTestCase {
         let activeSession = try XCTUnwrap(activeSessions.first)
         XCTAssertEqual(activeSession.title, "Performance Workout 10x5")
         XCTAssertEqual(activeSession.id, UUID(uuidString: "00000000-0000-4000-8000-000000000001"))
-        XCTAssertEqual(activeSession.startedAt, now.addingTimeInterval(-30 * 60))
         XCTAssertEqual(activeSession.sortedLoggedExercises.count, 10)
         XCTAssertTrue(activeSession.sortedLoggedExercises.allSatisfy { $0.sortedSets.count == 5 })
         XCTAssertTrue(activeSession.sortedLoggedExercises.allSatisfy { $0.sortedSets.allSatisfy { !$0.isCompleted } })
