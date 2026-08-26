@@ -8,11 +8,13 @@ struct SetRowView: View {
     let exerciseIndex: Int
     let index: Int
     @Bindable var engine: ActiveWorkoutEngine
+    let fieldCommitRegistry: WorkoutFieldCommitRegistry
     var focusedField: FocusState<WorkoutField?>.Binding
     let weightUnit: MeasurementUnit
     let previous: PreviousSetPerformance?
     let onEditRPE: (LoggedSet) -> Void
     @State private var input = ActiveWorkoutSetInput()
+    @State private var commitRegistrationID: UUID?
 
     var body: some View {
         SwipeToDeleteRow(
@@ -36,16 +38,20 @@ struct SetRowView: View {
                 standardRowContent
             }
         }
-        .onChange(of: focusedField.wrappedValue) { previousField, newField in
-            let ownFields: [WorkoutField] = [.setWeight(set.id), .setReps(set.id)]
-            if let previousField, ownFields.contains(previousField), previousField != newField {
+        .onAppear {
+            guard commitRegistrationID == nil else { return }
+            commitRegistrationID = fieldCommitRegistry.register(fields: ownFields) {
                 commitDraftsIfNeeded()
             }
         }
         .onDisappear {
             // Rows can leave the tree mid-edit (collapse, delete, finish); the
-            // focus-change commit no longer fires for them, so flush here.
+            // central focus transition can no longer reach them, so flush here.
             commitDraftsIfNeeded()
+            if let commitRegistrationID {
+                fieldCommitRegistry.unregister(commitRegistrationID)
+                self.commitRegistrationID = nil
+            }
         }
     }
 
@@ -156,11 +162,9 @@ struct SetRowView: View {
         let commit = input.commit(current: inputValues, weightUnit: weightUnit)
         guard commit.shouldPersist else { return commit }
 
-        try? engine.updateSet(
+        _ = try? engine.commitActiveSetDraft(
             set,
-            weight: commit.values.weight,
-            reps: commit.values.reps,
-            rpe: set.rpe,
+            values: commit.values,
             context: modelContext
         )
         return commit
@@ -306,6 +310,10 @@ struct SetRowView: View {
 
     private var inputValues: ActiveWorkoutSetInput.Values {
         ActiveWorkoutSetInput.Values(weight: set.weight, reps: set.reps)
+    }
+
+    private var ownFields: [WorkoutField] {
+        [.setWeight(set.id), .setReps(set.id)]
     }
 
     private func clearFocusedFieldForThisSet() {

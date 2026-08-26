@@ -27,11 +27,13 @@ struct WorkoutSessionView: View {
     @State private var collapsedExerciseIDs: Set<UUID> = []
     @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var isWorkoutNoteRevealed = false
+    @State private var cachedFocusOrder: [WorkoutField] = []
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
     @State private var rpeEditingSourceField: WorkoutField?
+    @State private var fieldCommitRegistry = WorkoutFieldCommitRegistry()
+    @State private var focusTransitionCoordinator = WorkoutFocusTransitionCoordinator()
     @FocusState private var focusedField: WorkoutField?
-    @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
     private var contentBottomPadding: CGFloat {
@@ -106,12 +108,13 @@ struct WorkoutSessionView: View {
                             engine: engine,
                             isCollapsed: isCollapsedBinding(for: loggedExercise),
                             isNoteRevealed: isNoteRevealedBinding(for: loggedExercise),
+                            fieldCommitRegistry: fieldCommitRegistry,
                             focusedField: $focusedField,
                             weightUnit: weightUnit,
                             previousSets: cachedPreviousSets[loggedExercise.id] ?? [],
                             canReorder: canReorderExercises,
                             viewHistory: {
-                                focusedField = nil
+                                resignFocus()
                                 selectedHistoryExercise = loggedExercise
                             },
                             onReorderExercises: {
@@ -144,29 +147,19 @@ struct WorkoutSessionView: View {
                 .padding(.bottom, contentBottomPadding)
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                    let metrics = WorkoutMetrics(session: session, now: timeline.date)
-                    WorkoutHeaderView(
-                        elapsedSeconds: metrics.durationSeconds,
-                        completedSets: metrics.completedSetCount,
-                        totalSets: metrics.totalSetCount,
-                        onFinish: {
-                            // Flush any in-progress field edit through the
-                            // commit path before the finish sheet reads the model.
-                            focusedField = nil
-                            isFinishSheetPresented = true
-                        }
-                    )
+                ActiveWorkoutMetricsHeader(session: session) {
+                    // Flush any in-progress field edit through the commit path
+                    // before the finish sheet reads the model.
+                    resignFocus()
+                    isFinishSheetPresented = true
                 }
-            }
-            .onChange(of: previousSetsCacheKey, initial: true) { _, _ in
-                cachedPreviousSets = previousSetsByExerciseID(for: session.sortedLoggedExercises)
+                .equatable()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 // Resigning focus routes pending drafts through the normal
                 // commit path before the app is backgrounded or suspended.
                 if newPhase != .active, focusedField != nil {
-                    focusedField = nil
+                    resignFocus()
                 }
             }
             .onChange(of: isAddExercisePresented) { _, isPresented in
@@ -178,18 +171,28 @@ struct WorkoutSessionView: View {
                 self.pendingFocusedField = nil
                 recentlyAddedExerciseID = scrollTarget
 
-                Task { @MainActor in
-                    self.focusedField = focusedField
-
-                    if let scrollTarget {
-                        try? await Task.sleep(for: .milliseconds(350))
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-                            scrollProxy.scrollTo(scrollTarget, anchor: .top)
+                focusTransitionCoordinator.transition(
+                    to: focusedField,
+                    delay: .milliseconds(350),
+                    commit: fieldCommitRegistry.commit,
+                    assign: { self.focusedField = $0 },
+                    reveal: { _ in
+                        if let scrollTarget {
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
+                                scrollProxy.scrollTo(scrollTarget, anchor: .top)
+                            }
                         }
                     }
-                }
+                )
             }
-            .onChange(of: focusedField) { _, newField in
+            .onChange(of: focusedField) { previousField, newField in
+                focusTransitionCoordinator.observeFocusChange(
+                    from: previousField,
+                    to: newField,
+                    commit: fieldCommitRegistry.commit,
+                    reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
+                )
+
                 if RPEEditingFocusPolicy.shouldReset(editingSetID: rpeEditingSetID, newFocusedField: newField) {
                     rpeEditingSetID = nil
                     rpeEditingSourceField = nil
@@ -202,15 +205,6 @@ struct WorkoutSessionView: View {
                     // field or dismissing focus.
                     recentlyAddedExerciseID = nil
                 }
-
-                if let newField, !shouldRetainNewExerciseReveal {
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(250))
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                            scrollProxy.scrollTo(newField, anchor: Self.focusRevealAnchor)
-                        }
-                    }
-                }
             }
             .toolbar {
                 if !isChildPresentationActive {
@@ -219,7 +213,11 @@ struct WorkoutSessionView: View {
                             RPEChipRow(
                                 selected: editingSet?.rpe,
                                 onSelect: { value in
-                                    let nextField = rpeNextFocusedField
+                                    let nextField = WorkoutFocusNavigator.adjacentField(
+                                        from: rpeEditingSourceField ?? focusTransitionCoordinator.currentField,
+                                        in: cachedFocusOrder,
+                                        offset: 1
+                                    )
                                     if let set = editingSet {
                                         try? RPEChipSelectionAction.apply(
                                             value: value,
@@ -230,36 +228,33 @@ struct WorkoutSessionView: View {
                                     }
                                     rpeEditingSetID = nil
                                     rpeEditingSourceField = nil
-                                    focusedField = nextField
+                                    transitionFocus(to: nextField, scrollProxy: scrollProxy)
                                 }
                             )
                         } else {
-                            let previousField = previousFocusedField
-                            let nextField = nextFocusedField
-
                             Button {
-                                focusedField = previousField
+                                moveFocus(offset: -1, scrollProxy: scrollProxy)
                             } label: {
                                 Image(systemName: "chevron.up")
                                     .font(.system(size: 16, weight: .semibold))
                             }
-                            .disabled(previousField == nil)
+                            .disabled(previousFocusedField == nil)
                             .accessibilityLabel("Previous field")
                             .accessibilityIdentifier("PreviousWorkoutFieldButton")
 
                             Button {
-                                focusedField = nextField
+                                moveFocus(offset: 1, scrollProxy: scrollProxy)
                             } label: {
                                 Image(systemName: "chevron.down")
                                     .font(.system(size: 16, weight: .semibold))
                             }
-                            .disabled(nextField == nil)
+                            .disabled(nextFocusedField == nil)
                             .accessibilityLabel("Next field")
                             .accessibilityIdentifier("NextWorkoutFieldButton")
 
                             if let focusedSetID {
                                 Button("RPE") {
-                                    rpeEditingSourceField = focusedField
+                                    rpeEditingSourceField = focusTransitionCoordinator.currentField
                                     rpeEditingSetID = focusedSetID
                                 }
                                 .font(.system(size: 16, weight: .semibold))
@@ -269,7 +264,7 @@ struct WorkoutSessionView: View {
                             Spacer()
 
                             Button("Done") {
-                                focusedField = nil
+                                resignFocus()
                             }
                             .font(.system(size: 16, weight: .semibold))
                             .accessibilityIdentifier("DismissKeyboardButton")
@@ -277,18 +272,40 @@ struct WorkoutSessionView: View {
                     }
                 }
             }
+            .background {
+                ZStack {
+                    WorkoutFocusOrderLoader(
+                        session: session,
+                        collapsedExerciseIDs: collapsedExerciseIDs,
+                        revealedExerciseNoteIDs: revealedExerciseNoteIDs,
+                        isWorkoutNoteRevealed: isWorkoutNoteRevealed
+                    ) { order in
+                        cachedFocusOrder = order
+                        focusTransitionCoordinator.updateFocusOrder(order)
+                        focusTransitionCoordinator.synchronizeFocus(focusedField)
+                    }
+                    .equatable()
+
+                    PreviousSetsCacheLoader(session: session) {
+                        cachedPreviousSets = $0
+                    }
+                    .equatable()
+                }
+                .frame(width: 0, height: 0)
+            }
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
+            focusTransitionCoordinator.synchronizeFocus(focusedField)
             onMinimizePreparationChanged {
                 // Resigning focus commits leaf-owned drafts before the shell
                 // transitions this session into its minimized presentation.
-                focusedField = nil
+                resignFocus()
             }
         }
         .onDisappear {
-            focusedField = nil
+            resignFocus()
             onMinimizePreparationChanged(nil)
         }
         .sheet(isPresented: $isFinishSheetPresented) {
@@ -312,15 +329,6 @@ struct WorkoutSessionView: View {
         }
     }
 
-    private var focusOrder: [WorkoutField] {
-        WorkoutFocusNavigator.focusOrder(
-            for: session,
-            collapsedExerciseIDs: collapsedExerciseIDs,
-            revealedExerciseNoteIDs: revealedExerciseNoteIDs,
-            isWorkoutNoteRevealed: isWorkoutNoteRevealed
-        )
-    }
-
     private var isChildPresentationActive: Bool {
         isFinishSheetPresented
             || isReorderExercisesPresented
@@ -328,39 +336,18 @@ struct WorkoutSessionView: View {
             || selectedHistoryExercise != nil
     }
 
-    // The lookup scans completed history, so it is cached in @State and
-    // recomputed only when its inputs change (see CacheKey) rather than on
-    // every body evaluation.
-    private var previousSetsCacheKey: PreviousSetPerformance.CacheKey {
-        PreviousSetPerformance.CacheKey(
-            session: session,
-            sessions: sessions,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
-            lastSyncedAt: syncScheduler.lastSyncedAt
-        )
-    }
-
-    private func previousSetsByExerciseID(for loggedExercises: [LoggedExercise]) -> [UUID: [PreviousSetPerformance]] {
-        PreviousSetPerformance.lastCompletedSetsByExerciseID(
-            for: loggedExercises,
-            in: sessions,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
-            sourceSessionID: session.source == .pastWorkout ? session.sourceSessionID : nil
-        )
-    }
-
     private var previousFocusedField: WorkoutField? {
-        WorkoutFocusNavigator.adjacentField(from: focusedField, in: focusOrder, offset: -1)
+        WorkoutFocusNavigator.adjacentField(
+            from: focusedField,
+            in: cachedFocusOrder,
+            offset: -1
+        )
     }
 
     private var nextFocusedField: WorkoutField? {
-        WorkoutFocusNavigator.adjacentField(from: focusedField, in: focusOrder, offset: 1)
-    }
-
-    private var rpeNextFocusedField: WorkoutField? {
         WorkoutFocusNavigator.adjacentField(
-            from: rpeEditingSourceField ?? focusedField,
-            in: focusOrder,
+            from: focusedField,
+            in: cachedFocusOrder,
             offset: 1
         )
     }
@@ -390,7 +377,7 @@ struct WorkoutSessionView: View {
             set: { isCollapsed in
                 if isCollapsed {
                     if focusedField == .exerciseNotes(loggedExercise.id) {
-                        focusedField = nil
+                        resignFocus()
                     }
                     revealedExerciseNoteIDs.remove(loggedExercise.id)
                     collapsedExerciseIDs.insert(loggedExercise.id)
@@ -414,6 +401,39 @@ struct WorkoutSessionView: View {
         )
     }
 
+    private func moveFocus(offset: Int, scrollProxy: ScrollViewProxy) {
+        focusTransitionCoordinator.move(
+            offset: offset,
+            commit: fieldCommitRegistry.commit,
+            assign: { focusedField = $0 },
+            reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
+        )
+    }
+
+    private func transitionFocus(to target: WorkoutField?, scrollProxy: ScrollViewProxy) {
+        focusTransitionCoordinator.transition(
+            to: target,
+            commit: fieldCommitRegistry.commit,
+            assign: { focusedField = $0 },
+            reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
+        )
+    }
+
+    private func resignFocus() {
+        focusTransitionCoordinator.transition(
+            to: nil,
+            commit: fieldCommitRegistry.commit,
+            assign: { focusedField = $0 },
+            reveal: { _ in }
+        )
+    }
+
+    private func revealFocusedField(_ field: WorkoutField, scrollProxy: ScrollViewProxy) {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+            scrollProxy.scrollTo(field, anchor: Self.focusRevealAnchor)
+        }
+    }
+
     private static func isSetField(_ field: WorkoutField?) -> Bool {
         switch field {
         case .setWeight, .setReps:
@@ -424,6 +444,110 @@ struct WorkoutSessionView: View {
     }
 
     private static let focusRevealAnchor = UnitPoint(x: 0.5, y: 0.72)
+}
+
+/// Rebuilds the keyboard route only when structure, collapse, or note
+/// disclosure changes. Focus-only parent updates do not reconstruct it.
+private struct WorkoutFocusOrderLoader: View, @MainActor Equatable {
+    let session: WorkoutSession
+    let collapsedExerciseIDs: Set<UUID>
+    let revealedExerciseNoteIDs: Set<UUID>
+    let isWorkoutNoteRevealed: Bool
+    let onUpdate: ([WorkoutField]) -> Void
+    @State private var cache = WorkoutFocusOrderCache()
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.session.id == rhs.session.id
+            && lhs.collapsedExerciseIDs == rhs.collapsedExerciseIDs
+            && lhs.revealedExerciseNoteIDs == rhs.revealedExerciseNoteIDs
+            && lhs.isWorkoutNoteRevealed == rhs.isWorkoutNoteRevealed
+    }
+
+    var body: some View {
+        let structureKey = WorkoutFocusNavigator.StructureKey(
+            session: session,
+            collapsedExerciseIDs: collapsedExerciseIDs,
+            revealedExerciseNoteIDs: revealedExerciseNoteIDs,
+            isWorkoutNoteRevealed: isWorkoutNoteRevealed
+        )
+
+        Color.clear
+            .onChange(of: structureKey, initial: true) { _, _ in
+                onUpdate(
+                    cache.update(
+                        for: session,
+                        collapsedExerciseIDs: collapsedExerciseIDs,
+                        revealedExerciseNoteIDs: revealedExerciseNoteIDs,
+                        isWorkoutNoteRevealed: isWorkoutNoteRevealed,
+                        structureKey: structureKey
+                    )
+                )
+            }
+    }
+}
+
+/// Owns the completed-history query and cache-key construction so focus-only
+/// updates in the 50-set form cannot scan history.
+private struct PreviousSetsCacheLoader: View, @MainActor Equatable {
+    @Environment(SyncScheduler.self) private var syncScheduler
+    @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
+
+    let session: WorkoutSession
+    let onUpdate: ([UUID: [PreviousSetPerformance]]) -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.session.id == rhs.session.id
+    }
+
+    var body: some View {
+        let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
+        let cacheKey = PreviousSetPerformance.CacheKey(
+            session: session,
+            sessions: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            lastSyncedAt: syncScheduler.lastSyncedAt
+        )
+
+        Color.clear
+            .onChange(of: cacheKey, initial: true) { _, _ in
+                onUpdate(
+                    PreviousSetPerformance.lastCompletedSetsByExerciseID(
+                        for: session.sortedLoggedExercises,
+                        in: sessions,
+                        ownerTokenIdentifier: ownerTokenIdentifier,
+                        sourceSessionID: session.source == .pastWorkout ? session.sourceSessionID : nil
+                    )
+                )
+            }
+    }
+}
+
+/// Separates the once-per-second duration tick from set aggregation. Set
+/// totals are recomputed only when their value inputs change.
+private struct ActiveWorkoutMetricsHeader: View, @MainActor Equatable {
+    let session: WorkoutSession
+    let onFinish: () -> Void
+    @State private var cachedMetrics: WorkoutMetrics?
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.session.id == rhs.session.id
+    }
+
+    var body: some View {
+        let cacheKey = WorkoutMetrics.CacheKey(session: session)
+
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            WorkoutHeaderView(
+                elapsedSeconds: session.effectiveDurationSeconds(now: timeline.date),
+                completedSets: cachedMetrics?.completedSetCount ?? 0,
+                totalSets: cachedMetrics?.totalSetCount ?? 0,
+                onFinish: onFinish
+            )
+        }
+        .onChange(of: cacheKey, initial: true) { _, _ in
+            cachedMetrics = WorkoutMetrics(session: session, now: session.startedAt)
+        }
+    }
 }
 
 /// Owns the title draft so keystrokes re-render only this leaf, never the

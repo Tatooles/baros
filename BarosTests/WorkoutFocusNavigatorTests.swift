@@ -179,4 +179,138 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
             RPEEditingFocusPolicy.shouldReset(editingSetID: nil, newFocusedField: .setWeight(secondSetID))
         )
     }
+
+    func testFocusOrderCacheInvalidatesOnlyForStructureCollapseAndRevealChanges() {
+        let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
+        let exercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
+        let firstSet = LoggedSet(orderIndex: 0)
+        exercise.sets = [firstSet]
+        session.loggedExercises = [exercise]
+        let cache = WorkoutFocusOrderCache()
+
+        let initialOrder = cache.update(
+            for: session,
+            collapsedExerciseIDs: [],
+            revealedExerciseNoteIDs: [],
+            isWorkoutNoteRevealed: false
+        )
+        _ = cache.update(
+            for: session,
+            collapsedExerciseIDs: [],
+            revealedExerciseNoteIDs: [],
+            isWorkoutNoteRevealed: false
+        )
+
+        XCTAssertEqual(cache.rebuildCount, 1)
+        XCTAssertEqual(initialOrder, [
+            .workoutTitle,
+            .setWeight(firstSet.id),
+            .setReps(firstSet.id),
+        ])
+
+        let secondSet = LoggedSet(orderIndex: 1)
+        exercise.sets.append(secondSet)
+        let addedOrder = cache.update(
+            for: session,
+            collapsedExerciseIDs: [],
+            revealedExerciseNoteIDs: [],
+            isWorkoutNoteRevealed: false
+        )
+
+        XCTAssertEqual(cache.rebuildCount, 2)
+        XCTAssertTrue(addedOrder.contains(.setWeight(secondSet.id)))
+
+        secondSet.markDeleted()
+        let removedOrder = cache.update(
+            for: session,
+            collapsedExerciseIDs: [],
+            revealedExerciseNoteIDs: [],
+            isWorkoutNoteRevealed: false
+        )
+
+        XCTAssertEqual(cache.rebuildCount, 3)
+        XCTAssertFalse(removedOrder.contains(.setWeight(secondSet.id)))
+
+        let collapsedOrder = cache.update(
+            for: session,
+            collapsedExerciseIDs: [exercise.id],
+            revealedExerciseNoteIDs: [exercise.id],
+            isWorkoutNoteRevealed: true
+        )
+
+        XCTAssertEqual(cache.rebuildCount, 4)
+        XCTAssertEqual(collapsedOrder, [.workoutTitle, .workoutNotes])
+    }
+
+    func testRapidMovesResolveFromCoordinatorLiveFocus() {
+        let fields = (0..<12).map { _ in WorkoutField.setWeight(UUID()) }
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
+        coordinator.updateFocusOrder(fields)
+        coordinator.synchronizeFocus(fields[0])
+        var assignedFields: [WorkoutField] = []
+
+        for _ in 0..<10 {
+            coordinator.move(
+                offset: 1,
+                commit: { _ in },
+                assign: { assignedFields.append($0) },
+                reveal: { _ in }
+            )
+        }
+
+        XCTAssertEqual(assignedFields.count, 10)
+        XCTAssertEqual(coordinator.currentField, fields[10])
+    }
+
+    func testLatestFocusRevealRequestCancelsStaleReveal() async {
+        let fields = (0..<3).map { _ in WorkoutField.setWeight(UUID()) }
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .milliseconds(20))
+        coordinator.updateFocusOrder(fields)
+        coordinator.synchronizeFocus(fields[0])
+        var revealedFields: [WorkoutField] = []
+        let revealExpectation = expectation(description: "latest field revealed")
+
+        coordinator.move(
+            offset: 1,
+            commit: { _ in },
+            assign: { _ in },
+            reveal: { revealedFields.append($0) }
+        )
+        coordinator.move(
+            offset: 1,
+            commit: { _ in },
+            assign: { _ in },
+            reveal: {
+                revealedFields.append($0)
+                revealExpectation.fulfill()
+            }
+        )
+
+        await fulfillment(of: [revealExpectation], timeout: 1)
+
+        XCTAssertEqual(revealedFields, [fields[2]])
+    }
+
+    func testTransitioningOutOfAFieldCommitsItsRegisteredDraft() {
+        let field = WorkoutField.setWeight(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
+        let registry = WorkoutFieldCommitRegistry()
+        var commitCount = 0
+        var assignedField: WorkoutField? = field
+        _ = registry.register(fields: [field]) {
+            commitCount += 1
+        }
+        coordinator.synchronizeFocus(field)
+
+        coordinator.transition(
+            to: nil,
+            commit: registry.commit,
+            assign: { assignedField = $0 },
+            reveal: { _ in }
+        )
+
+        XCTAssertEqual(commitCount, 1)
+        XCTAssertNil(coordinator.currentField)
+        XCTAssertNil(assignedField)
+    }
 }
