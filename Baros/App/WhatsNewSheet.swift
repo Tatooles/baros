@@ -11,6 +11,8 @@ struct WhatsNewSheet: View {
         switch sheetID {
         case .version1_0:
             WhatsNewVersion1_0View(onDismiss: onDismiss)
+        case .version1_2:
+            WhatsNewVersion1_2View(onDismiss: onDismiss)
         }
     }
 }

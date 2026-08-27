@@ -64,13 +64,13 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
         XCTAssertEqual(presentation, .onboarding)
     }
 
-    func testExistingUserReceivesUnseenCurrentReleaseHighlights() throws {
-        let release = makeRelease(version: "1.2")
+    func testExistingOneOneUserReceivesUnseenOneTwoReleaseHighlights() throws {
+        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.2"))
 
         let presentation = LaunchExperienceCoordinator.nextPresentation(
             state: LaunchExperienceState(
                 hasCompletedOnboarding: true,
-                lastProcessedAppVersion: "1.0",
+                lastProcessedAppVersion: "1.1",
                 lastSeenWhatsNewVersion: nil
             ),
             currentRelease: release
@@ -133,12 +133,5 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
         )
 
         XCTAssertNil(presentation)
-    }
-
-    private func makeRelease(version: String) -> AppReleaseDefinition {
-        AppReleaseDefinition(
-            version: version,
-            whatsNewSheet: .version1_0
-        )
     }
 }

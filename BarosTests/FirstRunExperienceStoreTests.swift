@@ -36,7 +36,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
     @MainActor
     func testCompletingOnboardingConsumesCurrentReleaseHighlights() throws {
         let store = FirstRunExperienceStore(defaults: defaults)
-        let release = try XCTUnwrap(AppReleaseCatalog.whatsNew(for: "1.0"))
+        let release = try XCTUnwrap(AppReleaseCatalog.whatsNew(for: "1.2"))
 
         store.markOnboardingCompleted(
             currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: release.version))
@@ -46,14 +46,14 @@ final class FirstRunExperienceStoreTests: XCTestCase {
             store.state,
             LaunchExperienceState(
                 hasCompletedOnboarding: true,
-                lastProcessedAppVersion: "1.0",
-                lastSeenWhatsNewVersion: "1.0"
+                lastProcessedAppVersion: "1.2",
+                lastSeenWhatsNewVersion: "1.2"
             )
         )
         XCTAssertNil(
             LaunchExperienceCoordinator.nextPresentation(
                 state: store.state,
-                currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.0"))
+                currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.2"))
             )
         )
     }
@@ -64,7 +64,8 @@ final class FirstRunExperienceStoreTests: XCTestCase {
         store.markOnboardingCompleted(
             currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.0"))
         )
-        let release = makeRelease(version: "1.2")
+        store.markAppVersionProcessed("1.1")
+        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.2"))
         let whatsNew = try XCTUnwrap(release.whatsNew)
 
         XCTAssertEqual(
@@ -141,7 +142,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
             LaunchExperienceState(
                 hasCompletedOnboarding: true,
                 lastProcessedAppVersion: AppBuildInfo.current.version,
-                lastSeenWhatsNewVersion: nil
+                lastSeenWhatsNewVersion: "1.2"
             )
         )
     }
@@ -166,13 +167,6 @@ final class FirstRunExperienceStoreTests: XCTestCase {
                 lastProcessedAppVersion: nil,
                 lastSeenWhatsNewVersion: nil
             )
-        )
-    }
-
-    private func makeRelease(version: String) -> AppReleaseDefinition {
-        AppReleaseDefinition(
-            version: version,
-            whatsNewSheet: .version1_0
         )
     }
 }
