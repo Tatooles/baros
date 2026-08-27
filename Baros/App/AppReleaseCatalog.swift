@@ -2,6 +2,7 @@ import Foundation
 
 enum WhatsNewSheetID: Equatable {
     case version1_0
+    case version1_2
 }
 
 struct WhatsNewRelease: Equatable {
@@ -32,7 +33,7 @@ enum AppReleaseCatalog {
             whatsNewSheet: .version1_0
         ),
         AppReleaseDefinition(version: "1.1", whatsNewSheet: nil),
-        AppReleaseDefinition(version: "1.2", whatsNewSheet: nil),
+        AppReleaseDefinition(version: "1.2", whatsNewSheet: .version1_2),
     ]
 
     static func release(for version: String) -> AppReleaseDefinition? {
