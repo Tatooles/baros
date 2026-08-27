@@ -9,6 +9,7 @@ struct ExerciseCardView: View {
     @Bindable var engine: ActiveWorkoutEngine
     @Binding var isCollapsed: Bool
     @Binding var isNoteRevealed: Bool
+    let fieldCommitRegistry: WorkoutFieldCommitRegistry
     var focusedField: FocusState<WorkoutField?>.Binding
     let weightUnit: MeasurementUnit
     let previousSets: [PreviousSetPerformance]
@@ -24,6 +25,7 @@ struct ExerciseCardView: View {
         engine: ActiveWorkoutEngine,
         isCollapsed: Binding<Bool>,
         isNoteRevealed: Binding<Bool>,
+        fieldCommitRegistry: WorkoutFieldCommitRegistry,
         focusedField: FocusState<WorkoutField?>.Binding,
         weightUnit: MeasurementUnit,
         previousSets: [PreviousSetPerformance],
@@ -37,6 +39,7 @@ struct ExerciseCardView: View {
         self.engine = engine
         self._isCollapsed = isCollapsed
         self._isNoteRevealed = isNoteRevealed
+        self.fieldCommitRegistry = fieldCommitRegistry
         self.focusedField = focusedField
         self.weightUnit = weightUnit
         self.previousSets = previousSets
@@ -145,6 +148,7 @@ struct ExerciseCardView: View {
                                         exerciseIndex: exerciseIndex,
                                         index: index,
                                         engine: engine,
+                                        fieldCommitRegistry: fieldCommitRegistry,
                                         focusedField: focusedField,
                                         weightUnit: weightUnit,
                                         previous: index < previousSetsForRows.count ? previousSetsForRows[index] : nil,

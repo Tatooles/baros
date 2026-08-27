@@ -233,4 +233,35 @@ final class SeedDataServiceTests: XCTestCase {
         XCTAssertEqual(set.rpe, 8)
         XCTAssertTrue(set.isCompleted)
     }
+
+    func testUITestActiveWorkoutPerformanceFixtureCreatesDeterministicWorkload() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        try SeedDataService.seedIfNeeded(context: context)
+        try UITestFixtureSeeder.seedActiveWorkoutPerformanceFixture(context: context)
+        try UITestFixtureSeeder.seedActiveWorkoutPerformanceFixture(context: context)
+
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let activeSessions = sessions.filter { $0.status == .active && !$0.isDeleted }
+        let completedSessions = sessions.filter { $0.status == .completed && !$0.isDeleted }
+        XCTAssertEqual(activeSessions.count, 1)
+        XCTAssertEqual(completedSessions.count, 100)
+
+        let activeSession = try XCTUnwrap(activeSessions.first)
+        XCTAssertEqual(activeSession.title, "Performance Workout 10x5")
+        XCTAssertEqual(activeSession.id, UUID(uuidString: "00000000-0000-4000-8000-000000000001"))
+        XCTAssertEqual(activeSession.sortedLoggedExercises.count, 10)
+        XCTAssertTrue(activeSession.sortedLoggedExercises.allSatisfy { $0.sortedSets.count == 5 })
+        XCTAssertTrue(activeSession.sortedLoggedExercises.allSatisfy { $0.sortedSets.allSatisfy { !$0.isCompleted } })
+        XCTAssertEqual(
+            activeSession.sortedLoggedExercises.flatMap(\.sortedSets).map(\.id).count,
+            Set(activeSession.sortedLoggedExercises.flatMap(\.sortedSets).map(\.id)).count
+        )
+
+        let completedSetCount = completedSessions.reduce(0) {
+            $0 + $1.sortedLoggedExercises.flatMap(\.sortedSets).count
+        }
+        XCTAssertEqual(completedSetCount, 5_000)
+        XCTAssertTrue(completedSessions.allSatisfy { $0.sortedLoggedExercises.allSatisfy { $0.sortedSets.count == 5 } })
+    }
 }

@@ -586,7 +586,13 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let firstSet = try XCTUnwrap(loggedExercise.sets.first)
-        try engine.updateSet(firstSet, weight: 185, reps: 5, rpe: 8, context: context)
+        try engine.commitActiveSetDraft(
+            firstSet,
+            values: .init(weight: 185, reps: 5),
+            context: context,
+            now: Date(timeIntervalSince1970: 200)
+        )
+        try RPEChipSelectionAction.apply(value: 8, to: firstSet, engine: engine, context: context)
         let secondSet = try engine.addSet(to: loggedExercise, context: context)
 
         try engine.finishWorkout(session, context: context, now: Date(timeIntervalSince1970: 400))
@@ -597,6 +603,12 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         assertEntry(entries, kind: .loggedExercise, id: loggedExercise.id, operation: .create)
         assertEntry(entries, kind: .loggedSet, id: firstSet.id, operation: .create)
         assertEntry(entries, kind: .loggedSet, id: secondSet.id, operation: .create)
+
+        let setPayload = SyncPayloadMapper.loggedSetPayload(from: firstSet)
+        XCTAssertEqual(setPayload.weight, 185)
+        XCTAssertEqual(setPayload.reps, 5)
+        XCTAssertEqual(setPayload.rpe, 8)
+        XCTAssertEqual(setPayload.loggedExerciseClientId, loggedExercise.id.uuidString.lowercased())
     }
 
     func testPrepareForSyncBackfillsOwnedCompletedSetsWhenSetCursorNeverAdvanced() throws {
@@ -695,10 +707,18 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let firstSet = try XCTUnwrap(loggedExercise.sets.first)
-        try engine.updateSet(firstSet, weight: 185, reps: 5, rpe: 8, context: context)
+        try engine.commitActiveSetDraft(
+            firstSet,
+            values: .init(weight: 185, reps: 5),
+            context: context
+        )
+        try RPEChipSelectionAction.apply(value: 8, to: firstSet, engine: engine, context: context)
         _ = try engine.addSet(to: loggedExercise, context: context)
         try engine.toggleSetCompletion(firstSet, context: context)
 
+        XCTAssertEqual(firstSet.weight, 185)
+        XCTAssertEqual(firstSet.reps, 5)
+        XCTAssertEqual(firstSet.rpe, 8)
         XCTAssertTrue(try fetchEntries(context).isEmpty)
     }
 

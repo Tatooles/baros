@@ -232,7 +232,55 @@ final class ActiveWorkoutEngine {
         try context.save()
     }
 
-    func fillSetFromPrevious(_ set: LoggedSet, previous: PreviousSetPerformance, context: ModelContext) throws {
+    /// Persists a focus-boundary weight/reps draft without turning a local
+    /// Active Workout checkpoint into a graph-level timestamp mutation.
+    @discardableResult
+    func commitActiveSetDraft(
+        _ set: LoggedSet,
+        values: ActiveWorkoutSetInput.Values,
+        context: ModelContext,
+        now: Date = .now
+    ) throws -> Bool {
+        let weight = WorkoutNumericInputPolicy.validatedWeight(values.weight)
+        let reps = WorkoutNumericInputPolicy.validatedReps(values.reps)
+        var didChange = false
+
+        if WorkoutNumericInputPolicy.validatedWeight(set.weight) != weight {
+            set.weight = weight
+            didChange = true
+        }
+        if WorkoutNumericInputPolicy.validatedReps(set.reps) != reps {
+            set.reps = reps
+            didChange = true
+        }
+
+        guard didChange else { return false }
+
+        set.touchActiveDraft(now: now)
+        try context.save()
+        return true
+    }
+
+    func updateActiveSetRPE(
+        _ set: LoggedSet,
+        rpe: Double?,
+        context: ModelContext,
+        now: Date = .now
+    ) throws {
+        let rpe = WorkoutNumericInputPolicy.validatedRPE(rpe)
+        guard WorkoutNumericInputPolicy.validatedRPE(set.rpe) != rpe else { return }
+
+        set.rpe = rpe
+        set.touchActiveDraft(now: now)
+        try context.save()
+    }
+
+    func fillSetFromPrevious(
+        _ set: LoggedSet,
+        previous: PreviousSetPerformance,
+        context: ModelContext,
+        now: Date = .now
+    ) throws {
         var didChange = false
 
         if WorkoutNumericInputPolicy.validatedWeight(set.weight) == nil,
@@ -249,7 +297,7 @@ final class ActiveWorkoutEngine {
 
         guard didChange else { return }
 
-        set.touch()
+        set.touchActiveDraft(now: now)
         try context.save()
     }
 

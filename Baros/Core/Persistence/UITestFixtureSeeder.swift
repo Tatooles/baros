@@ -6,6 +6,8 @@ enum UITestFixtureSeeder {
     static let completedBenchWorkoutArgument = "--uitest-seed-completed-bench-workout"
     static let historyExerciseNoteArgument = "--uitest-seed-history-exercise-note"
     static let exerciseHistoryPerformanceArgument = "--uitest-seed-exercise-history-performance"
+    static let largeActiveWorkoutArgument = "--uitest-seed-large-active-workout"
+    static let largeActiveWorkoutTitle = "Performance Workout 10x5"
 
     static func seedFixtures(
         from arguments: [String],
@@ -25,6 +27,13 @@ enum UITestFixtureSeeder {
 
         if arguments.contains(exerciseHistoryPerformanceArgument) {
             try seedExerciseHistoryPerformanceFixture(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+
+        if arguments.contains(largeActiveWorkoutArgument) {
+            try seedActiveWorkoutPerformanceFixture(
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context
             )
@@ -148,6 +157,122 @@ enum UITestFixtureSeeder {
             )
         }
         try context.save()
+    }
+
+    static func seedActiveWorkoutPerformanceFixture(
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext
+    ) throws {
+        let exercises = try context.fetch(
+            FetchDescriptor<Exercise>(sortBy: [SortDescriptor(\Exercise.name)])
+        ).filter { $0.isVisible(to: ownerTokenIdentifier) }
+        let fixtureExercises = Array(exercises.prefix(10))
+        guard fixtureExercises.count == 10 else { return }
+
+        let baseDate = Date(timeIntervalSince1970: 1_700_100_000)
+        let activeTitle = largeActiveWorkoutTitle
+        let existingSessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        guard !existingSessions.contains(where: {
+            $0.title == activeTitle
+                && $0.status == .active
+                && !$0.isDeleted
+                && $0.syncOwnerTokenIdentifier == ownerTokenIdentifier
+        }) else { return }
+
+        let activeSession = makePerformanceSession(
+            id: stableUUID("00000000-0000-4000-8000-000000000001"),
+            title: activeTitle,
+            startedAt: baseDate,
+            status: .active,
+            exercises: fixtureExercises,
+            setCount: 5,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            stableIDSeed: "00000000-0000-4000-8000-0000001"
+        )
+        context.insert(activeSession)
+
+        for sessionIndex in 0..<100 {
+            let startedAt = baseDate.addingTimeInterval(-Double((sessionIndex + 1) * 86_400))
+            let completedSession = makePerformanceSession(
+                id: stableUUID(String(format: "00000000-0000-4000-8000-%012d", sessionIndex + 2)),
+                title: String(format: "Performance History %03d", sessionIndex + 1),
+                startedAt: startedAt,
+                status: .completed,
+                exercises: fixtureExercises,
+                setCount: 5,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                stableIDSeed: String(format: "00000000-0000-4000-8001-%07d", sessionIndex + 1)
+            )
+            context.insert(completedSession)
+        }
+
+        try context.save()
+    }
+
+    private static func makePerformanceSession(
+        id: UUID,
+        title: String,
+        startedAt: Date,
+        status: WorkoutSessionStatus,
+        exercises: [Exercise],
+        setCount: Int,
+        ownerTokenIdentifier: String?,
+        stableIDSeed: String
+    ) -> WorkoutSession {
+        let endedAt = status == .completed ? startedAt.addingTimeInterval(3_600) : nil
+        let loggedExercises = exercises.enumerated().map { exerciseIndex, exercise in
+            let sets = (0..<setCount).map { setIndex in
+                LoggedSet(
+                    id: stableUUID("\(stableIDSeed)-\(exerciseIndex)-\(setIndex)"),
+                    orderIndex: setIndex,
+                    weight: Double(100 + exerciseIndex),
+                    reps: 5,
+                    rpe: 8,
+                    isCompleted: status == .completed,
+                    completedAt: endedAt,
+                    createdAt: startedAt,
+                    updatedAt: endedAt ?? startedAt
+                )
+            }
+            return LoggedExercise(
+                id: stableUUID("\(stableIDSeed)-exercise-\(exerciseIndex)"),
+                orderIndex: exerciseIndex,
+                exercise: exercise,
+                exerciseSnapshotName: exercise.name,
+                exerciseSnapshotEquipmentRaw: exercise.equipmentRaw,
+                exerciseSnapshotPrimaryMuscleGroupRaw: exercise.primaryMuscleGroupRaw,
+                createdAt: startedAt,
+                updatedAt: endedAt ?? startedAt,
+                sets: sets
+            )
+        }
+        return WorkoutSession(
+            id: id,
+            title: title,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSeconds: status == .completed ? 3_600 : 0,
+            status: status,
+            source: .blank,
+            createdAt: startedAt,
+            updatedAt: endedAt ?? startedAt,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier,
+            loggedExercises: loggedExercises
+        )
+    }
+
+    private static func stableUUID(_ string: String) -> UUID {
+        if let uuid = UUID(uuidString: string) {
+            return uuid
+        }
+
+        var hash = UInt64(1469598103934665603)
+        for byte in string.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1099511628211
+        }
+        let suffix = String(format: "%012llx", hash & 0x0000_FFFF_FFFF_FFFF)
+        return UUID(uuidString: "00000000-0000-4000-8000-\(suffix)")!
     }
 
     private static func values(after argument: String, in arguments: [String]) -> [String] {

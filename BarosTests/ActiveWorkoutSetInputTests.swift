@@ -49,7 +49,7 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
         )
 
         XCTAssertEqual(commit.values, .init(weight: nil, reps: 5))
-        XCTAssertTrue(commit.shouldPersist)
+        XCTAssertFalse(commit.shouldPersist)
         XCTAssertNil(input.previousFillBeforeCompletion(
             isCompleted: false,
             values: commit.values,
@@ -86,7 +86,7 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
         )
 
         XCTAssertEqual(commit.values, .init(weight: 185, reps: nil))
-        XCTAssertTrue(commit.shouldPersist)
+        XCTAssertFalse(commit.shouldPersist)
         XCTAssertNil(input.previousFillBeforeCompletion(
             isCompleted: false,
             values: commit.values,
@@ -205,6 +205,29 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
         XCTAssertEqual(
             input.commit(current: .init(weight: 185, reps: 5), weightUnit: .pounds),
             .init(values: .init(weight: 200, reps: 5), shouldPersist: true)
+        )
+    }
+
+    func testUnchangedDraftEndsEditingWithoutRequestingPersistence() {
+        var input = ActiveWorkoutSetInput()
+        input.update("185", for: .weight, isFocused: true)
+
+        let commit = input.commit(
+            current: .init(weight: 185, reps: 5),
+            weightUnit: .pounds
+        )
+
+        XCTAssertEqual(
+            commit,
+            .init(values: .init(weight: 185, reps: 5), shouldPersist: false)
+        )
+        XCTAssertEqual(
+            input.text(
+                for: .weight,
+                values: commit.values,
+                weightUnit: .pounds
+            ),
+            "185"
         )
     }
 }

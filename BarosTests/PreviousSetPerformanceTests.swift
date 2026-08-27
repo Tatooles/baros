@@ -1206,6 +1206,118 @@ final class PreviousSetPerformanceTests: XCTestCase {
         XCTAssertNotEqual(beforeSync, afterSync)
     }
 
+    func testCacheReloadPolicySkipsUpdatesConfinedToTheActiveWorkoutGraph() {
+        let activeIDs: Set = [UUID(), UUID(), UUID()]
+
+        XCTAssertFalse(
+            PreviousSetsCacheReloadPolicy.shouldReload(
+                insertedIDs: [],
+                updatedIDs: [activeIDs.first!],
+                deletedIDs: [],
+                activeGraphIDs: activeIDs
+            )
+        )
+    }
+
+    func testCacheReloadTriggerChangesWhenTheActiveSessionChanges() {
+        let ownerTokenIdentifier = "owner"
+        let lastSyncedAt = Date(timeIntervalSince1970: 100)
+        let first = PreviousSetsCacheReloadTrigger(
+            sessionID: UUID(),
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            lastSyncedAt: lastSyncedAt
+        )
+        let second = PreviousSetsCacheReloadTrigger(
+            sessionID: UUID(),
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            lastSyncedAt: lastSyncedAt
+        )
+
+        XCTAssertNotEqual(first, second)
+    }
+
+    func testCacheReloadPolicyReloadsForStructuralOrExternalChanges() {
+        let activeID = UUID()
+        let externalID = UUID()
+
+        XCTAssertTrue(
+            PreviousSetsCacheReloadPolicy.shouldReload(
+                insertedIDs: [activeID],
+                updatedIDs: [],
+                deletedIDs: [],
+                activeGraphIDs: [activeID]
+            )
+        )
+        XCTAssertTrue(
+            PreviousSetsCacheReloadPolicy.shouldReload(
+                insertedIDs: [],
+                updatedIDs: [externalID],
+                deletedIDs: [],
+                activeGraphIDs: [activeID]
+            )
+        )
+        XCTAssertTrue(
+            PreviousSetsCacheReloadPolicy.shouldReload(
+                insertedIDs: [],
+                updatedIDs: [],
+                deletedIDs: [activeID],
+                activeGraphIDs: [activeID]
+            )
+        )
+        XCTAssertTrue(
+            PreviousSetsCacheReloadPolicy.shouldReload(
+                insertedIDs: [],
+                updatedIDs: [activeID],
+                deletedIDs: [],
+                activeGraphIDs: [activeID],
+                activeStructureChanged: true
+            )
+        )
+        XCTAssertTrue(
+            PreviousSetsCacheReloadPolicy.shouldReload(
+                insertedIDs: [],
+                updatedIDs: [],
+                deletedIDs: [],
+                activeGraphIDs: [activeID],
+                invalidatedAllIdentifiers: true
+            )
+        )
+    }
+
+    func testCacheSaveChangesExtractsSwiftDataIdentifiers() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = WorkoutSession(
+            title: "Active",
+            startedAt: .now,
+            status: .active,
+            source: .blank
+        )
+        let notificationCapture = NotificationCapture()
+        let observer = NotificationCenter.default.addObserver(
+            forName: ModelContext.didSave,
+            object: context,
+            queue: nil
+        ) { notificationCapture.store($0) }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        context.insert(session)
+        try context.save()
+
+        let insertedChanges = PreviousSetsCacheSaveChanges(
+            notification: try XCTUnwrap(notificationCapture.take())
+        )
+        XCTAssertTrue(insertedChanges.insertedIDs.contains(session.persistentModelID))
+
+        session.title = "Updated"
+        try context.save()
+
+        let updatedChanges = PreviousSetsCacheSaveChanges(
+            notification: try XCTUnwrap(notificationCapture.take())
+        )
+        XCTAssertTrue(updatedChanges.updatedIDs.contains(session.persistentModelID))
+    }
+
     func testCacheKeyChangesWhenCompletedHistoryChanges() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -1293,5 +1405,23 @@ final class PreviousSetPerformanceTests: XCTestCase {
             context.insert(set)
         }
         try context.save()
+    }
+}
+
+private final class NotificationCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var notification: Notification?
+
+    func store(_ notification: Notification) {
+        lock.withLock {
+            self.notification = notification
+        }
+    }
+
+    func take() -> Notification? {
+        lock.withLock {
+            defer { notification = nil }
+            return notification
+        }
     }
 }
