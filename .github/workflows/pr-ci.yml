@@ -2,16 +2,6 @@ name: App CI
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/pr-ci.yml"
-      - "Baros/**"
-      - "BarosLiveActivity/**"
-      - "BarosTests/**"
-      - "BarosUITests/**"
-      - "Baros.xcodeproj/**"
-      - "LiftingLog.xcodeproj/**"
-      - "ci_scripts/**"
-      - "project.yml"
   push:
     branches:
       - main
@@ -24,6 +14,7 @@ on:
       - "Baros.xcodeproj/**"
       - "LiftingLog.xcodeproj/**"
       - "ci_scripts/**"
+      - "convex/auth.config.ts"
       - "project.yml"
 
 concurrency:
@@ -31,8 +22,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  app-changes:
+    name: app-change-detection
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.detect.outputs.changed }}
+
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect app-relevant changes
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if git diff --quiet "${BASE_SHA}" "${HEAD_SHA}" -- \
+            .github/workflows/pr-ci.yml \
+            'Baros/**' \
+            'BarosLiveActivity/**' \
+            'BarosTests/**' \
+            'BarosUITests/**' \
+            'Baros.xcodeproj/**' \
+            'LiftingLog.xcodeproj/**' \
+            'ci_scripts/**' \
+            convex/auth.config.ts \
+            project.yml; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          fi
+
   ios-unit-tests:
     name: ios-unit-tests
+    needs: app-changes
+    if: needs.app-changes.outputs.changed == 'true'
     runs-on: macos-26
     timeout-minutes: 30
     env:
@@ -81,6 +108,8 @@ jobs:
 
   ios-ui-smoke:
     name: ios-ui-smoke
+    needs: app-changes
+    if: needs.app-changes.outputs.changed == 'true'
     runs-on: macos-26
     timeout-minutes: 35
     env:

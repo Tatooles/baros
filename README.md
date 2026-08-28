@@ -18,11 +18,18 @@ Native SwiftUI workout tracker for iPhone with a SwiftData-backed offline workou
 
 ## CI
 
-Pull requests and pushes to `main` run three GitHub Actions checks:
+Pull requests classify changed paths before selecting the relevant GitHub
+Actions checks. Pushes to `main` use the same path boundaries. The checks are:
 
 - `ios-unit-tests`: builds the `BarosUnitTests` scheme and runs `BarosTests`.
 - `ios-ui-smoke`: runs four deterministic UI tests covering completed workout logging, workout/tab navigation, a settings-triggered sync request, and signed-out local-data reset.
 - `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
+- `support-site-checks`: builds, checks, and tests the Astro support site and validates tracked App Store release assets.
+
+The two iOS jobs report as skipped on support-site-only or unrelated pull
+requests, which preserves their required-check results without reserving a
+macOS runner. Changes to `convex/auth.config.ts` are app-relevant because the
+Swift unit suite validates that file's Clerk audience and OIDC contract.
 
 The UI smoke job intentionally selects only the four tests below instead of making the full `BarosUITests` target part of the required PR gate. Each selected test uses the UI suite's deterministic reset and in-memory launch helper. If either iOS job fails, first inspect the GitHub Actions log. The failed workflow run also uploads its `.xcresult` bundle and test log for local Xcode inspection.
 
