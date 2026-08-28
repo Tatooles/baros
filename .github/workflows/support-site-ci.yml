@@ -5,12 +5,14 @@ on:
     paths:
       - ".github/workflows/support-site-ci.yml"
       - "SupportSite/**"
+      - "docs/release/app-store/**"
   push:
     branches:
       - main
     paths:
       - ".github/workflows/support-site-ci.yml"
       - "SupportSite/**"
+      - "docs/release/app-store/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
