@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -22,6 +22,13 @@ const expectedScreenshots = [
 ];
 
 test("the Baros 1.2 App Store set is complete and upload-ready", async () => {
+  const expectedFilenames = expectedScreenshots.map(([filename]) => filename);
+  assert.deepEqual(
+    (await readdir(screenshotDirectory)).sort(),
+    [...expectedFilenames].sort(),
+    "the screenshot directory must contain exactly the reviewed six-file set",
+  );
+
   for (const [filename, expectedSha256] of expectedScreenshots) {
     const screenshotPath = path.join(screenshotDirectory, filename);
     await access(screenshotPath);
