@@ -32,6 +32,23 @@ test("the built site uses the approved brand anchors without the superseded red 
   assert.doesNotMatch(css, /#b4231f|#b8322d|#ff6b65/);
 });
 
+test("every public route advertises automatic light and dark appearance", async () => {
+  for (const route of ["index.html", "privacy/index.html", "support/index.html"]) {
+    const html = await readBuiltRoute(route);
+    assert.match(html, /<meta name="color-scheme" content="light dark">/);
+    assert.match(html, /<meta name="theme-color" content="#f7f5f1" media="\(prefers-color-scheme: light\)">/);
+    assert.match(html, /<meta name="theme-color" content="#080a0d" media="\(prefers-color-scheme: dark\)">/);
+  }
+
+  const cssFiles = (await readdir(new URL("_astro/", distUrl))).filter((name) => name.endsWith(".css"));
+  const css = (await Promise.all(cssFiles.map((name) => readFile(new URL(`_astro/${name}`, distUrl), "utf8")))).join("\n").toLowerCase();
+
+  assert.match(css, /@media\s*\(prefers-color-scheme:dark\)/);
+  assert.match(css, /--color-page:#080a0d/);
+  assert.match(css, /--color-ink:#f7f7f5/);
+  assert.match(css, /--color-link:#4d94ff/);
+});
+
 test("public imagery no longer ships superseded icon, preview, or red-app screenshots", async () => {
   const staleAssets = new Map([
     ["assets/baros-app-icon.png", "a1491f0efb74ed3033e072fd6908f9a0621c3891ae31edb2b833002ceac42120"],

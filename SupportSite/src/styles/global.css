@@ -9,6 +9,9 @@
   --color-accent: #1c66c7;
   --color-focus-on-dark: #4d94ff;
   --color-brand-silver: #f3ebe7;
+  --color-soft-surface: rgb(255 255 255 / 55%);
+  --color-soft-surface-hover: rgb(255 255 255 / 80%);
+  --color-soft-surface-subtle: rgb(255 255 255 / 48%);
   --color-dark-muted: #b7bbc1;
   --color-dark: #09121d;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
@@ -17,6 +20,7 @@
 
 @layer base {
   html {
+    color-scheme: light dark;
     scroll-behavior: smooth;
   }
 
@@ -55,6 +59,28 @@
     background:
       radial-gradient(circle at 82% 36%, rgb(28 102 199 / 14%), transparent 29%),
       radial-gradient(circle at 78% 48%, rgb(243 235 231 / 34%), transparent 42%);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-page: #080a0d;
+    --color-ink: #f7f7f5;
+    --color-muted: #b7bbc1;
+    --color-border: rgb(255 255 255 / 11%);
+    --color-link: #4d94ff;
+    --color-accent: #4d94ff;
+    --color-brand-silver: #f7f7f5;
+    --color-soft-surface: rgb(255 255 255 / 7%);
+    --color-soft-surface-hover: rgb(255 255 255 / 11%);
+    --color-soft-surface-subtle: rgb(255 255 255 / 5%);
+    --color-dark: #050608;
+  }
+
+  .marketing-hero {
+    background:
+      radial-gradient(circle at 82% 36%, rgb(23 104 229 / 20%), transparent 29%),
+      radial-gradient(circle at 78% 48%, rgb(247 247 245 / 5%), transparent 42%);
   }
 }
 
