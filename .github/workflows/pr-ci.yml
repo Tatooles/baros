@@ -38,9 +38,16 @@ jobs:
         id: detect
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          if git diff --quiet "${BASE_SHA}" "${HEAD_SHA}" -- \
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            diff_range="${BASE_SHA}...${HEAD_SHA}"
+          else
+            diff_range="${BASE_SHA}..${HEAD_SHA}"
+          fi
+
+          if git diff --quiet "${diff_range}" -- \
             .github/workflows/pr-ci.yml \
             'Baros/**' \
             'BarosLiveActivity/**' \
