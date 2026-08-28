@@ -7,6 +7,7 @@
   --color-border: #d9d7d2;
   --color-link: #1c66c7;
   --color-accent: #1c66c7;
+  --color-accent-foreground: #1c66c7;
   --color-focus: #1c66c7;
   --color-focus-on-dark: #1c66c7;
   --color-brand-silver: #f3ebe7;
@@ -73,6 +74,7 @@
     --color-border: rgb(255 255 255 / 11%);
     --color-link: #f7f7f5;
     --color-accent: #1768e5;
+    --color-accent-foreground: #f7f7f5;
     --color-focus: #1768e5;
     --color-focus-on-dark: #1768e5;
     --color-brand-silver: #f7f7f5;

@@ -52,6 +52,7 @@ test("every public route advertises automatic light and dark appearance", async 
   assert.match(css, /--color-ink:#f7f7f5/);
   assert.match(css, /--color-link:#f7f7f5/);
   assert.match(css, /--color-accent:#1768e5/);
+  assert.match(css, /--color-accent-foreground:#f7f7f5/);
   assert.doesNotMatch(css, /#4d94ff/);
 });
 
