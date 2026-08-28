@@ -32,15 +32,15 @@ test("the built site uses the approved brand anchors without the superseded red 
   assert.doesNotMatch(css, /#b4231f|#b8322d|#ff6b65/);
 });
 
-test("public imagery no longer ships superseded icon, preview, or red-app screenshots", async () => {
-  const staleAssets = new Map([
-    ["assets/baros-app-icon.png", "a1491f0efb74ed3033e072fd6908f9a0621c3891ae31edb2b833002ceac42120"],
-    ["assets/baros-social-preview.png", "0e003452107df83ab0e12bd6b432d9afa52f99d353f0cc23610b2f96672f052e"],
-    ["assets/baros-active-workout.jpg", "c33c7a2dd2ac59049129baf7b89b1b008be2a768f724472ede64a1a229cec1bb"],
-    ["assets/baros-workout-history.jpg", "59581b1c96783fbfc0ed72fcc3fc9d07a870169610dab61b6fbb3f155056038a"],
+test("public imagery matches the approved production assets", async () => {
+  const approvedAssets = new Map([
+    ["assets/baros-app-icon.png", "f6af1bd16254cef7f060a92c2fd12a0132bd97b6716d66ae0a9fd1aad238ce38"],
+    ["assets/baros-social-preview.png", "e72cbeb9045c2ffca1342affc7122acb01490bbebfd3e3cdbf2b0d7279fe2069"],
+    ["assets/baros-active-workout.jpg", "7731c5d42ec11034bde2f61d2488f5b5e4ef799c07ceb57a6b922f93eda157f2"],
+    ["assets/baros-workout-history.jpg", "701b04f17e9b396886dfc676dc4a9bd2b20afade004848d60166707568be1636"],
   ]);
 
-  for (const [asset, staleHash] of staleAssets) {
-    assert.notEqual(await sha256(asset), staleHash, `${asset} still matches the superseded public asset`);
+  for (const [asset, approvedHash] of approvedAssets) {
+    assert.equal(await sha256(asset), approvedHash, `${asset} does not match the approved public asset`);
   }
 });
