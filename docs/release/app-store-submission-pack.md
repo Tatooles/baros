@@ -1,13 +1,13 @@
 # App Store Submission Pack
 
-This document is the operator source of truth for submitting Baros 1.0 to App Store Connect.
+This document is the operator source of truth for submitting Baros 1.2 to App Store Connect.
 
 The [Baros authentication domain migration record](baros-auth-domain-migration-runbook.md) documents the completed production cutover and its final configuration.
 
 ## App Metadata
 
 - App name: Baros: Workout Tracker
-- Subtitle: Simple workout logging
+- Subtitle: Fast, private lifting log
 - Primary category: Health & Fitness
 - Pricing: Free
 - Support URL: https://baros.fit/support
@@ -24,6 +24,19 @@ The app focuses on fast workout entry, offline-first local logging, workout hist
 ## Keywords Draft
 
 workout, lifting, gym, strength, log, tracker, fitness, exercise, sets, reps
+
+## External Marketing Metadata
+
+- Canonical production icon source: `Baros/AppIcon.icon`.
+- Derived web and marketing icon export: `SupportSite/public/assets/baros-app-icon.png` (256 x 256 PNG).
+- Social preview: `SupportSite/public/assets/baros-social-preview.png` (1200 x 630 PNG).
+- Open Graph and X/Twitter metadata source: `SupportSite/src/layouts/BaseLayout.astro`.
+- Social-preview description: “Baros app icon with the message Log the lift. Keep the history.”
+
+The site metadata declares the social-preview dimensions and supplies the same
+descriptive text for both Open Graph and X/Twitter image alternatives. The
+support-site identity tests pin the approved icon, social preview, and product
+imagery so a stale replacement fails CI.
 
 ## Age Rating Notes
 
@@ -77,15 +90,23 @@ Production services:
 - Clerk production publishable key: pk_live_Y2xlcmsuYmFyb3MuZml0JA
 - Convex production deployment URL: https://sensible-reindeer-16.convex.cloud
 
-## Screenshot Plan
+## Screenshot Set
 
-Capture final screenshots after UI stabilizes:
+The final 6.9-inch iPhone set and its source captures are tracked in
+[`app-store/1.2`](app-store/1.2/README.md). Upload the six 1320 x 2868 PNGs in
+filename order. The set covers:
 
-- Start workout screen.
-- Active workout with exercises and sets.
-- Workout history.
-- Exercise library.
-- Profile or Settings showing sync/export/privacy controls.
+- active workout entry with completed exercises and sets;
+- the Review Workout flow for repeating a past workout;
+- workout history;
+- completed-workout details and notes;
+- the built-in, editable exercise library; and
+- local-only sync, export, privacy, support, and deletion controls.
+
+The screenshot generator uses the production icon and canonical identity
+tokens. Its automated contract rejects missing files, incorrect dimensions,
+non-PNG output, and alpha channels. A full-size and thumbnail-size visual pass
+is still required before upload.
 
 ## Release Checklist
 
@@ -104,8 +125,8 @@ Capture final screenshots after UI stabilizes:
 - Sentry Spike Protection is enabled to protect the project quota from unexpected event spikes.
 - A Sentry alert routes Durable Sync Failures to the maintainer.
 - The exact archive dSYM appears under the Sentry project's Debug Files before TestFlight testing begins.
-- Final app icon ticket is complete before submission.
-- App Store screenshots are final.
+- [x] Final app icon ticket is complete before submission.
+- [x] Baros 1.2 App Store screenshots are generated and repository-validated.
 - [x] Export compliance answer is ready for standard HTTPS encryption use.
 - Pricing and availability are set to Free and the intended launch regions.
 
