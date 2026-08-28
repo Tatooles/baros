@@ -50,7 +50,9 @@ test("every public route advertises automatic light and dark appearance", async 
   assert.match(css, /@media\s*\(prefers-color-scheme:dark\)/);
   assert.match(css, /--color-page:#080a0d/);
   assert.match(css, /--color-ink:#f7f7f5/);
-  assert.match(css, /--color-link:#4d94ff/);
+  assert.match(css, /--color-link:#f7f7f5/);
+  assert.match(css, /--color-accent:#1768e5/);
+  assert.doesNotMatch(css, /#4d94ff/);
 });
 
 test("public imagery no longer ships superseded icon, preview, or red-app screenshots", async () => {

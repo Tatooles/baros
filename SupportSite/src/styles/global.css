@@ -7,6 +7,7 @@
   --color-border: #d9d7d2;
   --color-link: #1c66c7;
   --color-accent: #1c66c7;
+  --color-focus: #1c66c7;
   --color-focus-on-dark: #1c66c7;
   --color-brand-silver: #f3ebe7;
   --color-secondary-action-surface: rgb(255 255 255 / 55%);
@@ -51,7 +52,7 @@
   }
 
   a:focus-visible {
-    outline: 2px solid var(--color-link);
+    outline: 2px solid var(--color-focus);
     outline-offset: 3px;
   }
 }
@@ -70,8 +71,10 @@
     --color-ink: #f7f7f5;
     --color-muted: #b7bbc1;
     --color-border: rgb(255 255 255 / 11%);
-    --color-link: #4d94ff;
-    --color-accent: #4d94ff;
+    --color-link: #f7f7f5;
+    --color-accent: #1768e5;
+    --color-focus: #1768e5;
+    --color-focus-on-dark: #1768e5;
     --color-brand-silver: #f7f7f5;
     --color-secondary-action-surface: rgb(255 255 255 / 7%);
     --color-secondary-action-surface-hover: rgb(255 255 255 / 11%);
@@ -79,6 +82,12 @@
     --color-hero-accent-glow: rgb(23 104 229 / 20%);
     --color-hero-highlight: rgb(247 247 245 / 5%);
     --color-dark: #050608;
+  }
+
+  .document-content a {
+    text-decoration-line: underline;
+    text-decoration-color: var(--color-accent);
+    text-underline-offset: 3px;
   }
 }
 
