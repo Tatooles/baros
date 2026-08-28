@@ -9,9 +9,11 @@
   --color-accent: #1c66c7;
   --color-focus-on-dark: #4d94ff;
   --color-brand-silver: #f3ebe7;
-  --color-soft-surface: rgb(255 255 255 / 55%);
-  --color-soft-surface-hover: rgb(255 255 255 / 80%);
-  --color-soft-surface-subtle: rgb(255 255 255 / 48%);
+  --color-secondary-action-surface: rgb(255 255 255 / 55%);
+  --color-secondary-action-surface-hover: rgb(255 255 255 / 80%);
+  --color-principles-surface: rgb(255 255 255 / 48%);
+  --color-hero-accent-glow: rgb(28 102 199 / 14%);
+  --color-hero-highlight: rgb(243 235 231 / 34%);
   --color-dark-muted: #b7bbc1;
   --color-dark: #09121d;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
@@ -57,8 +59,8 @@
 @layer components {
   .marketing-hero {
     background:
-      radial-gradient(circle at 82% 36%, rgb(28 102 199 / 14%), transparent 29%),
-      radial-gradient(circle at 78% 48%, rgb(243 235 231 / 34%), transparent 42%);
+      radial-gradient(circle at 82% 36%, var(--color-hero-accent-glow), transparent 29%),
+      radial-gradient(circle at 78% 48%, var(--color-hero-highlight), transparent 42%);
   }
 }
 
@@ -71,16 +73,12 @@
     --color-link: #4d94ff;
     --color-accent: #4d94ff;
     --color-brand-silver: #f7f7f5;
-    --color-soft-surface: rgb(255 255 255 / 7%);
-    --color-soft-surface-hover: rgb(255 255 255 / 11%);
-    --color-soft-surface-subtle: rgb(255 255 255 / 5%);
+    --color-secondary-action-surface: rgb(255 255 255 / 7%);
+    --color-secondary-action-surface-hover: rgb(255 255 255 / 11%);
+    --color-principles-surface: rgb(255 255 255 / 5%);
+    --color-hero-accent-glow: rgb(23 104 229 / 20%);
+    --color-hero-highlight: rgb(247 247 245 / 5%);
     --color-dark: #050608;
-  }
-
-  .marketing-hero {
-    background:
-      radial-gradient(circle at 82% 36%, rgb(23 104 229 / 20%), transparent 29%),
-      radial-gradient(circle at 78% 48%, rgb(247 247 245 / 5%), transparent 42%);
   }
 }
 

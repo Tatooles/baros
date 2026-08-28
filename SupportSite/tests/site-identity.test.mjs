@@ -4,6 +4,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { test } from "node:test";
 
 const distUrl = new URL("../dist/", import.meta.url);
+const publicRoutes = ["index.html", "privacy/index.html", "support/index.html"];
 
 async function readBuiltRoute(pathname) {
   return readFile(new URL(pathname, distUrl), "utf8");
@@ -14,8 +15,13 @@ async function sha256(pathname) {
   return createHash("sha256").update(contents).digest("hex");
 }
 
+async function readBuiltCss() {
+  const cssFiles = (await readdir(new URL("_astro/", distUrl))).filter((name) => name.endsWith(".css"));
+  return (await Promise.all(cssFiles.map((name) => readFile(new URL(`_astro/${name}`, distUrl), "utf8")))).join("\n").toLowerCase();
+}
+
 test("every public route uses the production icon in its header and metadata", async () => {
-  for (const route of ["index.html", "privacy/index.html", "support/index.html"]) {
+  for (const route of publicRoutes) {
     const html = await readBuiltRoute(route);
     assert.match(html, /<link rel="icon" type="image\/png" href="\/assets\/baros-app-icon\.png">/);
     assert.match(html, /<img[^>]+src="\/assets\/baros-app-icon\.png"/);
@@ -23,8 +29,7 @@ test("every public route uses the production icon in its header and metadata", a
 });
 
 test("the built site uses the approved brand anchors without the superseded red palette", async () => {
-  const cssFiles = (await readdir(new URL("_astro/", distUrl))).filter((name) => name.endsWith(".css"));
-  const css = (await Promise.all(cssFiles.map((name) => readFile(new URL(`_astro/${name}`, distUrl), "utf8")))).join("\n").toLowerCase();
+  const css = await readBuiltCss();
 
   assert.match(css, /#1c66c7/);
   assert.match(css, /#09121d/);
@@ -33,15 +38,14 @@ test("the built site uses the approved brand anchors without the superseded red 
 });
 
 test("every public route advertises automatic light and dark appearance", async () => {
-  for (const route of ["index.html", "privacy/index.html", "support/index.html"]) {
+  for (const route of publicRoutes) {
     const html = await readBuiltRoute(route);
     assert.match(html, /<meta name="color-scheme" content="light dark">/);
     assert.match(html, /<meta name="theme-color" content="#f7f5f1" media="\(prefers-color-scheme: light\)">/);
     assert.match(html, /<meta name="theme-color" content="#080a0d" media="\(prefers-color-scheme: dark\)">/);
   }
 
-  const cssFiles = (await readdir(new URL("_astro/", distUrl))).filter((name) => name.endsWith(".css"));
-  const css = (await Promise.all(cssFiles.map((name) => readFile(new URL(`_astro/${name}`, distUrl), "utf8")))).join("\n").toLowerCase();
+  const css = await readBuiltCss();
 
   assert.match(css, /@media\s*\(prefers-color-scheme:dark\)/);
   assert.match(css, /--color-page:#080a0d/);
