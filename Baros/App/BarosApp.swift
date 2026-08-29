@@ -126,6 +126,11 @@ struct BarosApp: App {
                 activeWorkoutEngine: activeWorkoutEngine,
                 workoutLiveActivityCoordinator: workoutLiveActivityCoordinator
             )
+            #if DEBUG
+            .overlay(alignment: .topTrailing) {
+                AppAppearanceUITestProbe(appearance: appAppearanceStore.appearance)
+            }
+            #endif
             .preferredColorScheme(appAppearanceStore.appearance.preferredColorScheme)
             .modelContainer(modelContainer)
             .environment(Clerk.shared)
@@ -181,6 +186,38 @@ struct BarosApp: App {
 }
 
 #if DEBUG
+private struct AppAppearanceUITestProbe: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let appearance: AppAppearance
+
+    var body: some View {
+        if ProcessInfo.processInfo.arguments.contains("--uitest-inspect-app-appearance") {
+            Text("App appearance test state")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("UITestAppAppearance")
+                .accessibilityLabel("App appearance test state")
+                .accessibilityValue(
+                    "\(appearance.displayName), \(appearance.systemImage), \(effectiveDisplayName)"
+                )
+                .allowsHitTesting(false)
+        }
+    }
+
+    private var effectiveDisplayName: String {
+        switch colorScheme {
+        case .dark:
+            "Dark"
+        case .light:
+            "Light"
+        @unknown default:
+            "Unknown"
+        }
+    }
+}
+
 private struct ExerciseHistoryUITestMetricsOverlay: View {
     private let metrics = ExerciseHistoryUITestMetrics.shared
     @State private var displayedResolutionCount = 0

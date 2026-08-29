@@ -59,8 +59,6 @@ final class AppInitializationOrderTests: XCTestCase {
         var launchArguments = [
             "--uitest-reset-persistent-store",
             "--uitest-force-signed-out-auth",
-            "--uitest-reset-exercise-picker-sort",
-        ]
 """)
         )
         XCTAssertTrue(

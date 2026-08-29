@@ -651,8 +651,12 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testSettingsAppearancePickerChangesSelectionImmediately() {
-        let app = makeApp()
+        let app = makeApp(extraArguments: ["--uitest-inspect-app-appearance"])
         app.launch()
+
+        let appearanceState = app.descendants(matching: .any)["UITestAppAppearance"]
+        XCTAssertTrue(appearanceState.waitForExistence(timeout: 3))
+        XCTAssertEqual(appearanceState.value as? String, "Dark, moon.fill, Dark")
 
         app.buttons["ProfileTab"].tap()
         XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
@@ -666,10 +670,16 @@ final class BarosUITests: XCTestCase {
         appearancePicker.tap()
         app.buttons["Light"].tap()
         XCTAssertEqual(appearancePicker.value as? String, "Light")
+        XCTAssertEqual(appearanceState.value as? String, "Light, sun.max.fill, Light")
 
         appearancePicker.tap()
         app.buttons["System"].tap()
         XCTAssertEqual(appearancePicker.value as? String, "System")
+        let systemState = appearanceState.value as? String
+        XCTAssertTrue(
+            systemState == "System, circle.lefthalf.filled, Dark"
+                || systemState == "System, circle.lefthalf.filled, Light"
+        )
     }
 
     @MainActor
