@@ -24,7 +24,7 @@ Actions checks. Pushes to `main` use the same path boundaries. The checks are:
 - `ios-unit-tests`: builds the `BarosUnitTests` scheme and runs `BarosTests`.
 - `ios-ui-smoke`: runs four deterministic UI tests covering completed workout logging, workout/tab navigation, a settings-triggered sync request, and signed-out local-data reset.
 - `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
-- `support-site-checks`: builds, checks, and tests the Astro support site and validates tracked App Store release assets.
+- `support-site-checks`: builds, checks, and tests the Astro support site, including any tracked release-asset contracts.
 
 The two iOS jobs report as skipped on support-site-only or unrelated pull
 requests, which preserves their required-check results without reserving a
