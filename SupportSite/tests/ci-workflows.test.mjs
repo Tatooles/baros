@@ -95,9 +95,23 @@ test("app classification is always reported and preserves its decision polarity"
   const workflow = await readWorkflow("pr-ci.yml");
   const appChanges = workflow.jobs["app-changes"];
   const classifier = appChanges.steps.find((step) => step.id === "detect");
+  const checkout = appChanges.steps.find(
+    (step) => step.name === "Check out repository history",
+  );
 
   assert.equal(workflow.on.pull_request, null);
+  assert.deepEqual(workflow.on.push.branches, ["main"]);
   assert.equal(appChanges.outputs.changed, "${{ steps.detect.outputs.changed }}");
+  assert.deepEqual(checkout, {
+    name: "Check out repository history",
+    uses: "actions/checkout@v4",
+    with: { "fetch-depth": 0 },
+  });
+  assert.deepEqual(classifier.env, {
+    BASE_SHA: "${{ github.event.pull_request.base.sha || github.event.before }}",
+    EVENT_NAME: "${{ github.event_name }}",
+    HEAD_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
+  });
   assert.match(
     classifier.run,
     /; then\n\s+echo "changed=false" >> "\$\{GITHUB_OUTPUT\}"\n\s*else\n\s+echo "changed=true" >> "\$\{GITHUB_OUTPUT\}"\n\s*fi\n?$/,
