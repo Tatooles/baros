@@ -63,7 +63,6 @@ struct HistoryView: View {
             .padding(AppTheme.shellPadding)
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(for: HistoryRoute.self) { route in
             switch route {
             case .workout(let sessionID):

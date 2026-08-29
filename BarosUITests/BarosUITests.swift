@@ -15,7 +15,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testPermanentTabsUseNativeSearchRoleLayoutWithHomeSelected() {
+    func testPermanentTabsAreHistoryHomeProfileWithHomeSelected() {
         let app = makeApp()
         app.launch()
 
@@ -25,9 +25,10 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(historyTab.waitForExistence(timeout: 3))
         XCTAssertTrue(homeTab.exists)
         XCTAssertTrue(profileTab.exists)
+        XCTAssertLessThan(historyTab.frame.minX, homeTab.frame.minX)
         XCTAssertLessThan(homeTab.frame.minX, profileTab.frame.minX)
-        XCTAssertLessThan(profileTab.frame.minX, historyTab.frame.minX)
         XCTAssertTrue(homeTab.isSelected)
+        XCTAssertFalse(app.searchFields.firstMatch.exists)
         XCTAssertFalse(app.buttons["WorkoutTab"].exists)
         XCTAssertTrue(app.staticTexts["HomeTitle"].exists)
         XCTAssertTrue(app.buttons["StartWorkoutButton"].exists)
@@ -552,9 +553,9 @@ final class BarosUITests: XCTestCase {
         app.buttons["HistoryTab"].tap()
         XCTAssertTrue(app.staticTexts["HistoryTitle"].waitForExistence(timeout: 3))
 
-        returnToHomeFromHistorySearch(in: app)
         app.buttons["ProfileTab"].tap()
         XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.searchFields.firstMatch.exists)
         XCTAssertTrue(app.staticTexts["ProfileEnvironmentBadge"].exists)
 
         app.buttons["ActiveWorkoutAccessory"].tap()
@@ -1246,7 +1247,9 @@ final class BarosUITests: XCTestCase {
 
         let searchField = app.searchFields.firstMatch
         XCTAssertTrue(searchField.waitForExistence(timeout: 3))
-        XCTAssertGreaterThan(searchField.frame.midY, app.windows.firstMatch.frame.midY)
+        XCTAssertTrue(app.buttons["HistoryTab"].isSelected)
+        XCTAssertTrue(app.buttons["HomeTab"].exists)
+        XCTAssertTrue(app.buttons["ProfileTab"].exists)
 
         searchField.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
@@ -1696,7 +1699,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 10))
         let initialMetrics = try settledExerciseHistoryMetrics(in: app)
 
-        returnToHomeFromHistorySearch(in: app)
+        app.buttons["HomeTab"].tap()
         startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 5))
         addBenchPress(in: app)
@@ -2455,17 +2458,6 @@ final class BarosUITests: XCTestCase {
         let accessory = app.buttons["ActiveWorkoutAccessory"]
         XCTAssertTrue(accessory.waitForExistence(timeout: 3))
         XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
-    }
-
-    @MainActor
-    private func returnToHomeFromHistorySearch(in app: XCUIApplication) {
-        let collapsedHomeTab = app.buttons.matching(
-            NSPredicate(format: "label == %@ AND value == %@", "Home", "Collapsed")
-        ).firstMatch
-        XCTAssertTrue(collapsedHomeTab.waitForExistence(timeout: 3))
-        collapsedHomeTab.tap()
-        XCTAssertTrue(app.buttons["HomeTab"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["HomeTitle"].exists)
     }
 
     @MainActor

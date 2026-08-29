@@ -211,42 +211,42 @@ struct AppShellView: View {
 
     private var tabs: some View {
         TabView(selection: $navigationState.selectedTab) {
-            Tab(value: AppTab.history, role: .search) {
-                NavigationStack(path: $navigationState.historyPath) {
-                    HistoryView(
-                        navigationState: navigationState,
-                        searchText: $historySearchText
-                    )
-                }
-            } label: {
+            NavigationStack(path: $navigationState.historyPath) {
+                HistoryView(
+                    navigationState: navigationState,
+                    searchText: $historySearchText
+                )
+            }
+            .searchable(text: $historySearchText, prompt: "Search history")
+            .tabItem {
                 Label(AppTab.history.title, systemImage: AppTab.history.symbolName)
                     .accessibilityIdentifier(AppTab.history.accessibilityIdentifier)
             }
+            .tag(AppTab.history)
 
-            Tab(value: AppTab.home) {
-                NavigationStack {
-                    HomeView(
-                        navigationState: navigationState,
-                        activeWorkoutEngine: activeWorkoutEngine,
-                        activeSession: activeSession,
-                        presentWorkout: { navigationState.presentActiveWorkout() }
-                    )
-                }
-            } label: {
+            NavigationStack {
+                HomeView(
+                    navigationState: navigationState,
+                    activeWorkoutEngine: activeWorkoutEngine,
+                    activeSession: activeSession,
+                    presentWorkout: { navigationState.presentActiveWorkout() }
+                )
+            }
+            .tabItem {
                 Label(AppTab.home.title, systemImage: AppTab.home.symbolName)
                     .accessibilityIdentifier(AppTab.home.accessibilityIdentifier)
             }
+            .tag(AppTab.home)
 
-            Tab(value: AppTab.profile) {
-                NavigationStack(path: $navigationState.profilePath) {
-                    ProfileView(navigationState: navigationState)
-                }
-            } label: {
+            NavigationStack(path: $navigationState.profilePath) {
+                ProfileView(navigationState: navigationState)
+            }
+            .tabItem {
                 Label(AppTab.profile.title, systemImage: AppTab.profile.symbolName)
                     .accessibilityIdentifier(AppTab.profile.accessibilityIdentifier)
             }
+            .tag(AppTab.profile)
         }
-        .searchable(text: $historySearchText, prompt: "Search history")
     }
 
     @ViewBuilder
