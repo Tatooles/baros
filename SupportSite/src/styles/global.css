@@ -7,8 +7,15 @@
   --color-border: #d9d7d2;
   --color-link: #1c66c7;
   --color-accent: #1c66c7;
+  --color-accent-foreground: #1c66c7;
+  --color-focus: #1c66c7;
   --color-focus-on-dark: #1c66c7;
   --color-brand-silver: #f3ebe7;
+  --color-secondary-action-surface: rgb(255 255 255 / 55%);
+  --color-secondary-action-surface-hover: rgb(255 255 255 / 80%);
+  --color-principles-surface: rgb(255 255 255 / 48%);
+  --color-hero-accent-glow: rgb(28 102 199 / 14%);
+  --color-hero-highlight: rgb(243 235 231 / 34%);
   --color-dark-muted: #b7bbc1;
   --color-dark: #09121d;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
@@ -17,6 +24,7 @@
 
 @layer base {
   html {
+    color-scheme: light dark;
     scroll-behavior: smooth;
   }
 
@@ -45,7 +53,7 @@
   }
 
   a:focus-visible {
-    outline: 2px solid var(--color-link);
+    outline: 2px solid var(--color-focus);
     outline-offset: 3px;
   }
 }
@@ -53,8 +61,35 @@
 @layer components {
   .marketing-hero {
     background:
-      radial-gradient(circle at 82% 36%, rgb(28 102 199 / 14%), transparent 29%),
-      radial-gradient(circle at 78% 48%, rgb(243 235 231 / 34%), transparent 42%);
+      radial-gradient(circle at 82% 36%, var(--color-hero-accent-glow), transparent 29%),
+      radial-gradient(circle at 78% 48%, var(--color-hero-highlight), transparent 42%);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-page: #080a0d;
+    --color-ink: #f7f7f5;
+    --color-muted: #b7bbc1;
+    --color-border: rgb(255 255 255 / 11%);
+    --color-link: #f7f7f5;
+    --color-accent: #1768e5;
+    --color-accent-foreground: #f7f7f5;
+    --color-focus: #1768e5;
+    --color-focus-on-dark: #1768e5;
+    --color-brand-silver: #f7f7f5;
+    --color-secondary-action-surface: rgb(255 255 255 / 7%);
+    --color-secondary-action-surface-hover: rgb(255 255 255 / 11%);
+    --color-principles-surface: rgb(255 255 255 / 5%);
+    --color-hero-accent-glow: rgb(23 104 229 / 20%);
+    --color-hero-highlight: rgb(247 247 245 / 5%);
+    --color-dark: #050608;
+  }
+
+  .document-content a {
+    text-decoration-line: underline;
+    text-decoration-color: var(--color-accent);
+    text-underline-offset: 3px;
   }
 }
 
