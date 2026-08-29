@@ -20,6 +20,7 @@ struct BarosApp: App {
     @State private var navigationState = AppNavigationState()
     @State private var activeWorkoutEngine = ActiveWorkoutEngine()
     @State private var workoutLiveActivityCoordinator = WorkoutLiveActivityCoordinator()
+    @State private var appAppearanceStore: AppAppearancePreferenceStore
     @State private var syncScheduler: SyncScheduler
     @State private var currentOwnerCoordinator: CurrentOwnerCoordinator
 
@@ -52,6 +53,8 @@ struct BarosApp: App {
         FirstRunExperienceStore.resetForUITestingIfRequested(arguments: arguments)
         FirstRunExperienceStore.markSeenForUITestingIfRequested(arguments: arguments)
         ExercisePickerSortPreferenceStore.resetForUITestingIfRequested(arguments: arguments)
+        AppAppearancePreferenceStore.resetForUITestingIfRequested(arguments: arguments)
+        _appAppearanceStore = State(initialValue: AppAppearancePreferenceStore())
 
         do {
             let useInMemoryStore = arguments.contains("--uitest-in-memory-store")
@@ -123,8 +126,10 @@ struct BarosApp: App {
                 activeWorkoutEngine: activeWorkoutEngine,
                 workoutLiveActivityCoordinator: workoutLiveActivityCoordinator
             )
+            .preferredColorScheme(appAppearanceStore.appearance.preferredColorScheme)
             .modelContainer(modelContainer)
             .environment(Clerk.shared)
+            .environment(appAppearanceStore)
             .environment(syncScheduler)
             .environment(currentOwnerCoordinator)
             .environment(

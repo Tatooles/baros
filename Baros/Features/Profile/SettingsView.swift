@@ -4,6 +4,7 @@ import UIKit
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppAppearancePreferenceStore.self) private var appAppearanceStore
     @Environment(SyncScheduler.self) private var syncScheduler
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
@@ -16,6 +17,46 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Appearance") {
+                Menu {
+                    Picker("App Appearance", selection: appearanceBinding) {
+                        ForEach(AppAppearance.allCases, id: \.self) { appearance in
+                            Label(appearance.displayName, systemImage: appearance.systemImage)
+                                .tag(appearance)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: appAppearanceStore.appearance.systemImage)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(AppTheme.onBrandAccent)
+                            .frame(width: 30, height: 30)
+                            .background(
+                                AppTheme.brandAccentFill,
+                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            )
+                            .accessibilityHidden(true)
+
+                        Text("App Appearance")
+                            .foregroundStyle(AppTheme.textPrimary)
+
+                        Spacer(minLength: 12)
+
+                        Text(appAppearanceStore.appearance.displayName)
+                            .foregroundStyle(AppTheme.textSecondary)
+
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .accessibilityHidden(true)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .accessibilityIdentifier("AppAppearancePicker")
+                .accessibilityLabel("App Appearance")
+                .accessibilityValue(appAppearanceStore.appearance.displayName)
+            }
+
             Section("Units") {
                 Picker("Weight Unit", selection: weightUnitBinding) {
                     ForEach(MeasurementUnit.allCases) { unit in
@@ -207,6 +248,13 @@ struct SettingsView: View {
                     showSaveFailure(error)
                 }
             }
+        )
+    }
+
+    private var appearanceBinding: Binding<AppAppearance> {
+        Binding(
+            get: { appAppearanceStore.appearance },
+            set: { appAppearanceStore.appearance = $0 }
         )
     }
 

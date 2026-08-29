@@ -650,6 +650,56 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testSettingsAppearancePickerChangesSelectionImmediately() {
+        let app = makeApp()
+        app.launch()
+
+        app.buttons["ProfileTab"].tap()
+        XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
+        app.buttons["ProfileSettingsLink"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+
+        let appearancePicker = app.descendants(matching: .any)["AppAppearancePicker"]
+        XCTAssertTrue(appearancePicker.waitForExistence(timeout: 3))
+        XCTAssertEqual(appearancePicker.value as? String, "Dark")
+
+        appearancePicker.tap()
+        app.buttons["Light"].tap()
+        XCTAssertEqual(appearancePicker.value as? String, "Light")
+
+        appearancePicker.tap()
+        app.buttons["System"].tap()
+        XCTAssertEqual(appearancePicker.value as? String, "System")
+    }
+
+    @MainActor
+    func testSettingsAppearancePickerSupportsAccessibilityDynamicType() {
+        let app = makeApp(
+            extraArguments: [
+                "--uitest-accessibility-dynamic-type",
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityXXXL",
+            ]
+        )
+        app.launch()
+
+        app.buttons["ProfileTab"].tap()
+        XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
+        app.buttons["ProfileSettingsLink"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+
+        let appearancePicker = app.descendants(matching: .any)["AppAppearancePicker"]
+        XCTAssertTrue(appearancePicker.waitForExistence(timeout: 3))
+        XCTAssertTrue(appearancePicker.isHittable)
+        XCTAssertEqual(appearancePicker.value as? String, "Dark")
+        XCTAssertGreaterThanOrEqual(appearancePicker.frame.height, 44)
+
+        appearancePicker.tap()
+        XCTAssertTrue(app.buttons["Light"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["System"].isHittable)
+    }
+
+    @MainActor
     func testAddingExerciseAndSetMovesFocusAndKeyboardCanBeDismissed() {
         let app = makeApp()
         app.launch()
@@ -2111,6 +2161,7 @@ final class BarosUITests: XCTestCase {
             "--uitest-reset-persistent-store",
             "--uitest-in-memory-store",
             "--uitest-reset-exercise-picker-sort",
+            "--uitest-reset-app-appearance",
         ] + fixtureArguments + authArguments
         if !extraArguments.contains("--uitest-reset-first-run-experience") {
             launchArguments.append("--uitest-skip-first-run-experience")
@@ -2128,6 +2179,7 @@ final class BarosUITests: XCTestCase {
             "--uitest-reset-persistent-store",
             "--uitest-force-signed-out-auth",
             "--uitest-reset-exercise-picker-sort",
+            "--uitest-reset-app-appearance",
         ]
         if !extraArguments.contains("--uitest-reset-first-run-experience") {
             launchArguments.append("--uitest-skip-first-run-experience")
@@ -2154,6 +2206,7 @@ final class BarosUITests: XCTestCase {
         if skipsFirstRunExperience && !extraArguments.contains("--uitest-reset-first-run-experience") {
             launchArguments.append("--uitest-skip-first-run-experience")
         }
+        launchArguments.append("--uitest-reset-app-appearance")
         app.launchArguments = launchArguments
         return app
     }
