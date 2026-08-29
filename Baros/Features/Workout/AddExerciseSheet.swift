@@ -1,6 +1,26 @@
 import SwiftData
 import SwiftUI
 
+struct SwapExerciseConfirmationContent {
+    let title: String
+    let message: String
+
+    init(original: LoggedExercise, replacement: Exercise) {
+        let originalName = original.exerciseSnapshotName
+        let replacementName = replacement.name
+        let hasMatchingNames = originalName.localizedCaseInsensitiveCompare(replacementName) == .orderedSame
+        let originalDescription = hasMatchingNames
+            ? "\(originalName) (\(original.snapshotEquipment?.displayName ?? "Other"))"
+            : originalName
+        let replacementDescription = hasMatchingNames
+            ? "\(replacementName) (\(replacement.equipment.displayName))"
+            : replacementName
+
+        title = "Swap \(originalDescription) for \(replacementDescription)?"
+        message = "This removes \(originalName), its sets, and its exercise note from this workout."
+    }
+}
+
 struct AddExerciseSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -29,8 +49,8 @@ struct SwapExerciseSheet: View {
     @Environment(\.dismiss) private var dismiss
     let loggedExercise: LoggedExercise
     @Bindable var engine: ActiveWorkoutEngine
-    var onSwapExercise: (LoggedExercise) -> Void = { _ in }
     @State private var pendingReplacement: Exercise?
+    @State private var swapErrorMessage: String?
 
     private var isConfirmationPresented: Binding<Bool> {
         Binding(
@@ -43,12 +63,32 @@ struct SwapExerciseSheet: View {
         )
     }
 
+    private var isErrorPresented: Binding<Bool> {
+        Binding(
+            get: { swapErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    swapErrorMessage = nil
+                    engine.lastErrorMessage = nil
+                }
+            }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ExercisePickerView(
                 mode: .swap(currentExerciseID: loggedExercise.exercise?.id)
             ) { exercise in
                 pendingReplacement = exercise
+            }
+            .alert("Unable to Swap Exercise", isPresented: isErrorPresented) {
+                Button("OK", role: .cancel) {
+                    swapErrorMessage = nil
+                    engine.lastErrorMessage = nil
+                }
+            } message: {
+                Text(swapErrorMessage ?? "The exercise could not be swapped.")
             }
         }
         .alert(confirmationTitle, isPresented: isConfirmationPresented) {
@@ -63,31 +103,34 @@ struct SwapExerciseSheet: View {
             }
             .accessibilityIdentifier("CancelSwapExerciseButton")
         } message: {
-            Text(
-                "This removes \(loggedExercise.exerciseSnapshotName), its sets, "
-                    + "and its exercise note from this workout."
-            )
+            Text(confirmationContent?.message ?? "The original exercise will be removed.")
         }
         .presentationDetents([.large])
     }
 
+    private var confirmationContent: SwapExerciseConfirmationContent? {
+        pendingReplacement.map {
+            SwapExerciseConfirmationContent(original: loggedExercise, replacement: $0)
+        }
+    }
+
     private var confirmationTitle: String {
-        guard let pendingReplacement else { return "Swap Exercise?" }
-        return "Swap \(loggedExercise.exerciseSnapshotName) for \(pendingReplacement.name)?"
+        confirmationContent?.title ?? "Swap Exercise?"
     }
 
     private func confirmSwap(with exercise: Exercise) {
         do {
-            let replacement = try engine.swapLoggedExercise(
+            try engine.swapLoggedExercise(
                 loggedExercise,
                 with: exercise,
                 context: modelContext
             )
-            onSwapExercise(replacement)
             dismiss()
         } catch {
             pendingReplacement = nil
-            engine.lastErrorMessage = error.localizedDescription
+            let message = error.localizedDescription
+            engine.lastErrorMessage = message
+            swapErrorMessage = message
         }
     }
 }

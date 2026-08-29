@@ -173,7 +173,8 @@ final class ActiveWorkoutEngine {
         _ loggedExercise: LoggedExercise,
         with exercise: Exercise,
         context: ModelContext,
-        now: Date = .now
+        now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws -> LoggedExercise {
         guard let session = loggedExercise.session,
               !loggedExercise.isDeleted,
@@ -182,6 +183,12 @@ final class ActiveWorkoutEngine {
             throw ActiveWorkoutEngineError.invalidExerciseSwap
         }
 
+        let originalSessionUpdatedAt = session.updatedAt
+        let originalLoggedExerciseUpdatedAt = loggedExercise.updatedAt
+        let originalLoggedExerciseDeletedAt = loggedExercise.deletedAt
+        let originalSetStates = loggedExercise.sets.map { set in
+            (set: set, updatedAt: set.updatedAt, deletedAt: set.deletedAt)
+        }
         let replacement = LoggedExercise(
             orderIndex: loggedExercise.orderIndex,
             exercise: exercise,
@@ -204,9 +211,19 @@ final class ActiveWorkoutEngine {
         session.touch(now: now)
 
         do {
-            try context.save()
+            try save(context)
             return replacement
         } catch {
+            session.loggedExercises.removeAll { $0.id == replacement.id }
+            context.delete(firstSet)
+            context.delete(replacement)
+            loggedExercise.updatedAt = originalLoggedExerciseUpdatedAt
+            loggedExercise.deletedAt = originalLoggedExerciseDeletedAt
+            for state in originalSetStates {
+                state.set.updatedAt = state.updatedAt
+                state.set.deletedAt = state.deletedAt
+            }
+            session.updatedAt = originalSessionUpdatedAt
             context.rollback()
             throw error
         }

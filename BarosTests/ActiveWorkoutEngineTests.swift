@@ -465,6 +465,57 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(try allLoggedSets(in: context).count, 1)
     }
 
+    func testSwappingLoggedExerciseRollsBackWhenSavingFails() throws {
+        enum SaveFailure: Error {
+            case expected
+        }
+
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let row = Exercise(name: "Barbell Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+        context.insert(bench)
+        context.insert(row)
+        let original = try engine.addExercise(bench, to: session, context: context)
+        let originalSet = try XCTUnwrap(original.sortedSets.first)
+        let originalSecondSet = try engine.addSet(to: original, context: context)
+        original.notes = "Keep this note"
+        originalSet.weight = 185
+        originalSet.reps = 5
+        originalSecondSet.weight = 175
+        originalSecondSet.reps = 8
+        try context.save()
+        let sessionUpdatedAt = session.updatedAt
+
+        XCTAssertThrowsError(
+            try engine.swapLoggedExercise(
+                original,
+                with: row,
+                context: context,
+                now: Date(timeIntervalSince1970: 500),
+                save: { _ in throw SaveFailure.expected }
+            )
+        ) { error in
+            XCTAssertTrue(error is SaveFailure)
+        }
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [original.id])
+        XCTAssertEqual(original.notes, "Keep this note")
+        XCTAssertNil(original.deletedAt)
+        XCTAssertEqual(originalSet.weight, 185)
+        XCTAssertEqual(originalSet.reps, 5)
+        XCTAssertNil(originalSet.deletedAt)
+        XCTAssertEqual(originalSecondSet.weight, 175)
+        XCTAssertEqual(originalSecondSet.reps, 8)
+        XCTAssertNil(originalSecondSet.deletedAt)
+        XCTAssertEqual(session.updatedAt, sessionUpdatedAt)
+        XCTAssertEqual(try allLoggedExercises(in: context).count, 1)
+        XCTAssertEqual(try allLoggedSets(in: context).count, 2)
+        XCTAssertFalse(context.hasChanges)
+    }
+
     func testSwappingFirstAndLastLoggedExercisesRetainsTheirPositions() throws {
         for originalIndex in [0, 2] {
             let container = try SwiftDataTestSupport.makeInMemoryContainer()
