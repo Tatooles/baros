@@ -33,7 +33,7 @@ const features = [
   <SiteHeader page="marketing" />
   <main>
     <section
-      class="mx-auto grid min-h-0 w-[calc(100%-2.25rem)] max-w-[76.25rem] grid-cols-1 items-center gap-[66px] pt-14 pb-[82px] text-center min-[561px]:pt-[68px] min-[761px]:w-[calc(100%-3.5rem)] min-[761px]:grid-cols-[minmax(0,1fr)_300px] min-[761px]:gap-[54px] min-[761px]:py-[72px] min-[761px]:pb-[86px] min-[761px]:text-left min-[941px]:min-h-[805px] min-[941px]:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)] min-[941px]:gap-[clamp(72px,10vw,156px)] min-[941px]:pt-12 min-[941px]:pb-[76px]"
+      class="marketing-hero mx-auto grid min-h-0 w-[calc(100%-2.25rem)] max-w-[76.25rem] grid-cols-1 items-center gap-[66px] pt-14 pb-[82px] text-center min-[561px]:pt-[68px] min-[761px]:w-[calc(100%-3.5rem)] min-[761px]:grid-cols-[minmax(0,1fr)_300px] min-[761px]:gap-[54px] min-[761px]:py-[72px] min-[761px]:pb-[86px] min-[761px]:text-left min-[941px]:min-h-[805px] min-[941px]:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)] min-[941px]:gap-[clamp(72px,10vw,156px)] min-[941px]:pt-12 min-[941px]:pb-[76px]"
       aria-labelledby="hero-title"
     >
       <div
@@ -46,7 +46,7 @@ const features = [
           Log the lift.<br />Keep the history.
         </h1>
         <p
-          class="mt-[26px] max-w-[580px] text-[17px] leading-[1.52] text-[#565a62] min-[561px]:mt-8 min-[561px]:text-[clamp(18px,1.6vw,21px)] min-[941px]:max-w-[540px]"
+          class="mt-[26px] max-w-[580px] text-[17px] leading-[1.52] text-muted min-[561px]:mt-8 min-[561px]:text-[clamp(18px,1.6vw,21px)] min-[941px]:max-w-[540px]"
         >
           Baros is a focused iPhone workout tracker built to stay out of your
           way. Log sets in seconds, train without a connection, and sync when you
@@ -69,7 +69,7 @@ const features = [
             />
           </a>
           <a
-            class="inline-flex aspect-[2.9916] w-44 items-center justify-center gap-2 rounded-[10px] border border-black/15 bg-white/45 px-3 text-[15px] font-[680] whitespace-nowrap text-ink no-underline shadow-[0_6px_18px_rgba(57,52,46,0.05)] transition-[background-color,border-color,transform] duration-160 hover:-translate-y-0.5 hover:border-black/25 hover:bg-white/75 hover:no-underline motion-reduce:transition-none"
+            class="inline-flex aspect-[2.9916] w-44 items-center justify-center gap-2 rounded-[10px] border border-ink/15 bg-white/55 px-3 text-[15px] font-[680] whitespace-nowrap text-ink no-underline shadow-[0_6px_18px_rgba(9,18,29,0.06)] transition-[background-color,border-color,transform] duration-160 hover:-translate-y-0.5 hover:border-accent/60 hover:bg-white/80 hover:no-underline motion-reduce:transition-none"
             href="https://github.com/Tatooles/baros"
           >
             <svg
@@ -87,19 +87,19 @@ const features = [
           </a>
         </div>
         <div
-          class="mt-9 inline-flex w-auto max-w-80 flex-col overflow-hidden rounded-[18px] border border-black/8 bg-white/42 shadow-[0_12px_28px_rgba(57,52,46,0.035)] min-[561px]:mt-11 min-[941px]:w-fit min-[941px]:max-w-none min-[941px]:flex-row min-[941px]:rounded-full"
+          class="mt-9 inline-flex w-auto max-w-80 flex-col overflow-hidden rounded-[18px] border border-ink/10 bg-white/48 shadow-[0_12px_28px_rgba(9,18,29,0.04)] min-[561px]:mt-11 min-[941px]:w-fit min-[941px]:max-w-none min-[941px]:flex-row min-[941px]:rounded-full"
           aria-label="Baros product principles"
         >
           <span
-            class="px-5 py-[11px] text-[13px] whitespace-nowrap text-[#55534f]"
+            class="px-5 py-[11px] text-[13px] whitespace-nowrap text-muted"
             >No account required</span
           >
           <span
-            class="border-t border-black/10 px-5 py-[11px] text-[13px] whitespace-nowrap text-[#55534f] min-[941px]:border-t-0 min-[941px]:border-l"
+            class="border-t border-ink/10 px-5 py-[11px] text-[13px] whitespace-nowrap text-muted min-[941px]:border-t-0 min-[941px]:border-l"
             >Works offline</span
           >
           <span
-            class="border-t border-black/10 px-5 py-[11px] text-[13px] whitespace-nowrap text-[#55534f] min-[941px]:border-t-0 min-[941px]:border-l"
+            class="border-t border-ink/10 px-5 py-[11px] text-[13px] whitespace-nowrap text-muted min-[941px]:border-t-0 min-[941px]:border-l"
             >Optional sync</span
           >
         </div>
@@ -113,7 +113,7 @@ const features = [
           loading="eager"
         />
         <p
-          class="mt-5 text-[11px] font-[650] tracking-[0.12em] text-[#706d68] uppercase"
+          class="mt-5 text-[11px] font-[650] tracking-[0.12em] text-muted uppercase"
         >
           Actual app screen
         </p>
@@ -138,7 +138,7 @@ const features = [
             <h2 class="mt-[21px] mb-2.5 text-[22px] font-semibold tracking-[-0.03em]">
               {feature.title}
             </h2>
-            <p class="max-w-[330px] text-[15px] leading-[1.55] text-[#5c6068]">
+            <p class="max-w-[330px] text-[15px] leading-[1.55] text-muted">
               {feature.description}
             </p>
           </article>
@@ -164,7 +164,7 @@ const features = [
           Everything you need.<br />Nothing shouting for attention.
         </h2>
         <p
-          class="mx-auto mt-7 max-w-[500px] text-lg leading-[1.58] text-[#5c6068] min-[761px]:mx-0"
+          class="mx-auto mt-7 max-w-[500px] text-lg leading-[1.58] text-muted min-[761px]:mx-0"
         >
           Baros gives the set you are logging the space it deserves. Finish a
           workout and the same clean record becomes part of a history you can
@@ -186,7 +186,7 @@ const features = [
             alt="Baros active workout screen"
           />
           <figcaption
-            class="mt-[18px] text-center text-xs font-[650] tracking-[0.1em] text-[#706d68] uppercase"
+            class="mt-[18px] text-center text-xs font-[650] tracking-[0.1em] text-muted uppercase"
             >Focused set logging</figcaption
           >
         </figure>
@@ -196,7 +196,7 @@ const features = [
             alt="Baros workout history detail screen"
           />
           <figcaption
-            class="mt-[18px] text-center text-xs font-[650] tracking-[0.1em] text-[#706d68] uppercase"
+            class="mt-[18px] text-center text-xs font-[650] tracking-[0.1em] text-muted uppercase"
             >A useful training record</figcaption
           >
         </figure>
@@ -212,20 +212,20 @@ const features = [
         alt=""
       />
       <p
-        class="mb-5 text-xs leading-tight font-[750] tracking-[0.16em] text-accent-on-dark"
+        class="mb-5 text-xs leading-tight font-[750] tracking-[0.16em] text-brand-silver"
       >
         BAROS FOR IPHONE
       </p>
       <h2
-        class="m-0 text-[clamp(42px,5vw,68px)] font-semibold tracking-[-0.055em] text-white"
+        class="m-0 text-[clamp(42px,5vw,68px)] font-semibold tracking-[-0.055em] text-brand-silver"
       >
         Lift now. Remember later.
       </h2>
-      <p class="mt-[13px] text-lg text-[#9a9a9a]">
+      <p class="mt-[13px] text-lg text-dark-muted">
         Fast enough for the gym. Thoughtful enough for the long run.
       </p>
       <a
-        class="motion-safe:hover:-translate-y-0.5 mt-8 inline-flex rounded-[9px] shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-transform duration-160 hover:no-underline focus-visible:outline-accent-on-dark motion-reduce:transition-none"
+        class="motion-safe:hover:-translate-y-0.5 mt-8 inline-flex rounded-[9px] shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-transform duration-160 hover:no-underline focus-visible:outline-focus-on-dark motion-reduce:transition-none"
         href="https://apps.apple.com/us/app/baros-workout-tracker/id6782692304"
         aria-label="Download Baros on the App Store"
       >

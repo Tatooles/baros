@@ -5,7 +5,7 @@ interface Props {
 
 const { page } = Astro.props;
 const linkClasses =
-  "text-[13px] text-ink no-underline hover:underline hover:underline-offset-[3px] min-[561px]:text-sm";
+  "text-[13px] text-ink decoration-accent decoration-2 no-underline hover:underline hover:underline-offset-[4px] min-[561px]:text-sm";
 ---
 
 <header class="bg-page">
@@ -41,7 +41,7 @@ const linkClasses =
       <a
         class:list={[
           linkClasses,
-          page === "privacy" && "underline underline-offset-[3px]",
+          page === "privacy" && "text-accent underline underline-offset-[4px]",
         ]}
         href="/privacy"
         aria-current={page === "privacy" ? "page" : undefined}
@@ -51,7 +51,7 @@ const linkClasses =
       <a
         class:list={[
           linkClasses,
-          page === "support" && "underline underline-offset-[3px]",
+          page === "support" && "text-accent underline underline-offset-[4px]",
         ]}
         href="/support"
         aria-current={page === "support" ? "page" : undefined}

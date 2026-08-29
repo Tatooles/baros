@@ -2,13 +2,15 @@
 
 @theme {
   --color-page: #f7f5f1;
-  --color-ink: #171717;
-  --color-muted: #65635f;
-  --color-border: #dedbd4;
-  --color-link: #b4231f;
-  --color-accent: #b8322d;
-  --color-accent-on-dark: #ff6b65;
-  --color-dark: #101010;
+  --color-ink: #09121d;
+  --color-muted: #565a62;
+  --color-border: #d9d7d2;
+  --color-link: #1c66c7;
+  --color-accent: #1c66c7;
+  --color-focus-on-dark: #1c66c7;
+  --color-brand-silver: #f3ebe7;
+  --color-dark-muted: #b7bbc1;
+  --color-dark: #09121d;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
     system-ui, sans-serif;
 }
@@ -45,6 +47,14 @@
   a:focus-visible {
     outline: 2px solid var(--color-link);
     outline-offset: 3px;
+  }
+}
+
+@layer components {
+  .marketing-hero {
+    background:
+      radial-gradient(circle at 82% 36%, rgb(28 102 199 / 14%), transparent 29%),
+      radial-gradient(circle at 78% 48%, rgb(243 235 231 / 34%), transparent 42%);
   }
 }
 
