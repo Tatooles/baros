@@ -34,6 +34,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate CI workflow contracts
+        run: node --test SupportSite/tests/ci-workflows.test.mjs
+
       - name: Detect app-relevant changes
         id: detect
         env:
@@ -66,13 +69,17 @@ jobs:
   ios-unit-tests:
     name: ios-unit-tests
     needs: app-changes
-    if: needs.app-changes.outputs.changed == 'true'
-    runs-on: macos-26
+    if: ${{ !cancelled() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
+    runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
     timeout-minutes: 30
     env:
       IOS_TEST_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=26.5
 
     steps:
+      - name: Require successful app change classification
+        if: needs.app-changes.result != 'success'
+        run: exit 1
+
       - name: Check out repository
         uses: actions/checkout@v4
 
@@ -116,13 +123,17 @@ jobs:
   ios-ui-smoke:
     name: ios-ui-smoke
     needs: app-changes
-    if: needs.app-changes.outputs.changed == 'true'
-    runs-on: macos-26
+    if: ${{ !cancelled() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
+    runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
     timeout-minutes: 35
     env:
       IOS_TEST_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=26.5
 
     steps:
+      - name: Require successful app change classification
+        if: needs.app-changes.result != 'success'
+        run: exit 1
+
       - name: Check out repository
         uses: actions/checkout@v4
 
