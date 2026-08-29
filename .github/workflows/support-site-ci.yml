@@ -6,6 +6,7 @@ on:
       - ".github/workflows/support-site-ci.yml"
       - "SupportSite/**"
       - "docs/release/app-store/**"
+      - "docs/release/app-store-submission-pack.md"
   push:
     branches:
       - main
@@ -13,6 +14,7 @@ on:
       - ".github/workflows/support-site-ci.yml"
       - "SupportSite/**"
       - "docs/release/app-store/**"
+      - "docs/release/app-store-submission-pack.md"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
