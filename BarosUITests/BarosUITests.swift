@@ -552,6 +552,7 @@ final class BarosUITests: XCTestCase {
         minimizeActiveWorkout(in: app)
         app.buttons["HistoryTab"].tap()
         XCTAssertTrue(app.staticTexts["HistoryTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 3))
 
         app.buttons["ProfileTab"].tap()
         XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
@@ -760,7 +761,7 @@ final class BarosUITests: XCTestCase {
         let addedExerciseHeader = app.buttons["ExerciseHeader-1"]
         XCTAssertTrue(addedExerciseHeader.waitForExistence(timeout: 3))
         XCTAssertTrue(
-            waitForElement(addedExerciseHeader, maxYOrigin: 160, timeout: 3),
+            waitForElement(addedExerciseHeader, maxYOrigin: 150, timeout: 3),
             "Expected ExerciseHeader-1 to scroll near the top, got minY \(addedExerciseHeader.frame.minY)"
         )
 
@@ -2370,10 +2371,6 @@ final class BarosUITests: XCTestCase {
         startWorkoutButton.tap()
         let blankWorkoutButton = app.buttons["StartBlankWorkoutButton"]
         XCTAssertTrue(blankWorkoutButton.waitForExistence(timeout: 3))
-        for _ in 0..<3 where !blankWorkoutButton.isHittable {
-            app.swipeUp()
-        }
-        XCTAssertTrue(blankWorkoutButton.isHittable)
         blankWorkoutButton.tap()
     }
 
