@@ -1237,6 +1237,37 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testHistorySearchFiltersBothSegmentsAndDistinguishesNoResults() {
+        let app = makeApp(completedBenchWorkoutTitles: ["Upper Body", "Lower Body"])
+        app.launch()
+
+        app.buttons["HistoryTab"].tap()
+
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        XCTAssertGreaterThan(searchField.frame.midY, app.windows.firstMatch.frame.midY)
+
+        searchField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        app.searchFields.firstMatch.typeText("Upper")
+        XCTAssertTrue(app.staticTexts["Upper Body"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["Lower Body"].exists)
+
+        replaceText(in: app.searchFields.firstMatch, with: "")
+        XCTAssertTrue(app.staticTexts["Upper Body"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Lower Body"].waitForExistence(timeout: 3))
+
+        app.searchFields.firstMatch.tap()
+        app.searchFields.firstMatch.typeText("Bench")
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
+
+        replaceText(in: app.searchFields.firstMatch, with: "No Such Exercise")
+        XCTAssertTrue(app.staticTexts["No Matching Exercises"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["No Exercise History"].exists)
+    }
+
+    @MainActor
     func testDeletingCompletedWorkoutRemovesItFromHistory() {
         let app = makeApp(completedBenchWorkoutTitles: ["Delete Me"])
         app.launch()

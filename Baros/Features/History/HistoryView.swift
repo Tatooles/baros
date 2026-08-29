@@ -4,6 +4,7 @@ import SwiftUI
 struct HistoryView: View {
     @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
+    @Binding var searchText: String
     @State private var exerciseHistoryState = ExerciseHistoryViewState()
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query(
@@ -19,6 +20,10 @@ struct HistoryView: View {
             from: sessions,
             ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
         )
+    }
+
+    private var filteredCompletedSessions: [WorkoutSession] {
+        HistorySearch.workouts(in: completedSessions, matching: searchText)
     }
 
     var body: some View {
@@ -93,9 +98,14 @@ struct HistoryView: View {
                 emptyTitle: "No Workouts Yet",
                 emptyMessage: "Finished workouts will appear here."
             )
+        } else if HistorySearch.hasQuery(searchText), filteredCompletedSessions.isEmpty {
+            EmptyStateView(
+                title: "No Matching Workouts",
+                message: "Try a workout title or exercise name."
+            )
         } else {
             VStack(spacing: 10) {
-                ForEach(Array(completedSessions.enumerated()), id: \.element.id) { index, session in
+                ForEach(Array(filteredCompletedSessions.enumerated()), id: \.element.id) { index, session in
                     NavigationLink(value: HistoryRoute.workout(session.id)) {
                         WorkoutHistoryRow(session: session)
                     }
@@ -109,6 +119,7 @@ struct HistoryView: View {
     @ViewBuilder
     private func exerciseContent(snapshot: ExerciseHistoryViewSnapshot) -> some View {
         let summaries = snapshot.resolvedHistory.summaries
+        let filteredSummaries = HistorySearch.exercises(in: summaries, matching: searchText)
         if summaries.isEmpty {
             EmptyHistoryStateView(
                 recoveryTitle: "Looking for your exercise history?",
@@ -116,14 +127,19 @@ struct HistoryView: View {
                 emptyMessage: "Completed sets will build exercise history.",
                 hasVisibleCompletedWorkouts: !completedSessions.isEmpty
             )
+        } else if HistorySearch.hasQuery(searchText), filteredSummaries.isEmpty {
+            EmptyStateView(
+                title: "No Matching Exercises",
+                message: "Try an exercise name, equipment, or muscle group."
+            )
         } else {
             SurfaceCard(padding: 0) {
                 VStack(spacing: 0) {
-                    ForEach(Array(summaries.enumerated()), id: \.element.id) { index, summary in
+                    ForEach(Array(filteredSummaries.enumerated()), id: \.element.id) { index, summary in
                         NavigationLink(value: HistoryRoute.exercise(ExerciseHistoryRoute(summary: summary))) {
                             ExerciseHistoryRow(
                                 summary: summary,
-                                showsDivider: index < summaries.count - 1
+                                showsDivider: index < filteredSummaries.count - 1
                             )
                         }
                         .buttonStyle(.plain)

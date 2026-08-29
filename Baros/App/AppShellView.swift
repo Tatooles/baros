@@ -14,6 +14,7 @@ struct AppShellView: View {
     @State private var dismissedSyncFailureSignature: String?
     @State private var launchPresentation: LaunchExperiencePresentation?
     @State private var hasMadeLaunchExperienceDecision = false
+    @State private var historySearchText = ""
     @State private var prepareActiveWorkoutForMinimization: (() -> Void)?
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \SyncOutboxEntry.updatedAt, order: .reverse) private var outboxEntries: [SyncOutboxEntry]
@@ -210,38 +211,42 @@ struct AppShellView: View {
 
     private var tabs: some View {
         TabView(selection: $navigationState.selectedTab) {
-            NavigationStack(path: $navigationState.historyPath) {
-                HistoryView(navigationState: navigationState)
-            }
-            .tabItem {
+            Tab(value: AppTab.history, role: .search) {
+                NavigationStack(path: $navigationState.historyPath) {
+                    HistoryView(
+                        navigationState: navigationState,
+                        searchText: $historySearchText
+                    )
+                }
+            } label: {
                 Label(AppTab.history.title, systemImage: AppTab.history.symbolName)
                     .accessibilityIdentifier(AppTab.history.accessibilityIdentifier)
             }
-            .tag(AppTab.history)
 
-            NavigationStack {
-                HomeView(
-                    navigationState: navigationState,
-                    activeWorkoutEngine: activeWorkoutEngine,
-                    activeSession: activeSession,
-                    presentWorkout: { navigationState.presentActiveWorkout() }
-                )
-            }
-            .tabItem {
+            Tab(value: AppTab.home) {
+                NavigationStack {
+                    HomeView(
+                        navigationState: navigationState,
+                        activeWorkoutEngine: activeWorkoutEngine,
+                        activeSession: activeSession,
+                        presentWorkout: { navigationState.presentActiveWorkout() }
+                    )
+                }
+            } label: {
                 Label(AppTab.home.title, systemImage: AppTab.home.symbolName)
                     .accessibilityIdentifier(AppTab.home.accessibilityIdentifier)
             }
-            .tag(AppTab.home)
 
-            NavigationStack(path: $navigationState.profilePath) {
-                ProfileView(navigationState: navigationState)
-            }
-            .tabItem {
+            Tab(value: AppTab.profile) {
+                NavigationStack(path: $navigationState.profilePath) {
+                    ProfileView(navigationState: navigationState)
+                }
+            } label: {
                 Label(AppTab.profile.title, systemImage: AppTab.profile.symbolName)
                     .accessibilityIdentifier(AppTab.profile.accessibilityIdentifier)
             }
-            .tag(AppTab.profile)
         }
+        .searchable(text: $historySearchText, prompt: "Search history")
     }
 
     @ViewBuilder
