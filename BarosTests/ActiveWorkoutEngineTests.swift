@@ -368,6 +368,163 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(try allLoggedExercises(in: context).count, 3)
     }
 
+    func testSwappingLoggedExerciseReplacesItInPlaceWithOneBlankSet() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let row = Exercise(name: "Barbell Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+        let deadlift = Exercise(name: "Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .glutes)
+        context.insert(squat)
+        context.insert(bench)
+        context.insert(row)
+        context.insert(deadlift)
+        let first = try engine.addExercise(squat, to: session, context: context)
+        let original = try engine.addExercise(bench, to: session, context: context)
+        let last = try engine.addExercise(deadlift, to: session, context: context)
+        let originalFirstSet = try XCTUnwrap(original.sortedSets.first)
+        originalFirstSet.weight = 225
+        originalFirstSet.reps = 5
+        originalFirstSet.rpe = 8
+        originalFirstSet.isCompleted = true
+        let originalSecondSet = try engine.addSet(to: original, context: context)
+        original.notes = "Pause on the chest"
+        original.referenceNotes = "Previous cue"
+        try context.save()
+        let swapDate = Date(timeIntervalSince1970: 500)
+
+        let replacement = try engine.swapLoggedExercise(
+            original,
+            with: row,
+            context: context,
+            now: swapDate
+        )
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [first.id, replacement.id, last.id])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2])
+        XCTAssertEqual(replacement.exercise?.id, row.id)
+        XCTAssertEqual(replacement.exerciseSnapshotName, "Barbell Row")
+        XCTAssertEqual(replacement.notes, "")
+        XCTAssertNil(replacement.referenceNotes)
+        XCTAssertEqual(replacement.createdAt, swapDate)
+        XCTAssertEqual(replacement.updatedAt, swapDate)
+
+        XCTAssertEqual(replacement.sortedSets.count, 1)
+        let replacementSet = try XCTUnwrap(replacement.sortedSets.first)
+        XCTAssertEqual(replacementSet.orderIndex, 0)
+        XCTAssertNil(replacementSet.weight)
+        XCTAssertNil(replacementSet.reps)
+        XCTAssertNil(replacementSet.rpe)
+        XCTAssertFalse(replacementSet.isCompleted)
+        XCTAssertEqual(replacementSet.createdAt, swapDate)
+        XCTAssertEqual(replacementSet.updatedAt, swapDate)
+
+        XCTAssertEqual(original.deletedAt, swapDate)
+        XCTAssertEqual(original.updatedAt, swapDate)
+        XCTAssertEqual(originalFirstSet.deletedAt, swapDate)
+        XCTAssertEqual(originalSecondSet.deletedAt, swapDate)
+        XCTAssertEqual(session.updatedAt, swapDate)
+    }
+
+    func testSwappingLoggedExerciseWithItselfFailsWithoutMutation() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(bench)
+        let original = try engine.addExercise(bench, to: session, context: context)
+        let originalSet = try XCTUnwrap(original.sortedSets.first)
+        original.notes = "Keep this note"
+        originalSet.weight = 185
+        originalSet.reps = 5
+        try context.save()
+        let sessionUpdatedAt = session.updatedAt
+
+        XCTAssertThrowsError(
+            try engine.swapLoggedExercise(
+                original,
+                with: bench,
+                context: context,
+                now: Date(timeIntervalSince1970: 500)
+            )
+        ) { error in
+            XCTAssertEqual(error as? ActiveWorkoutEngineError, .invalidExerciseSwap)
+        }
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [original.id])
+        XCTAssertEqual(original.notes, "Keep this note")
+        XCTAssertNil(original.deletedAt)
+        XCTAssertEqual(originalSet.weight, 185)
+        XCTAssertEqual(originalSet.reps, 5)
+        XCTAssertNil(originalSet.deletedAt)
+        XCTAssertEqual(session.updatedAt, sessionUpdatedAt)
+        XCTAssertEqual(try allLoggedExercises(in: context).count, 1)
+        XCTAssertEqual(try allLoggedSets(in: context).count, 1)
+    }
+
+    func testSwappingFirstAndLastLoggedExercisesRetainsTheirPositions() throws {
+        for originalIndex in [0, 2] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let engine = ActiveWorkoutEngine()
+            let session = try engine.startBlankWorkout(context: context)
+            let exercises = [
+                Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads),
+                Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest),
+                Exercise(name: "Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .glutes),
+            ]
+            let replacementExercise = Exercise(
+                name: "Barbell Row",
+                category: .strength,
+                equipment: .barbell,
+                primaryMuscleGroup: .upperBack
+            )
+            for exercise in exercises {
+                context.insert(exercise)
+            }
+            context.insert(replacementExercise)
+            let originals = try exercises.map { try engine.addExercise($0, to: session, context: context) }
+
+            let replacement = try engine.swapLoggedExercise(
+                originals[originalIndex],
+                with: replacementExercise,
+                context: context
+            )
+
+            XCTAssertEqual(session.sortedLoggedExercises[originalIndex].id, replacement.id)
+            XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2])
+            XCTAssertEqual(
+                session.sortedLoggedExercises.map(\.exerciseSnapshotName),
+                originalIndex == 0
+                    ? ["Barbell Row", "Bench Press", "Deadlift"]
+                    : ["Back Squat", "Bench Press", "Barbell Row"]
+            )
+        }
+    }
+
+    func testSwappingOnlyLoggedExerciseKeepsOneVisibleExercise() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let row = Exercise(name: "Barbell Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+        context.insert(bench)
+        context.insert(row)
+        let original = try engine.addExercise(bench, to: session, context: context)
+
+        let replacement = try engine.swapLoggedExercise(original, with: row, context: context)
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [replacement.id])
+        XCTAssertEqual(replacement.orderIndex, 0)
+        XCTAssertEqual(replacement.exerciseSnapshotName, "Barbell Row")
+        XCTAssertEqual(replacement.sortedSets.count, 1)
+        XCTAssertTrue(original.isDeleted)
+    }
+
     func testAddingExerciseAfterRemovingLastExerciseUsesNextVisibleOrderIndex() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

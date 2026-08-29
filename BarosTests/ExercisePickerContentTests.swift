@@ -1,6 +1,27 @@
 import XCTest
 @testable import Baros
 
+final class ExercisePickerModeTests: XCTestCase {
+    func testSwapModeTreatsOnlyTheExactCurrentExerciseAsUnavailable() {
+        let current = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscleGroup: .chest
+        )
+        let sameNameVariant = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .dumbbell,
+            primaryMuscleGroup: .chest
+        )
+        let mode = ExercisePickerMode.swap(currentExerciseID: current.id)
+
+        XCTAssertTrue(mode.isCurrent(current))
+        XCTAssertFalse(mode.isCurrent(sameNameVariant))
+    }
+}
+
 final class ExercisePickerContentTests: XCTestCase {
     func testRecentSortPlacesLatestPerformanceFirstAndNeverPerformedLast() {
         let benchPress = exercise(named: "Bench Press")

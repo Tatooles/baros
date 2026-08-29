@@ -20,6 +20,7 @@ struct WorkoutSessionView: View {
     @State private var isFinishSheetPresented = false
     @State private var isReorderExercisesPresented = false
     @State private var isAddExercisePresented = false
+    @State private var swappingLoggedExercise: LoggedExercise?
     @State private var selectedHistoryExercise: LoggedExercise?
     @State private var pendingFocusedField: WorkoutField?
     @State private var pendingScrollTarget: UUID?
@@ -117,6 +118,10 @@ struct WorkoutSessionView: View {
                                 resignFocus()
                                 selectedHistoryExercise = loggedExercise
                             },
+                            onSwapExercise: {
+                                resignFocus()
+                                swappingLoggedExercise = loggedExercise
+                            },
                             onReorderExercises: {
                                 isReorderExercisesPresented = true
                             },
@@ -164,26 +169,7 @@ struct WorkoutSessionView: View {
             }
             .onChange(of: isAddExercisePresented) { _, isPresented in
                 guard !isPresented else { return }
-
-                let scrollTarget = pendingScrollTarget
-                let focusedField = pendingFocusedField
-                pendingScrollTarget = nil
-                self.pendingFocusedField = nil
-                recentlyAddedExerciseID = scrollTarget
-
-                focusTransitionCoordinator.transition(
-                    to: focusedField,
-                    delay: .milliseconds(350),
-                    commit: fieldCommitRegistry.commit,
-                    assign: { self.focusedField = $0 },
-                    reveal: { _ in
-                        if let scrollTarget {
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-                                scrollProxy.scrollTo(scrollTarget, anchor: .top)
-                            }
-                        }
-                    }
-                )
+                completeExerciseSelection(scrollProxy: scrollProxy)
             }
             .onChange(of: focusedField) { previousField, newField in
                 focusTransitionCoordinator.observeFocusChange(
@@ -321,6 +307,9 @@ struct WorkoutSessionView: View {
                 pendingFocusedField = loggedExercise.sortedSets.first.map { .setWeight($0.id) }
             }
         }
+        .sheet(item: $swappingLoggedExercise) { loggedExercise in
+            SwapExerciseSheet(loggedExercise: loggedExercise, engine: engine)
+        }
         .sheet(item: $selectedHistoryExercise) { loggedExercise in
             ExerciseQuickHistorySheet(loggedExercise: loggedExercise) { route in
                 selectedHistoryExercise = nil
@@ -334,7 +323,30 @@ struct WorkoutSessionView: View {
         isFinishSheetPresented
             || isReorderExercisesPresented
             || isAddExercisePresented
+            || swappingLoggedExercise != nil
             || selectedHistoryExercise != nil
+    }
+
+    private func completeExerciseSelection(scrollProxy: ScrollViewProxy) {
+        let scrollTarget = pendingScrollTarget
+        let focusedField = pendingFocusedField
+        pendingScrollTarget = nil
+        pendingFocusedField = nil
+        recentlyAddedExerciseID = scrollTarget
+
+        focusTransitionCoordinator.transition(
+            to: focusedField,
+            delay: .milliseconds(350),
+            commit: fieldCommitRegistry.commit,
+            assign: { self.focusedField = $0 },
+            reveal: { _ in
+                if let scrollTarget {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
+                        scrollProxy.scrollTo(scrollTarget, anchor: .top)
+                    }
+                }
+            }
+        )
     }
 
     private var previousFocusedField: WorkoutField? {

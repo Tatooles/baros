@@ -692,6 +692,51 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertFalse(entries.contains { $0.entityID == deletedLoggedExerciseSet.id })
     }
 
+    func testFinishingWorkoutAfterExerciseSwapRecordsOnlyReplacementGraph() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest"
+        )
+        let row = Exercise(
+            name: "Barbell Row",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Upper Back"
+        )
+        context.insert(bench)
+        context.insert(row)
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let original = try engine.addExercise(bench, to: session, context: context)
+        let originalFirstSet = try XCTUnwrap(original.sortedSets.first)
+        let originalSecondSet = try engine.addSet(to: original, context: context)
+
+        let replacement = try engine.swapLoggedExercise(
+            original,
+            with: row,
+            context: context,
+            now: Date(timeIntervalSince1970: 200)
+        )
+
+        XCTAssertTrue(try fetchEntries(context).isEmpty)
+
+        try engine.finishWorkout(session, context: context, now: Date(timeIntervalSince1970: 300))
+
+        let replacementSet = try XCTUnwrap(replacement.sortedSets.first)
+        let entries = try fetchEntries(context)
+        XCTAssertEqual(entries.count, 3)
+        assertEntry(entries, kind: .workoutSession, id: session.id, operation: .create)
+        assertEntry(entries, kind: .loggedExercise, id: replacement.id, operation: .create)
+        assertEntry(entries, kind: .loggedSet, id: replacementSet.id, operation: .create)
+        XCTAssertFalse(entries.contains { $0.entityID == original.id })
+        XCTAssertFalse(entries.contains { $0.entityID == originalFirstSet.id })
+        XCTAssertFalse(entries.contains { $0.entityID == originalSecondSet.id })
+    }
+
     func testActiveWorkoutDraftEditsProduceNoOutboxEntriesBeforeFinish() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

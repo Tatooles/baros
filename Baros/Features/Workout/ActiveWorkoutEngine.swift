@@ -4,12 +4,15 @@ import SwiftData
 
 enum ActiveWorkoutEngineError: LocalizedError, Equatable {
     case invalidExerciseReorder
+    case invalidExerciseSwap
     case pastWorkoutUnavailable
 
     var errorDescription: String? {
         switch self {
         case .invalidExerciseReorder:
             return "Workout exercises changed. Review the current order and try again."
+        case .invalidExerciseSwap:
+            return "That exercise can no longer be swapped. Review the workout and try again."
         case .pastWorkoutUnavailable:
             return "That past workout is no longer available. Choose another workout and try again."
         }
@@ -163,6 +166,50 @@ final class ActiveWorkoutEngine {
             session.touch(now: now)
         }
         try context.save()
+    }
+
+    @discardableResult
+    func swapLoggedExercise(
+        _ loggedExercise: LoggedExercise,
+        with exercise: Exercise,
+        context: ModelContext,
+        now: Date = .now
+    ) throws -> LoggedExercise {
+        guard let session = loggedExercise.session,
+              !loggedExercise.isDeleted,
+              loggedExercise.exercise?.id != exercise.id,
+              session.sortedLoggedExercises.contains(where: { $0.id == loggedExercise.id }) else {
+            throw ActiveWorkoutEngineError.invalidExerciseSwap
+        }
+
+        let replacement = LoggedExercise(
+            orderIndex: loggedExercise.orderIndex,
+            exercise: exercise,
+            createdAt: now,
+            updatedAt: now
+        )
+        replacement.session = session
+        context.insert(replacement)
+
+        let firstSet = LoggedSet(orderIndex: 0, createdAt: now, updatedAt: now)
+        firstSet.loggedExercise = replacement
+        context.insert(firstSet)
+        replacement.sets.append(firstSet)
+        session.loggedExercises.append(replacement)
+
+        loggedExercise.markDeleted(now: now)
+        for set in loggedExercise.sets {
+            set.markDeleted(now: now)
+        }
+        session.touch(now: now)
+
+        do {
+            try context.save()
+            return replacement
+        } catch {
+            context.rollback()
+            throw error
+        }
     }
 
     func reorderLoggedExercises(
