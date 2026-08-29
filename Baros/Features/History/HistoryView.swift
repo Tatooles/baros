@@ -40,11 +40,6 @@ struct HistoryView: View {
 
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
-                Text("History")
-                    .font(.largeTitle.weight(.bold))
-                    .foregroundStyle(AppTheme.textPrimary)
-                    .accessibilityIdentifier("HistoryTitle")
-
                 Picker("History Mode", selection: $navigationState.historyMode) {
                     ForEach(HistoryMode.allCases) { mode in
                         Text(mode.title).tag(mode)
@@ -63,6 +58,8 @@ struct HistoryView: View {
             .padding(AppTheme.shellPadding)
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
+        .navigationTitle("History")
+        .searchable(text: $searchText, prompt: "Search history")
         .navigationDestination(for: HistoryRoute.self) { route in
             switch route {
             case .workout(let sessionID):

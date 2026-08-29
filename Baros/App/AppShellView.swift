@@ -217,7 +217,6 @@ struct AppShellView: View {
                     searchText: $historySearchText
                 )
             }
-            .searchable(text: $historySearchText, prompt: "Search history")
             .tabItem {
                 Label(AppTab.history.title, systemImage: AppTab.history.symbolName)
                     .accessibilityIdentifier(AppTab.history.accessibilityIdentifier)

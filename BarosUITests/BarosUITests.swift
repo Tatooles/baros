@@ -551,7 +551,7 @@ final class BarosUITests: XCTestCase {
 
         minimizeActiveWorkout(in: app)
         app.buttons["HistoryTab"].tap()
-        XCTAssertTrue(app.staticTexts["HistoryTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 3))
 
         app.buttons["ProfileTab"].tap()
@@ -1240,6 +1240,26 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testHistoryUsesNativeTitleAboveSearch() {
+        let app = makeApp(completedBenchWorkoutTitles: ["Upper Body"])
+        app.launch()
+
+        app.buttons["HistoryTab"].tap()
+
+        let navigationBar = app.navigationBars["History"]
+        XCTAssertTrue(navigationBar.waitForExistence(timeout: 3))
+        let title = navigationBar.staticTexts["History"]
+        XCTAssertTrue(title.exists)
+
+        let searchField = app.searchFields.firstMatch
+        if !searchField.waitForExistence(timeout: 1) {
+            app.swipeDown()
+        }
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        XCTAssertLessThan(title.frame.maxY, searchField.frame.minY)
+    }
+
+    @MainActor
     func testHistorySearchFiltersBothSegmentsAndDistinguishesNoResults() {
         let app = makeApp(completedBenchWorkoutTitles: ["Upper Body", "Lower Body"])
         app.launch()
@@ -1291,7 +1311,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.alerts["Delete Workout?"].waitForExistence(timeout: 3))
         app.alerts.buttons["Delete"].tap()
 
-        XCTAssertTrue(app.staticTexts["HistoryTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 1))
     }
 
@@ -1658,7 +1678,7 @@ final class BarosUITests: XCTestCase {
         app.buttons["SaveWorkoutButton"].tap()
 
         app.buttons["HistoryTab"].tap()
-        XCTAssertTrue(app.staticTexts["HistoryTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 3))
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
         app.staticTexts["Bench Press"].tap()
 
@@ -1676,7 +1696,7 @@ final class BarosUITests: XCTestCase {
         app.launch()
 
         app.buttons["HistoryTab"].tap()
-        XCTAssertTrue(app.staticTexts["HistoryTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 3))
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
 
         let historyRow = app.buttons["ExerciseHistoryButton-0"]
@@ -1695,7 +1715,7 @@ final class BarosUITests: XCTestCase {
         app.launch()
 
         app.buttons["HistoryTab"].tap()
-        XCTAssertTrue(app.staticTexts["HistoryTitle"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 5))
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 10))
         let initialMetrics = try settledExerciseHistoryMetrics(in: app)
@@ -2572,7 +2592,7 @@ final class BarosUITests: XCTestCase {
         app.buttons["SaveWorkoutButton"].tap()
 
         app.buttons["HistoryTab"].tap()
-        XCTAssertTrue(app.staticTexts["HistoryTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 3))
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
         app.buttons["ExerciseHistoryButton-0"].tap()
