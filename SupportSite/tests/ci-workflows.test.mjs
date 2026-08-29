@@ -19,6 +19,13 @@ const appPaths = [
   "convex/auth.config.ts",
   "project.yml",
 ];
+const convexPaths = [
+  ".github/workflows/convex-ci.yml",
+  "convex/**",
+  "package.json",
+  "pnpm-lock.yaml",
+  "vitest.config.ts",
+];
 const supportSitePaths = [
   ".github/workflows/support-site-ci.yml",
   "SupportSite/**",
@@ -78,8 +85,23 @@ test("app classification uses the correct comparison for pull requests and pushe
   const workflow = await readWorkflow("pr-ci.yml");
   const classifier = workflow.jobs["app-changes"].steps.find((step) => step.id === "detect");
 
-  assert.match(classifier.run, /diff_range="\$\{BASE_SHA\}\.\.\.\$\{HEAD_SHA\}"/);
-  assert.match(classifier.run, /diff_range="\$\{BASE_SHA\}\.\.\$\{HEAD_SHA\}"/);
+  assert.match(
+    classifier.run,
+    /if \[\[ "\$\{EVENT_NAME\}" == "pull_request" \]\]; then\n\s+diff_range="\$\{BASE_SHA\}\.\.\.\$\{HEAD_SHA\}"\n\s*else\n\s+diff_range="\$\{BASE_SHA\}\.\.\$\{HEAD_SHA\}"\n\s*fi/,
+  );
+});
+
+test("app classification is always reported and preserves its decision polarity", async () => {
+  const workflow = await readWorkflow("pr-ci.yml");
+  const appChanges = workflow.jobs["app-changes"];
+  const classifier = appChanges.steps.find((step) => step.id === "detect");
+
+  assert.equal(workflow.on.pull_request, null);
+  assert.equal(appChanges.outputs.changed, "${{ steps.detect.outputs.changed }}");
+  assert.match(
+    classifier.run,
+    /; then\n\s+echo "changed=false" >> "\$\{GITHUB_OUTPUT\}"\n\s*else\n\s+echo "changed=true" >> "\$\{GITHUB_OUTPUT\}"\n\s*fi\n?$/,
+  );
 });
 
 test("push triggers and pull-request classification cover the same app paths", async () => {
@@ -131,4 +153,11 @@ test("Support Site CI watches the complete release surface on pull requests and 
 
   assert.deepEqual(workflow.on.pull_request.paths, supportSitePaths);
   assert.deepEqual(workflow.on.push.paths, supportSitePaths);
+});
+
+test("Convex CI watches the complete backend surface on pull requests and pushes", async () => {
+  const workflow = await readWorkflow("convex-ci.yml");
+
+  assert.deepEqual(workflow.on.pull_request.paths, convexPaths);
+  assert.deepEqual(workflow.on.push.paths, convexPaths);
 });
