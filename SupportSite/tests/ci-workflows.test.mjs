@@ -92,11 +92,35 @@ test("push triggers and pull-request classification cover the same app paths", a
 
 test("the lightweight classifier always runs the workflow contract tests", async () => {
   const workflow = await readWorkflow("pr-ci.yml");
-  const contractStep = workflow.jobs["app-changes"].steps.find(
+  const classifierSteps = workflow.jobs["app-changes"].steps;
+  const pnpmIndex = classifierSteps.findIndex((step) => step.name === "Set up pnpm");
+  const nodeIndex = classifierSteps.findIndex((step) => step.name === "Set up Node.js");
+  const installIndex = classifierSteps.findIndex(
+    (step) => step.name === "Install workflow test dependencies",
+  );
+  const contractIndex = classifierSteps.findIndex(
     (step) => step.name === "Validate CI workflow contracts",
   );
 
-  assert.deepEqual(contractStep, {
+  assert.deepEqual(classifierSteps[pnpmIndex], {
+    name: "Set up pnpm",
+    uses: "pnpm/action-setup@v4",
+    with: { version: "10.26.1" },
+  });
+  assert.deepEqual(classifierSteps[nodeIndex], {
+    name: "Set up Node.js",
+    uses: "actions/setup-node@v4",
+    with: { "node-version": "22.12.0" },
+  });
+  assert.deepEqual(classifierSteps[installIndex], {
+    name: "Install workflow test dependencies",
+    run: "pnpm --dir SupportSite install --frozen-lockfile",
+  });
+  assert.ok(
+    pnpmIndex < nodeIndex && nodeIndex < installIndex && installIndex < contractIndex,
+    "workflow test dependencies must be installed before the contract tests run",
+  );
+  assert.deepEqual(classifierSteps[contractIndex], {
     name: "Validate CI workflow contracts",
     run: "node --test SupportSite/tests/ci-workflows.test.mjs",
   });
