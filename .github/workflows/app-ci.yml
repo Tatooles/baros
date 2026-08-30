@@ -82,7 +82,7 @@ jobs:
   ios-unit-tests:
     name: ios-unit-tests
     needs: app-changes
-    if: ${{ !cancelled() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
+    if: ${{ always() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
     runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
     timeout-minutes: 30
     env:
@@ -136,7 +136,7 @@ jobs:
   ios-ui-smoke:
     name: ios-ui-smoke
     needs: app-changes
-    if: ${{ !cancelled() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
+    if: ${{ always() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
     runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
     timeout-minutes: 35
     env:

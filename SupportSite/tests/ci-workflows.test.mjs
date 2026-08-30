@@ -33,7 +33,7 @@ const supportSitePaths = [
   "docs/release/app-store-submission-pack.md",
 ];
 const requiredGateCondition = [
-  "${{ !cancelled() && (needs.app-changes.result != 'success'",
+  "${{ always() && (needs.app-changes.result != 'success'",
   "|| needs.app-changes.outputs.changed == 'true') }}",
 ].join(" ");
 const requiredGateRunner = [
@@ -74,7 +74,7 @@ function requireFailClosedGate(job) {
   });
 }
 
-test("required iOS gates fail closed when app-change classification fails", async () => {
+test("required iOS gates fail closed when app-change classification fails or is cancelled", async () => {
   const workflow = await readWorkflow("app-ci.yml");
 
   requireFailClosedGate(workflow.jobs["ios-unit-tests"]);
