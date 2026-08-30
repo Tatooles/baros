@@ -1409,6 +1409,7 @@ final class BarosUITests: XCTestCase {
         let noteField = app.descendants(matching: .any)
             .matching(identifier: "CompletedWorkoutExerciseNotesField-0")
             .firstMatch
+        let addNoteButton = app.buttons["AddCompletedWorkoutExerciseNoteButton-0"]
         XCTAssertTrue(noteField.waitForExistence(timeout: 3))
         guard noteField.exists else { return }
         replaceText(in: noteField, with: "Discard this edit")
@@ -1420,12 +1421,13 @@ final class BarosUITests: XCTestCase {
         app.buttons["EditWorkoutButton"].tap()
         XCTAssertTrue(noteField.waitForExistence(timeout: 3))
         replaceText(in: noteField, with: "")
+        app.textFields["CompletedWorkoutTitleField"].tap()
+        XCTAssertTrue(addNoteButton.waitForExistence(timeout: 3))
         app.buttons["SaveCompletedWorkoutEditButton"].tap()
 
         XCTAssertFalse(displayedNote.waitForExistence(timeout: 1))
 
         app.buttons["EditWorkoutButton"].tap()
-        let addNoteButton = app.buttons["AddCompletedWorkoutExerciseNoteButton-0"]
         XCTAssertTrue(addNoteButton.waitForExistence(timeout: 3))
         addNoteButton.tap()
         XCTAssertTrue(noteField.waitForExistence(timeout: 3))

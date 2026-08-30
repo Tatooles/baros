@@ -541,9 +541,12 @@ private struct CompletedWorkoutExerciseNoteControl: View {
                     .accessibilityLabel("Exercise note")
                     .accessibilityIdentifier(fieldAccessibilityIdentifier)
                     .id(focusTarget)
-                    .onChange(of: focusedField.wrappedValue) { _, newField in
+                    .onChange(of: focusedField.wrappedValue) { previousField, newField in
                         if newField == focusTarget {
                             isRevealed = true
+                        } else if previousField == focusTarget,
+                                  notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            isRevealed = false
                         }
                     }
             } else {
