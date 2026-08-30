@@ -18,41 +18,39 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                Menu {
-                    Picker("App Appearance", selection: appearanceBinding) {
-                        ForEach(AppAppearance.allCases, id: \.self) { appearance in
-                            Text(appearance.displayName)
-                                .tag(appearance)
+                HStack(spacing: 12) {
+                    Image(systemName: appAppearanceStore.appearance.systemImage)
+                        .imageScale(.medium)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .frame(width: 24, alignment: .leading)
+                        .accessibilityHidden(true)
+
+                    Text("App Appearance")
+                        .foregroundStyle(AppTheme.textPrimary)
+
+                    Spacer(minLength: 12)
+
+                    Menu {
+                        Picker("App Appearance", selection: appearanceBinding) {
+                            ForEach(AppAppearance.allCases, id: \.self) { appearance in
+                                Text(appearance.displayName)
+                                    .tag(appearance)
+                            }
                         }
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: appAppearanceStore.appearance.systemImage)
-                            .imageScale(.medium)
-                            .foregroundStyle(AppTheme.textSecondary)
-                            .frame(width: 24, alignment: .leading)
-                            .accessibilityHidden(true)
-
-                        Text("App Appearance")
-                            .foregroundStyle(AppTheme.textPrimary)
-
-                        Spacer(minLength: 12)
-
+                    } label: {
                         HStack(spacing: 6) {
                             Text(appAppearanceStore.appearance.displayName)
-                                .foregroundStyle(AppTheme.textSecondary)
 
                             Image(systemName: "chevron.up.chevron.down")
                                 .font(.caption2.weight(.semibold))
-                                .foregroundStyle(AppTheme.textSecondary)
                                 .accessibilityHidden(true)
                         }
+                        .foregroundStyle(AppTheme.textSecondary)
                     }
-                    .contentShape(Rectangle())
+                    .accessibilityIdentifier("AppAppearancePicker")
+                    .accessibilityLabel("App Appearance")
+                    .accessibilityValue(appAppearanceStore.appearance.displayName)
                 }
-                .accessibilityIdentifier("AppAppearancePicker")
-                .accessibilityLabel("App Appearance")
-                .accessibilityValue(appAppearanceStore.appearance.displayName)
             }
 
             Section("Units") {

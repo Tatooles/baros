@@ -671,6 +671,11 @@ final class BarosUITests: XCTestCase {
         let appearancePicker = app.descendants(matching: .any)["AppAppearancePicker"]
         XCTAssertTrue(appearancePicker.waitForExistence(timeout: 3))
         XCTAssertEqual(appearancePicker.value as? String, "Dark")
+        XCTAssertLessThan(
+            appearancePicker.frame.width,
+            app.frame.width / 2,
+            "Only the trailing appearance control should open the menu."
+        )
 
         appearancePicker.tap()
         app.buttons["Light"].tap()
