@@ -8,7 +8,7 @@ const repositoryRoot = process.env.CI_WORKFLOW_ROOT
   ? pathToFileURL(`${process.env.CI_WORKFLOW_ROOT}/`)
   : new URL("../../", import.meta.url);
 const appPaths = [
-  ".github/workflows/pr-ci.yml",
+  ".github/workflows/app-ci.yml",
   "Baros/**",
   "BarosLiveActivity/**",
   "BarosTests/**",
@@ -75,14 +75,14 @@ function requireFailClosedGate(job) {
 }
 
 test("required iOS gates fail closed when app-change classification fails", async () => {
-  const workflow = await readWorkflow("pr-ci.yml");
+  const workflow = await readWorkflow("app-ci.yml");
 
   requireFailClosedGate(workflow.jobs["ios-unit-tests"]);
   requireFailClosedGate(workflow.jobs["ios-ui-smoke"]);
 });
 
 test("app classification uses the correct comparison for pull requests and pushes", async () => {
-  const workflow = await readWorkflow("pr-ci.yml");
+  const workflow = await readWorkflow("app-ci.yml");
   const classifier = workflow.jobs["app-changes"].steps.find((step) => step.id === "detect");
 
   assert.match(
@@ -92,7 +92,7 @@ test("app classification uses the correct comparison for pull requests and pushe
 });
 
 test("app classification is always reported and preserves its decision polarity", async () => {
-  const workflow = await readWorkflow("pr-ci.yml");
+  const workflow = await readWorkflow("app-ci.yml");
   const appChanges = workflow.jobs["app-changes"];
   const classifier = appChanges.steps.find((step) => step.id === "detect");
   const checkout = appChanges.steps.find(
@@ -119,7 +119,7 @@ test("app classification is always reported and preserves its decision polarity"
 });
 
 test("push triggers and pull-request classification cover the same app paths", async () => {
-  const workflow = await readWorkflow("pr-ci.yml");
+  const workflow = await readWorkflow("app-ci.yml");
   const classifier = workflow.jobs["app-changes"].steps.find((step) => step.id === "detect");
 
   assert.deepEqual(workflow.on.push.paths, appPaths);
@@ -127,7 +127,7 @@ test("push triggers and pull-request classification cover the same app paths", a
 });
 
 test("the lightweight classifier always runs the workflow contract tests", async () => {
-  const workflow = await readWorkflow("pr-ci.yml");
+  const workflow = await readWorkflow("app-ci.yml");
   const classifierSteps = workflow.jobs["app-changes"].steps;
   const pnpmIndex = classifierSteps.findIndex((step) => step.name === "Set up pnpm");
   const nodeIndex = classifierSteps.findIndex((step) => step.name === "Set up Node.js");
