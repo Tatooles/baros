@@ -57,6 +57,7 @@ struct ExerciseHistorySessionGroupCard: View {
     let headingIdentity: ExerciseHistoryDisplayIdentity
     var weightUnit: MeasurementUnit = .pounds
     var showsExerciseNotes: Bool = true
+    var openWorkout: (() -> Void)? = nil
 
     var body: some View {
         SurfaceCard {
@@ -71,7 +72,25 @@ struct ExerciseHistorySessionGroupCard: View {
         }
     }
 
+    @ViewBuilder
     private var header: some View {
+        if let openWorkout {
+            Button(action: openWorkout) {
+                headerContent(showsDisclosureIndicator: true)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                "\(group.title), \(WorkoutFormatters.compactDate(group.startedAt))"
+            )
+            .accessibilityHint("Opens completed workout")
+            .accessibilityIdentifier("ExercisePerformanceWorkoutButton-\(group.id.uuidString)")
+        } else {
+            headerContent(showsDisclosureIndicator: false)
+        }
+    }
+
+    private func headerContent(showsDisclosureIndicator: Bool) -> some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(group.title)
@@ -91,6 +110,13 @@ struct ExerciseHistorySessionGroupCard: View {
                 .padding(.vertical, 6)
                 .background(AppTheme.brandAccentMuted)
                 .clipShape(Capsule())
+
+            if showsDisclosureIndicator {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppTheme.textTertiary)
+                    .accessibilityHidden(true)
+            }
         }
     }
 
