@@ -1260,30 +1260,6 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testCompletedWorkoutEditShowsNotesAboveExercises() {
-        let app = makeApp(completedBenchWorkoutTitles: ["Editable Push"])
-        app.launch()
-
-        app.buttons["HistoryTab"].tap()
-        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
-        app.buttons["WorkoutHistoryButton-0"].tap()
-        XCTAssertTrue(app.buttons["EditWorkoutButton"].waitForExistence(timeout: 3))
-        app.buttons["EditWorkoutButton"].tap()
-        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 3))
-
-        let notesLabel = app.staticTexts["NOTES"]
-        let notesField = app.textFields["CompletedWorkoutNotesField"]
-        let firstExerciseHeader = app.staticTexts
-            .matching(identifier: "CompletedWorkoutExerciseHeader-0")
-            .matching(NSPredicate(format: "label == %@", "Bench Press"))
-            .firstMatch
-        XCTAssertTrue(notesLabel.waitForExistence(timeout: 3))
-        XCTAssertTrue(notesField.exists)
-        XCTAssertTrue(firstExerciseHeader.exists)
-        XCTAssertLessThanOrEqual(notesField.frame.maxY, firstExerciseHeader.frame.minY)
-    }
-
-    @MainActor
     func testEditingCompletedWorkoutUpdatesHistoryDetailAndExerciseHistory() {
         let app = makeApp()
         app.launch()

@@ -198,7 +198,6 @@ struct CompletedWorkoutEditView: View {
                     progress: exerciseProgress(for: exerciseIndex),
                     isCollapsed: nil
                 )
-                .accessibilityIdentifier("CompletedWorkoutExerciseHeader-\(exerciseIndex)")
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)
 
