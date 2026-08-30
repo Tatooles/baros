@@ -666,6 +666,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
         app.buttons["ProfileSettingsLink"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["Appearance"].exists)
 
         let appearancePicker = app.descendants(matching: .any)["AppAppearancePicker"]
         XCTAssertTrue(appearancePicker.waitForExistence(timeout: 3))

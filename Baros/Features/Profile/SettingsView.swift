@@ -17,20 +17,20 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Appearance") {
+            Section {
                 Menu {
                     Picker("App Appearance", selection: appearanceBinding) {
                         ForEach(AppAppearance.allCases, id: \.self) { appearance in
-                            Label(appearance.displayName, systemImage: appearance.systemImage)
+                            Text(appearance.displayName)
                                 .tag(appearance)
                         }
                     }
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: appAppearanceStore.appearance.systemImage)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(AppTheme.brandAccentForeground)
-                            .frame(width: 24)
+                            .imageScale(.medium)
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .frame(width: 24, alignment: .leading)
                             .accessibilityHidden(true)
 
                         Text("App Appearance")
@@ -38,13 +38,15 @@ struct SettingsView: View {
 
                         Spacer(minLength: 12)
 
-                        Text(appAppearanceStore.appearance.displayName)
-                            .foregroundStyle(AppTheme.textSecondary)
+                        HStack(spacing: 6) {
+                            Text(appAppearanceStore.appearance.displayName)
+                                .foregroundStyle(AppTheme.textSecondary)
 
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(AppTheme.textSecondary)
-                            .accessibilityHidden(true)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .accessibilityHidden(true)
+                        }
                     }
                     .contentShape(Rectangle())
                 }

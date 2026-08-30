@@ -61,7 +61,7 @@ final class AppAppearancePreferenceStoreTests: XCTestCase {
         XCTAssertNil(AppAppearance.system.preferredColorScheme)
     }
 
-    func testAppearanceOptionsExposeMenuLabelsAndSymbols() {
+    func testAppearanceOptionsExposeLabelsAndRowSymbols() {
         XCTAssertEqual(AppAppearance.allCases.map(\.displayName), ["Dark", "Light", "System"])
         XCTAssertEqual(
             AppAppearance.allCases.map(\.systemImage),
