@@ -658,7 +658,11 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(appearanceState.waitForExistence(timeout: 3))
         XCTAssertEqual(appearanceState.value as? String, "Dark, moon.fill, Dark")
 
-        app.buttons["ProfileTab"].tap()
+        let profileTab = app.buttons["ProfileTab"].exists
+            ? app.buttons["ProfileTab"]
+            : app.buttons["Profile"]
+        XCTAssertTrue(profileTab.waitForExistence(timeout: 3))
+        profileTab.tap()
         XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
         app.buttons["ProfileSettingsLink"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))

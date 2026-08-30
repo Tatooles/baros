@@ -28,13 +28,9 @@ struct SettingsView: View {
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: appAppearanceStore.appearance.systemImage)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(AppTheme.onBrandAccent)
-                            .frame(width: 30, height: 30)
-                            .background(
-                                AppTheme.brandAccentFill,
-                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            )
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(AppTheme.brandAccentForeground)
+                            .frame(width: 24)
                             .accessibilityHidden(true)
 
                         Text("App Appearance")
