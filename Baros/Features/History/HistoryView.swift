@@ -1,11 +1,12 @@
+import Observation
 import SwiftData
 import SwiftUI
 
 struct HistoryView: View {
     @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
-    @Binding var searchText: String
     @State private var exerciseHistoryState = ExerciseHistoryViewState()
+    @State private var searchState = HistorySearchState()
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query(
         filter: #Predicate<WorkoutSession> { session in
@@ -22,10 +23,6 @@ struct HistoryView: View {
         )
     }
 
-    private var filteredCompletedSessions: [WorkoutSession] {
-        HistorySearch.workouts(in: completedSessions, matching: searchText)
-    }
-
     var body: some View {
         let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
         // Remote child records do not always touch their parent session. Reading
@@ -37,29 +34,16 @@ struct HistoryView: View {
             ownerTokenIdentifier: ownerTokenIdentifier,
             syncCompletion: syncScheduler.lastSyncedAt
         )
+        let completedSessions = completedSessions
+        let workoutSearchIndex = WorkoutHistorySearchIndex(sessions: completedSessions)
 
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                Picker("History Mode", selection: $navigationState.historyMode) {
-                    ForEach(HistoryMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("HistoryModePicker")
-
-                switch navigationState.historyMode {
-                case .workouts:
-                    workoutContent
-                case .exercises:
-                    exerciseContent(snapshot: exerciseHistorySnapshot)
-                }
-            }
-            .padding(AppTheme.shellPadding)
-        }
-        .background(AppTheme.canvasBackground.ignoresSafeArea())
-        .navigationTitle("History")
-        .searchable(text: $searchText, prompt: "Search history")
+        HistorySearchContent(
+            navigationState: navigationState,
+            searchState: searchState,
+            completedSessions: completedSessions,
+            workoutSearchIndex: workoutSearchIndex,
+            exerciseHistorySnapshot: exerciseHistorySnapshot
+        )
         .navigationDestination(for: HistoryRoute.self) { route in
             switch route {
             case .workout(let sessionID):
@@ -85,22 +69,65 @@ struct HistoryView: View {
             }
         }
     }
+}
+
+@MainActor
+@Observable
+private final class HistorySearchState {
+    var text = ""
+}
+
+private struct HistorySearchContent: View {
+    @Bindable var navigationState: AppNavigationState
+    @Bindable var searchState: HistorySearchState
+    let completedSessions: [WorkoutSession]
+    let workoutSearchIndex: WorkoutHistorySearchIndex
+    let exerciseHistorySnapshot: ExerciseHistoryViewSnapshot
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                Picker("History Mode", selection: $navigationState.historyMode) {
+                    ForEach(HistoryMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("HistoryModePicker")
+
+                switch navigationState.historyMode {
+                case .workouts:
+                    workoutContent
+                case .exercises:
+                    exerciseContent
+                }
+            }
+            .padding(AppTheme.shellPadding)
+        }
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
+        .navigationTitle("History")
+        .searchable(text: $searchState.text, prompt: "Search history")
+    }
 
     @ViewBuilder
     private var workoutContent: some View {
+        let filteredCompletedSessions = workoutSearchIndex.sessions(
+            from: completedSessions,
+            matching: searchState.text
+        )
         if completedSessions.isEmpty {
             EmptyHistoryStateView(
                 recoveryTitle: "Looking for your workouts?",
                 emptyTitle: "No Workouts Yet",
                 emptyMessage: "Finished workouts will appear here."
             )
-        } else if HistorySearch.hasQuery(searchText), filteredCompletedSessions.isEmpty {
+        } else if HistorySearch.hasQuery(searchState.text), filteredCompletedSessions.isEmpty {
             EmptyStateView(
                 title: "No Matching Workouts",
                 message: "Try a workout title or exercise name."
             )
         } else {
-            VStack(spacing: 10) {
+            LazyVStack(spacing: 10) {
                 ForEach(Array(filteredCompletedSessions.enumerated()), id: \.element.id) { index, session in
                     NavigationLink(value: HistoryRoute.workout(session.id)) {
                         WorkoutHistoryRow(session: session)
@@ -113,9 +140,9 @@ struct HistoryView: View {
     }
 
     @ViewBuilder
-    private func exerciseContent(snapshot: ExerciseHistoryViewSnapshot) -> some View {
-        let summaries = snapshot.resolvedHistory.summaries
-        let filteredSummaries = HistorySearch.exercises(in: summaries, matching: searchText)
+    private var exerciseContent: some View {
+        let summaries = exerciseHistorySnapshot.resolvedHistory.summaries
+        let filteredSummaries = HistorySearch.exercises(in: summaries, matching: searchState.text)
         if summaries.isEmpty {
             EmptyHistoryStateView(
                 recoveryTitle: "Looking for your exercise history?",
@@ -123,7 +150,7 @@ struct HistoryView: View {
                 emptyMessage: "Completed sets will build exercise history.",
                 hasVisibleCompletedWorkouts: !completedSessions.isEmpty
             )
-        } else if HistorySearch.hasQuery(searchText), filteredSummaries.isEmpty {
+        } else if HistorySearch.hasQuery(searchState.text), filteredSummaries.isEmpty {
             EmptyStateView(
                 title: "No Matching Exercises",
                 message: "Try an exercise name, equipment, or muscle group."

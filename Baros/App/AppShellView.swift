@@ -14,7 +14,6 @@ struct AppShellView: View {
     @State private var dismissedSyncFailureSignature: String?
     @State private var launchPresentation: LaunchExperiencePresentation?
     @State private var hasMadeLaunchExperienceDecision = false
-    @State private var historySearchText = ""
     @State private var prepareActiveWorkoutForMinimization: (() -> Void)?
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \SyncOutboxEntry.updatedAt, order: .reverse) private var outboxEntries: [SyncOutboxEntry]
@@ -212,10 +211,7 @@ struct AppShellView: View {
     private var tabs: some View {
         TabView(selection: $navigationState.selectedTab) {
             NavigationStack(path: $navigationState.historyPath) {
-                HistoryView(
-                    navigationState: navigationState,
-                    searchText: $historySearchText
-                )
+                HistoryView(navigationState: navigationState)
             }
             .tabItem {
                 Label(AppTab.history.title, systemImage: AppTab.history.symbolName)

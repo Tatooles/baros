@@ -7,17 +7,19 @@ final class HistorySearchTests: XCTestCase {
         let titleMatch = makeSession(title: "Upper Body", exerciseName: "Barbell Row")
         let exerciseMatch = makeSession(title: "Strength", exerciseName: "Bench Press")
         let nonMatch = makeSession(title: "Conditioning", exerciseName: "Farmer Carry")
+        let sessions = [titleMatch, exerciseMatch, nonMatch]
+        let searchIndex = WorkoutHistorySearchIndex(sessions: sessions)
 
         XCTAssertEqual(
-            HistorySearch.workouts(
-                in: [titleMatch, exerciseMatch, nonMatch],
+            searchIndex.sessions(
+                from: sessions,
                 matching: "  upper BODY  "
             ).map(\.id),
             [titleMatch.id]
         )
         XCTAssertEqual(
-            HistorySearch.workouts(
-                in: [titleMatch, exerciseMatch, nonMatch],
+            searchIndex.sessions(
+                from: sessions,
                 matching: "bEnCh"
             ).map(\.id),
             [exerciseMatch.id]

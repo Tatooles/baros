@@ -1,12 +1,21 @@
 import Foundation
 
-enum HistorySearch {
-    static func hasQuery(_ query: String) -> Bool {
-        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+struct WorkoutHistorySearchIndex {
+    private let searchableFieldsBySessionID: [UUID: [String]]
+
+    init(sessions: [WorkoutSession]) {
+        searchableFieldsBySessionID = Dictionary(
+            uniqueKeysWithValues: sessions.map { session in
+                (
+                    session.id,
+                    [session.title] + session.sortedLoggedExercises.map(\.exerciseSnapshotName)
+                )
+            }
+        )
     }
 
-    static func workouts(
-        in sessions: [WorkoutSession],
+    func sessions(
+        from sessions: [WorkoutSession],
         matching query: String
     ) -> [WorkoutSession] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -15,11 +24,16 @@ enum HistorySearch {
         }
 
         return sessions.filter { session in
-            session.title.localizedCaseInsensitiveContains(normalizedQuery)
-                || session.sortedLoggedExercises.contains { loggedExercise in
-                    loggedExercise.exerciseSnapshotName.localizedCaseInsensitiveContains(normalizedQuery)
-                }
+            searchableFieldsBySessionID[session.id]?.contains { field in
+                field.localizedCaseInsensitiveContains(normalizedQuery)
+            } == true
         }
+    }
+}
+
+enum HistorySearch {
+    static func hasQuery(_ query: String) -> Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     static func exercises(
