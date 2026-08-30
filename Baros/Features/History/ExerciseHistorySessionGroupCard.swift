@@ -83,7 +83,7 @@ struct ExerciseHistorySessionGroupCard: View {
             .accessibilityLabel(
                 "\(group.title), \(WorkoutFormatters.compactDate(group.startedAt))"
             )
-            .accessibilityHint("Opens completed workout")
+            .accessibilityHint("Opens completed workout.")
             .accessibilityIdentifier("ExercisePerformanceWorkoutButton-\(group.id.uuidString)")
         } else {
             headerContent(showsDisclosureIndicator: false)
