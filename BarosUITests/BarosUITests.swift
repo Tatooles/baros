@@ -1419,6 +1419,16 @@ final class BarosUITests: XCTestCase {
 
         app.buttons["EditWorkoutButton"].tap()
         XCTAssertTrue(noteField.waitForExistence(timeout: 3))
+        replaceText(in: noteField, with: "")
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+
+        XCTAssertFalse(displayedNote.waitForExistence(timeout: 1))
+
+        app.buttons["EditWorkoutButton"].tap()
+        let addNoteButton = app.buttons["AddCompletedWorkoutExerciseNoteButton-0"]
+        XCTAssertTrue(addNoteButton.waitForExistence(timeout: 3))
+        addNoteButton.tap()
+        XCTAssertTrue(noteField.waitForExistence(timeout: 3))
         replaceText(in: noteField, with: savedNote)
         app.buttons["SaveCompletedWorkoutEditButton"].tap()
 

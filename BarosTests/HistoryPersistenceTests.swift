@@ -51,12 +51,17 @@ final class HistoryPersistenceTests: XCTestCase {
                 notes: "Original note",
                 sets: [set]
             )
+            let noteOnlyExercise = LoggedExercise(
+                orderIndex: 1,
+                exerciseSnapshotName: "Bench Press",
+                notes: "Original no-set note"
+            )
             let session = WorkoutSession(
                 title: "Push",
                 startedAt: Date(timeIntervalSince1970: 1_000),
                 status: .completed,
                 source: .blank,
-                loggedExercises: [exercise]
+                loggedExercises: [exercise, noteOnlyExercise]
             )
             sessionID = session.id
             context.insert(session)
@@ -64,6 +69,7 @@ final class HistoryPersistenceTests: XCTestCase {
 
             var draft = CompletedWorkoutEditDraft(session: session)
             draft.exercises[0].notes = "Persisted correction"
+            draft.exercises[1].notes = "Persisted no-set correction"
             try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
                 draft,
                 for: session,
@@ -81,15 +87,18 @@ final class HistoryPersistenceTests: XCTestCase {
                 predicate: #Predicate { $0.id == targetSessionID }
             )
             let reopenedSession = try XCTUnwrap(context.fetch(descriptor).first)
-            let reopenedExercise = try XCTUnwrap(reopenedSession.sortedLoggedExercises.first)
+            let reopenedExercises = reopenedSession.sortedLoggedExercises
+            let reopenedExercise = try XCTUnwrap(reopenedExercises.first)
 
             XCTAssertEqual(reopenedExercise.notes, "Persisted correction")
+            XCTAssertEqual(reopenedExercises.map(\.notes), ["Persisted correction", "Persisted no-set correction"])
 
             let summary = try XCTUnwrap(ExerciseHistorySummary.makeSummaries(from: [reopenedSession]).first)
             let group = try XCTUnwrap(
                 ExerciseHistorySessionGroup.makeGroups(from: [reopenedSession], matching: summary).first
             )
             XCTAssertEqual(group.loggedExerciseEntries.first?.exerciseNotes, "Persisted correction")
+            XCTAssertEqual(group.loggedExerciseEntries.map(\.loggedExercise.id), [reopenedExercise.id])
             container = nil
         }
     }
