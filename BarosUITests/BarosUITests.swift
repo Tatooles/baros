@@ -676,15 +676,18 @@ final class BarosUITests: XCTestCase {
             app.frame.width / 2,
             "Only the trailing appearance control should open the menu."
         )
+        let appearancePickerWidth = appearancePicker.frame.width
 
         appearancePicker.tap()
         app.buttons["Light"].tap()
         XCTAssertEqual(appearancePicker.value as? String, "Light")
+        XCTAssertEqual(appearancePicker.frame.width, appearancePickerWidth, accuracy: 1)
         XCTAssertEqual(appearanceState.value as? String, "Light, sun.max.fill, Light")
 
         appearancePicker.tap()
         app.buttons["System"].tap()
         XCTAssertEqual(appearancePicker.value as? String, "System")
+        XCTAssertEqual(appearancePicker.frame.width, appearancePickerWidth, accuracy: 1)
         let systemState = appearanceState.value as? String
         XCTAssertTrue(
             systemState == "System, circle.lefthalf.filled, Dark"

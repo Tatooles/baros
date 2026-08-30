@@ -39,7 +39,13 @@ struct SettingsView: View {
                         }
                     } label: {
                         HStack(spacing: 6) {
-                            Text(appAppearanceStore.appearance.displayName)
+                            ZStack(alignment: .trailing) {
+                                ForEach(AppAppearance.allCases, id: \.self) { appearance in
+                                    Text(appearance.displayName)
+                                        .opacity(appearance == appAppearanceStore.appearance ? 1 : 0)
+                                }
+                            }
+                            .accessibilityHidden(true)
 
                             Image(systemName: "chevron.up.chevron.down")
                                 .font(.caption2.weight(.semibold))
