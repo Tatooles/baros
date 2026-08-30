@@ -46,8 +46,19 @@ enum HistorySearch {
         }
 
         return summaries.filter { summary in
-            summary.name.localizedCaseInsensitiveContains(normalizedQuery)
-                || summary.metadataDisplayText?.localizedCaseInsensitiveContains(normalizedQuery) == true
+            let metadataFields = [
+                summary.equipmentRaw.map {
+                    (ExerciseEquipment(rawValue: $0) ?? .other).displayName
+                },
+                summary.primaryMuscleGroupRaw.map {
+                    (ExerciseMuscleGroup(rawValue: $0) ?? .other).displayName
+                },
+            ].compactMap { $0 }
+
+            return summary.name.localizedCaseInsensitiveContains(normalizedQuery)
+                || metadataFields.contains { field in
+                    field.localizedCaseInsensitiveContains(normalizedQuery)
+                }
         }
     }
 }

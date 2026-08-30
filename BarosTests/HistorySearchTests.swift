@@ -63,6 +63,36 @@ final class HistorySearchTests: XCTestCase {
         )
     }
 
+    func testExerciseSearchMatchesEachAvailableMetadataFieldIndependently() {
+        let equipmentOnly = makeSummary(
+            id: "equipment-only",
+            name: "Legacy Press",
+            equipment: .barbell,
+            muscleGroup: nil
+        )
+        let muscleGroupOnly = makeSummary(
+            id: "muscle-group-only",
+            name: "Legacy Pull",
+            equipment: nil,
+            muscleGroup: .upperBack
+        )
+
+        XCTAssertEqual(
+            HistorySearch.exercises(
+                in: [equipmentOnly, muscleGroupOnly],
+                matching: "barbell"
+            ).map(\.id),
+            [equipmentOnly.id]
+        )
+        XCTAssertEqual(
+            HistorySearch.exercises(
+                in: [equipmentOnly, muscleGroupOnly],
+                matching: "upper back"
+            ).map(\.id),
+            [muscleGroupOnly.id]
+        )
+    }
+
     func testWhitespaceOnlySearchIsNotAnActiveQuery() {
         XCTAssertFalse(HistorySearch.hasQuery("  \n\t "))
         XCTAssertTrue(HistorySearch.hasQuery(" bench "))
@@ -86,15 +116,15 @@ final class HistorySearchTests: XCTestCase {
     private func makeSummary(
         id: String,
         name: String,
-        equipment: ExerciseEquipment,
-        muscleGroup: ExerciseMuscleGroup
+        equipment: ExerciseEquipment?,
+        muscleGroup: ExerciseMuscleGroup?
     ) -> ExerciseHistorySummary {
         ExerciseHistorySummary(
             id: id,
             exerciseID: nil,
             name: name,
-            equipmentRaw: equipment.rawValue,
-            primaryMuscleGroupRaw: muscleGroup.rawValue,
+            equipmentRaw: equipment?.rawValue,
+            primaryMuscleGroupRaw: muscleGroup?.rawValue,
             lastPerformedAt: Date(timeIntervalSince1970: 1_700_000_000),
             completedSetCount: 1,
             performanceSessionIDs: [],
