@@ -20,6 +20,7 @@ struct BarosApp: App {
     @State private var navigationState = AppNavigationState()
     @State private var activeWorkoutEngine = ActiveWorkoutEngine()
     @State private var workoutLiveActivityCoordinator = WorkoutLiveActivityCoordinator()
+    @State private var appAppearanceStore: AppAppearancePreferenceStore
     @State private var syncScheduler: SyncScheduler
     @State private var currentOwnerCoordinator: CurrentOwnerCoordinator
 
@@ -52,6 +53,8 @@ struct BarosApp: App {
         FirstRunExperienceStore.resetForUITestingIfRequested(arguments: arguments)
         FirstRunExperienceStore.markSeenForUITestingIfRequested(arguments: arguments)
         ExercisePickerSortPreferenceStore.resetForUITestingIfRequested(arguments: arguments)
+        AppAppearancePreferenceStore.resetForUITestingIfRequested(arguments: arguments)
+        _appAppearanceStore = State(initialValue: AppAppearancePreferenceStore())
 
         do {
             let useInMemoryStore = arguments.contains("--uitest-in-memory-store")
@@ -123,8 +126,15 @@ struct BarosApp: App {
                 activeWorkoutEngine: activeWorkoutEngine,
                 workoutLiveActivityCoordinator: workoutLiveActivityCoordinator
             )
+            #if DEBUG
+            .overlay(alignment: .topTrailing) {
+                AppAppearanceUITestProbe(appearance: appAppearanceStore.appearance)
+            }
+            #endif
+            .preferredColorScheme(appAppearanceStore.appearance.preferredColorScheme)
             .modelContainer(modelContainer)
             .environment(Clerk.shared)
+            .environment(appAppearanceStore)
             .environment(syncScheduler)
             .environment(currentOwnerCoordinator)
             .environment(
@@ -176,6 +186,38 @@ struct BarosApp: App {
 }
 
 #if DEBUG
+private struct AppAppearanceUITestProbe: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let appearance: AppAppearance
+
+    var body: some View {
+        if ProcessInfo.processInfo.arguments.contains("--uitest-inspect-app-appearance") {
+            Text("App appearance test state")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("UITestAppAppearance")
+                .accessibilityLabel("App appearance test state")
+                .accessibilityValue(
+                    "\(appearance.displayName), \(appearance.systemImage), \(effectiveDisplayName)"
+                )
+                .allowsHitTesting(false)
+        }
+    }
+
+    private var effectiveDisplayName: String {
+        switch colorScheme {
+        case .dark:
+            "Dark"
+        case .light:
+            "Light"
+        @unknown default:
+            "Unknown"
+        }
+    }
+}
+
 private struct ExerciseHistoryUITestMetricsOverlay: View {
     private let metrics = ExerciseHistoryUITestMetrics.shared
     @State private var displayedResolutionCount = 0
