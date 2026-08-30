@@ -1273,11 +1273,14 @@ final class BarosUITests: XCTestCase {
 
         let notesLabel = app.staticTexts["NOTES"]
         let notesField = app.textFields["CompletedWorkoutNotesField"]
-        let firstSetWeightField = app.textFields["HistorySetWeightField-0-0"]
+        let firstExerciseHeader = app.staticTexts
+            .matching(identifier: "CompletedWorkoutExerciseHeader-0")
+            .matching(NSPredicate(format: "label == %@", "Bench Press"))
+            .firstMatch
         XCTAssertTrue(notesLabel.waitForExistence(timeout: 3))
         XCTAssertTrue(notesField.exists)
-        XCTAssertTrue(firstSetWeightField.exists)
-        XCTAssertLessThanOrEqual(notesField.frame.maxY, firstSetWeightField.frame.minY)
+        XCTAssertTrue(firstExerciseHeader.exists)
+        XCTAssertLessThanOrEqual(notesField.frame.maxY, firstExerciseHeader.frame.minY)
     }
 
     @MainActor
