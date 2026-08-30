@@ -6,6 +6,8 @@ enum UITestFixtureSeeder {
     static let completedBenchWorkoutArgument = "--uitest-seed-completed-bench-workout"
     static let historyExerciseNoteArgument = "--uitest-seed-history-exercise-note"
     static let exerciseHistoryPerformanceArgument = "--uitest-seed-exercise-history-performance"
+    static let matchingExercisePerformanceWorkoutsArgument =
+        "--uitest-seed-matching-exercise-performance-workouts"
     static let largeActiveWorkoutArgument = "--uitest-seed-large-active-workout"
     static let largeActiveWorkoutTitle = "Performance Workout 10x5"
 
@@ -27,6 +29,13 @@ enum UITestFixtureSeeder {
 
         if arguments.contains(exerciseHistoryPerformanceArgument) {
             try seedExerciseHistoryPerformanceFixture(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+
+        if arguments.contains(matchingExercisePerformanceWorkoutsArgument) {
+            try seedMatchingExercisePerformanceWorkouts(
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context
             )
@@ -101,6 +110,102 @@ enum UITestFixtureSeeder {
         )
 
         context.insert(session)
+        try context.save()
+    }
+
+    static func seedMatchingExercisePerformanceWorkouts(
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext
+    ) throws {
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        guard let benchPress = Exercise.visibleActiveExercises(
+            from: exercises,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        ).first(where: { $0.seedIdentifier == "bench-press" }) else {
+            return
+        }
+
+        let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let endedAt = startedAt.addingTimeInterval(3_600)
+
+        func loggedExercise(
+            id: String,
+            orderIndex: Int,
+            weight: Double
+        ) -> LoggedExercise {
+            LoggedExercise(
+                id: stableUUID(id),
+                orderIndex: orderIndex,
+                exercise: benchPress,
+                exerciseSnapshotName: "Bench Press",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
+                createdAt: startedAt,
+                updatedAt: endedAt,
+                sets: [
+                    LoggedSet(
+                        id: stableUUID("\(id)-set"),
+                        orderIndex: 0,
+                        weight: weight,
+                        reps: 5,
+                        rpe: 8,
+                        isCompleted: true,
+                        completedAt: endedAt,
+                        createdAt: startedAt,
+                        updatedAt: endedAt
+                    ),
+                ]
+            )
+        }
+
+        let alphaSession = WorkoutSession(
+            id: stableUUID("00000000-0000-4000-8000-000000012601"),
+            title: "Matching Push",
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSeconds: 3_600,
+            notes: "Identity Alpha",
+            status: .completed,
+            source: .blank,
+            createdAt: startedAt,
+            updatedAt: endedAt,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier,
+            loggedExercises: [
+                loggedExercise(
+                    id: "00000000-0000-4000-8000-000000012611",
+                    orderIndex: 0,
+                    weight: 185
+                ),
+                loggedExercise(
+                    id: "00000000-0000-4000-8000-000000012612",
+                    orderIndex: 1,
+                    weight: 195
+                ),
+            ]
+        )
+        let betaSession = WorkoutSession(
+            id: stableUUID("00000000-0000-4000-8000-000000012602"),
+            title: "Matching Push",
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSeconds: 3_600,
+            notes: "Identity Beta",
+            status: .completed,
+            source: .blank,
+            createdAt: startedAt,
+            updatedAt: endedAt,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier,
+            loggedExercises: [
+                loggedExercise(
+                    id: "00000000-0000-4000-8000-000000012621",
+                    orderIndex: 0,
+                    weight: 225
+                ),
+            ]
+        )
+
+        context.insert(alphaSession)
+        context.insert(betaSession)
         try context.save()
     }
 

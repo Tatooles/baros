@@ -54,6 +54,19 @@ struct HistoryView: View {
                 case .exercises:
                     exerciseContent(snapshot: exerciseHistorySnapshot)
                 }
+
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains(
+                    "--uitest-open-unavailable-workout-history"
+                ) {
+                    Button("Open unavailable workout") {
+                        navigationState.openWorkoutHistory(
+                            UUID(uuidString: "00000000-0000-4000-8000-000000012699")!
+                        )
+                    }
+                    .accessibilityIdentifier("UITestOpenUnavailableWorkoutButton")
+                }
+                #endif
             }
             .padding(AppTheme.shellPadding)
         }

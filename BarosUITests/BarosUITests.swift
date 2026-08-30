@@ -1312,6 +1312,8 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(alphaPerformance.waitForExistence(timeout: 3))
         XCTAssertTrue(betaPerformance.exists)
         XCTAssertTrue(alphaPerformance.isHittable)
+        XCTAssertTrue(alphaPerformance.label.contains("Nov 14, 2023"))
+        XCTAssertFalse(app.buttons["Set 1"].exists)
 
         alphaPerformance.tap()
         XCTAssertFalse(app.staticTexts["Workout Unavailable"].exists)
@@ -1327,6 +1329,115 @@ final class BarosUITests: XCTestCase {
 
         betaPerformance.tap()
         XCTAssertTrue(app.navigationBars["Beta Push"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testExercisePerformanceUsesWorkoutIdentityWhenTitleAndTimestampMatch() {
+        let app = makeApp(
+            extraArguments: ["--uitest-seed-matching-exercise-performance-workouts"]
+        )
+        app.launch()
+
+        app.buttons["HistoryTab"].tap()
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["ExerciseHistoryButton-0"].tap()
+
+        let performanceButtons = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-")
+        )
+        XCTAssertTrue(performanceButtons.firstMatch.waitForExistence(timeout: 3))
+        XCTAssertEqual(performanceButtons.count, 2)
+
+        performanceButtons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["Matching Push"].waitForExistence(timeout: 3))
+        let firstOpenedAlpha = app.staticTexts["Identity Alpha"].exists
+        let firstOpenedBeta = app.staticTexts["Identity Beta"].exists
+        XCTAssertNotEqual(firstOpenedAlpha, firstOpenedBeta)
+
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["ExerciseHistoryHeading"].waitForExistence(timeout: 3)
+        )
+        performanceButtons.element(boundBy: 1).tap()
+        XCTAssertTrue(app.navigationBars["Matching Push"].waitForExistence(timeout: 3))
+        XCTAssertNotEqual(app.staticTexts["Identity Alpha"].exists, firstOpenedAlpha)
+        XCTAssertNotEqual(app.staticTexts["Identity Beta"].exists, firstOpenedBeta)
+    }
+
+    @MainActor
+    func testExercisePerformanceHeaderSupportsAccessibilityDynamicType() {
+        let app = makeApp(
+            extraArguments: [
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+            ],
+            completedBenchWorkoutTitles: ["Accessible Push"]
+        )
+        app.launch()
+
+        app.buttons["HistoryTab"].tap()
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["ExerciseHistoryButton-0"].tap()
+
+        let performanceButton = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-")
+        ).firstMatch
+        let setLabel = app.staticTexts["Set 1"]
+        XCTAssertTrue(performanceButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(setLabel.waitForExistence(timeout: 3))
+        XCTAssertTrue(performanceButton.isHittable)
+        XCTAssertTrue(performanceButton.label.contains("Accessible Push"))
+        XCTAssertLessThanOrEqual(performanceButton.frame.maxY, setLabel.frame.minY)
+    }
+
+    @MainActor
+    func testUnavailableWorkoutRouteDoesNotExposeHistoryContent() {
+        let app = makeApp(extraArguments: ["--uitest-open-unavailable-workout-history"])
+        app.launch()
+
+        app.buttons["HistoryTab"].tap()
+        let openUnavailableWorkout = app.buttons["UITestOpenUnavailableWorkoutButton"]
+        XCTAssertTrue(openUnavailableWorkout.waitForExistence(timeout: 3))
+        openUnavailableWorkout.tap()
+
+        XCTAssertTrue(app.staticTexts["Workout Unavailable"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["EditWorkoutButton"].exists)
+        XCTAssertFalse(app.staticTexts["Previous workout narrative"].exists)
+    }
+
+    @MainActor
+    func testDeletingWorkoutOpenedFromExerciseHistoryShowsNoHistoryState() {
+        let app = makeApp(completedBenchWorkoutTitles: ["Delete Exercise Performance"])
+        app.launch()
+
+        app.buttons["HistoryTab"].tap()
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["ExerciseHistoryButton-0"].tap()
+
+        let performanceButton = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-")
+        ).firstMatch
+        XCTAssertTrue(performanceButton.waitForExistence(timeout: 3))
+        performanceButton.tap()
+        XCTAssertTrue(
+            app.navigationBars["Delete Exercise Performance"].waitForExistence(timeout: 3)
+        )
+
+        let deleteWorkoutButton = app.buttons["Delete Workout"]
+        for _ in 0..<6 where !deleteWorkoutButton.exists || !deleteWorkoutButton.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(deleteWorkoutButton.waitForExistence(timeout: 3))
+        deleteWorkoutButton.tap()
+        XCTAssertTrue(app.alerts["Delete Workout?"].waitForExistence(timeout: 3))
+        app.alerts.buttons["Delete"].tap()
+
+        XCTAssertTrue(app.staticTexts["No Exercise History"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.descendants(matching: .any)["ExerciseHistoryHeading"].exists)
+        XCTAssertFalse(performanceButton.exists)
     }
 
     @MainActor
@@ -1618,6 +1729,15 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Done"].exists)
         XCTAssertTrue(app.buttons["Full History"].exists)
         XCTAssertFalse(app.staticTexts["QuickHistoryLimitFooter"].exists)
+        XCTAssertEqual(
+            app.buttons.matching(
+                NSPredicate(
+                    format: "identifier BEGINSWITH %@",
+                    "ExercisePerformanceWorkoutButton-"
+                )
+            ).count,
+            0
+        )
         let setLabel = app.staticTexts["Set 1"]
         let noteText = app.staticTexts["ExerciseHistoryNoteText"]
         XCTAssertTrue(setLabel.waitForExistence(timeout: 3))
