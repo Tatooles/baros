@@ -34,18 +34,18 @@ struct CompletedWorkoutEditView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     workoutHeader
 
-                    ForEach(draft.exercises.indices, id: \.self) { exerciseIndex in
-                        exerciseEditor(exerciseIndex: exerciseIndex)
-                    }
-
                     WorkoutNotesField(
-                        title: "WORKOUT NOTES",
+                        title: "NOTES",
                         placeholder: "How did this session feel? Any notes for next time...",
                         text: $draft.notes,
                         focusTarget: .notes,
                         focusedField: $focusedField,
                         accessibilityIdentifier: "CompletedWorkoutNotesField"
                     )
+
+                    ForEach(draft.exercises.indices, id: \.self) { exerciseIndex in
+                        exerciseEditor(exerciseIndex: exerciseIndex)
+                    }
                 }
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
