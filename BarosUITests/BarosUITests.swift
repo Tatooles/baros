@@ -779,6 +779,103 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testSwappingActiveWorkoutExerciseReplacesItInPlace() {
+        let app = makeApp()
+        app.launch()
+
+        startBlankWorkoutWithBenchPress(in: app)
+        assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
+
+        app.buttons["ExerciseMenuButton-0"].tap()
+        let swapButton = app.buttons["SwapExerciseButton-0"]
+        XCTAssertTrue(swapButton.waitForExistence(timeout: 3))
+        XCTAssertEqual(swapButton.label, "Swap Exercise")
+        swapButton.tap()
+
+        XCTAssertTrue(app.navigationBars["Swap Exercise"].waitForExistence(timeout: 3))
+        let currentExercise = app.buttons["ExercisePickerRow-Bench Press-Barbell"]
+        XCTAssertTrue(currentExercise.waitForExistence(timeout: 3))
+        XCTAssertFalse(currentExercise.isEnabled)
+        XCTAssertTrue(currentExercise.label.contains("Current exercise"))
+
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.tap()
+        searchField.typeText("Overhead Press")
+        let replacementRow = app.buttons["ExercisePickerRow-Overhead Press-Barbell"]
+        XCTAssertTrue(replacementRow.waitForExistence(timeout: 3))
+        replacementRow.tap()
+
+        XCTAssertTrue(app.staticTexts["Swap Bench Press for Overhead Press?"].waitForExistence(timeout: 3))
+        XCTAssertTrue(
+            app.staticTexts["This removes Bench Press, its sets, and its exercise note from this workout."].exists
+        )
+        let confirmButton = app.buttons["ConfirmSwapExerciseButton"].firstMatch
+        XCTAssertTrue(confirmButton.waitForExistence(timeout: 3))
+        confirmButton.tap()
+
+        assertActiveWorkoutExerciseOrder(["Overhead Press"], in: app)
+        let replacementWeightField = app.textFields["SetWeightField-0-0"]
+        XCTAssertTrue(replacementWeightField.waitForExistence(timeout: 3))
+        XCTAssertEqual(replacementWeightField.value as? String, "LBS")
+        XCTAssertFalse(app.textFields["SetWeightField-0-1"].exists)
+    }
+
+    @MainActor
+    func testCancellingSwapExerciseLeavesActiveWorkoutUnchanged() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+
+        app.buttons["ExerciseMenuButton-0"].tap()
+        app.buttons["SwapExerciseButton-0"].tap()
+        XCTAssertTrue(app.navigationBars["Swap Exercise"].waitForExistence(timeout: 3))
+        app.buttons["Done"].tap()
+        assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
+
+        app.buttons["ExerciseMenuButton-0"].tap()
+        app.buttons["SwapExerciseButton-0"].tap()
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.tap()
+        searchField.typeText("Overhead Press")
+        app.buttons["ExercisePickerRow-Overhead Press-Barbell"].tap()
+
+        let cancelButton = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 3))
+        cancelButton.tap()
+        let closeSearchButton = app.buttons["close"].firstMatch
+        XCTAssertTrue(closeSearchButton.waitForExistence(timeout: 3))
+        closeSearchButton.tap()
+        XCTAssertTrue(app.navigationBars["Swap Exercise"].waitForExistence(timeout: 3))
+        app.buttons["Done"].tap()
+
+        assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
+    }
+
+    @MainActor
+    func testCreatingExerciseFromSwapPickerUsesSwapConfirmation() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+
+        app.buttons["ExerciseMenuButton-0"].tap()
+        app.buttons["SwapExerciseButton-0"].tap()
+        XCTAssertTrue(app.navigationBars["Swap Exercise"].waitForExistence(timeout: 3))
+        app.buttons["ExercisePickerCreateExerciseButton"].tap()
+
+        XCTAssertTrue(app.navigationBars["Create Exercise"].waitForExistence(timeout: 3))
+        app.textFields["ExerciseNameField"].tap()
+        app.textFields["ExerciseNameField"].typeText("Swap Test Press")
+        app.buttons["ExerciseEditorSaveButton"].tap()
+
+        XCTAssertTrue(app.staticTexts["Swap Bench Press for Swap Test Press?"].waitForExistence(timeout: 3))
+        app.buttons["ConfirmSwapExerciseButton"].firstMatch.tap()
+
+        assertActiveWorkoutExerciseOrder(["Swap Test Press"], in: app)
+    }
+
+    @MainActor
     func testReorderingActiveWorkoutExercisesChangesCardOrder() {
         let app = makeApp()
         app.launch()

@@ -4,12 +4,15 @@ import SwiftData
 
 enum ActiveWorkoutEngineError: LocalizedError, Equatable {
     case invalidExerciseReorder
+    case invalidExerciseSwap
     case pastWorkoutUnavailable
 
     var errorDescription: String? {
         switch self {
         case .invalidExerciseReorder:
             return "Workout exercises changed. Review the current order and try again."
+        case .invalidExerciseSwap:
+            return "That exercise can no longer be swapped. Review the workout and try again."
         case .pastWorkoutUnavailable:
             return "That past workout is no longer available. Choose another workout and try again."
         }
@@ -163,6 +166,67 @@ final class ActiveWorkoutEngine {
             session.touch(now: now)
         }
         try context.save()
+    }
+
+    @discardableResult
+    func swapLoggedExercise(
+        _ loggedExercise: LoggedExercise,
+        with exercise: Exercise,
+        context: ModelContext,
+        now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws -> LoggedExercise {
+        guard let session = loggedExercise.session,
+              !loggedExercise.isDeleted,
+              loggedExercise.exercise?.id != exercise.id,
+              session.sortedLoggedExercises.contains(where: { $0.id == loggedExercise.id }) else {
+            throw ActiveWorkoutEngineError.invalidExerciseSwap
+        }
+
+        let originalSessionUpdatedAt = session.updatedAt
+        let originalLoggedExerciseUpdatedAt = loggedExercise.updatedAt
+        let originalLoggedExerciseDeletedAt = loggedExercise.deletedAt
+        let originalSetStates = loggedExercise.sets.map { set in
+            (set: set, updatedAt: set.updatedAt, deletedAt: set.deletedAt)
+        }
+        let replacement = LoggedExercise(
+            orderIndex: loggedExercise.orderIndex,
+            exercise: exercise,
+            createdAt: now,
+            updatedAt: now
+        )
+        replacement.session = session
+        context.insert(replacement)
+
+        let firstSet = LoggedSet(orderIndex: 0, createdAt: now, updatedAt: now)
+        firstSet.loggedExercise = replacement
+        context.insert(firstSet)
+        replacement.sets.append(firstSet)
+        session.loggedExercises.append(replacement)
+
+        loggedExercise.markDeleted(now: now)
+        for set in loggedExercise.sets {
+            set.markDeleted(now: now)
+        }
+        session.touch(now: now)
+
+        do {
+            try save(context)
+            return replacement
+        } catch {
+            session.loggedExercises.removeAll { $0.id == replacement.id }
+            context.delete(firstSet)
+            context.delete(replacement)
+            loggedExercise.updatedAt = originalLoggedExerciseUpdatedAt
+            loggedExercise.deletedAt = originalLoggedExerciseDeletedAt
+            for state in originalSetStates {
+                state.set.updatedAt = state.updatedAt
+                state.set.deletedAt = state.deletedAt
+            }
+            session.updatedAt = originalSessionUpdatedAt
+            context.rollback()
+            throw error
+        }
     }
 
     func reorderLoggedExercises(

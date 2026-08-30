@@ -15,6 +15,7 @@ struct ExerciseCardView: View {
     let previousSets: [PreviousSetPerformance]
     let canReorder: Bool
     let viewHistory: () -> Void
+    let onSwapExercise: () -> Void
     let onReorderExercises: () -> Void
     let onEditRPE: (LoggedSet) -> Void
     @State private var showsRemoveConfirmation = false
@@ -31,6 +32,7 @@ struct ExerciseCardView: View {
         previousSets: [PreviousSetPerformance],
         canReorder: Bool,
         viewHistory: @escaping () -> Void,
+        onSwapExercise: @escaping () -> Void,
         onReorderExercises: @escaping () -> Void,
         onEditRPE: @escaping (LoggedSet) -> Void
     ) {
@@ -45,6 +47,7 @@ struct ExerciseCardView: View {
         self.previousSets = previousSets
         self.canReorder = canReorder
         self.viewHistory = viewHistory
+        self.onSwapExercise = onSwapExercise
         self.onReorderExercises = onReorderExercises
         self.onEditRPE = onEditRPE
     }
@@ -76,6 +79,11 @@ struct ExerciseCardView: View {
                             Label("View History", systemImage: "clock.arrow.circlepath")
                         }
                         .accessibilityIdentifier("ExerciseHistoryButton-\(exerciseIndex)")
+
+                        Button(action: onSwapExercise) {
+                            Label("Swap Exercise", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .accessibilityIdentifier("SwapExerciseButton-\(exerciseIndex)")
 
                         if canReorder {
                             Button(action: onReorderExercises) {
