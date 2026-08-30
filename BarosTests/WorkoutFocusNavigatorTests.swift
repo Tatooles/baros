@@ -288,15 +288,21 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
     }
 
     func testUnrealizedTransitionRealizesBeforeAssigningAndRevealingFocus() async {
+        let source = WorkoutField.setReps(UUID())
         let field = WorkoutField.setWeight(UUID())
         let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
         var events: [String] = []
         let revealExpectation = expectation(description: "field revealed after realization")
+        coordinator.synchronizeFocus(source)
 
         coordinator.transitionAfterRealizing(
             to: field,
-            commit: { _ in events.append("commit") },
+            commit: { committedField in
+                XCTAssertEqual(committedField, source)
+                events.append("commit")
+            },
             realize: { _ in events.append("realize") },
+            realizeTarget: { _ in events.append("realizeTarget") },
             assign: { _ in events.append("assign") },
             reveal: { _ in
                 events.append("reveal")
@@ -306,8 +312,42 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
 
         await fulfillment(of: [revealExpectation], timeout: 1)
 
-        XCTAssertEqual(events, ["commit", "realize", "assign", "reveal"])
+        XCTAssertEqual(
+            events,
+            ["commit", "realize", "realizeTarget", "commit", "assign", "reveal"]
+        )
         XCTAssertEqual(coordinator.currentField, field)
+    }
+
+    func testSupersededUnrealizedTransitionsKeepCommittingTheActualSource() async {
+        let source = WorkoutField.setReps(UUID())
+        let firstTarget = WorkoutField.setWeight(UUID())
+        let latestTarget = WorkoutField.setReps(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .seconds(1))
+        var committedFields: [WorkoutField?] = []
+        let revealExpectation = expectation(description: "latest field revealed")
+        coordinator.synchronizeFocus(source)
+
+        coordinator.transitionAfterRealizing(
+            to: firstTarget,
+            commit: { committedFields.append($0) },
+            realize: { _ in },
+            assign: { _ in },
+            reveal: { _ in XCTFail("The superseded target must not reveal") }
+        )
+        coordinator.transitionAfterRealizing(
+            to: latestTarget,
+            delay: .zero,
+            commit: { committedFields.append($0) },
+            realize: { _ in },
+            assign: { _ in },
+            reveal: { _ in revealExpectation.fulfill() }
+        )
+
+        await fulfillment(of: [revealExpectation], timeout: 1)
+
+        XCTAssertEqual(committedFields, [source, source, source])
+        XCTAssertEqual(coordinator.currentField, latestTarget)
     }
 
     func testTransitioningOutOfAFieldCommitsThatField() {

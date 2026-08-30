@@ -313,11 +313,15 @@ final class BarosUITests: XCTestCase {
 
         let nextButton = app.buttons["NextWorkoutFieldButton"]
         XCTAssertTrue(nextButton.waitForExistence(timeout: 3))
+        let expectedField = app.textFields["SetRepsField-0-4"]
+        XCTAssertFalse(
+            expectedField.exists,
+            "The fifth set's reps field should begin unrealized in the large fixture."
+        )
         for _ in 0..<10 {
             nextButton.tap()
         }
 
-        let expectedField = app.textFields["SetRepsField-0-4"]
         XCTAssertTrue(expectedField.waitForExistence(timeout: 3))
         let focusExpectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "hasKeyboardFocus == true"),
@@ -397,16 +401,16 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(editedField.value as? String, "101.")
         XCTAssertTrue(app.keyboards.firstMatch.exists)
 
-        let offscreenExercise = app.buttons["ExerciseHeader-2"]
+        let offscreenExercise = app.buttons["ExerciseHeader-1"]
         let workoutScrollView = app.scrollViews["ActiveWorkoutScrollView"]
         XCTAssertTrue(workoutScrollView.exists)
-        for _ in 0..<6 where !offscreenExercise.exists {
+        for _ in 0..<12 where !offscreenExercise.exists {
             drag(workoutScrollView, direction: .up)
         }
         XCTAssertTrue(offscreenExercise.waitForExistence(timeout: 3))
         XCTAssertTrue(app.keyboards.firstMatch.exists)
 
-        for _ in 0..<8 where !app.textFields["WorkoutTitle"].isHittable {
+        for _ in 0..<16 where !app.textFields["WorkoutTitle"].isHittable {
             drag(workoutScrollView, direction: .down)
         }
         XCTAssertTrue(editedField.waitForExistence(timeout: 3))

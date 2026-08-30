@@ -18,12 +18,25 @@ final class ActiveWorkoutSetDraftStore {
     func existingDraft(for setID: UUID) -> ActiveWorkoutSetDraft? {
         drafts[setID]
     }
+
+    func isRowRealized(for setID: UUID) -> Bool {
+        existingDraft(for: setID)?.isRowRealized == true
+    }
+
+    func realizeRow(for setID: UUID) {
+        draft(for: setID).setRowVisibility(true)
+    }
 }
 
 @Observable
 @MainActor
 final class ActiveWorkoutSetDraft {
     private var input = ActiveWorkoutSetInput()
+    private(set) var isRowRealized = false
+
+    func setRowVisibility(_ isVisible: Bool) {
+        isRowRealized = isVisible
+    }
 
     func update(_ text: String, for field: ActiveWorkoutSetInput.Field, isFocused: Bool) {
         input.update(text, for: field, isFocused: isFocused)

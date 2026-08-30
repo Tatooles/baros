@@ -134,6 +134,7 @@ final class WorkoutFocusOrderCache {
 @MainActor
 final class WorkoutFocusTransitionCoordinator {
     private(set) var currentField: WorkoutField?
+    private var actualField: WorkoutField?
     private var focusOrder: [WorkoutField] = []
     private var revealTask: Task<Void, Never>?
     private let revealDelay: Duration
@@ -148,6 +149,7 @@ final class WorkoutFocusTransitionCoordinator {
 
     func synchronizeFocus(_ focusedField: WorkoutField?) {
         currentField = focusedField
+        actualField = focusedField
     }
 
     func adjacentField(offset: Int) -> WorkoutField? {
@@ -188,7 +190,7 @@ final class WorkoutFocusTransitionCoordinator {
     ) {
         guard target != currentField else { return }
 
-        commit(currentField)
+        commit(actualField)
         currentField = target
         if let target {
             scheduleLatestReveal(target, delay: delay, reveal: reveal)
@@ -196,20 +198,23 @@ final class WorkoutFocusTransitionCoordinator {
             cancelPendingReveal()
         }
         assign(target)
+        actualField = target
     }
 
     func transitionAfterRealizing(
         to target: WorkoutField,
         delay: Duration? = nil,
         revealDelayAfterAssignment: Duration = .zero,
-        commit: (WorkoutField?) -> Void,
+        commit: @escaping @MainActor (WorkoutField?) -> Void,
         realize: @escaping @MainActor (WorkoutField) -> Void,
+        realizeTarget: @escaping @MainActor (WorkoutField) -> Void = { _ in },
         assign: @escaping @MainActor (WorkoutField) -> Void,
         reveal: @escaping @MainActor (WorkoutField) -> Void
     ) {
         guard target != currentField else { return }
 
-        commit(currentField)
+        let source = actualField
+        commit(source)
         currentField = target
         cancelPendingReveal()
         revealTask = Task { @MainActor [weak self] in
@@ -224,7 +229,15 @@ final class WorkoutFocusTransitionCoordinator {
             await Task.yield()
             guard !Task.isCancelled, self?.currentField == target else { return }
 
+            realizeTarget(target)
+            await Task.yield()
+            guard !Task.isCancelled, self?.currentField == target else { return }
+
+            // The source remains the actual first responder during realization.
+            // Flush once more so a keystroke delivered during the delay is not lost.
+            commit(source)
             assign(target)
+            self?.actualField = target
             await Task.yield()
             do {
                 try await Task.sleep(for: revealDelayAfterAssignment)
@@ -244,6 +257,7 @@ final class WorkoutFocusTransitionCoordinator {
         commit: (WorkoutField?) -> Void,
         reveal: @escaping @MainActor (WorkoutField) -> Void
     ) {
+        actualField = newField
         // Programmatic transitions update currentField synchronously before
         // assigning FocusState. Their onChange notification is only an
         // acknowledgement and must not restart the delayed reveal.

@@ -9,6 +9,7 @@ struct SetRowView: View {
     let index: Int
     @Bindable var engine: ActiveWorkoutEngine
     @Bindable var draft: ActiveWorkoutSetDraft
+    let commitDraft: (LoggedSet, ActiveWorkoutSetDraft) -> ActiveWorkoutSetInput.Commit
     var focusedField: FocusState<WorkoutField?>.Binding
     let weightUnit: MeasurementUnit
     let previous: PreviousSetPerformance?
@@ -139,19 +140,11 @@ struct SetRowView: View {
     }
 
     /// Typing stages values in a session-owned draft that survives lazy row
-    /// realization. This is the single point that writes it to the model and
-    /// saves, and it only runs at an explicit commit boundary.
+    /// realization. Row actions call this only at explicit commit boundaries;
+    /// the shared closure owns the actual model write and save.
     @discardableResult
     private func commitDraftsIfNeeded() -> ActiveWorkoutSetInput.Commit {
-        let commit = draft.commit(current: inputValues, weightUnit: weightUnit)
-        guard commit.shouldPersist else { return commit }
-
-        _ = try? engine.commitActiveSetDraft(
-            set,
-            values: commit.values,
-            context: modelContext
-        )
-        return commit
+        commitDraft(set, draft)
     }
 
     private func previousColumn(accessibilityLabelIncludesContext: Bool = true) -> some View {

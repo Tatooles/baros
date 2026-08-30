@@ -110,6 +110,7 @@ struct WorkoutSessionView: View {
                             isCollapsed: isCollapsedBinding(for: loggedExercise),
                             isNoteRevealed: isNoteRevealedBinding(for: loggedExercise),
                             draftStore: setDraftStore,
+                            commitDraft: persistSetDraft,
                             focusedField: $focusedField,
                             weightUnit: weightUnit,
                             previousSets: cachedPreviousSets[loggedExercise.id] ?? [],
@@ -354,6 +355,7 @@ struct WorkoutSessionView: View {
                     scrollProxy.scrollTo(scrollTarget, anchor: .top)
                 }
             },
+            realizeTarget: revealSetRow,
             assign: { self.focusedField = $0 },
             reveal: { _ in
                 if let scrollTarget {
@@ -455,6 +457,7 @@ struct WorkoutSessionView: View {
                 to: target,
                 commit: commitSetDraft,
                 realize: { revealExercise(containing: $0, scrollProxy: scrollProxy) },
+                realizeTarget: revealSetRow,
                 assign: { focusedField = $0 },
                 reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
             )
@@ -489,7 +492,15 @@ struct WorkoutSessionView: View {
         scrollProxy.scrollTo(exerciseID, anchor: .center)
     }
 
+    private func revealSetRow(containing field: WorkoutField) {
+        guard let setID = Self.setID(for: field) else { return }
+        setDraftStore.realizeRow(for: setID)
+    }
+
     private func requiresRealizationBeforeFocus(_ target: WorkoutField) -> Bool {
+        if let setID = Self.setID(for: target), !setDraftStore.isRowRealized(for: setID) {
+            return true
+        }
         guard let targetExerciseID = WorkoutFocusNavigator.exerciseID(containing: target, in: session) else {
             return false
         }
@@ -504,12 +515,20 @@ struct WorkoutSessionView: View {
               let draft = setDraftStore.existingDraft(for: setID),
               let set = set(withID: setID) else { return }
 
+        _ = persistSetDraft(set, draft)
+    }
+
+    private func persistSetDraft(
+        _ set: LoggedSet,
+        _ draft: ActiveWorkoutSetDraft
+    ) -> ActiveWorkoutSetInput.Commit {
         let commit = draft.commit(
             current: .init(weight: set.weight, reps: set.reps),
             weightUnit: weightUnit
         )
-        guard commit.shouldPersist else { return }
+        guard commit.shouldPersist else { return commit }
         _ = try? engine.commitActiveSetDraft(set, values: commit.values, context: modelContext)
+        return commit
     }
 
     private func set(withID id: UUID) -> LoggedSet? {
