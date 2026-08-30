@@ -34,6 +34,10 @@ _Avoid_: Inactive Workout screen, dashboard
 A completed workout in which an exercise has at least one completed set. An exercise counts at most once per workout, even when it appears more than once.
 _Avoid_: Completed set count, exercise appearance
 
+**Exercise Note**:
+A note attached to one exercise occurrence within a workout. Separate occurrences of the same exercise have independent Exercise Notes.
+_Avoid_: Exercise library note, reference note, set note
+
 **Durable Sync Failure**:
 A sync problem that Baros already classifies as a failed outbox push, incomplete remote pull, safely mapped sync error, or owner-boundary problem. It warrants an external technical report without workout content or Current Owner identity.
 _Avoid_: Sync error, Sentry event, persistent error

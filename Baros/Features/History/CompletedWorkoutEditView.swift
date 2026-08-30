@@ -15,6 +15,7 @@ struct CompletedWorkoutEditView: View {
     @State private var hasEditedDuration = false
     @State private var isDurationEditorPresented = false
     @State private var numberInputTexts: [CompletedWorkoutEditFocusedField: WorkoutNumberInputText] = [:]
+    @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var errorMessage: String?
     @State private var removalCandidate: CompletedWorkoutSetRemovalCandidate?
     @FocusState private var focusedField: CompletedWorkoutEditFocusedField?
@@ -121,7 +122,7 @@ struct CompletedWorkoutEditView: View {
                 switch previousField {
                 case .setWeight, .setReps, .setRPE:
                     numberInputTexts[previousField]?.endEditing()
-                case .title, .notes:
+                case .title, .notes, .exerciseNotes:
                     break
                 }
             }
@@ -228,6 +229,20 @@ struct CompletedWorkoutEditView: View {
                             addSet(to: exerciseIndex)
                         }
                     }
+                    .padding(.horizontal, 16)
+
+                    Divider()
+                        .overlay(AppTheme.subtleBorder)
+                        .padding(.horizontal, 16)
+
+                    CompletedWorkoutExerciseNoteControl(
+                        notes: exerciseNotesBinding(exerciseIndex: exerciseIndex),
+                        focusTarget: .exerciseNotes(exerciseIndex),
+                        isRevealed: exerciseNoteRevealBinding(exerciseID: exercise.id),
+                        focusedField: $focusedField,
+                        addAccessibilityIdentifier: "AddCompletedWorkoutExerciseNoteButton-\(exerciseIndex)",
+                        fieldAccessibilityIdentifier: "CompletedWorkoutExerciseNotesField-\(exerciseIndex)"
+                    )
                     .padding(.horizontal, 16)
                 }
                 .padding(.bottom, 16)
@@ -386,6 +401,32 @@ struct CompletedWorkoutEditView: View {
             && draft.exercises[exerciseIndex].sets.indices.contains(setIndex)
     }
 
+    private func exerciseNotesBinding(exerciseIndex: Int) -> Binding<String> {
+        Binding(
+            get: {
+                guard draft.exercises.indices.contains(exerciseIndex) else { return "" }
+                return draft.exercises[exerciseIndex].notes
+            },
+            set: { notes in
+                guard draft.exercises.indices.contains(exerciseIndex) else { return }
+                draft.exercises[exerciseIndex].notes = notes
+            }
+        )
+    }
+
+    private func exerciseNoteRevealBinding(exerciseID: UUID) -> Binding<Bool> {
+        Binding(
+            get: { revealedExerciseNoteIDs.contains(exerciseID) },
+            set: { isRevealed in
+                if isRevealed {
+                    revealedExerciseNoteIDs.insert(exerciseID)
+                } else {
+                    revealedExerciseNoteIDs.remove(exerciseID)
+                }
+            }
+        )
+    }
+
     private func updateDraftSet(
         exerciseIndex: Int,
         setIndex: Int,
@@ -468,6 +509,63 @@ struct CompletedWorkoutEditView: View {
             modelContext.rollback()
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+private struct CompletedWorkoutExerciseNoteControl: View {
+    @Binding var notes: String
+    let focusTarget: CompletedWorkoutEditFocusedField
+    @Binding var isRevealed: Bool
+    var focusedField: FocusState<CompletedWorkoutEditFocusedField?>.Binding
+    let addAccessibilityIdentifier: String
+    let fieldAccessibilityIdentifier: String
+
+    var body: some View {
+        Group {
+            if isNoteVisible {
+                TextField("Exercise notes...", text: $notes, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.body)
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .lineLimit(1...6)
+                    .focused(focusedField, equals: focusTarget)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 10)
+                    .frame(minHeight: 44, alignment: .topLeading)
+                    .workoutInputTapTarget(focusedField, equals: focusTarget)
+                    .background(
+                        isFocused ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(Color.clear),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    )
+                    .animation(.easeOut(duration: 0.15), value: isFocused)
+                    .accessibilityLabel("Exercise note")
+                    .accessibilityIdentifier(fieldAccessibilityIdentifier)
+                    .id(focusTarget)
+                    .onChange(of: focusedField.wrappedValue) { _, newField in
+                        if newField == focusTarget {
+                            isRevealed = true
+                        }
+                    }
+            } else {
+                WorkoutProgressiveNoteAddButton(
+                    title: "Add exercise note",
+                    systemImage: "note.text.badge.plus",
+                    accessibilityIdentifier: addAccessibilityIdentifier,
+                    focusTarget: focusTarget,
+                    isRevealed: $isRevealed,
+                    focusedField: focusedField
+                )
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: isNoteVisible)
+    }
+
+    private var isNoteVisible: Bool {
+        isRevealed || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var isFocused: Bool {
+        focusedField.wrappedValue == focusTarget
     }
 }
 
@@ -660,6 +758,7 @@ private struct CompletedWorkoutSetRemovalCandidate: Identifiable {
 private enum CompletedWorkoutEditFocusedField: Hashable {
     case title
     case notes
+    case exerciseNotes(Int)
     case setWeight(Int, Int)
     case setReps(Int, Int)
     case setRPE(Int, Int)

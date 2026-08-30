@@ -4,6 +4,96 @@ import XCTest
 
 @MainActor
 final class HistoryPersistenceTests: XCTestCase {
+    func testCompletedWorkoutEditDraftKeepsExerciseNotesIndependentFromSavedWorkout() throws {
+        let firstOccurrence = LoggedExercise(
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press",
+            notes: "Pause on the chest"
+        )
+        let secondOccurrence = LoggedExercise(
+            orderIndex: 1,
+            exerciseSnapshotName: "Bench Press",
+            notes: "Close-grip finisher"
+        )
+        let session = WorkoutSession(
+            title: "Push",
+            startedAt: .now,
+            status: .completed,
+            source: .blank
+        )
+        session.loggedExercises = [firstOccurrence, secondOccurrence]
+
+        var draft = CompletedWorkoutEditDraft(session: session)
+
+        XCTAssertEqual(draft.exercises.map(\.notes), ["Pause on the chest", "Close-grip finisher"])
+
+        draft.exercises[0].notes = "Edited in the draft"
+
+        XCTAssertEqual(firstOccurrence.notes, "Pause on the chest")
+        XCTAssertEqual(secondOccurrence.notes, "Close-grip finisher")
+    }
+
+    func testCompletedWorkoutExerciseNoteSurvivesDiskBackedReopen() throws {
+        let storeDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BarosExerciseNoteTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: storeDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
+        let storeURL = storeDirectory.appendingPathComponent("Baros.store")
+        let sessionID: UUID
+
+        do {
+            var container: ModelContainer? = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: storeURL)
+            let context = try XCTUnwrap(container?.mainContext)
+            let set = LoggedSet(orderIndex: 0, weight: 185, reps: 5, isCompleted: true)
+            let exercise = LoggedExercise(
+                orderIndex: 0,
+                exerciseSnapshotName: "Bench Press",
+                notes: "Original note",
+                sets: [set]
+            )
+            let session = WorkoutSession(
+                title: "Push",
+                startedAt: Date(timeIntervalSince1970: 1_000),
+                status: .completed,
+                source: .blank,
+                loggedExercises: [exercise]
+            )
+            sessionID = session.id
+            context.insert(session)
+            try context.save()
+
+            var draft = CompletedWorkoutEditDraft(session: session)
+            draft.exercises[0].notes = "Persisted correction"
+            try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+                draft,
+                for: session,
+                context: context,
+                now: Date(timeIntervalSince1970: 2_000)
+            )
+            container = nil
+        }
+
+        do {
+            var container: ModelContainer? = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: storeURL)
+            let context = try XCTUnwrap(container?.mainContext)
+            let targetSessionID = sessionID
+            let descriptor = FetchDescriptor<WorkoutSession>(
+                predicate: #Predicate { $0.id == targetSessionID }
+            )
+            let reopenedSession = try XCTUnwrap(context.fetch(descriptor).first)
+            let reopenedExercise = try XCTUnwrap(reopenedSession.sortedLoggedExercises.first)
+
+            XCTAssertEqual(reopenedExercise.notes, "Persisted correction")
+
+            let summary = try XCTUnwrap(ExerciseHistorySummary.makeSummaries(from: [reopenedSession]).first)
+            let group = try XCTUnwrap(
+                ExerciseHistorySessionGroup.makeGroups(from: [reopenedSession], matching: summary).first
+            )
+            XCTAssertEqual(group.loggedExerciseEntries.first?.exerciseNotes, "Persisted correction")
+            container = nil
+        }
+    }
+
     func testCompletedWorkoutEditDraftRecoversOutOfPolicyNumericValues() throws {
         let set = LoggedSet(orderIndex: 0, weight: 10_001, reps: 1_001, rpe: 10.1, isCompleted: true)
         let exercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press", sets: [set])
