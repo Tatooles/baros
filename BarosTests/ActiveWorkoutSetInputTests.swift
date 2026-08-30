@@ -2,6 +2,26 @@ import XCTest
 @testable import Baros
 
 final class ActiveWorkoutSetInputTests: XCTestCase {
+    @MainActor
+    func testDraftStoreKeepsAnEditedValueAcrossRowRealizationChanges() {
+        let setID = UUID()
+        let store = ActiveWorkoutSetDraftStore()
+        let firstRealization = store.draft(for: setID)
+
+        firstRealization.update("185.", for: .weight, isFocused: true)
+
+        let secondRealization = store.draft(for: setID)
+        XCTAssertTrue(firstRealization === secondRealization)
+        XCTAssertEqual(
+            secondRealization.text(
+                for: .weight,
+                values: .init(weight: nil, reps: nil),
+                weightUnit: .pounds
+            ),
+            "185."
+        )
+    }
+
     func testReturnsOnlyMissingPreviousValueBeforeCompletion() {
         let input = ActiveWorkoutSetInput()
         let previous = PreviousSetPerformance(weight: 185, reps: 5)

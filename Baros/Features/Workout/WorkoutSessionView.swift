@@ -32,7 +32,7 @@ struct WorkoutSessionView: View {
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
     @State private var rpeEditingSourceField: WorkoutField?
-    @State private var fieldCommitRegistry = WorkoutFieldCommitRegistry()
+    @State private var setDraftStore = ActiveWorkoutSetDraftStore()
     @State private var focusTransitionCoordinator = WorkoutFocusTransitionCoordinator()
     @FocusState private var focusedField: WorkoutField?
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
@@ -67,7 +67,7 @@ struct WorkoutSessionView: View {
 
         ScrollViewReader { scrollProxy in
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 8) {
                         WorkoutTitleDraftField(
                             title: session.title,
@@ -109,7 +109,7 @@ struct WorkoutSessionView: View {
                             engine: engine,
                             isCollapsed: isCollapsedBinding(for: loggedExercise),
                             isNoteRevealed: isNoteRevealedBinding(for: loggedExercise),
-                            fieldCommitRegistry: fieldCommitRegistry,
+                            draftStore: setDraftStore,
                             focusedField: $focusedField,
                             weightUnit: weightUnit,
                             previousSets: cachedPreviousSets[loggedExercise.id] ?? [],
@@ -151,6 +151,7 @@ struct WorkoutSessionView: View {
                 .padding(.top, 8)
                 .padding(.bottom, contentBottomPadding)
             }
+            .accessibilityIdentifier("ActiveWorkoutScrollView")
             .safeAreaInset(edge: .top, spacing: 0) {
                 ActiveWorkoutMetricsHeader(session: session) {
                     // Flush any in-progress field edit through the commit path
@@ -175,7 +176,7 @@ struct WorkoutSessionView: View {
                 focusTransitionCoordinator.observeFocusChange(
                     from: previousField,
                     to: newField,
-                    commit: fieldCommitRegistry.commit,
+                    commit: commitSetDraft,
                     reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
                 )
 
@@ -334,15 +335,33 @@ struct WorkoutSessionView: View {
         pendingFocusedField = nil
         recentlyAddedExerciseID = scrollTarget
 
-        focusTransitionCoordinator.transition(
+        guard let focusedField else {
+            if let scrollTarget {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
+                    scrollProxy.scrollTo(scrollTarget, anchor: .top)
+                }
+            }
+            return
+        }
+
+        focusTransitionCoordinator.transitionAfterRealizing(
             to: focusedField,
-            delay: .milliseconds(350),
-            commit: fieldCommitRegistry.commit,
+            delay: .zero,
+            revealDelayAfterAssignment: .milliseconds(350),
+            commit: commitSetDraft,
+            realize: { _ in
+                if let scrollTarget {
+                    scrollProxy.scrollTo(scrollTarget, anchor: .top)
+                }
+            },
             assign: { self.focusedField = $0 },
             reveal: { _ in
                 if let scrollTarget {
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-                        scrollProxy.scrollTo(scrollTarget, anchor: .top)
+                        scrollProxy.scrollTo(
+                            "ExerciseHeaderScroll-\(scrollTarget.uuidString)",
+                            anchor: .top
+                        )
                     }
                 }
             }
@@ -389,7 +408,7 @@ struct WorkoutSessionView: View {
             get: { collapsedExerciseIDs.contains(loggedExercise.id) },
             set: { isCollapsed in
                 if isCollapsed {
-                    if focusedField == .exerciseNotes(loggedExercise.id) {
+                    if field(focusedField, belongsTo: loggedExercise) {
                         resignFocus()
                     }
                     revealedExerciseNoteIDs.remove(loggedExercise.id)
@@ -399,6 +418,17 @@ struct WorkoutSessionView: View {
                 }
             }
         )
+    }
+
+    private func field(_ field: WorkoutField?, belongsTo loggedExercise: LoggedExercise) -> Bool {
+        switch field {
+        case .exerciseNotes(let exerciseID):
+            return exerciseID == loggedExercise.id
+        case .setWeight(let setID), .setReps(let setID):
+            return loggedExercise.sortedSets.contains { $0.id == setID }
+        case .workoutTitle, .workoutNotes, nil:
+            return false
+        }
     }
 
     private func isNoteRevealedBinding(for loggedExercise: LoggedExercise) -> Binding<Bool> {
@@ -415,18 +445,25 @@ struct WorkoutSessionView: View {
     }
 
     private func moveFocus(offset: Int, scrollProxy: ScrollViewProxy) {
-        focusTransitionCoordinator.move(
-            offset: offset,
-            commit: fieldCommitRegistry.commit,
-            assign: { focusedField = $0 },
-            reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
-        )
+        guard let target = focusTransitionCoordinator.adjacentField(offset: offset) else { return }
+        transitionFocus(to: target, scrollProxy: scrollProxy)
     }
 
     private func transitionFocus(to target: WorkoutField?, scrollProxy: ScrollViewProxy) {
+        if let target, requiresRealizationBeforeFocus(target) {
+            focusTransitionCoordinator.transitionAfterRealizing(
+                to: target,
+                commit: commitSetDraft,
+                realize: { revealExercise(containing: $0, scrollProxy: scrollProxy) },
+                assign: { focusedField = $0 },
+                reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
+            )
+            return
+        }
+
         focusTransitionCoordinator.transition(
             to: target,
-            commit: fieldCommitRegistry.commit,
+            commit: commitSetDraft,
             assign: { focusedField = $0 },
             reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
         )
@@ -435,7 +472,7 @@ struct WorkoutSessionView: View {
     private func resignFocus() {
         focusTransitionCoordinator.transition(
             to: nil,
-            commit: fieldCommitRegistry.commit,
+            commit: commitSetDraft,
             assign: { focusedField = $0 },
             reveal: { _ in }
         )
@@ -444,6 +481,52 @@ struct WorkoutSessionView: View {
     private func revealFocusedField(_ field: WorkoutField, scrollProxy: ScrollViewProxy) {
         withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
             scrollProxy.scrollTo(field, anchor: Self.focusRevealAnchor)
+        }
+    }
+
+    private func revealExercise(containing field: WorkoutField, scrollProxy: ScrollViewProxy) {
+        guard let exerciseID = WorkoutFocusNavigator.exerciseID(containing: field, in: session) else { return }
+        scrollProxy.scrollTo(exerciseID, anchor: .center)
+    }
+
+    private func requiresRealizationBeforeFocus(_ target: WorkoutField) -> Bool {
+        guard let targetExerciseID = WorkoutFocusNavigator.exerciseID(containing: target, in: session) else {
+            return false
+        }
+        let currentExerciseID = focusedField.flatMap {
+            WorkoutFocusNavigator.exerciseID(containing: $0, in: session)
+        }
+        return currentExerciseID != targetExerciseID
+    }
+
+    private func commitSetDraft(_ field: WorkoutField?) {
+        guard let setID = Self.setID(for: field),
+              let draft = setDraftStore.existingDraft(for: setID),
+              let set = set(withID: setID) else { return }
+
+        let commit = draft.commit(
+            current: .init(weight: set.weight, reps: set.reps),
+            weightUnit: weightUnit
+        )
+        guard commit.shouldPersist else { return }
+        _ = try? engine.commitActiveSetDraft(set, values: commit.values, context: modelContext)
+    }
+
+    private func set(withID id: UUID) -> LoggedSet? {
+        for loggedExercise in session.sortedLoggedExercises {
+            if let set = loggedExercise.sortedSets.first(where: { $0.id == id }) {
+                return set
+            }
+        }
+        return nil
+    }
+
+    private static func setID(for field: WorkoutField?) -> UUID? {
+        switch field {
+        case .setWeight(let id), .setReps(let id):
+            return id
+        case .workoutTitle, .workoutNotes, .exerciseNotes, nil:
+            return nil
         }
     }
 

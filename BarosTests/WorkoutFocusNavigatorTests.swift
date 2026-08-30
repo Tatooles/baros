@@ -287,25 +287,44 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         XCTAssertEqual(revealedFields, [fields[2]])
     }
 
-    func testTransitioningOutOfAFieldCommitsItsRegisteredDraft() {
+    func testUnrealizedTransitionRealizesBeforeAssigningAndRevealingFocus() async {
         let field = WorkoutField.setWeight(UUID())
         let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
-        let registry = WorkoutFieldCommitRegistry()
-        var commitCount = 0
+        var events: [String] = []
+        let revealExpectation = expectation(description: "field revealed after realization")
+
+        coordinator.transitionAfterRealizing(
+            to: field,
+            commit: { _ in events.append("commit") },
+            realize: { _ in events.append("realize") },
+            assign: { _ in events.append("assign") },
+            reveal: { _ in
+                events.append("reveal")
+                revealExpectation.fulfill()
+            }
+        )
+
+        await fulfillment(of: [revealExpectation], timeout: 1)
+
+        XCTAssertEqual(events, ["commit", "realize", "assign", "reveal"])
+        XCTAssertEqual(coordinator.currentField, field)
+    }
+
+    func testTransitioningOutOfAFieldCommitsThatField() {
+        let field = WorkoutField.setWeight(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
+        var committedFields: [WorkoutField?] = []
         var assignedField: WorkoutField? = field
-        _ = registry.register(fields: [field]) {
-            commitCount += 1
-        }
         coordinator.synchronizeFocus(field)
 
         coordinator.transition(
             to: nil,
-            commit: registry.commit,
+            commit: { committedFields.append($0) },
             assign: { assignedField = $0 },
             reveal: { _ in }
         )
 
-        XCTAssertEqual(commitCount, 1)
+        XCTAssertEqual(committedFields, [field])
         XCTAssertNil(coordinator.currentField)
         XCTAssertNil(assignedField)
     }

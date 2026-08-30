@@ -77,6 +77,19 @@ enum WorkoutFocusNavigator {
 
         return focusOrder[targetIndex]
     }
+
+    static func exerciseID(containing field: WorkoutField, in session: WorkoutSession) -> UUID? {
+        switch field {
+        case .exerciseNotes(let exerciseID):
+            return exerciseID
+        case .setWeight(let setID), .setReps(let setID):
+            return session.sortedLoggedExercises.first { loggedExercise in
+                loggedExercise.sortedSets.contains { $0.id == setID }
+            }?.id
+        case .workoutTitle, .workoutNotes:
+            return nil
+        }
+    }
 }
 
 @MainActor
@@ -185,6 +198,46 @@ final class WorkoutFocusTransitionCoordinator {
         assign(target)
     }
 
+    func transitionAfterRealizing(
+        to target: WorkoutField,
+        delay: Duration? = nil,
+        revealDelayAfterAssignment: Duration = .zero,
+        commit: (WorkoutField?) -> Void,
+        realize: @escaping @MainActor (WorkoutField) -> Void,
+        assign: @escaping @MainActor (WorkoutField) -> Void,
+        reveal: @escaping @MainActor (WorkoutField) -> Void
+    ) {
+        guard target != currentField else { return }
+
+        commit(currentField)
+        currentField = target
+        cancelPendingReveal()
+        revealTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: delay ?? self?.revealDelay ?? .zero)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, self?.currentField == target else { return }
+
+            realize(target)
+            await Task.yield()
+            guard !Task.isCancelled, self?.currentField == target else { return }
+
+            assign(target)
+            await Task.yield()
+            do {
+                try await Task.sleep(for: revealDelayAfterAssignment)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, self?.currentField == target else { return }
+
+            reveal(target)
+            self?.revealTask = nil
+        }
+    }
+
     func observeFocusChange(
         from previousField: WorkoutField?,
         to newField: WorkoutField?,
@@ -227,34 +280,5 @@ final class WorkoutFocusTransitionCoordinator {
             reveal(field)
             self?.revealTask = nil
         }
-    }
-}
-
-@MainActor
-final class WorkoutFieldCommitRegistry {
-    private struct Registration {
-        let id: UUID
-        let commit: () -> Void
-    }
-
-    private var registrations: [WorkoutField: Registration] = [:]
-
-    @discardableResult
-    func register(fields: [WorkoutField], commit: @escaping () -> Void) -> UUID {
-        let id = UUID()
-        let registration = Registration(id: id, commit: commit)
-        for field in fields {
-            registrations[field] = registration
-        }
-        return id
-    }
-
-    func commit(_ field: WorkoutField?) {
-        guard let field else { return }
-        registrations[field]?.commit()
-    }
-
-    func unregister(_ id: UUID) {
-        registrations = registrations.filter { $0.value.id != id }
     }
 }

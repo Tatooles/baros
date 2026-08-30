@@ -1,4 +1,65 @@
 import Foundation
+import Observation
+
+@MainActor
+final class ActiveWorkoutSetDraftStore {
+    private var drafts: [UUID: ActiveWorkoutSetDraft] = [:]
+
+    func draft(for setID: UUID) -> ActiveWorkoutSetDraft {
+        if let draft = drafts[setID] {
+            return draft
+        }
+
+        let draft = ActiveWorkoutSetDraft()
+        drafts[setID] = draft
+        return draft
+    }
+
+    func existingDraft(for setID: UUID) -> ActiveWorkoutSetDraft? {
+        drafts[setID]
+    }
+}
+
+@Observable
+@MainActor
+final class ActiveWorkoutSetDraft {
+    private var input = ActiveWorkoutSetInput()
+
+    func update(_ text: String, for field: ActiveWorkoutSetInput.Field, isFocused: Bool) {
+        input.update(text, for: field, isFocused: isFocused)
+    }
+
+    func text(
+        for field: ActiveWorkoutSetInput.Field,
+        values: ActiveWorkoutSetInput.Values,
+        weightUnit: MeasurementUnit
+    ) -> String {
+        input.text(for: field, values: values, weightUnit: weightUnit)
+    }
+
+    func commit(
+        current: ActiveWorkoutSetInput.Values,
+        weightUnit: MeasurementUnit
+    ) -> ActiveWorkoutSetInput.Commit {
+        input.commit(current: current, weightUnit: weightUnit)
+    }
+
+    func previousFillBeforeCompletion(
+        isCompleted: Bool,
+        values: ActiveWorkoutSetInput.Values,
+        previous: PreviousSetPerformance?
+    ) -> PreviousSetPerformance? {
+        input.previousFillBeforeCompletion(
+            isCompleted: isCompleted,
+            values: values,
+            previous: previous
+        )
+    }
+
+    func clearRejectionsSatisfiedByPreviousFill(_ values: ActiveWorkoutSetInput.Values) {
+        input.clearRejectionsSatisfiedByPreviousFill(values)
+    }
+}
 
 struct ActiveWorkoutSetInput {
     enum Field {

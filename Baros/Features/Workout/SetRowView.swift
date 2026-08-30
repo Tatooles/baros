@@ -8,19 +8,18 @@ struct SetRowView: View {
     let exerciseIndex: Int
     let index: Int
     @Bindable var engine: ActiveWorkoutEngine
-    let fieldCommitRegistry: WorkoutFieldCommitRegistry
+    @Bindable var draft: ActiveWorkoutSetDraft
     var focusedField: FocusState<WorkoutField?>.Binding
     let weightUnit: MeasurementUnit
     let previous: PreviousSetPerformance?
     let onEditRPE: (LoggedSet) -> Void
-    @State private var input = ActiveWorkoutSetInput()
-    @State private var commitRegistrationID: UUID?
 
     var body: some View {
         SwipeToDeleteRow(
             deleteAccessibilityLabel: "Remove set",
             deleteAccessibilityIdentifier: "DeleteSetButton-\(exerciseIndex)-\(index)"
         ) {
+            clearFocusedFieldForThisSet()
             try? engine.removeSet(set, context: modelContext)
         } content: {
             rowContent
@@ -36,21 +35,6 @@ struct SetRowView: View {
                 accessibilityRowContent
             } else {
                 standardRowContent
-            }
-        }
-        .onAppear {
-            guard commitRegistrationID == nil else { return }
-            commitRegistrationID = fieldCommitRegistry.register(fields: ownFields) {
-                commitDraftsIfNeeded()
-            }
-        }
-        .onDisappear {
-            // Rows can leave the tree mid-edit (collapse, delete, finish); the
-            // central focus transition can no longer reach them, so flush here.
-            commitDraftsIfNeeded()
-            if let commitRegistrationID {
-                fieldCommitRegistry.unregister(commitRegistrationID)
-                self.commitRegistrationID = nil
             }
         }
     }
@@ -154,12 +138,12 @@ struct SetRowView: View {
         .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
     }
 
-    /// Typing stages values in view-local drafts; this is the single point that
-    /// writes them to the model and saves. Runs on focus leave, completion, and
-    /// row disappearance — never per keystroke.
+    /// Typing stages values in a session-owned draft that survives lazy row
+    /// realization. This is the single point that writes it to the model and
+    /// saves, and it only runs at an explicit commit boundary.
     @discardableResult
     private func commitDraftsIfNeeded() -> ActiveWorkoutSetInput.Commit {
-        let commit = input.commit(current: inputValues, weightUnit: weightUnit)
+        let commit = draft.commit(current: inputValues, weightUnit: weightUnit)
         guard commit.shouldPersist else { return commit }
 
         _ = try? engine.commitActiveSetDraft(
@@ -259,9 +243,9 @@ struct SetRowView: View {
 
     private var weightBinding: Binding<String> {
         Binding(
-            get: { input.text(for: .weight, values: inputValues, weightUnit: weightUnit) },
+            get: { draft.text(for: .weight, values: inputValues, weightUnit: weightUnit) },
             set: { value in
-                input.update(
+                draft.update(
                     value,
                     for: .weight,
                     isFocused: focusedField.wrappedValue == .setWeight(set.id)
@@ -272,9 +256,9 @@ struct SetRowView: View {
 
     private var repsBinding: Binding<String> {
         Binding(
-            get: { input.text(for: .reps, values: inputValues, weightUnit: weightUnit) },
+            get: { draft.text(for: .reps, values: inputValues, weightUnit: weightUnit) },
             set: { value in
-                input.update(
+                draft.update(
                     value,
                     for: .reps,
                     isFocused: focusedField.wrappedValue == .setReps(set.id)
@@ -288,7 +272,7 @@ struct SetRowView: View {
         // must land first (the focus-change commit only fires on a later update).
         let commit = commitDraftsIfNeeded()
         clearFocusedFieldForThisSet()
-        if let previousFill = input.previousFillBeforeCompletion(
+        if let previousFill = draft.previousFillBeforeCompletion(
             isCompleted: set.isCompleted,
             values: commit.values,
             previous: previous
@@ -305,15 +289,11 @@ struct SetRowView: View {
         // that are still nil, so a typed-but-uncommitted value must win.
         commitDraftsIfNeeded()
         try? engine.fillSetFromPrevious(set, previous: previous, context: modelContext)
-        input.clearRejectionsSatisfiedByPreviousFill(inputValues)
+        draft.clearRejectionsSatisfiedByPreviousFill(inputValues)
     }
 
     private var inputValues: ActiveWorkoutSetInput.Values {
         ActiveWorkoutSetInput.Values(weight: set.weight, reps: set.reps)
-    }
-
-    private var ownFields: [WorkoutField] {
-        [.setWeight(set.id), .setReps(set.id)]
     }
 
     private func clearFocusedFieldForThisSet() {

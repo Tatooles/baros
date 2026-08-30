@@ -329,8 +329,24 @@ final class BarosUITests: XCTestCase {
             "Ten rapid moves from the workout title should land on the fifth set's reps field."
         )
 
+        nextButton.tap()
+        nextButton.tap()
+        let offscreenField = app.textFields["SetRepsField-1-0"]
+        XCTAssertTrue(offscreenField.waitForExistence(timeout: 3))
+        let offscreenFocusExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: offscreenField
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [offscreenFocusExpectation], timeout: 3),
+            .completed,
+            "Navigation should realize the next exercise before transferring keyboard focus."
+        )
+
         let previousButton = app.buttons["PreviousWorkoutFieldButton"]
         XCTAssertTrue(previousButton.waitForExistence(timeout: 3))
+        previousButton.tap()
+        previousButton.tap()
         for _ in 0..<10 {
             previousButton.tap()
         }
@@ -343,6 +359,63 @@ final class BarosUITests: XCTestCase {
             .completed,
             "Ten rapid reverse moves should return to the workout title."
         )
+    }
+
+    @MainActor
+    func testLargeActiveWorkoutDefersFarExerciseUntilScrolledIntoView() {
+        let app = makeApp(extraArguments: [
+            "--uitest-seed-large-active-workout",
+            "--uitest-disable-animations",
+        ])
+        app.launch()
+
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        let farExercise = app.buttons["ExerciseHeader-9"]
+        XCTAssertFalse(
+            farExercise.exists,
+            "The last exercise should not be realized with the initial viewport."
+        )
+
+        for _ in 0..<20 where !farExercise.exists {
+            app.swipeUp()
+        }
+
+        XCTAssertTrue(farExercise.waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testLargeActiveWorkoutKeepsFocusedDraftAndKeyboardAcrossLazyScrolling() {
+        let app = makeApp(extraArguments: [
+            "--uitest-seed-large-active-workout",
+            "--uitest-disable-animations",
+        ])
+        app.launch()
+
+        let editedField = app.textFields["SetWeightField-0-0"]
+        XCTAssertTrue(editedField.waitForExistence(timeout: 8))
+        replaceText(in: editedField, with: "101.")
+        XCTAssertEqual(editedField.value as? String, "101.")
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+
+        let offscreenExercise = app.buttons["ExerciseHeader-2"]
+        let workoutScrollView = app.scrollViews["ActiveWorkoutScrollView"]
+        XCTAssertTrue(workoutScrollView.exists)
+        for _ in 0..<6 where !offscreenExercise.exists {
+            drag(workoutScrollView, direction: .up)
+        }
+        XCTAssertTrue(offscreenExercise.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+
+        for _ in 0..<8 where !app.textFields["WorkoutTitle"].isHittable {
+            drag(workoutScrollView, direction: .down)
+        }
+        XCTAssertTrue(editedField.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            editedField.value as? String,
+            "101.",
+            "Lazy scrolling must retain the uncommitted decimal draft instead of normalizing it."
+        )
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
     }
 
     @MainActor
@@ -2842,6 +2915,24 @@ final class BarosUITests: XCTestCase {
             field.tap()
         }
         field.typeText(text)
+    }
+
+    private enum VerticalDragDirection {
+        case up
+        case down
+    }
+
+    @MainActor
+    private func drag(_ element: XCUIElement, direction: VerticalDragDirection) {
+        let startOffset: CGFloat = direction == .up ? 0.8 : 0.2
+        let endOffset: CGFloat = direction == .up ? 0.2 : 0.8
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startOffset))
+            .press(
+                forDuration: 0.05,
+                thenDragTo: element.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.5, dy: endOffset)
+                )
+            )
     }
 
     @MainActor

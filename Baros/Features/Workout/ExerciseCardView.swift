@@ -9,7 +9,7 @@ struct ExerciseCardView: View {
     @Bindable var engine: ActiveWorkoutEngine
     @Binding var isCollapsed: Bool
     @Binding var isNoteRevealed: Bool
-    let fieldCommitRegistry: WorkoutFieldCommitRegistry
+    let draftStore: ActiveWorkoutSetDraftStore
     var focusedField: FocusState<WorkoutField?>.Binding
     let weightUnit: MeasurementUnit
     let previousSets: [PreviousSetPerformance]
@@ -26,7 +26,7 @@ struct ExerciseCardView: View {
         engine: ActiveWorkoutEngine,
         isCollapsed: Binding<Bool>,
         isNoteRevealed: Binding<Bool>,
-        fieldCommitRegistry: WorkoutFieldCommitRegistry,
+        draftStore: ActiveWorkoutSetDraftStore,
         focusedField: FocusState<WorkoutField?>.Binding,
         weightUnit: MeasurementUnit,
         previousSets: [PreviousSetPerformance],
@@ -41,7 +41,7 @@ struct ExerciseCardView: View {
         self.engine = engine
         self._isCollapsed = isCollapsed
         self._isNoteRevealed = isNoteRevealed
-        self.fieldCommitRegistry = fieldCommitRegistry
+        self.draftStore = draftStore
         self.focusedField = focusedField
         self.weightUnit = weightUnit
         self.previousSets = previousSets
@@ -72,6 +72,7 @@ struct ExerciseCardView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .id("ExerciseHeaderScroll-\(loggedExercise.id.uuidString)")
                     .accessibilityIdentifier("ExerciseHeader-\(exerciseIndex)")
 
                     Menu {
@@ -156,7 +157,7 @@ struct ExerciseCardView: View {
                                         exerciseIndex: exerciseIndex,
                                         index: index,
                                         engine: engine,
-                                        fieldCommitRegistry: fieldCommitRegistry,
+                                        draft: draftStore.draft(for: set.id),
                                         focusedField: focusedField,
                                         weightUnit: weightUnit,
                                         previous: index < previousSetsForRows.count ? previousSetsForRows[index] : nil,
