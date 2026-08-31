@@ -1,6 +1,11 @@
 import Foundation
 
 enum WorkoutFocusNavigator {
+    enum RealizationTarget: Equatable {
+        case workoutHeader
+        case exercise(UUID)
+    }
+
     struct StructureInputs: Equatable {
         var collapsedExerciseIDs: Set<UUID> = []
         var revealedExerciseNoteIDs: Set<UUID> = []
@@ -78,16 +83,19 @@ enum WorkoutFocusNavigator {
         return focusOrder[targetIndex]
     }
 
-    static func exerciseID(containing field: WorkoutField, in session: WorkoutSession) -> UUID? {
+    static func realizationTarget(
+        containing field: WorkoutField,
+        in session: WorkoutSession
+    ) -> RealizationTarget? {
         switch field {
         case .exerciseNotes(let exerciseID):
-            return exerciseID
+            return .exercise(exerciseID)
         case .setWeight(let setID), .setReps(let setID):
             return session.sortedLoggedExercises.first { loggedExercise in
                 loggedExercise.sortedSets.contains { $0.id == setID }
-            }?.id
+            }.map { .exercise($0.id) }
         case .workoutTitle, .workoutNotes:
-            return nil
+            return .workoutHeader
         }
     }
 }
@@ -213,7 +221,6 @@ final class WorkoutFocusTransitionCoordinator {
         guard target != currentField else { return }
 
         let source = actualField
-        commit(source)
         currentField = target
         cancelPendingReveal()
         revealTask = Task { @MainActor [weak self] in
@@ -229,7 +236,8 @@ final class WorkoutFocusTransitionCoordinator {
             guard !Task.isCancelled, self?.currentField == target else { return }
 
             // The source remains the actual first responder during realization.
-            // Flush once more so a keystroke delivered during the delay is not lost.
+            // Keep its raw draft intact until the physical focus transfer, then
+            // commit once so every keystroke delivered during the delay is kept.
             commit(source)
             assign(target)
             self?.actualField = target

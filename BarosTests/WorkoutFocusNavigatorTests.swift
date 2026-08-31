@@ -161,6 +161,31 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         XCTAssertNil(WorkoutFocusNavigator.adjacentField(from: .setReps(secondSetID), in: order, offset: 1))
     }
 
+    func testRealizationTargetsGroupWorkoutFieldsAboveLazyExerciseCards() {
+        let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
+        let exercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
+        let set = LoggedSet(orderIndex: 0)
+        exercise.sets = [set]
+        session.loggedExercises = [exercise]
+
+        XCTAssertEqual(
+            WorkoutFocusNavigator.realizationTarget(containing: .workoutTitle, in: session),
+            .workoutHeader
+        )
+        XCTAssertEqual(
+            WorkoutFocusNavigator.realizationTarget(containing: .workoutNotes, in: session),
+            .workoutHeader
+        )
+        XCTAssertEqual(
+            WorkoutFocusNavigator.realizationTarget(containing: .exerciseNotes(exercise.id), in: session),
+            .exercise(exercise.id)
+        )
+        XCTAssertEqual(
+            WorkoutFocusNavigator.realizationTarget(containing: .setWeight(set.id), in: session),
+            .exercise(exercise.id)
+        )
+    }
+
     func testRPEEditingResetsWhenFocusMovesToDifferentSet() {
         let firstSetID = UUID()
         let secondSetID = UUID()
@@ -287,7 +312,7 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         XCTAssertEqual(revealedFields, [fields[2]])
     }
 
-    func testUnrealizedExerciseTransitionRealizesBeforeAssigningAndRevealingFocus() async {
+    func testUnrealizedExerciseTransitionCommitsOnlyWhenFocusTransfers() async {
         let source = WorkoutField.setReps(UUID())
         let field = WorkoutField.setWeight(UUID())
         let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
@@ -313,12 +338,12 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
 
         XCTAssertEqual(
             events,
-            ["commit", "realize", "commit", "assign", "reveal"]
+            ["realize", "commit", "assign", "reveal"]
         )
         XCTAssertEqual(coordinator.currentField, field)
     }
 
-    func testSupersededUnrealizedTransitionsKeepCommittingTheActualSource() async {
+    func testSupersededUnrealizedTransitionsCommitOnlyForTheLatestTransfer() async {
         let source = WorkoutField.setReps(UUID())
         let firstTarget = WorkoutField.setWeight(UUID())
         let latestTarget = WorkoutField.setReps(UUID())
@@ -345,26 +370,57 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
 
         await fulfillment(of: [revealExpectation], timeout: 1)
 
-        XCTAssertEqual(committedFields, [source, source, source])
+        XCTAssertEqual(committedFields, [source])
         XCTAssertEqual(coordinator.currentField, latestTarget)
     }
 
-    func testStagedTransitionKeepsActualFieldAtSourceUntilAssignment() {
+    func testStagedTransitionKeepsSourceDraftUncommittedUntilAssignment() {
         let source = WorkoutField.setReps(UUID())
         let target = WorkoutField.setWeight(UUID())
         let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .seconds(1))
+        var committedFields: [WorkoutField?] = []
         coordinator.synchronizeFocus(source)
 
         coordinator.transitionAfterRealizing(
             to: target,
-            commit: { _ in },
+            commit: { committedFields.append($0) },
             realize: { _ in },
             assign: { _ in },
             reveal: { _ in }
         )
 
+        XCTAssertTrue(committedFields.isEmpty)
         XCTAssertEqual(coordinator.currentField, target)
         XCTAssertEqual(coordinator.actualField, source)
+    }
+
+    func testStagedTransitionPreservesPartialDecimalUntilFocusTransfers() async {
+        let source = WorkoutField.setWeight(UUID())
+        let target = WorkoutField.setReps(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .milliseconds(20))
+        let draft = ActiveWorkoutSetDraft()
+        var values = ActiveWorkoutSetInput.Values(weight: nil, reps: nil)
+        let revealExpectation = expectation(description: "focus transferred")
+        draft.update("101.", for: .weight, isFocused: true)
+        coordinator.synchronizeFocus(source)
+
+        coordinator.transitionAfterRealizing(
+            to: target,
+            commit: { _ in
+                values = draft.commit(current: values, weightUnit: .pounds).values
+            },
+            realize: { _ in },
+            assign: { _ in },
+            reveal: { _ in revealExpectation.fulfill() }
+        )
+
+        XCTAssertEqual(
+            draft.text(for: .weight, values: values, weightUnit: .pounds),
+            "101."
+        )
+
+        await fulfillment(of: [revealExpectation], timeout: 1)
+        XCTAssertEqual(values.weight, 101)
     }
 
     func testTransitioningOutOfAFieldCommitsThatField() {

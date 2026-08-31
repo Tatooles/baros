@@ -105,6 +105,7 @@ struct WorkoutSessionView: View {
                         )
                         .padding(.horizontal, 4)
                     }
+                    .id(Self.workoutHeaderScrollID)
                     .padding(.horizontal, 4)
 
                     ForEach(Array(sortedLoggedExercises.enumerated()), id: \.element.id) { exerciseIndex, loggedExercise in
@@ -456,11 +457,11 @@ struct WorkoutSessionView: View {
     }
 
     private func transitionFocus(to target: WorkoutField?, scrollProxy: ScrollViewProxy) {
-        if let target, requiresExerciseRevealBeforeFocus(target) {
+        if let target, requiresContainerRevealBeforeFocus(target) {
             focusTransitionCoordinator.transitionAfterRealizing(
                 to: target,
                 commit: commitSetDraft,
-                realize: { revealExercise(containing: $0, scrollProxy: scrollProxy) },
+                realize: { revealContainer(containing: $0, scrollProxy: scrollProxy) },
                 assign: { focusedField = $0 },
                 reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
             )
@@ -490,19 +491,27 @@ struct WorkoutSessionView: View {
         }
     }
 
-    private func revealExercise(containing field: WorkoutField, scrollProxy: ScrollViewProxy) {
-        guard let exerciseID = WorkoutFocusNavigator.exerciseID(containing: field, in: session) else { return }
-        scrollProxy.scrollTo(exerciseID, anchor: .center)
+    private func revealContainer(containing field: WorkoutField, scrollProxy: ScrollViewProxy) {
+        guard let target = WorkoutFocusNavigator.realizationTarget(containing: field, in: session) else {
+            return
+        }
+
+        switch target {
+        case .workoutHeader:
+            scrollProxy.scrollTo(Self.workoutHeaderScrollID, anchor: .top)
+        case .exercise(let exerciseID):
+            scrollProxy.scrollTo(exerciseID, anchor: .center)
+        }
     }
 
-    private func requiresExerciseRevealBeforeFocus(_ target: WorkoutField) -> Bool {
-        guard let targetExerciseID = WorkoutFocusNavigator.exerciseID(containing: target, in: session) else {
+    private func requiresContainerRevealBeforeFocus(_ target: WorkoutField) -> Bool {
+        guard let targetContainer = WorkoutFocusNavigator.realizationTarget(containing: target, in: session) else {
             return false
         }
-        let currentExerciseID = focusedField.flatMap {
-            WorkoutFocusNavigator.exerciseID(containing: $0, in: session)
+        let currentContainer = focusedField.flatMap {
+            WorkoutFocusNavigator.realizationTarget(containing: $0, in: session)
         }
-        return currentExerciseID != targetExerciseID
+        return currentContainer != targetContainer
     }
 
     private func commitSetDraft(_ field: WorkoutField?) {
@@ -554,6 +563,7 @@ struct WorkoutSessionView: View {
     }
 
     private static let focusRevealAnchor = UnitPoint(x: 0.5, y: 0.72)
+    private static let workoutHeaderScrollID = "WorkoutHeaderScroll"
 }
 
 /// Rebuilds the keyboard route only when structure, collapse, or note
