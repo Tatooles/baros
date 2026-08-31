@@ -137,9 +137,11 @@ struct WorkoutSessionView: View {
                                 swappingLoggedExercise = loggedExercise
                             },
                             onReorderExercises: {
+                                resignFocus()
                                 isReorderExercisesPresented = true
                             },
                             onEditRPE: { set in
+                                focusTransitionCoordinator.cancelPendingTransition()
                                 focusedField = .setReps(set.id)
                                 rpeEditingSourceField = .setReps(set.id)
                                 rpeEditingSetID = set.id

@@ -517,6 +517,37 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         XCTAssertNil(coordinator.actualField)
     }
 
+    func testRealizationKeepsStagedTransferWhenSourceIsRecycled() async {
+        let source = WorkoutField.setReps(UUID())
+        let target = WorkoutField.setWeight(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
+        var committedFields: [WorkoutField?] = []
+        var assignedFields: [WorkoutField] = []
+        let revealExpectation = expectation(description: "target revealed")
+        coordinator.synchronizeFocus(source)
+
+        coordinator.transitionAfterRealizing(
+            to: target,
+            commit: { committedFields.append($0) },
+            realize: { _ in
+                coordinator.observeFocusChange(
+                    from: source,
+                    to: nil,
+                    commit: { committedFields.append($0) },
+                    reveal: { _ in }
+                )
+            },
+            assign: { assignedFields.append($0) },
+            reveal: { _ in revealExpectation.fulfill() }
+        )
+
+        await fulfillment(of: [revealExpectation], timeout: 1)
+        XCTAssertEqual(committedFields, [source])
+        XCTAssertEqual(assignedFields, [target])
+        XCTAssertEqual(coordinator.currentField, target)
+        XCTAssertEqual(coordinator.actualField, target)
+    }
+
     func testRealizedTransitionCommitsLogicalFieldAfterPhysicalFocusWasRecycled() async {
         let source = WorkoutField.setWeight(UUID())
         let target = WorkoutField.setWeight(UUID())

@@ -145,6 +145,7 @@ final class WorkoutFocusTransitionCoordinator {
     private(set) var actualField: WorkoutField?
     private var focusOrder: [WorkoutField] = []
     private var revealTask: Task<Void, Never>?
+    private var stagedSourceField: WorkoutField?
     private let revealDelay: Duration
 
     init(revealDelay: Duration = .milliseconds(250)) {
@@ -235,6 +236,7 @@ final class WorkoutFocusTransitionCoordinator {
         let source = actualField ?? currentField
         currentField = target
         cancelPendingReveal()
+        stagedSourceField = source
         revealTask = Task { @MainActor [weak self] in
             do {
                 try await Task.sleep(for: delay ?? self?.revealDelay ?? .zero)
@@ -253,6 +255,7 @@ final class WorkoutFocusTransitionCoordinator {
             commit(source)
             assign(target)
             self?.actualField = target
+            self?.stagedSourceField = nil
             await Task.yield()
             do {
                 try await Task.sleep(for: revealDelayAfterAssignment)
@@ -280,7 +283,9 @@ final class WorkoutFocusTransitionCoordinator {
         // disclosure and draft survive until an explicit transition commits
         // them. Explicit dismissal already sets currentField to nil through
         // transition(to:) before FocusState reports this change.
-        if newField == nil, previousField == currentField {
+        let stagedSourceWasRecycled = stagedSourceField != nil && previousField == stagedSourceField
+        if newField == nil,
+           previousField == currentField || stagedSourceWasRecycled {
             return
         }
 
@@ -301,6 +306,7 @@ final class WorkoutFocusTransitionCoordinator {
     func cancelPendingReveal() {
         revealTask?.cancel()
         revealTask = nil
+        stagedSourceField = nil
     }
 
     func cancelPendingTransition() {
