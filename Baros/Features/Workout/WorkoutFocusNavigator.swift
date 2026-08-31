@@ -198,6 +198,16 @@ final class WorkoutFocusTransitionCoordinator {
     ) {
         guard target != currentField else { return }
 
+        // A staged cross-container transfer advances currentField before the
+        // first responder moves. Returning to actualField only cancels that
+        // pending transfer; the source is still focused, so committing or
+        // assigning it would normalize an in-progress draft unnecessarily.
+        if target == actualField {
+            currentField = target
+            cancelPendingReveal()
+            return
+        }
+
         commit(actualField)
         currentField = target
         if let target {

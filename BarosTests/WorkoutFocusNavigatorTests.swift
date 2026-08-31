@@ -423,6 +423,44 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         XCTAssertEqual(values.weight, 101)
     }
 
+    func testReversingStagedTransitionToActualFieldCancelsWithoutCommitting() {
+        let source = WorkoutField.setWeight(UUID())
+        let stagedTarget = WorkoutField.setReps(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .seconds(1))
+        let draft = ActiveWorkoutSetDraft()
+        var values = ActiveWorkoutSetInput.Values(weight: nil, reps: nil)
+        var assignedFields: [WorkoutField?] = []
+        draft.update("101.", for: .weight, isFocused: true)
+        coordinator.synchronizeFocus(source)
+
+        coordinator.transitionAfterRealizing(
+            to: stagedTarget,
+            commit: { _ in
+                values = draft.commit(current: values, weightUnit: .pounds).values
+            },
+            realize: { _ in },
+            assign: { _ in XCTFail("The staged target must not receive focus") },
+            reveal: { _ in XCTFail("The staged target must not reveal") }
+        )
+        coordinator.transition(
+            to: source,
+            commit: { _ in
+                values = draft.commit(current: values, weightUnit: .pounds).values
+            },
+            assign: { assignedFields.append($0) },
+            reveal: { _ in XCTFail("The already-focused source must not reveal") }
+        )
+
+        XCTAssertNil(values.weight)
+        XCTAssertEqual(
+            draft.text(for: .weight, values: values, weightUnit: .pounds),
+            "101."
+        )
+        XCTAssertTrue(assignedFields.isEmpty)
+        XCTAssertEqual(coordinator.currentField, source)
+        XCTAssertEqual(coordinator.actualField, source)
+    }
+
     func testTransitioningOutOfAFieldCommitsThatField() {
         let field = WorkoutField.setWeight(UUID())
         let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
