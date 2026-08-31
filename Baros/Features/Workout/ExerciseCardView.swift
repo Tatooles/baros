@@ -148,7 +148,7 @@ struct ExerciseCardView: View {
                         }
 
                         VStack(spacing: 0) {
-                            LazyVStack(spacing: 0) {
+                            VStack(spacing: 0) {
                                 ForEach(Array(loggedExercise.sortedSets.enumerated()), id: \.element.id) { index, set in
                                     let draft = draftStore.draft(for: set.id)
                                     if index > 0 {
@@ -156,28 +156,18 @@ struct ExerciseCardView: View {
                                             .overlay(AppTheme.subtleBorder)
                                             .padding(.horizontal, 16)
                                     }
-                                    VirtualizedSetRow(
-                                        isRealized: index < 2
-                                            || draft.isRowRealized
-                                            || isFocused(set.id),
-                                        placeholderHeight: dynamicTypeSize.isAccessibilitySize ? 112 : 44,
-                                        onVisibilityChange: {
-                                            draft.setRowVisibility($0)
-                                        }
-                                    ) {
-                                        SetRowView(
-                                            set: set,
-                                            exerciseIndex: exerciseIndex,
-                                            index: index,
-                                            engine: engine,
-                                            draft: draft,
-                                            commitDraft: commitDraft,
-                                            focusedField: focusedField,
-                                            weightUnit: weightUnit,
-                                            previous: index < previousSetsForRows.count ? previousSetsForRows[index] : nil,
-                                            onEditRPE: onEditRPE
-                                        )
-                                    }
+                                    SetRowView(
+                                        set: set,
+                                        exerciseIndex: exerciseIndex,
+                                        index: index,
+                                        engine: engine,
+                                        draft: draft,
+                                        commitDraft: commitDraft,
+                                        focusedField: focusedField,
+                                        weightUnit: weightUnit,
+                                        previous: index < previousSetsForRows.count ? previousSetsForRows[index] : nil,
+                                        onEditRPE: onEditRPE
+                                    )
                                     .id(set.id)
                                     .padding(.horizontal, 16)
                                 }
@@ -221,11 +211,6 @@ struct ExerciseCardView: View {
         }
     }
 
-    private func isFocused(_ setID: UUID) -> Bool {
-        focusedField.wrappedValue == .setWeight(setID)
-            || focusedField.wrappedValue == .setReps(setID)
-    }
-
     private var addSetButton: some View {
         WorkoutAddRowButton(
             title: "Add Set",
@@ -243,25 +228,5 @@ struct ExerciseCardView: View {
         let visibleSets = loggedExercise.sortedSets
         let completed = visibleSets.filter(\.isCompleted).count
         return WorkoutExerciseProgress(completed: completed, total: visibleSets.count)
-    }
-}
-
-private struct VirtualizedSetRow<Content: View>: View {
-    let isRealized: Bool
-    let placeholderHeight: CGFloat
-    let onVisibilityChange: (Bool) -> Void
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        Group {
-            if isRealized {
-                content()
-            } else {
-                Color.clear
-                    .frame(height: placeholderHeight)
-                    .accessibilityHidden(true)
-            }
-        }
-        .onScrollVisibilityChange(threshold: 0.01, onVisibilityChange)
     }
 }

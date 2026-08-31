@@ -139,8 +139,8 @@ struct SetRowView: View {
         .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
     }
 
-    /// Typing stages values in a session-owned draft that survives lazy row
-    /// realization. Row actions call this only at explicit commit boundaries;
+    /// Typing stages values in a session-owned draft that survives lazy exercise
+    /// card recycling. Row actions call this only at explicit commit boundaries;
     /// the shared closure owns the actual model write and save.
     @discardableResult
     private func commitDraftsIfNeeded() -> ActiveWorkoutSetInput.Commit {

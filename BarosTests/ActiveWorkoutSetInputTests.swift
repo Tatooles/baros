@@ -3,7 +3,7 @@ import XCTest
 
 final class ActiveWorkoutSetInputTests: XCTestCase {
     @MainActor
-    func testDraftStoreKeepsAnEditedValueAcrossRowRealizationChanges() {
+    func testDraftStoreKeepsAnEditedValueAcrossExerciseCardRecreation() {
         let setID = UUID()
         let store = ActiveWorkoutSetDraftStore()
         let firstRealization = store.draft(for: setID)

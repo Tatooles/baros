@@ -355,7 +355,6 @@ struct WorkoutSessionView: View {
                     scrollProxy.scrollTo(scrollTarget, anchor: .top)
                 }
             },
-            realizeTarget: revealSetRow,
             assign: { self.focusedField = $0 },
             reveal: { _ in
                 if let scrollTarget {
@@ -452,12 +451,11 @@ struct WorkoutSessionView: View {
     }
 
     private func transitionFocus(to target: WorkoutField?, scrollProxy: ScrollViewProxy) {
-        if let target, requiresRealizationBeforeFocus(target) {
+        if let target, requiresExerciseRevealBeforeFocus(target) {
             focusTransitionCoordinator.transitionAfterRealizing(
                 to: target,
                 commit: commitSetDraft,
                 realize: { revealExercise(containing: $0, scrollProxy: scrollProxy) },
-                realizeTarget: revealSetRow,
                 assign: { focusedField = $0 },
                 reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
             )
@@ -492,15 +490,7 @@ struct WorkoutSessionView: View {
         scrollProxy.scrollTo(exerciseID, anchor: .center)
     }
 
-    private func revealSetRow(containing field: WorkoutField) {
-        guard let setID = Self.setID(for: field) else { return }
-        setDraftStore.realizeRow(for: setID)
-    }
-
-    private func requiresRealizationBeforeFocus(_ target: WorkoutField) -> Bool {
-        if let setID = Self.setID(for: target), !setDraftStore.isRowRealized(for: setID) {
-            return true
-        }
+    private func requiresExerciseRevealBeforeFocus(_ target: WorkoutField) -> Bool {
         guard let targetExerciseID = WorkoutFocusNavigator.exerciseID(containing: target, in: session) else {
             return false
         }

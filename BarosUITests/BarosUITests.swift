@@ -314,9 +314,9 @@ final class BarosUITests: XCTestCase {
         let nextButton = app.buttons["NextWorkoutFieldButton"]
         XCTAssertTrue(nextButton.waitForExistence(timeout: 3))
         let expectedField = app.textFields["SetRepsField-0-4"]
-        XCTAssertFalse(
-            expectedField.exists,
-            "The fifth set's reps field should begin unrealized in the large fixture."
+        XCTAssertTrue(
+            expectedField.waitForExistence(timeout: 3),
+            "A realized exercise card should keep all five set rows stable."
         )
         for _ in 0..<10 {
             nextButton.tap()

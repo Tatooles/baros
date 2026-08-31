@@ -287,7 +287,7 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         XCTAssertEqual(revealedFields, [fields[2]])
     }
 
-    func testUnrealizedTransitionRealizesBeforeAssigningAndRevealingFocus() async {
+    func testUnrealizedExerciseTransitionRealizesBeforeAssigningAndRevealingFocus() async {
         let source = WorkoutField.setReps(UUID())
         let field = WorkoutField.setWeight(UUID())
         let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
@@ -302,7 +302,6 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
                 events.append("commit")
             },
             realize: { _ in events.append("realize") },
-            realizeTarget: { _ in events.append("realizeTarget") },
             assign: { _ in events.append("assign") },
             reveal: { _ in
                 events.append("reveal")
@@ -314,7 +313,7 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
 
         XCTAssertEqual(
             events,
-            ["commit", "realize", "realizeTarget", "commit", "assign", "reveal"]
+            ["commit", "realize", "commit", "assign", "reveal"]
         )
         XCTAssertEqual(coordinator.currentField, field)
     }

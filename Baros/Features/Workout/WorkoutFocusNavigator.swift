@@ -207,7 +207,6 @@ final class WorkoutFocusTransitionCoordinator {
         revealDelayAfterAssignment: Duration = .zero,
         commit: @escaping @MainActor (WorkoutField?) -> Void,
         realize: @escaping @MainActor (WorkoutField) -> Void,
-        realizeTarget: @escaping @MainActor (WorkoutField) -> Void = { _ in },
         assign: @escaping @MainActor (WorkoutField) -> Void,
         reveal: @escaping @MainActor (WorkoutField) -> Void
     ) {
@@ -226,10 +225,6 @@ final class WorkoutFocusTransitionCoordinator {
             guard !Task.isCancelled, self?.currentField == target else { return }
 
             realize(target)
-            await Task.yield()
-            guard !Task.isCancelled, self?.currentField == target else { return }
-
-            realizeTarget(target)
             await Task.yield()
             guard !Task.isCancelled, self?.currentField == target else { return }
 
