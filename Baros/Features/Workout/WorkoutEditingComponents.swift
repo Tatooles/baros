@@ -42,78 +42,8 @@ struct WorkoutProgressiveNoteAddButton<Focus: Hashable>: View {
     }
 }
 
-struct WorkoutProgressiveNoteDraftField<Focus: Hashable>: View {
-    let notes: String
-    let placeholder: String
-    let accessibilityLabel: String
-    let accessibilityIdentifier: String
-    let focusTarget: Focus
-    @Binding var isRevealed: Bool
-    var focusedField: FocusState<Focus?>.Binding
-    let commit: (String) -> Void
-    @State private var draft: String?
-
-    var body: some View {
-        TextField(
-            placeholder,
-            text: Binding(
-                get: { draft ?? notes },
-                set: { draft = $0 }
-            ),
-            axis: .vertical
-        )
-        .textFieldStyle(.plain)
-        .font(.body)
-        .foregroundStyle(AppTheme.textPrimary)
-        .lineLimit(1...6)
-        .focused(focusedField, equals: focusTarget)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 10)
-        .frame(minHeight: 44, alignment: .topLeading)
-        .workoutInputTapTarget(focusedField, equals: focusTarget)
-        .background(
-            isFocused ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(Color.clear),
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-        )
-        .animation(.easeOut(duration: 0.15), value: isFocused)
-        .accessibilityLabel(Text(verbatim: accessibilityLabel))
-        .accessibilityIdentifier(accessibilityIdentifier)
-        .id(focusTarget)
-        .onChange(of: focusedField.wrappedValue) { previousField, newField in
-            if previousField == focusTarget, newField != focusTarget {
-                commitAndUpdateDisclosure()
-            }
-        }
-        .onDisappear {
-            commitAndUpdateDisclosure()
-        }
-    }
-
-    private func commitIfNeeded() {
-        guard let draft else { return }
-        commit(draft)
-        self.draft = nil
-    }
-
-    private func commitAndUpdateDisclosure() {
-        let shouldHide = currentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        commitIfNeeded()
-        if shouldHide {
-            isRevealed = false
-        }
-    }
-
-    private var currentText: String {
-        draft ?? notes
-    }
-
-    private var isFocused: Bool {
-        focusedField.wrappedValue == focusTarget
-    }
-}
-
 struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
-    let notes: String
+    private let commitOnFocusLoss: ((String) -> Void)?
     let addTitle: String
     let addSystemImage: String
     let placeholder: String
@@ -123,23 +53,76 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
     let addAccessibilityHint: String?
     let addButtonHorizontalPadding: CGFloat
     let focusTarget: Focus
+    @Binding private var notes: String
     @Binding var isRevealed: Bool
     var focusedField: FocusState<Focus?>.Binding
-    let commit: (String) -> Void
+    @State private var draft: String?
+
+    init(
+        notes: Binding<String>,
+        addTitle: String,
+        addSystemImage: String,
+        placeholder: String,
+        accessibilityLabel: String,
+        addAccessibilityIdentifier: String,
+        fieldAccessibilityIdentifier: String,
+        addAccessibilityHint: String?,
+        addButtonHorizontalPadding: CGFloat,
+        focusTarget: Focus,
+        isRevealed: Binding<Bool>,
+        focusedField: FocusState<Focus?>.Binding,
+        commitOnFocusLoss: ((String) -> Void)? = nil
+    ) {
+        self.commitOnFocusLoss = commitOnFocusLoss
+        self.addTitle = addTitle
+        self.addSystemImage = addSystemImage
+        self.placeholder = placeholder
+        self.accessibilityLabel = accessibilityLabel
+        self.addAccessibilityIdentifier = addAccessibilityIdentifier
+        self.fieldAccessibilityIdentifier = fieldAccessibilityIdentifier
+        self.addAccessibilityHint = addAccessibilityHint
+        self.addButtonHorizontalPadding = addButtonHorizontalPadding
+        self.focusTarget = focusTarget
+        _notes = notes
+        _isRevealed = isRevealed
+        self.focusedField = focusedField
+    }
 
     var body: some View {
         Group {
             if isNoteVisible {
-                WorkoutProgressiveNoteDraftField(
-                    notes: notes,
-                    placeholder: placeholder,
-                    accessibilityLabel: accessibilityLabel,
-                    accessibilityIdentifier: fieldAccessibilityIdentifier,
-                    focusTarget: focusTarget,
-                    isRevealed: $isRevealed,
-                    focusedField: focusedField,
-                    commit: commit
+                TextField(
+                    placeholder,
+                    text: editorBinding,
+                    axis: .vertical
                 )
+                .textFieldStyle(.plain)
+                .font(.body)
+                .foregroundStyle(AppTheme.textPrimary)
+                .lineLimit(1...6)
+                .focused(focusedField, equals: focusTarget)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 10)
+                .frame(minHeight: 44, alignment: .topLeading)
+                .workoutInputTapTarget(focusedField, equals: focusTarget)
+                .background(
+                    isFocused ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(Color.clear),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
+                .animation(.easeOut(duration: 0.15), value: isFocused)
+                .accessibilityLabel(Text(verbatim: accessibilityLabel))
+                .accessibilityIdentifier(fieldAccessibilityIdentifier)
+                .id(focusTarget)
+                .onChange(of: focusedField.wrappedValue) { previousField, newField in
+                    if newField == focusTarget {
+                        isRevealed = true
+                    } else if previousField == focusTarget {
+                        commitAndUpdateDisclosure()
+                    }
+                }
+                .onDisappear {
+                    commitAndUpdateDisclosure()
+                }
             } else {
                 addButton
                     .padding(.horizontal, addButtonHorizontalPadding)
@@ -167,7 +150,42 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
     }
 
     private var isNoteVisible: Bool {
-        isRevealed || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        isRevealed || !currentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var editorBinding: Binding<String> {
+        Binding(
+            get: { currentText },
+            set: { newValue in
+                if commitOnFocusLoss == nil {
+                    notes = newValue
+                } else {
+                    draft = newValue
+                }
+            }
+        )
+    }
+
+    private var currentText: String {
+        draft ?? notes
+    }
+
+    private var isFocused: Bool {
+        focusedField.wrappedValue == focusTarget
+    }
+
+    private func commitAndUpdateDisclosure() {
+        let shouldHide = currentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        commitIfNeeded()
+        if shouldHide {
+            isRevealed = false
+        }
+    }
+
+    private func commitIfNeeded() {
+        guard let commitOnFocusLoss, let draft else { return }
+        commitOnFocusLoss(draft)
+        self.draft = nil
     }
 }
 

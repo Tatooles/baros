@@ -235,13 +235,19 @@ struct CompletedWorkoutEditView: View {
                         .overlay(AppTheme.subtleBorder)
                         .padding(.horizontal, 16)
 
-                    CompletedWorkoutExerciseNoteControl(
+                    WorkoutProgressiveNoteControl(
                         notes: exerciseNotesBinding(exerciseIndex: exerciseIndex),
+                        addTitle: "Add exercise note",
+                        addSystemImage: "note.text.badge.plus",
+                        placeholder: "Exercise notes...",
+                        accessibilityLabel: "Exercise note",
+                        addAccessibilityIdentifier: "AddCompletedWorkoutExerciseNoteButton-\(exerciseIndex)",
+                        fieldAccessibilityIdentifier: "CompletedWorkoutExerciseNotesField-\(exerciseIndex)",
+                        addAccessibilityHint: nil,
+                        addButtonHorizontalPadding: 0,
                         focusTarget: .exerciseNotes(exerciseIndex),
                         isRevealed: exerciseNoteRevealBinding(exerciseID: exercise.id),
-                        focusedField: $focusedField,
-                        addAccessibilityIdentifier: "AddCompletedWorkoutExerciseNoteButton-\(exerciseIndex)",
-                        fieldAccessibilityIdentifier: "CompletedWorkoutExerciseNotesField-\(exerciseIndex)"
+                        focusedField: $focusedField
                     )
                     .padding(.horizontal, 16)
                 }
@@ -509,66 +515,6 @@ struct CompletedWorkoutEditView: View {
             modelContext.rollback()
             errorMessage = error.localizedDescription
         }
-    }
-}
-
-private struct CompletedWorkoutExerciseNoteControl: View {
-    @Binding var notes: String
-    let focusTarget: CompletedWorkoutEditFocusedField
-    @Binding var isRevealed: Bool
-    var focusedField: FocusState<CompletedWorkoutEditFocusedField?>.Binding
-    let addAccessibilityIdentifier: String
-    let fieldAccessibilityIdentifier: String
-
-    var body: some View {
-        Group {
-            if isNoteVisible {
-                TextField("Exercise notes...", text: $notes, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.body)
-                    .foregroundStyle(AppTheme.textPrimary)
-                    .lineLimit(1...6)
-                    .focused(focusedField, equals: focusTarget)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 10)
-                    .frame(minHeight: 44, alignment: .topLeading)
-                    .workoutInputTapTarget(focusedField, equals: focusTarget)
-                    .background(
-                        isFocused ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(Color.clear),
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    )
-                    .animation(.easeOut(duration: 0.15), value: isFocused)
-                    .accessibilityLabel("Exercise note")
-                    .accessibilityIdentifier(fieldAccessibilityIdentifier)
-                    .id(focusTarget)
-                    .onChange(of: focusedField.wrappedValue) { previousField, newField in
-                        if newField == focusTarget {
-                            isRevealed = true
-                        } else if previousField == focusTarget,
-                                  notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            isRevealed = false
-                        }
-                    }
-            } else {
-                WorkoutProgressiveNoteAddButton(
-                    title: "Add exercise note",
-                    systemImage: "note.text.badge.plus",
-                    accessibilityIdentifier: addAccessibilityIdentifier,
-                    focusTarget: focusTarget,
-                    isRevealed: $isRevealed,
-                    focusedField: focusedField
-                )
-            }
-        }
-        .animation(.easeOut(duration: 0.15), value: isNoteVisible)
-    }
-
-    private var isNoteVisible: Bool {
-        isRevealed || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var isFocused: Bool {
-        focusedField.wrappedValue == focusTarget
     }
 }
 
