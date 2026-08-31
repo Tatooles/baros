@@ -1599,6 +1599,65 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testEditingCompletedWorkoutExerciseNoteCancelsAndSavesToHistory() {
+        let originalNote = "Pause at the bottom\nKeep wrists stacked"
+        let savedNote = "Keep the bar path steady"
+        let app = makeApp(
+            extraArguments: ["--uitest-seed-history-exercise-note"],
+            completedBenchWorkoutTitles: ["Exercise Note Push"]
+        )
+        app.launch()
+
+        app.buttons["HistoryTab"].tap()
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["WorkoutHistoryButton-0"].tap()
+
+        let displayedNote = app.staticTexts["ExerciseHistoryNoteText"]
+        XCTAssertTrue(displayedNote.waitForExistence(timeout: 3))
+        XCTAssertEqual(displayedNote.value as? String, originalNote)
+
+        app.buttons["EditWorkoutButton"].tap()
+        let noteField = app.descendants(matching: .any)
+            .matching(identifier: "CompletedWorkoutExerciseNotesField-0")
+            .firstMatch
+        let addNoteButton = app.buttons["AddCompletedWorkoutExerciseNoteButton-0"]
+        XCTAssertTrue(noteField.waitForExistence(timeout: 3))
+        guard noteField.exists else { return }
+        replaceText(in: noteField, with: "Discard this edit")
+        app.navigationBars["Edit Workout"].buttons["Cancel"].tap()
+
+        XCTAssertTrue(displayedNote.waitForExistence(timeout: 3))
+        XCTAssertEqual(displayedNote.value as? String, originalNote)
+
+        app.buttons["EditWorkoutButton"].tap()
+        XCTAssertTrue(noteField.waitForExistence(timeout: 3))
+        replaceText(in: noteField, with: "")
+        app.textFields["CompletedWorkoutTitleField"].tap()
+        XCTAssertTrue(addNoteButton.waitForExistence(timeout: 3))
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+
+        XCTAssertFalse(displayedNote.waitForExistence(timeout: 1))
+
+        app.buttons["EditWorkoutButton"].tap()
+        XCTAssertTrue(addNoteButton.waitForExistence(timeout: 3))
+        addNoteButton.tap()
+        XCTAssertTrue(noteField.waitForExistence(timeout: 3))
+        replaceText(in: noteField, with: savedNote)
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+
+        XCTAssertTrue(displayedNote.waitForExistence(timeout: 3))
+        XCTAssertEqual(displayedNote.value as? String, savedNote)
+
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["ExerciseHistoryButton-0"].tap()
+
+        XCTAssertTrue(displayedNote.waitForExistence(timeout: 3))
+        XCTAssertEqual(displayedNote.value as? String, savedNote)
+    }
+
+    @MainActor
     func testRemovingFocusedNewCompletedWorkoutSetDoesNotCrash() {
         let app = makeApp()
         app.launch()
