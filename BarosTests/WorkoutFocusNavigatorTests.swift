@@ -349,6 +349,24 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         XCTAssertEqual(coordinator.currentField, latestTarget)
     }
 
+    func testStagedTransitionKeepsActualFieldAtSourceUntilAssignment() {
+        let source = WorkoutField.setReps(UUID())
+        let target = WorkoutField.setWeight(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .seconds(1))
+        coordinator.synchronizeFocus(source)
+
+        coordinator.transitionAfterRealizing(
+            to: target,
+            commit: { _ in },
+            realize: { _ in },
+            assign: { _ in },
+            reveal: { _ in }
+        )
+
+        XCTAssertEqual(coordinator.currentField, target)
+        XCTAssertEqual(coordinator.actualField, source)
+    }
+
     func testTransitioningOutOfAFieldCommitsThatField() {
         let field = WorkoutField.setWeight(UUID())
         let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)

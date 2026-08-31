@@ -134,7 +134,7 @@ final class WorkoutFocusOrderCache {
 @MainActor
 final class WorkoutFocusTransitionCoordinator {
     private(set) var currentField: WorkoutField?
-    private var actualField: WorkoutField?
+    private(set) var actualField: WorkoutField?
     private var focusOrder: [WorkoutField] = []
     private var revealTask: Task<Void, Never>?
     private let revealDelay: Duration

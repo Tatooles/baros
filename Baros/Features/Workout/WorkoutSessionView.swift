@@ -247,7 +247,7 @@ struct WorkoutSessionView: View {
 
                             if let focusedSetID {
                                 Button("RPE") {
-                                    rpeEditingSourceField = focusTransitionCoordinator.currentField
+                                    rpeEditingSourceField = focusTransitionCoordinator.actualField
                                     rpeEditingSetID = focusedSetID
                                 }
                                 .font(.system(size: 16, weight: .semibold))
