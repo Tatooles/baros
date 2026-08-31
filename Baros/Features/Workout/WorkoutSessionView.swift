@@ -151,6 +151,7 @@ struct WorkoutSessionView: View {
                     }
 
                     Button {
+                        resignFocus()
                         isAddExercisePresented = true
                     } label: {
                         Label("Add Exercise", systemImage: "plus")

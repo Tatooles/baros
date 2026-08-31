@@ -999,6 +999,30 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testCancellingAddExerciseCommitsSourceSetDraftAfterPickerFocusLoss() {
+        let app = makeApp()
+        app.launch()
+
+        startBlankWorkoutWithBenchPress(in: app)
+        let sourceWeightField = app.textFields["SetWeightField-0-0"]
+        XCTAssertTrue(sourceWeightField.waitForExistence(timeout: 3))
+        replaceText(in: sourceWeightField, with: "185.")
+        XCTAssertEqual(sourceWeightField.value as? String, "185.")
+
+        app.buttons["AddExerciseButton"].tap()
+        XCTAssertTrue(app.navigationBars["Add Exercise"].waitForExistence(timeout: 3))
+        app.buttons["Done"].tap()
+
+        XCTAssertTrue(sourceWeightField.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            sourceWeightField.value as? String,
+            "185",
+            "Cancelling Add Exercise must commit and normalize the source draft."
+        )
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+    }
+
+    @MainActor
     func testExercisePickerShowsPerformanceSummaryAndInlineSortMenu() {
         let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
         app.launch()
