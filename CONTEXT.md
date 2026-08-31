@@ -31,8 +31,12 @@ Baros's stable starting place for beginning or returning to a workout and reachi
 _Avoid_: Inactive Workout screen, dashboard
 
 **Exercise Performance**:
-A completed workout in which an exercise has at least one completed set. An exercise counts at most once per workout, even when it appears more than once.
+A completed workout in which an exercise has at least one completed set. It belongs to one exact completed workout regardless of matching title or date, and an exercise counts at most once per workout even when it appears more than once.
 _Avoid_: Completed set count, exercise appearance
+
+**Exercise Note**:
+A note attached to one exercise occurrence within a workout. Separate occurrences of the same exercise have independent Exercise Notes.
+_Avoid_: Exercise library note, reference note, set note
 
 **Durable Sync Failure**:
 A sync problem that Baros already classifies as a failed outbox push, incomplete remote pull, safely mapped sync error, or owner-boundary problem. It warrants an external technical report without workout content or Current Owner identity.

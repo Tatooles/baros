@@ -15,6 +15,7 @@ struct CompletedWorkoutEditView: View {
     @State private var hasEditedDuration = false
     @State private var isDurationEditorPresented = false
     @State private var numberInputTexts: [CompletedWorkoutEditFocusedField: WorkoutNumberInputText] = [:]
+    @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var errorMessage: String?
     @State private var removalCandidate: CompletedWorkoutSetRemovalCandidate?
     @FocusState private var focusedField: CompletedWorkoutEditFocusedField?
@@ -34,18 +35,18 @@ struct CompletedWorkoutEditView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     workoutHeader
 
-                    ForEach(draft.exercises.indices, id: \.self) { exerciseIndex in
-                        exerciseEditor(exerciseIndex: exerciseIndex)
-                    }
-
                     WorkoutNotesField(
-                        title: "WORKOUT NOTES",
+                        title: "NOTES",
                         placeholder: "How did this session feel? Any notes for next time...",
                         text: $draft.notes,
                         focusTarget: .notes,
                         focusedField: $focusedField,
                         accessibilityIdentifier: "CompletedWorkoutNotesField"
                     )
+
+                    ForEach(draft.exercises.indices, id: \.self) { exerciseIndex in
+                        exerciseEditor(exerciseIndex: exerciseIndex)
+                    }
                 }
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
@@ -121,7 +122,7 @@ struct CompletedWorkoutEditView: View {
                 switch previousField {
                 case .setWeight, .setReps, .setRPE:
                     numberInputTexts[previousField]?.endEditing()
-                case .title, .notes:
+                case .title, .notes, .exerciseNotes:
                     break
                 }
             }
@@ -228,6 +229,26 @@ struct CompletedWorkoutEditView: View {
                             addSet(to: exerciseIndex)
                         }
                     }
+                    .padding(.horizontal, 16)
+
+                    Divider()
+                        .overlay(AppTheme.subtleBorder)
+                        .padding(.horizontal, 16)
+
+                    WorkoutProgressiveNoteControl(
+                        notes: exerciseNotesBinding(exerciseIndex: exerciseIndex),
+                        addTitle: "Add exercise note",
+                        addSystemImage: "note.text.badge.plus",
+                        placeholder: "Exercise notes...",
+                        accessibilityLabel: "Exercise note",
+                        addAccessibilityIdentifier: "AddCompletedWorkoutExerciseNoteButton-\(exerciseIndex)",
+                        fieldAccessibilityIdentifier: "CompletedWorkoutExerciseNotesField-\(exerciseIndex)",
+                        addAccessibilityHint: nil,
+                        addButtonHorizontalPadding: 0,
+                        focusTarget: .exerciseNotes(exerciseIndex),
+                        isRevealed: exerciseNoteRevealBinding(exerciseID: exercise.id),
+                        focusedField: $focusedField
+                    )
                     .padding(.horizontal, 16)
                 }
                 .padding(.bottom, 16)
@@ -384,6 +405,32 @@ struct CompletedWorkoutEditView: View {
     private func draftSetExists(exerciseIndex: Int, setIndex: Int) -> Bool {
         draft.exercises.indices.contains(exerciseIndex)
             && draft.exercises[exerciseIndex].sets.indices.contains(setIndex)
+    }
+
+    private func exerciseNotesBinding(exerciseIndex: Int) -> Binding<String> {
+        Binding(
+            get: {
+                guard draft.exercises.indices.contains(exerciseIndex) else { return "" }
+                return draft.exercises[exerciseIndex].notes
+            },
+            set: { notes in
+                guard draft.exercises.indices.contains(exerciseIndex) else { return }
+                draft.exercises[exerciseIndex].notes = notes
+            }
+        )
+    }
+
+    private func exerciseNoteRevealBinding(exerciseID: UUID) -> Binding<Bool> {
+        Binding(
+            get: { revealedExerciseNoteIDs.contains(exerciseID) },
+            set: { isRevealed in
+                if isRevealed {
+                    revealedExerciseNoteIDs.insert(exerciseID)
+                } else {
+                    revealedExerciseNoteIDs.remove(exerciseID)
+                }
+            }
+        )
     }
 
     private func updateDraftSet(
@@ -660,6 +707,7 @@ private struct CompletedWorkoutSetRemovalCandidate: Identifiable {
 private enum CompletedWorkoutEditFocusedField: Hashable {
     case title
     case notes
+    case exerciseNotes(Int)
     case setWeight(Int, Int)
     case setReps(Int, Int)
     case setRPE(Int, Int)

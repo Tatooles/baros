@@ -83,7 +83,7 @@ struct WorkoutSessionView: View {
                             .accessibilityIdentifier("WorkoutDate")
 
                         WorkoutProgressiveNoteControl(
-                            notes: session.notes,
+                            notes: .constant(session.notes),
                             addTitle: "Add workout note",
                             addSystemImage: "square.and.pencil",
                             placeholder: "Notes about today's workout",
@@ -94,10 +94,15 @@ struct WorkoutSessionView: View {
                             addButtonHorizontalPadding: 8,
                             focusTarget: .workoutNotes,
                             isRevealed: $isWorkoutNoteRevealed,
-                            focusedField: $focusedField
-                        ) { draft in
-                            try? engine.updateWorkoutNotes(draft, session: session, context: modelContext)
-                        }
+                            focusedField: $focusedField,
+                            commitOnFocusLoss: { draft in
+                                try? engine.updateWorkoutNotes(
+                                    draft,
+                                    session: session,
+                                    context: modelContext
+                                )
+                            }
+                        )
                         .padding(.horizontal, 4)
                     }
                     .padding(.horizontal, 4)

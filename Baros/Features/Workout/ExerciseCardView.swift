@@ -185,7 +185,7 @@ struct ExerciseCardView: View {
                         }
 
                         WorkoutProgressiveNoteControl(
-                            notes: loggedExercise.notes,
+                            notes: .constant(loggedExercise.notes),
                             addTitle: "Add exercise note",
                             addSystemImage: "note.text.badge.plus",
                             placeholder: "Exercise notes...",
@@ -196,10 +196,15 @@ struct ExerciseCardView: View {
                             addButtonHorizontalPadding: 0,
                             focusTarget: .exerciseNotes(loggedExercise.id),
                             isRevealed: $isNoteRevealed,
-                            focusedField: focusedField
-                        ) { draft in
-                            try? engine.updateExerciseNotes(draft, loggedExercise: loggedExercise, context: modelContext)
-                        }
+                            focusedField: focusedField,
+                            commitOnFocusLoss: { draft in
+                                try? engine.updateExerciseNotes(
+                                    draft,
+                                    loggedExercise: loggedExercise,
+                                    context: modelContext
+                                )
+                            }
+                        )
                         .padding(.horizontal, 16)
                     }
                     // Content stays put and fades while the clipped card edge

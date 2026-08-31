@@ -68,12 +68,14 @@ struct CompletedWorkoutEditExerciseDraft: Identifiable {
     let id: UUID
     let exerciseSnapshotName: String
     let metadataDisplayText: String?
+    var notes: String
     var sets: [CompletedWorkoutEditSetDraft]
 
     init(loggedExercise: LoggedExercise) {
         id = loggedExercise.id
         exerciseSnapshotName = loggedExercise.exerciseSnapshotName
         metadataDisplayText = loggedExercise.metadataDisplayText
+        notes = loggedExercise.notes
         sets = loggedExercise.sortedSets.map(CompletedWorkoutEditSetDraft.init(set:))
     }
 }
@@ -201,6 +203,27 @@ struct WorkoutHistoryMutationService {
         for exerciseDraft in draft.exercises {
             guard let loggedExercise = loggedExercisesByID[exerciseDraft.id] else {
                 throw WorkoutHistoryMutationError.missingLoggedExercise
+            }
+
+            if loggedExercise.notes != exerciseDraft.notes {
+                try claimOwnerlessWorkoutGraphIfNeeded(
+                    session,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context,
+                    now: now
+                )
+                loggedExercise.notes = exerciseDraft.notes
+                loggedExercise.updatedAt = now
+                try recordUpdateIfNeeded(
+                    entityKind: .loggedExercise,
+                    entityID: loggedExercise.id,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
+                    context: context,
+                    now: now
+                )
+                didChange = true
+                didChangeChildRecords = true
             }
 
             let visibleSets = loggedExercise.sortedSets

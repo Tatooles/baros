@@ -129,7 +129,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testMarkSeenForUITestingSkipsFirstRunExperience() {
+    func testMarkSeenForUITestingSkipsReleaseWithoutHighlights() {
         let store = FirstRunExperienceStore(defaults: defaults)
 
         FirstRunExperienceStore.markSeenForUITestingIfRequested(
@@ -142,7 +142,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
             LaunchExperienceState(
                 hasCompletedOnboarding: true,
                 lastProcessedAppVersion: AppBuildInfo.current.version,
-                lastSeenWhatsNewVersion: "1.2"
+                lastSeenWhatsNewVersion: nil
             )
         )
     }
