@@ -47,15 +47,7 @@ struct HistoryView: View {
         .navigationDestination(for: HistoryRoute.self) { route in
             switch route {
             case .workout(let sessionID):
-                if let session = completedSessions.first(where: { $0.id == sessionID }) {
-                    WorkoutHistoryDetailView(session: session)
-                } else {
-                    EmptyStateView(
-                        title: "Workout Unavailable",
-                        message: "This workout is no longer available in History."
-                    )
-                    .background(AppTheme.canvasBackground.ignoresSafeArea())
-                }
+                WorkoutHistoryDestinationView(sessionID: sessionID)
             case .exercise(let exerciseRoute):
                 if let summary = exerciseHistorySnapshot.resolvedHistory.summary(for: exerciseRoute) {
                     ExerciseHistoryDetailView(summary: summary)
@@ -101,6 +93,19 @@ private struct HistorySearchContent: View {
                 case .exercises:
                     exerciseContent
                 }
+
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains(
+                    "--uitest-open-unavailable-workout-history"
+                ) {
+                    Button("Open unavailable workout") {
+                        navigationState.openWorkoutHistory(
+                            UUID(uuidString: "00000000-0000-4000-8000-000000012699")!
+                        )
+                    }
+                    .accessibilityIdentifier("UITestOpenUnavailableWorkoutButton")
+                }
+                #endif
             }
             .padding(AppTheme.shellPadding)
         }

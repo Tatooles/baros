@@ -31,7 +31,7 @@ Baros's stable starting place for beginning or returning to a workout and reachi
 _Avoid_: Inactive Workout screen, dashboard
 
 **Exercise Performance**:
-A completed workout in which an exercise has at least one completed set. An exercise counts at most once per workout, even when it appears more than once.
+A completed workout in which an exercise has at least one completed set. It belongs to one exact completed workout regardless of matching title or date, and an exercise counts at most once per workout even when it appears more than once.
 _Avoid_: Completed set count, exercise appearance
 
 **Durable Sync Failure**:

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ExerciseHistoryDetailView: View {
     let summary: ExerciseHistorySummary
+    @State private var workoutSelection: WorkoutHistorySelection?
     @Environment(SyncScheduler.self) private var syncScheduler
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
@@ -39,7 +40,10 @@ struct ExerciseHistoryDetailView: View {
                             name: summary.name,
                             metadataDisplayText: summary.metadataDisplayText
                         ),
-                        weightUnit: weightUnit
+                        weightUnit: weightUnit,
+                        openWorkout: {
+                            workoutSelection = WorkoutHistorySelection(id: group.session.id)
+                        }
                     )
                 }
             }
@@ -47,5 +51,12 @@ struct ExerciseHistoryDetailView: View {
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $workoutSelection) { selection in
+            WorkoutHistoryDestinationView(sessionID: selection.id)
+        }
     }
+}
+
+private struct WorkoutHistorySelection: Identifiable, Hashable {
+    let id: UUID
 }

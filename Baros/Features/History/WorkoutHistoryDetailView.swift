@@ -1,6 +1,38 @@
 import SwiftData
 import SwiftUI
 
+struct WorkoutHistoryDestinationView: View {
+    let sessionID: UUID
+
+    @Environment(SyncScheduler.self) private var syncScheduler
+    @Query(
+        filter: #Predicate<WorkoutSession> { session in
+            session.statusRaw == "completed"
+        },
+        sort: \WorkoutSession.startedAt,
+        order: .reverse
+    ) private var sessions: [WorkoutSession]
+
+    private var session: WorkoutSession? {
+        WorkoutSession.visibleCompletedSessions(
+            from: sessions,
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+        ).first { $0.id == sessionID }
+    }
+
+    var body: some View {
+        if let session {
+            WorkoutHistoryDetailView(session: session)
+        } else {
+            EmptyStateView(
+                title: "Workout Unavailable",
+                message: "This workout is no longer available in History."
+            )
+            .background(AppTheme.canvasBackground.ignoresSafeArea())
+        }
+    }
+}
+
 struct WorkoutHistoryDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
