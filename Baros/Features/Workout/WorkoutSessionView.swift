@@ -166,6 +166,7 @@ struct WorkoutSessionView: View {
                 .padding(.bottom, contentBottomPadding)
             }
             .accessibilityIdentifier("ActiveWorkoutScrollView")
+            .scrollDismissesKeyboard(.immediately)
             .safeAreaInset(edge: .top, spacing: 0) {
                 ActiveWorkoutMetricsHeader(session: session) {
                     // Flush any in-progress field edit through the commit path

@@ -389,11 +389,8 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testLargeActiveWorkoutKeepsFocusedDraftAndKeyboardAcrossLazyScrolling() {
-        let app = makeApp(extraArguments: [
-            "--uitest-seed-large-active-workout",
-            "--uitest-disable-animations",
-        ])
+    func testLargeActiveWorkoutDismissesKeyboardAndKeepsSetDraftAcrossLazyScrolling() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
         app.launch()
 
         let editedField = app.textFields["SetWeightField-0-0"]
@@ -402,14 +399,10 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(editedField.value as? String, "101.")
         XCTAssertTrue(app.keyboards.firstMatch.exists)
 
-        let offscreenExercise = app.buttons["ExerciseHeader-1"]
         let workoutScrollView = app.scrollViews["ActiveWorkoutScrollView"]
         XCTAssertTrue(workoutScrollView.exists)
-        for _ in 0..<12 where !offscreenExercise.exists {
-            drag(workoutScrollView, direction: .up)
-        }
-        XCTAssertTrue(offscreenExercise.waitForExistence(timeout: 3))
-        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        dragAboveKeyboard(workoutScrollView, direction: .up)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 2))
 
         for _ in 0..<16 where !app.textFields["WorkoutTitle"].isHittable {
             drag(workoutScrollView, direction: .down)
@@ -420,7 +413,7 @@ final class BarosUITests: XCTestCase {
             "101.",
             "Lazy scrolling must retain the uncommitted decimal draft instead of normalizing it."
         )
-        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
     }
 
     @MainActor
@@ -495,6 +488,38 @@ final class BarosUITests: XCTestCase {
         let relaunchedNoteField = relaunchedApp.textFields["ExerciseNotesField-0"]
         XCTAssertTrue(relaunchedNoteField.waitForExistence(timeout: 8))
         XCTAssertEqual(relaunchedNoteField.value as? String, "Pause reps")
+    }
+
+    @MainActor
+    func testManualScrollDismissesKeyboardWithoutDiscardingExerciseNoteDraft() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        app.launch()
+
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["AddExerciseNoteButton-0"].tap()
+        let noteField = app.textFields["ExerciseNotesField-0"]
+        XCTAssertTrue(noteField.waitForExistence(timeout: 3))
+        noteField.typeText("Pause reps")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+
+        let workoutScrollView = app.scrollViews["ActiveWorkoutScrollView"]
+        XCTAssertTrue(workoutScrollView.exists)
+        dragAboveKeyboard(workoutScrollView, direction: .up)
+        XCTAssertTrue(
+            app.keyboards.firstMatch.waitForNonExistence(timeout: 2),
+            "A manual workout scroll should dismiss editing through the native keyboard animation."
+        )
+
+        for _ in 0..<16 where !noteField.isHittable {
+            drag(workoutScrollView, direction: .down)
+        }
+
+        XCTAssertTrue(noteField.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            noteField.value as? String,
+            "Pause reps",
+            "Dismissing the keyboard during a manual scroll must preserve the Exercise Note draft."
+        )
     }
 
     @MainActor
