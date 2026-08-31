@@ -1341,6 +1341,16 @@ final class BarosUITests: XCTestCase {
         let performanceButtons = exercisePerformanceButtons(in: app)
         XCTAssertTrue(performanceButtons.firstMatch.waitForExistence(timeout: 3))
         XCTAssertEqual(performanceButtons.count, 2)
+        XCTAssertTrue(
+            performanceButtons.matching(
+                NSPredicate(format: "label CONTAINS %@", "1 set")
+            ).firstMatch.exists
+        )
+        XCTAssertTrue(
+            performanceButtons.matching(
+                NSPredicate(format: "label CONTAINS %@", "2 sets")
+            ).firstMatch.exists
+        )
 
         performanceButtons.element(boundBy: 0).tap()
         XCTAssertTrue(app.navigationBars["Matching Push"].waitForExistence(timeout: 3))
@@ -1377,6 +1387,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(setLabel.waitForExistence(timeout: 3))
         XCTAssertTrue(performanceButton.isHittable)
         XCTAssertTrue(performanceButton.label.contains("Accessible Push"))
+        XCTAssertTrue(performanceButton.label.contains("1 set"))
         XCTAssertLessThanOrEqual(performanceButton.frame.maxY, setLabel.frame.minY)
     }
 

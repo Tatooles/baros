@@ -81,7 +81,8 @@ struct ExerciseHistorySessionGroupCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(
-                "\(group.title), \(WorkoutFormatters.compactDate(group.startedAt))"
+                "\(group.title), \(WorkoutFormatters.compactDate(group.startedAt)), "
+                    + setCountLabel(for: group.completedSetCount)
             )
             .accessibilityHint("Opens completed workout.")
             .accessibilityIdentifier("ExercisePerformanceWorkoutButton-\(group.id.uuidString)")
