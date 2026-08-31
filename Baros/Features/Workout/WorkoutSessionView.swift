@@ -32,6 +32,8 @@ struct WorkoutSessionView: View {
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
     @State private var rpeEditingSourceField: WorkoutField?
+    @State private var workoutNoteDraft: String?
+    @State private var exerciseNoteDrafts: [UUID: String] = [:]
     @State private var setDraftStore = ActiveWorkoutSetDraftStore()
     @State private var focusTransitionCoordinator = WorkoutFocusTransitionCoordinator()
     @FocusState private var focusedField: WorkoutField?
@@ -95,6 +97,9 @@ struct WorkoutSessionView: View {
                             focusTarget: .workoutNotes,
                             isRevealed: $isWorkoutNoteRevealed,
                             focusedField: $focusedField,
+                            draft: $workoutNoteDraft,
+                            preservesDraftOnDisappear: true,
+                            shouldCommitOnFocusLoss: shouldCommitNoteFocusLoss,
                             commitOnFocusLoss: { draft in
                                 try? engine.updateWorkoutNotes(
                                     draft,
@@ -115,6 +120,8 @@ struct WorkoutSessionView: View {
                             engine: engine,
                             isCollapsed: isCollapsedBinding(for: loggedExercise),
                             isNoteRevealed: isNoteRevealedBinding(for: loggedExercise),
+                            noteDraft: exerciseNoteDraftBinding(for: loggedExercise.id),
+                            shouldCommitNoteFocusLoss: shouldCommitNoteFocusLoss,
                             draftStore: setDraftStore,
                             commitDraft: persistSetDraft,
                             focusedField: $focusedField,
@@ -171,9 +178,9 @@ struct WorkoutSessionView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 // Resigning focus routes pending drafts through the normal
                 // commit path before the app is backgrounded or suspended.
-                if newPhase != .active, focusedField != nil {
-                    resignFocus()
-                }
+                guard newPhase != .active else { return }
+                commitAllDrafts()
+                resignFocus()
             }
             .onChange(of: isAddExercisePresented) { _, isPresented in
                 guard !isPresented else { return }
@@ -183,7 +190,7 @@ struct WorkoutSessionView: View {
                 focusTransitionCoordinator.observeFocusChange(
                     from: previousField,
                     to: newField,
-                    commit: commitSetDraft,
+                    commit: commitFocusedDraft,
                     reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
                 )
 
@@ -248,6 +255,7 @@ struct WorkoutSessionView: View {
 
                             if let focusedSetID {
                                 Button("RPE") {
+                                    focusTransitionCoordinator.cancelPendingTransition()
                                     rpeEditingSourceField = focusTransitionCoordinator.actualField
                                     rpeEditingSetID = focusedSetID
                                 }
@@ -296,10 +304,12 @@ struct WorkoutSessionView: View {
             onMinimizePreparationChanged {
                 // Resigning focus commits leaf-owned drafts before the shell
                 // transitions this session into its minimized presentation.
+                commitAllDrafts()
                 resignFocus()
             }
         }
         .onDisappear {
+            commitAllDrafts()
             resignFocus()
             onMinimizePreparationChanged(nil)
         }
@@ -355,7 +365,7 @@ struct WorkoutSessionView: View {
             to: focusedField,
             delay: .zero,
             revealDelayAfterAssignment: .milliseconds(350),
-            commit: commitSetDraft,
+            commit: commitFocusedDraft,
             realize: { _ in
                 if let scrollTarget {
                     scrollProxy.scrollTo(scrollTarget, anchor: .top)
@@ -415,7 +425,9 @@ struct WorkoutSessionView: View {
             get: { collapsedExerciseIDs.contains(loggedExercise.id) },
             set: { isCollapsed in
                 if isCollapsed {
-                    if field(focusedField, belongsTo: loggedExercise) {
+                    if field(focusedField, belongsTo: loggedExercise)
+                        || field(focusTransitionCoordinator.currentField, belongsTo: loggedExercise) {
+                        commitExerciseNoteDraftIfNeeded(for: loggedExercise)
                         resignFocus()
                     }
                     revealedExerciseNoteIDs.remove(loggedExercise.id)
@@ -451,6 +463,27 @@ struct WorkoutSessionView: View {
         )
     }
 
+    private func exerciseNoteDraftBinding(for exerciseID: UUID) -> Binding<String?> {
+        Binding(
+            get: { exerciseNoteDrafts[exerciseID] },
+            set: { draft in
+                if let draft {
+                    exerciseNoteDrafts[exerciseID] = draft
+                } else {
+                    exerciseNoteDrafts.removeValue(forKey: exerciseID)
+                }
+            }
+        )
+    }
+
+    private func shouldCommitNoteFocusLoss(to newField: WorkoutField?) -> Bool {
+        // A real field transition has a non-nil destination. Explicit keyboard
+        // dismissal updates the coordinator before FocusState. If FocusState
+        // alone becomes nil while the coordinator still targets this note, a
+        // lazy container was recycled and must not become a commit boundary.
+        newField != nil || focusTransitionCoordinator.currentField == nil
+    }
+
     private func moveFocus(offset: Int, scrollProxy: ScrollViewProxy) {
         guard let target = focusTransitionCoordinator.adjacentField(offset: offset) else { return }
         transitionFocus(to: target, scrollProxy: scrollProxy)
@@ -460,7 +493,7 @@ struct WorkoutSessionView: View {
         if let target, requiresContainerRevealBeforeFocus(target) {
             focusTransitionCoordinator.transitionAfterRealizing(
                 to: target,
-                commit: commitSetDraft,
+                commit: commitFocusedDraft,
                 realize: { revealContainer(containing: $0, scrollProxy: scrollProxy) },
                 assign: { focusedField = $0 },
                 reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
@@ -470,7 +503,7 @@ struct WorkoutSessionView: View {
 
         focusTransitionCoordinator.transition(
             to: target,
-            commit: commitSetDraft,
+            commit: commitFocusedDraft,
             assign: { focusedField = $0 },
             reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
         )
@@ -479,7 +512,7 @@ struct WorkoutSessionView: View {
     private func resignFocus() {
         focusTransitionCoordinator.transition(
             to: nil,
-            commit: commitSetDraft,
+            commit: commitFocusedDraft,
             assign: { focusedField = $0 },
             reveal: { _ in }
         )
@@ -514,12 +547,55 @@ struct WorkoutSessionView: View {
         return currentContainer != targetContainer
     }
 
-    private func commitSetDraft(_ field: WorkoutField?) {
-        guard let setID = Self.setID(for: field),
-              let draft = setDraftStore.existingDraft(for: setID),
-              let set = set(withID: setID) else { return }
+    private func commitFocusedDraft(_ field: WorkoutField?) {
+        switch field {
+        case .workoutNotes:
+            commitWorkoutNoteDraftIfNeeded()
+        case .exerciseNotes(let exerciseID):
+            guard let loggedExercise = session.sortedLoggedExercises.first(where: { $0.id == exerciseID }) else {
+                return
+            }
+            commitExerciseNoteDraftIfNeeded(for: loggedExercise)
+        case .setWeight, .setReps:
+            guard let setID = Self.setID(for: field),
+                  let draft = setDraftStore.existingDraft(for: setID),
+                  let set = set(withID: setID) else { return }
+            _ = persistSetDraft(set, draft)
+        case .workoutTitle, nil:
+            break
+        }
+    }
 
-        _ = persistSetDraft(set, draft)
+    private func commitAllDrafts() {
+        for (setID, draft) in setDraftStore.existingDrafts() {
+            guard let set = set(withID: setID) else { continue }
+            _ = persistSetDraft(set, draft)
+        }
+
+        commitWorkoutNoteDraftIfNeeded()
+
+        for loggedExercise in session.sortedLoggedExercises {
+            commitExerciseNoteDraftIfNeeded(for: loggedExercise)
+        }
+    }
+
+    private func commitWorkoutNoteDraftIfNeeded() {
+        guard let workoutNoteDraft else { return }
+        try? engine.updateWorkoutNotes(
+            workoutNoteDraft,
+            session: session,
+            context: modelContext
+        )
+        self.workoutNoteDraft = nil
+    }
+
+    private func commitExerciseNoteDraftIfNeeded(for loggedExercise: LoggedExercise) {
+        guard let draft = exerciseNoteDrafts.removeValue(forKey: loggedExercise.id) else { return }
+        try? engine.updateExerciseNotes(
+            draft,
+            loggedExercise: loggedExercise,
+            context: modelContext
+        )
     }
 
     private func persistSetDraft(

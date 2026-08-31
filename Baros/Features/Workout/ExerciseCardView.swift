@@ -9,6 +9,8 @@ struct ExerciseCardView: View {
     @Bindable var engine: ActiveWorkoutEngine
     @Binding var isCollapsed: Bool
     @Binding var isNoteRevealed: Bool
+    @Binding var noteDraft: String?
+    let shouldCommitNoteFocusLoss: (WorkoutField?) -> Bool
     let draftStore: ActiveWorkoutSetDraftStore
     let commitDraft: (LoggedSet, ActiveWorkoutSetDraft) -> ActiveWorkoutSetInput.Commit
     var focusedField: FocusState<WorkoutField?>.Binding
@@ -27,6 +29,8 @@ struct ExerciseCardView: View {
         engine: ActiveWorkoutEngine,
         isCollapsed: Binding<Bool>,
         isNoteRevealed: Binding<Bool>,
+        noteDraft: Binding<String?>,
+        shouldCommitNoteFocusLoss: @escaping (WorkoutField?) -> Bool,
         draftStore: ActiveWorkoutSetDraftStore,
         commitDraft: @escaping (LoggedSet, ActiveWorkoutSetDraft) -> ActiveWorkoutSetInput.Commit,
         focusedField: FocusState<WorkoutField?>.Binding,
@@ -43,6 +47,8 @@ struct ExerciseCardView: View {
         self.engine = engine
         self._isCollapsed = isCollapsed
         self._isNoteRevealed = isNoteRevealed
+        self._noteDraft = noteDraft
+        self.shouldCommitNoteFocusLoss = shouldCommitNoteFocusLoss
         self.draftStore = draftStore
         self.commitDraft = commitDraft
         self.focusedField = focusedField
@@ -197,6 +203,9 @@ struct ExerciseCardView: View {
                             focusTarget: .exerciseNotes(loggedExercise.id),
                             isRevealed: $isNoteRevealed,
                             focusedField: focusedField,
+                            draft: $noteDraft,
+                            preservesDraftOnDisappear: true,
+                            shouldCommitOnFocusLoss: shouldCommitNoteFocusLoss,
                             commitOnFocusLoss: { draft in
                                 try? engine.updateExerciseNotes(
                                     draft,

@@ -461,6 +461,127 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         XCTAssertEqual(coordinator.actualField, source)
     }
 
+    func testCancellingStagedTransitionForRPEKeepsActualFocusAndStopsAssignment() async throws {
+        let source = WorkoutField.setReps(UUID())
+        let stagedTarget = WorkoutField.setWeight(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .milliseconds(20))
+        var committedFields: [WorkoutField?] = []
+        var assignedFields: [WorkoutField] = []
+        var revealedFields: [WorkoutField] = []
+        coordinator.synchronizeFocus(source)
+
+        coordinator.transitionAfterRealizing(
+            to: stagedTarget,
+            commit: { committedFields.append($0) },
+            realize: { _ in },
+            assign: { assignedFields.append($0) },
+            reveal: { revealedFields.append($0) }
+        )
+
+        coordinator.cancelPendingTransition()
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertTrue(committedFields.isEmpty)
+        XCTAssertTrue(assignedFields.isEmpty)
+        XCTAssertTrue(revealedFields.isEmpty)
+        XCTAssertEqual(coordinator.currentField, source)
+        XCTAssertEqual(coordinator.actualField, source)
+    }
+
+    func testUnexpectedPhysicalFocusLossKeepsLogicalFieldUntilExplicitDismissal() {
+        let field = WorkoutField.exerciseNotes(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
+        var committedFields: [WorkoutField?] = []
+        coordinator.synchronizeFocus(field)
+
+        coordinator.observeFocusChange(
+            from: field,
+            to: nil,
+            commit: { committedFields.append($0) },
+            reveal: { _ in }
+        )
+
+        XCTAssertTrue(committedFields.isEmpty)
+        XCTAssertEqual(coordinator.currentField, field)
+        XCTAssertNil(coordinator.actualField)
+
+        coordinator.transition(
+            to: nil,
+            commit: { committedFields.append($0) },
+            assign: { _ in },
+            reveal: { _ in }
+        )
+
+        XCTAssertEqual(committedFields, [field])
+        XCTAssertNil(coordinator.currentField)
+        XCTAssertNil(coordinator.actualField)
+    }
+
+    func testRealizedTransitionCommitsLogicalFieldAfterPhysicalFocusWasRecycled() async {
+        let source = WorkoutField.setWeight(UUID())
+        let target = WorkoutField.setWeight(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
+        var committedFields: [WorkoutField?] = []
+        let revealExpectation = expectation(description: "target revealed")
+        coordinator.synchronizeFocus(source)
+        coordinator.observeFocusChange(
+            from: source,
+            to: nil,
+            commit: { committedFields.append($0) },
+            reveal: { _ in }
+        )
+
+        coordinator.transitionAfterRealizing(
+            to: target,
+            commit: { committedFields.append($0) },
+            realize: { _ in },
+            assign: { _ in },
+            reveal: { _ in revealExpectation.fulfill() }
+        )
+
+        await fulfillment(of: [revealExpectation], timeout: 1)
+        XCTAssertEqual(committedFields, [source])
+        XCTAssertEqual(coordinator.currentField, target)
+        XCTAssertEqual(coordinator.actualField, target)
+    }
+
+    func testStructureSyncPreservesLogicalFieldAfterPhysicalFocusWasRecycled() {
+        let field = WorkoutField.setWeight(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
+        coordinator.synchronizeFocus(field)
+        coordinator.observeFocusChange(
+            from: field,
+            to: nil,
+            commit: { _ in },
+            reveal: { _ in }
+        )
+
+        coordinator.synchronizeFocus(nil)
+
+        XCTAssertEqual(coordinator.currentField, field)
+        XCTAssertNil(coordinator.actualField)
+    }
+
+    func testStructureSyncDoesNotCancelStagedTransition() {
+        let source = WorkoutField.setWeight(UUID())
+        let target = WorkoutField.setWeight(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .seconds(1))
+        coordinator.synchronizeFocus(source)
+        coordinator.transitionAfterRealizing(
+            to: target,
+            commit: { _ in },
+            realize: { _ in },
+            assign: { _ in },
+            reveal: { _ in }
+        )
+
+        coordinator.synchronizeFocus(source)
+
+        XCTAssertEqual(coordinator.currentField, target)
+        XCTAssertEqual(coordinator.actualField, source)
+        coordinator.cancelPendingReveal()
+    }
+
     func testTransitioningOutOfAFieldCommitsThatField() {
         let field = WorkoutField.setWeight(UUID())
         let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)

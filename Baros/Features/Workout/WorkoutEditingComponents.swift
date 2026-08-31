@@ -44,6 +44,9 @@ struct WorkoutProgressiveNoteAddButton<Focus: Hashable>: View {
 
 struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
     private let commitOnFocusLoss: ((String) -> Void)?
+    private let externalDraft: Binding<String?>?
+    private let preservesDraftOnDisappear: Bool
+    private let shouldCommitOnFocusLoss: ((Focus?) -> Bool)?
     let addTitle: String
     let addSystemImage: String
     let placeholder: String
@@ -56,7 +59,7 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
     @Binding private var notes: String
     @Binding var isRevealed: Bool
     var focusedField: FocusState<Focus?>.Binding
-    @State private var draft: String?
+    @State private var localDraft: String?
 
     init(
         notes: Binding<String>,
@@ -71,9 +74,15 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
         focusTarget: Focus,
         isRevealed: Binding<Bool>,
         focusedField: FocusState<Focus?>.Binding,
+        draft: Binding<String?>? = nil,
+        preservesDraftOnDisappear: Bool = false,
+        shouldCommitOnFocusLoss: ((Focus?) -> Bool)? = nil,
         commitOnFocusLoss: ((String) -> Void)? = nil
     ) {
         self.commitOnFocusLoss = commitOnFocusLoss
+        self.externalDraft = draft
+        self.preservesDraftOnDisappear = preservesDraftOnDisappear
+        self.shouldCommitOnFocusLoss = shouldCommitOnFocusLoss
         self.addTitle = addTitle
         self.addSystemImage = addSystemImage
         self.placeholder = placeholder
@@ -117,10 +126,12 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
                     if newField == focusTarget {
                         isRevealed = true
                     } else if previousField == focusTarget {
+                        guard shouldCommitOnFocusLoss?(newField) ?? true else { return }
                         commitAndUpdateDisclosure()
                     }
                 }
                 .onDisappear {
+                    guard !preservesDraftOnDisappear else { return }
                     commitAndUpdateDisclosure()
                 }
             } else {
@@ -160,14 +171,14 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
                 if commitOnFocusLoss == nil {
                     notes = newValue
                 } else {
-                    draft = newValue
+                    updateDraft(newValue)
                 }
             }
         )
     }
 
     private var currentText: String {
-        draft ?? notes
+        currentDraft ?? notes
     }
 
     private var isFocused: Bool {
@@ -183,10 +194,26 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
     }
 
     private func commitIfNeeded() {
-        guard let commitOnFocusLoss, let draft else { return }
+        guard let commitOnFocusLoss, let draft = currentDraft else { return }
         commitOnFocusLoss(draft)
-        self.draft = nil
+        updateDraft(nil)
     }
+
+    private var currentDraft: String? {
+        if let externalDraft {
+            return externalDraft.wrappedValue
+        }
+        return localDraft
+    }
+
+    private func updateDraft(_ value: String?) {
+        if let externalDraft {
+            externalDraft.wrappedValue = value
+        } else {
+            localDraft = value
+        }
+    }
+
 }
 
 struct WorkoutExerciseProgress {

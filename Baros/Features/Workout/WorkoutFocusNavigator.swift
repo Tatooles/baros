@@ -156,8 +156,11 @@ final class WorkoutFocusTransitionCoordinator {
     }
 
     func synchronizeFocus(_ focusedField: WorkoutField?) {
-        currentField = focusedField
+        let logicalAndPhysicalFocusWereSynchronized = currentField == actualField
         actualField = focusedField
+        if logicalAndPhysicalFocusWereSynchronized {
+            currentField = focusedField
+        }
     }
 
     func adjacentField(offset: Int) -> WorkoutField? {
@@ -202,13 +205,12 @@ final class WorkoutFocusTransitionCoordinator {
         // first responder moves. Returning to actualField only cancels that
         // pending transfer; the source is still focused, so committing or
         // assigning it would normalize an in-progress draft unnecessarily.
-        if target == actualField {
-            currentField = target
-            cancelPendingReveal()
+        if target == actualField, actualField != nil {
+            cancelPendingTransition()
             return
         }
 
-        commit(actualField)
+        commit(actualField ?? currentField)
         currentField = target
         if let target {
             scheduleLatestReveal(target, delay: delay, reveal: reveal)
@@ -230,7 +232,7 @@ final class WorkoutFocusTransitionCoordinator {
     ) {
         guard target != currentField else { return }
 
-        let source = actualField
+        let source = actualField ?? currentField
         currentField = target
         cancelPendingReveal()
         revealTask = Task { @MainActor [weak self] in
@@ -271,12 +273,23 @@ final class WorkoutFocusTransitionCoordinator {
         reveal: @escaping @MainActor (WorkoutField) -> Void
     ) {
         actualField = newField
+
+        // Lazy containers can recycle the focused field while it is far
+        // offscreen. That removes the physical first responder, but it is not
+        // a user-requested focus transition. Keep the logical field so its
+        // disclosure and draft survive until an explicit transition commits
+        // them. Explicit dismissal already sets currentField to nil through
+        // transition(to:) before FocusState reports this change.
+        if newField == nil, previousField == currentField {
+            return
+        }
+
         // Programmatic transitions update currentField synchronously before
         // assigning FocusState. Their onChange notification is only an
         // acknowledgement and must not restart the delayed reveal.
         guard currentField != newField else { return }
 
-        commit(previousField)
+        commit(previousField ?? currentField)
         currentField = newField
         if let newField {
             scheduleLatestReveal(newField, reveal: reveal)
@@ -288,6 +301,12 @@ final class WorkoutFocusTransitionCoordinator {
     func cancelPendingReveal() {
         revealTask?.cancel()
         revealTask = nil
+    }
+
+    func cancelPendingTransition() {
+        guard currentField != actualField else { return }
+        currentField = actualField
+        cancelPendingReveal()
     }
 
     private func scheduleLatestReveal(

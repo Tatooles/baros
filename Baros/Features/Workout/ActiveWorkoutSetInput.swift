@@ -18,6 +18,10 @@ final class ActiveWorkoutSetDraftStore {
     func existingDraft(for setID: UUID) -> ActiveWorkoutSetDraft? {
         drafts[setID]
     }
+
+    func existingDrafts() -> [(setID: UUID, draft: ActiveWorkoutSetDraft)] {
+        drafts.map { (setID: $0.key, draft: $0.value) }
+    }
 }
 
 @Observable

@@ -424,6 +424,116 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testLargeActiveWorkoutKeepsEmptyExerciseNoteRevealedAcrossFarLazyScrolling() {
+        let app = makeApp(extraArguments: [
+            "--uitest-seed-large-active-workout",
+            "--uitest-disable-animations",
+        ])
+        app.launch()
+
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        let addNoteButton = app.buttons["AddExerciseNoteButton-0"]
+        XCTAssertTrue(addNoteButton.waitForExistence(timeout: 3))
+        addNoteButton.tap()
+
+        let noteField = app.textFields["ExerciseNotesField-0"]
+        XCTAssertTrue(noteField.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+
+        let workoutScrollView = app.scrollViews["ActiveWorkoutScrollView"]
+        let farExercise = app.buttons["ExerciseHeader-9"]
+        XCTAssertTrue(workoutScrollView.exists)
+        for _ in 0..<40 where !farExercise.exists {
+            dragAboveKeyboard(workoutScrollView, direction: .up)
+        }
+        XCTAssertTrue(
+            farExercise.waitForExistence(timeout: 3),
+            "The validation must move far enough to realize the tenth exercise."
+        )
+
+        let firstExercise = app.buttons["ExerciseHeader-0"]
+        for _ in 0..<40 where !firstExercise.isHittable {
+            dragAboveKeyboard(workoutScrollView, direction: .down)
+        }
+
+        XCTAssertTrue(firstExercise.waitForExistence(timeout: 3))
+        XCTAssertTrue(
+            noteField.waitForExistence(timeout: 3),
+            "Lazy scrolling must not collapse a deliberately revealed empty Exercise Note."
+        )
+        XCTAssertFalse(addNoteButton.exists)
+    }
+
+    @MainActor
+    func testLazyRecycledExerciseNoteDraftCommitsWhenAppBackgrounds() {
+        let app = makeDiskBackedResetApp(extraArguments: [
+            "--uitest-seed-large-active-workout",
+            "--uitest-disable-animations",
+        ])
+        app.launch()
+
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["AddExerciseNoteButton-0"].tap()
+        let noteField = app.textFields["ExerciseNotesField-0"]
+        XCTAssertTrue(noteField.waitForExistence(timeout: 3))
+        noteField.typeText("Pause reps")
+
+        let workoutScrollView = app.scrollViews["ActiveWorkoutScrollView"]
+        let farExercise = app.buttons["ExerciseHeader-9"]
+        for _ in 0..<40 where !farExercise.exists {
+            dragAboveKeyboard(workoutScrollView, direction: .up)
+        }
+        XCTAssertTrue(farExercise.waitForExistence(timeout: 3))
+        XCTAssertFalse(noteField.exists, "The source note must be lazily recycled before backgrounding.")
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        app.terminate()
+
+        let relaunchedApp = makeDiskBackedApp()
+        relaunchedApp.launch()
+        let relaunchedNoteField = relaunchedApp.textFields["ExerciseNotesField-0"]
+        XCTAssertTrue(relaunchedNoteField.waitForExistence(timeout: 8))
+        XCTAssertEqual(relaunchedNoteField.value as? String, "Pause reps")
+    }
+
+    @MainActor
+    func testLazyRecycledSetDraftCommitsBeforeExerciseCollapse() {
+        let app = makeDiskBackedResetApp(extraArguments: [
+            "--uitest-seed-large-active-workout",
+            "--uitest-disable-animations",
+        ])
+        app.launch()
+
+        let editedField = app.textFields["SetWeightField-0-0"]
+        XCTAssertTrue(editedField.waitForExistence(timeout: 8))
+        replaceText(in: editedField, with: "185")
+
+        let workoutScrollView = app.scrollViews["ActiveWorkoutScrollView"]
+        let farExercise = app.buttons["ExerciseHeader-9"]
+        for _ in 0..<40 where !farExercise.exists {
+            dragAboveKeyboard(workoutScrollView, direction: .up)
+        }
+        XCTAssertTrue(farExercise.waitForExistence(timeout: 3))
+        XCTAssertFalse(editedField.exists, "The focused set must be lazily recycled before collapse.")
+
+        let firstExercise = app.buttons["ExerciseHeader-0"]
+        for _ in 0..<40 where !firstExercise.isHittable {
+            dragAboveKeyboard(workoutScrollView, direction: .down)
+        }
+        XCTAssertTrue(firstExercise.waitForExistence(timeout: 3))
+        firstExercise.tap()
+        XCTAssertFalse(editedField.exists)
+        app.terminate()
+
+        let relaunchedApp = makeDiskBackedApp()
+        relaunchedApp.launch()
+        let persistedField = relaunchedApp.textFields["SetWeightField-0-0"]
+        XCTAssertTrue(persistedField.waitForExistence(timeout: 8))
+        XCTAssertEqual(persistedField.value as? String, "185")
+    }
+
+    @MainActor
     func testCollapsingFocusedSetCommitsPendingDraft() {
         let app = makeApp(extraArguments: ["--uitest-disable-animations"])
         app.launch()
@@ -836,6 +946,31 @@ final class BarosUITests: XCTestCase {
         // so it shows the unit placeholder rather than carrying the prior value.
         XCTAssertEqual(secondWeightField.value as? String, "LBS")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testAddingExerciseCommitsSourceSetDraftAfterPickerFocusLoss() {
+        let app = makeDiskBackedResetApp()
+        app.launch()
+
+        startBlankWorkoutWithBenchPress(in: app)
+        let sourceWeightField = app.textFields["SetWeightField-0-0"]
+        XCTAssertTrue(sourceWeightField.waitForExistence(timeout: 3))
+        replaceText(in: sourceWeightField, with: "185")
+
+        app.buttons["AddExerciseButton"].tap()
+        XCTAssertTrue(app.navigationBars["Add Exercise"].waitForExistence(timeout: 3))
+        let squatRow = app.buttons["ExercisePickerRow-Back Squat-Barbell"]
+        XCTAssertTrue(squatRow.waitForExistence(timeout: 3))
+        squatRow.tap()
+        XCTAssertTrue(app.textFields["SetWeightField-1-0"].waitForExistence(timeout: 3))
+        app.terminate()
+
+        let relaunchedApp = makeDiskBackedApp()
+        relaunchedApp.launch()
+        let persistedWeightField = relaunchedApp.textFields["SetWeightField-0-0"]
+        XCTAssertTrue(persistedWeightField.waitForExistence(timeout: 8))
+        XCTAssertEqual(persistedWeightField.value as? String, "185")
     }
 
     @MainActor
@@ -3248,6 +3383,19 @@ final class BarosUITests: XCTestCase {
     private func drag(_ element: XCUIElement, direction: VerticalDragDirection) {
         let startOffset: CGFloat = direction == .up ? 0.8 : 0.2
         let endOffset: CGFloat = direction == .up ? 0.2 : 0.8
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startOffset))
+            .press(
+                forDuration: 0.05,
+                thenDragTo: element.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.5, dy: endOffset)
+                )
+            )
+    }
+
+    @MainActor
+    private func dragAboveKeyboard(_ element: XCUIElement, direction: VerticalDragDirection) {
+        let startOffset: CGFloat = direction == .up ? 0.45 : 0.08
+        let endOffset: CGFloat = direction == .up ? 0.08 : 0.45
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startOffset))
             .press(
                 forDuration: 0.05,
