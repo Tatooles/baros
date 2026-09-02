@@ -414,8 +414,15 @@ final class SyncSchedulerStatusTests: XCTestCase {
         scheduler.currentOwnerTokenIdentifier = owner
 
         scheduler.requestSync()
-        try await waitUntil { scheduler.lastFailure != nil }
+        try await waitUntil {
+            let entry = try? context.fetch(FetchDescriptor<SyncOutboxEntry>()).first
+            return entry?.attemptCount == 1 && !scheduler.isSyncing
+        }
 
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertEqual(entry.status, .pending)
+        XCTAssertNil(entry.lastErrorMessage)
         XCTAssertTrue(sink.observations.contains {
             $0.kind == .breadcrumb
                 && $0.phase == .push
@@ -473,6 +480,32 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertFalse(String(describing: sink.observations).contains("Private workout content"))
     }
 
+    func testOfflinePullRecordsNetworkTransientSyncCondition() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let client = FakeSyncClient()
+        client.fetchError = URLError(.notConnectedToInternet)
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client, observability: observability),
+            modelContext: context,
+            observability: observability
+        )
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+
+        scheduler.requestSync()
+        try await waitUntil {
+            sink.observations.contains {
+                $0.kind == .breadcrumb
+                    && $0.phase == .pull
+                    && $0.errorCode == .networkUnavailable
+            } && !scheduler.isSyncing
+        }
+
+        XCTAssertNil(scheduler.lastFailure)
+    }
+
     func testTimedOutPullIsATransientSyncConditionInsteadOfADurableSyncFailure() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -488,8 +521,15 @@ final class SyncSchedulerStatusTests: XCTestCase {
         scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
 
         scheduler.requestSync()
-        try await waitUntil { scheduler.lastFailure != nil }
+        try await waitUntil {
+            sink.observations.contains {
+                $0.kind == .breadcrumb
+                    && $0.phase == .pull
+                    && $0.errorCode == .requestTimedOut
+            } && !scheduler.isSyncing
+        }
 
+        XCTAssertNil(scheduler.lastFailure)
         XCTAssertTrue(sink.observations.contains {
             $0.kind == .breadcrumb
                 && $0.phase == .pull

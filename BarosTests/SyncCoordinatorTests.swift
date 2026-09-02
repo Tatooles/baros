@@ -3456,7 +3456,10 @@ final class SyncCoordinatorTests: XCTestCase {
             observability: observability
         ).run(ownerTokenIdentifier: owner, context: context)
 
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
         XCTAssertEqual(result.transientCondition, .networkUnavailable)
+        XCTAssertEqual(entry.status, .pending)
+        XCTAssertNil(entry.lastErrorMessage)
         XCTAssertTrue(sink.observations.contains {
             $0.kind == .breadcrumb
                 && $0.phase == .pull

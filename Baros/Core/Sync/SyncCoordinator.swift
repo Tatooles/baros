@@ -519,8 +519,13 @@ final class SyncCoordinator {
                     }
                     continue
                 }
+                let transientCondition = TransientSyncConditionClassifier.errorCode(for: error)
                 if entry.status == .inFlight {
-                    recorder.markFailed(entry, message: error.localizedDescription, now: .now)
+                    if transientCondition != nil {
+                        recorder.markPendingForRetry(entry, now: .now)
+                    } else {
+                        recorder.markFailed(entry, message: error.localizedDescription, now: .now)
+                    }
                     needsSave = true
                 }
                 if needsSave {
@@ -529,7 +534,7 @@ final class SyncCoordinator {
                 return SyncPushResult(
                     didComplete: false,
                     didPush: true,
-                    transientCondition: TransientSyncConditionClassifier.errorCode(for: error)
+                    transientCondition: transientCondition
                 )
             }
         }

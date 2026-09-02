@@ -376,11 +376,6 @@ final class SyncScheduler {
                         break
                     }
                     if let transientCondition = result.transientCondition {
-                        lastFailure = Failure(
-                            message: Self.incompleteSyncFailureMessage,
-                            occurredAt: .now,
-                            reason: .failedOutboxPush
-                        )
                         observability.record(.transient(
                             phase: .push,
                             errorCode: transientCondition
@@ -438,11 +433,6 @@ final class SyncScheduler {
                             phase: .pull,
                             errorCode: transientCondition
                         ))
-                        lastFailure = Failure(
-                            message: error.localizedDescription,
-                            occurredAt: .now,
-                            reason: .syncError
-                        )
                         break
                     }
                     lastFailure = Failure(message: error.localizedDescription, occurredAt: .now, reason: .syncError)
