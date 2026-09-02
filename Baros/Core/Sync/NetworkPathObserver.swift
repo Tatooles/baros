@@ -1,10 +1,27 @@
 import Foundation
 import Network
 
+enum NetworkAvailability: Equatable {
+    case unknown
+    case available
+    case unavailable
+}
+
 enum NetworkPathStatus: Equatable {
     case satisfied
     case unsatisfied
     case requiresConnection
+}
+
+private extension NetworkAvailability {
+    init(pathStatus: NetworkPathStatus) {
+        self = switch pathStatus {
+        case .satisfied:
+            .available
+        case .unsatisfied, .requiresConnection:
+            .unavailable
+        }
+    }
 }
 
 @MainActor
@@ -123,6 +140,7 @@ final class NetworkPathObserver<RecoveryCandidate> {
     }
 
     func start(
+        onAvailabilityChange: @escaping @MainActor (NetworkAvailability) -> Void = { _ in },
         onNetworkRecovery: @escaping @MainActor (RecoveryCandidate) -> Void
     ) {
         guard !isStarted else { return }
@@ -130,7 +148,11 @@ final class NetworkPathObserver<RecoveryCandidate> {
 
         monitor.start { [weak self] status in
             guard let self else { return }
-            handle(status, onNetworkRecovery: onNetworkRecovery)
+            handle(
+                status,
+                onAvailabilityChange: onAvailabilityChange,
+                onNetworkRecovery: onNetworkRecovery
+            )
         }
     }
 
@@ -144,12 +166,17 @@ final class NetworkPathObserver<RecoveryCandidate> {
 
     private func handle(
         _ status: NetworkPathStatus,
+        onAvailabilityChange: @escaping @MainActor (NetworkAvailability) -> Void,
         onNetworkRecovery: @escaping @MainActor (RecoveryCandidate) -> Void
     ) {
         guard status != latestStatus else { return }
 
         let previousStatus = latestStatus
         latestStatus = status
+        let availability = NetworkAvailability(pathStatus: status)
+        if previousStatus.map(NetworkAvailability.init(pathStatus:)) != availability {
+            onAvailabilityChange(availability)
+        }
         settlingTask?.cancel()
         settlingTask = nil
 

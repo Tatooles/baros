@@ -3,6 +3,27 @@ import XCTest
 
 @MainActor
 final class NetworkPathObserverTests: XCTestCase {
+    func testPathUpdatesPublishCoarseAvailabilityChanges() {
+        let monitor = TestNetworkPathMonitor()
+        let observer = NetworkPathObserver(
+            monitor: monitor,
+            makeRecoveryCandidate: { true }
+        )
+        var receivedAvailability: [NetworkAvailability] = []
+
+        observer.start(
+            onAvailabilityChange: { availability in
+                receivedAvailability.append(availability)
+            },
+            onNetworkRecovery: { _ in }
+        )
+        monitor.send(.unsatisfied)
+        monitor.send(.requiresConnection)
+        monitor.send(.satisfied)
+
+        XCTAssertEqual(receivedAvailability, [.unavailable, .available])
+    }
+
     func testInitialSatisfiedPathEstablishesBaselineWithoutRecovery() async throws {
         let monitor = TestNetworkPathMonitor()
         let observer = NetworkPathObserver(

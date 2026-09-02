@@ -41,6 +41,27 @@ final class SyncStatusDisplayStateTests: XCTestCase {
         XCTAssertFalse(state.canRetry)
     }
 
+    func testUnavailableNetworkMapsActiveSyncToWaitingForConnection() {
+        let state = SyncStatusDisplayState.make(
+            ownerTokenIdentifier: "issuer|owner_a",
+            isSyncing: true,
+            networkAvailability: .unavailable,
+            lastSyncedAt: nil,
+            lastFailureMessage: nil,
+            pendingCount: 1,
+            failedCount: 0,
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+
+        XCTAssertEqual(state.kind, .waitingForConnection)
+        XCTAssertEqual(state.subtitle, "Waiting for connection. Your data is saved on this iPhone.")
+        XCTAssertEqual(state.detailText, "1 waiting.")
+        XCTAssertEqual(state.trailingText, "Offline")
+        XCTAssertEqual(state.tint, .secondary)
+        XCTAssertFalse(state.canRetry)
+        XCTAssertFalse(state.showsGlobalFailureNotice)
+    }
+
     func testFailedEntriesMapToNeedsAttentionAndGlobalNotice() {
         let state = SyncStatusDisplayState.make(
             ownerTokenIdentifier: "issuer|owner_a",

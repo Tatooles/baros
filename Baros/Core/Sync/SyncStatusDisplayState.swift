@@ -4,6 +4,7 @@ struct SyncStatusDisplayState {
     enum Kind: Equatable {
         case localOnly
         case syncing
+        case waitingForConnection
         case waiting
         case upToDate
         case needsAttention
@@ -32,6 +33,7 @@ struct SyncStatusDisplayState {
     static func make(
         ownerTokenIdentifier: String?,
         isSyncing: Bool,
+        networkAvailability: NetworkAvailability = .unknown,
         lastSyncedAt: Date?,
         lastFailureMessage: String?,
         lastFailureReason: SyncScheduler.FailureReason? = nil,
@@ -46,6 +48,31 @@ struct SyncStatusDisplayState {
                 subtitle: "Cloud sync starts after you sign in.",
                 detailText: nil,
                 trailingText: "Local only",
+                systemImage: "icloud.slash",
+                tint: .secondary,
+                canRetry: false,
+                showsGlobalFailureNotice: false,
+                failureNoticeTitle: nil,
+                failureNoticeMessage: nil,
+                userVisibleFailureMessage: nil
+            )
+        }
+
+        if networkAvailability == .unavailable,
+           lastFailureMessage == nil,
+           failedCount == 0,
+           isSyncing || pendingCount > 0 {
+            return SyncStatusDisplayState(
+                kind: .waitingForConnection,
+                title: "Sync Status",
+                subtitle: "Waiting for connection. Your data is saved on this iPhone.",
+                detailText: countsText(
+                    pendingCount: pendingCount,
+                    failedCount: failedCount,
+                    lastSyncedAt: lastSyncedAt,
+                    now: now
+                ),
+                trailingText: "Offline",
                 systemImage: "icloud.slash",
                 tint: .secondary,
                 canRetry: false,

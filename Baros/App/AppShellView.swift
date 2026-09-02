@@ -45,6 +45,7 @@ struct AppShellView: View {
         return SyncStatusDisplayState.make(
             ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
             isSyncing: syncScheduler.isSyncing,
+            networkAvailability: syncScheduler.networkAvailability,
             lastSyncedAt: syncScheduler.lastSyncedAt,
             lastFailureMessage: syncScheduler.lastFailure?.message,
             lastFailureReason: syncScheduler.lastFailure?.reason,
