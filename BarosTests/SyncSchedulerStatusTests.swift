@@ -421,6 +421,7 @@ final class SyncSchedulerStatusTests: XCTestCase {
 
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
         XCTAssertNil(scheduler.lastFailure)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
         XCTAssertEqual(entry.status, .pending)
         XCTAssertNil(entry.lastErrorMessage)
         XCTAssertTrue(sink.observations.contains {
@@ -504,6 +505,17 @@ final class SyncSchedulerStatusTests: XCTestCase {
         }
 
         XCTAssertNil(scheduler.lastFailure)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
+        XCTAssertFalse(scheduler.hasUnfinishedSyncWork)
+        XCTAssertTrue(scheduler.shouldAttemptNetworkRecovery)
+
+        client.fetchError = nil
+        scheduler.retrySync()
+        try await waitUntil { scheduler.lastSyncedAt != nil }
+
+        XCTAssertNil(scheduler.lastTransientCondition)
+        XCTAssertFalse(scheduler.hasUnfinishedSyncWork)
+        XCTAssertFalse(scheduler.shouldAttemptNetworkRecovery)
     }
 
     func testTimedOutPullIsATransientSyncConditionInsteadOfADurableSyncFailure() async throws {
@@ -530,6 +542,9 @@ final class SyncSchedulerStatusTests: XCTestCase {
         }
 
         XCTAssertNil(scheduler.lastFailure)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .requestTimedOut)
+        XCTAssertFalse(scheduler.hasUnfinishedSyncWork)
+        XCTAssertTrue(scheduler.shouldAttemptNetworkRecovery)
         XCTAssertTrue(sink.observations.contains {
             $0.kind == .breadcrumb
                 && $0.phase == .pull
@@ -824,6 +839,100 @@ final class SyncSchedulerStatusTests: XCTestCase {
         let failure = try XCTUnwrap(sink.observations.first { $0.kind == .durableFailure })
         XCTAssertEqual(failure.failureCategory, .remotePull)
         XCTAssertEqual(failure.errorCode, .incompleteRemotePull)
+    }
+
+    func testTransientPushPreservesKnownIncompleteRemotePullFailure() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(exercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.fetchResponses = [
+            SyncFetchChangesResponse(
+                userSettings: [],
+                exercises: [],
+                workoutSessions: [],
+                loggedExercises: [
+                    LoggedExerciseSyncRecord(
+                        clientId: "00000000-0000-0000-0000-000000006621",
+                        createdAt: 1,
+                        updatedAt: 2,
+                        deletedAt: nil,
+                        serverUpdatedAt: 50,
+                        sessionClientId: "00000000-0000-0000-0000-000000006622",
+                        exerciseClientId: nil,
+                        orderIndex: 0,
+                        exerciseSnapshotName: "Standing Calf Raise",
+                        exerciseSnapshotEquipmentRaw: "machine",
+                        exerciseSnapshotPrimaryMuscleGroupRaw: "legs",
+                        hasSnapshotMetadata: true,
+                        notes: "",
+                        referenceNotes: nil,
+                        sourceLoggedExerciseID: nil
+                    )
+                ],
+                loggedSets: [],
+                cursors: SyncChangeCursors(
+                    userSettings: 0,
+                    exercises: 0,
+                    workoutSessions: 0,
+                    loggedExercises: 50,
+                    loggedSets: 0
+                ),
+                hasMore: SyncHasMore(
+                    userSettings: false,
+                    exercises: false,
+                    loggedExercises: true
+                )
+            )
+        ]
+        client.error = URLError(.notConnectedToInternet)
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client, observability: observability),
+            modelContext: context,
+            observability: observability
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+
+        scheduler.requestSync()
+        try await waitUntil { scheduler.lastFailure != nil && !scheduler.isSyncing }
+
+        XCTAssertNil(scheduler.lastSyncedAt)
+        XCTAssertEqual(scheduler.lastFailure?.reason, .incompleteRemotePull)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
+        XCTAssertEqual(entry.status, .pending)
+        XCTAssertTrue(sink.observations.contains {
+            $0.kind == .durableFailure && $0.errorCode == .incompleteRemotePull
+        })
+        XCTAssertTrue(sink.observations.contains {
+            $0.kind == .breadcrumb
+                && $0.phase == .push
+                && $0.errorCode == .networkUnavailable
+        })
     }
 
     func testSchedulerDrainsMorePendingEntriesBeforeFailingIncompleteRemotePull() async throws {

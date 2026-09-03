@@ -4,6 +4,7 @@ import Network
 enum NetworkAvailability: Equatable {
     case unknown
     case available
+    case requiresConnection
     case unavailable
 }
 
@@ -18,7 +19,9 @@ private extension NetworkAvailability {
         self = switch pathStatus {
         case .satisfied:
             .available
-        case .unsatisfied, .requiresConnection:
+        case .requiresConnection:
+            .requiresConnection
+        case .unsatisfied:
             .unavailable
         }
     }

@@ -21,7 +21,7 @@ final class NetworkPathObserverTests: XCTestCase {
         monitor.send(.requiresConnection)
         monitor.send(.satisfied)
 
-        XCTAssertEqual(receivedAvailability, [.unavailable, .available])
+        XCTAssertEqual(receivedAvailability, [.unavailable, .requiresConnection, .available])
     }
 
     func testInitialSatisfiedPathEstablishesBaselineWithoutRecovery() async throws {

@@ -51,6 +51,11 @@ final class SyncScheduler {
         let reason: FailureReason
     }
 
+    struct TransientCondition: Equatable {
+        let errorCode: SyncStableErrorCode
+        let occurredAt: Date
+    }
+
     var currentOwnerTokenIdentifier: String? {
         didSet {
             if let currentOwnerTokenIdentifier {
@@ -67,6 +72,7 @@ final class SyncScheduler {
     private(set) var hasQueuedSyncRequest = false
     private(set) var lastSyncedAt: Date?
     private(set) var lastFailure: Failure?
+    private(set) var lastTransientCondition: TransientCondition?
     private(set) var isDeletionModeEnabled = false
     private(set) var isCloudSyncAuthorized = true
     private(set) var networkAvailability: NetworkAvailability = .unknown
@@ -120,6 +126,10 @@ final class SyncScheduler {
                 context: modelContext
             )) == true
         }
+    }
+
+    var shouldAttemptNetworkRecovery: Bool {
+        hasUnfinishedSyncWork || lastTransientCondition != nil
     }
 
     func requestSync() {
@@ -361,9 +371,11 @@ final class SyncScheduler {
         isSyncing = false
         lastSyncedAt = nil
         lastFailure = nil
+        lastTransientCondition = nil
     }
 
     private func startSyncTask(coordinator: SyncCoordinator, modelContext: ModelContext) {
+        lastTransientCondition = nil
         syncTask = Task { @MainActor in
             isSyncing = true
             while true {
@@ -376,11 +388,14 @@ final class SyncScheduler {
                         break
                     }
                     if let transientCondition = result.transientCondition {
+                        lastTransientCondition = TransientCondition(
+                            errorCode: transientCondition,
+                            occurredAt: .now
+                        )
                         observability.record(.transient(
                             phase: .push,
                             errorCode: transientCondition
                         ))
-                        break
                     }
                     guard !hasFailedActiveV1OutboxEntries(
                         ownerTokenIdentifier: syncOwnerTokenIdentifier,
@@ -412,6 +427,8 @@ final class SyncScheduler {
                             context: modelContext
                         )
                         break
+                    } else if result.transientCondition != nil {
+                        break
                     } else {
                         lastSyncedAt = .now
                     }
@@ -429,6 +446,10 @@ final class SyncScheduler {
                         break
                     }
                     if let transientCondition = TransientSyncConditionClassifier.errorCode(for: error) {
+                        lastTransientCondition = TransientCondition(
+                            errorCode: transientCondition,
+                            occurredAt: .now
+                        )
                         observability.record(.transient(
                             phase: .pull,
                             errorCode: transientCondition

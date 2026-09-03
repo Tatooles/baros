@@ -156,7 +156,7 @@ final class SyncCoordinator {
                     context: context
                 )
             }
-            if entry.ownerTokenIdentifier == ownerTokenIdentifier, entry.status == .inFlight || entry.status == .failed {
+            if entry.ownerTokenIdentifier == ownerTokenIdentifier, entry.status == .inFlight {
                 recorder.markPendingForRetry(entry, now: .now)
             }
         }
@@ -447,7 +447,7 @@ final class SyncCoordinator {
     }
 
     private func pushPendingEntries(ownerTokenIdentifier: String, context: ModelContext) async throws -> SyncPushResult {
-        let fetchedEntries = try recorder.pendingEntries(
+        let fetchedEntries = try recorder.entriesForPush(
             ownerTokenIdentifier: ownerTokenIdentifier,
             context: context
         )
@@ -458,6 +458,11 @@ final class SyncCoordinator {
                 let rhsRank = syncPushRank(for: rhs)
                 if lhsRank != rhsRank {
                     return lhsRank < rhsRank
+                }
+                let lhsIsDurableRetry = lhs.status == .failed
+                let rhsIsDurableRetry = rhs.status == .failed
+                if lhsIsDurableRetry != rhsIsDurableRetry {
+                    return !lhsIsDurableRetry
                 }
                 if lhs.updatedAt == rhs.updatedAt {
                     return lhs.createdAt < rhs.createdAt
@@ -471,11 +476,13 @@ final class SyncCoordinator {
         for entry in entries {
             try Task.checkCancellation()
             let logicalUpdatedAt = logicalFallbackTimestamp(for: entry)
+            let previousDurableFailureMessage = entry.status == .failed ? entry.lastErrorMessage : nil
+            let wasDurableFailure = entry.status == .failed
             recorder.markInFlight(entry, now: .now)
             needsSave = true
-            try Task.checkCancellation()
 
             do {
+                try Task.checkCancellation()
                 let result = try await push(
                     entry: entry,
                     ownerTokenIdentifier: ownerTokenIdentifier,
@@ -496,6 +503,14 @@ final class SyncCoordinator {
                     needsSave = false
                     completedSinceLastSave = 0
                 }
+            } catch is CancellationError {
+                if wasDurableFailure {
+                    recorder.restoreFailed(entry, message: previousDurableFailureMessage, now: .now)
+                } else {
+                    recorder.markPendingForRetry(entry, now: .now)
+                }
+                try context.save()
+                throw CancellationError()
             } catch {
                 if let syncError = error as? SyncCoordinatorError, case .ownerMismatch = syncError {
                     observability.record(.durableFailure(DurableSyncFailure(
@@ -522,7 +537,11 @@ final class SyncCoordinator {
                 let transientCondition = TransientSyncConditionClassifier.errorCode(for: error)
                 if entry.status == .inFlight {
                     if transientCondition != nil {
-                        recorder.markPendingForRetry(entry, now: .now)
+                        if wasDurableFailure {
+                            recorder.restoreFailed(entry, message: previousDurableFailureMessage, now: .now)
+                        } else {
+                            recorder.markPendingForRetry(entry, now: .now)
+                        }
                     } else {
                         recorder.markFailed(entry, message: error.localizedDescription, now: .now)
                     }

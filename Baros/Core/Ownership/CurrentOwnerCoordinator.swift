@@ -233,7 +233,7 @@ final class CurrentOwnerCoordinator {
         _ candidate: NetworkRecoveryCandidate
     ) -> Bool {
         makeNetworkRecoveryCandidate() == candidate
-            && syncScheduler.hasUnfinishedSyncWork
+            && syncScheduler.shouldAttemptNetworkRecovery
     }
 
     private func requestSyncInTestMode(for trigger: SyncRecoveryCoordinator.Trigger) {
