@@ -63,7 +63,7 @@ struct SyncStatusDisplayState {
         if networkAvailability == .unavailable || networkAvailability == .requiresConnection,
            lastFailureMessage == nil,
            failedCount == 0,
-           isSyncing || pendingCount > 0 || hasQueuedSyncRequest {
+           isSyncing || pendingCount > 0 || hasQueuedSyncRequest || transientCondition != nil {
             let canRetry = networkAvailability == .requiresConnection
             return SyncStatusDisplayState(
                 kind: .waitingForConnection,

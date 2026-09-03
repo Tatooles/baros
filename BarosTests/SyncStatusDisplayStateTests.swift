@@ -177,6 +177,26 @@ final class SyncStatusDisplayStateTests: XCTestCase {
         XCTAssertFalse(state.showsGlobalFailureNotice)
     }
 
+    func testUnavailableNetworkMapsTimedOutPullWithoutOutboxWorkToOffline() {
+        let state = SyncStatusDisplayState.make(
+            ownerTokenIdentifier: "issuer|owner_a",
+            isSyncing: false,
+            networkAvailability: .unavailable,
+            transientCondition: .requestTimedOut,
+            lastSyncedAt: nil,
+            lastFailureMessage: nil,
+            pendingCount: 0,
+            failedCount: 0,
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+
+        XCTAssertEqual(state.kind, .waitingForConnection)
+        XCTAssertEqual(state.subtitle, "Waiting for connection. Your data is saved on this iPhone.")
+        XCTAssertEqual(state.trailingText, "Offline")
+        XCTAssertFalse(state.canRetry)
+        XCTAssertFalse(state.showsGlobalFailureNotice)
+    }
+
     func testDurableFailureWinsOverTransientInterruption() {
         let state = SyncStatusDisplayState.make(
             ownerTokenIdentifier: "issuer|owner_a",
