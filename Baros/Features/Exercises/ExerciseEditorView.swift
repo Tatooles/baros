@@ -31,12 +31,6 @@ struct ExerciseEditorView: View {
             Section {
                 TextField("Name", text: $name)
                     .accessibilityIdentifier("ExerciseNameField")
-                Picker("Category", selection: $category) {
-                    ForEach(ExerciseCategory.allCases) { category in
-                        Text(category.displayName).tag(category)
-                    }
-                }
-                .accessibilityIdentifier("ExerciseCategoryPicker")
                 Picker("Equipment", selection: $equipment) {
                     ForEach(ExerciseEquipment.allCases) { equipment in
                         Text(equipment.displayName).tag(equipment)
