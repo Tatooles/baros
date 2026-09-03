@@ -428,6 +428,9 @@ final class SyncScheduler {
                         )
                         break
                     } else if result.transientCondition != nil {
+                        // The completed pull and empty failed outbox prove that the
+                        // previously reported durable failure is no longer current.
+                        lastFailure = nil
                         break
                     } else {
                         lastSyncedAt = .now
@@ -446,6 +449,10 @@ final class SyncScheduler {
                         break
                     }
                     if let transientCondition = TransientSyncConditionClassifier.errorCode(for: error) {
+                        clearResolvedFailedOutboxFailureIfNeeded(
+                            ownerTokenIdentifier: syncOwnerTokenIdentifier,
+                            context: modelContext
+                        )
                         lastTransientCondition = TransientCondition(
                             errorCode: transientCondition,
                             occurredAt: .now
@@ -488,6 +495,20 @@ final class SyncScheduler {
                 hasQueuedSyncRequest = false
             }
         }
+    }
+
+    private func clearResolvedFailedOutboxFailureIfNeeded(
+        ownerTokenIdentifier: String?,
+        context: ModelContext
+    ) {
+        guard lastFailure?.reason == .failedOutboxPush,
+              !hasFailedActiveV1OutboxEntries(
+                  ownerTokenIdentifier: ownerTokenIdentifier,
+                  context: context
+              ) else {
+            return
+        }
+        lastFailure = nil
     }
 
     private func hasFailedActiveV1OutboxEntries(
