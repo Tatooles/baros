@@ -77,7 +77,7 @@ struct ActiveWorkoutSetInput {
         return Commit(values: values, shouldPersist: values != storedValues)
     }
 
-    mutating func preparedValuesForRPESelection(
+    mutating func preparedValuesForSetAction(
         current: Values,
         weightUnit: MeasurementUnit,
         completesSet: Bool,

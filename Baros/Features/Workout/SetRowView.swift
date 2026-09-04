@@ -64,7 +64,7 @@ struct SetRowView: View, @MainActor Equatable {
             commitRegistrationID = setInputRegistry.register(
                 fields: ownFields,
                 commit: { commitDraftsIfNeeded() },
-                prepareForRPESelection: prepareValuesForRPESelection
+                prepareForRPESelection: prepareValuesForSetAction
             )
         }
         .onChange(of: previous) { _, _ in
@@ -185,9 +185,9 @@ struct SetRowView: View, @MainActor Equatable {
         .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
     }
 
-    /// Typing stages values in view-local drafts; this is the single point that
-    /// writes them to the model and saves. Runs on focus leave, completion, and
-    /// row disappearance — never per keystroke.
+    /// Typing stages values in view-local drafts. Focus leave and row
+    /// disappearance persist here; set actions consume drafts before saving
+    /// their prepared values and completion/RPE together, never per keystroke.
     @discardableResult
     private func commitDraftsIfNeeded() -> ActiveWorkoutSetInput.Commit {
         let commit = input.commit(current: inputValues, weightUnit: weightUnit)
@@ -348,26 +348,22 @@ struct SetRowView: View, @MainActor Equatable {
     }
 
     private func completeButtonTapped() {
-        // The fill policy below reads committed model values, so pending drafts
-        // must land first (the focus-change commit only fires on a later update).
-        let commit = commitDraftsIfNeeded()
+        let preparedValues = prepareValuesForSetAction(completesSet: !set.isCompleted)
+        // Preparation consumes the drafts before the later focus-change commit.
         clearFocusedFieldForThisSet()
-        if let previousFill = input.previousFillBeforeCompletion(
-            isCompleted: set.isCompleted,
-            values: commit.values,
-            previous: previous
-        ) {
-            fillFromPrevious(previousFill)
-        }
         withAnimation(.easeInOut(duration: 0.2)) {
-            try? engine.toggleSetCompletion(set, context: modelContext)
+            try? engine.toggleSetCompletion(
+                set,
+                preparedValues: preparedValues,
+                context: modelContext
+            )
         }
     }
 
-    private func prepareValuesForRPESelection(
+    private func prepareValuesForSetAction(
         completesSet: Bool
     ) -> ActiveWorkoutSetInput.Values {
-        input.preparedValuesForRPESelection(
+        input.preparedValuesForSetAction(
             current: inputValues,
             weightUnit: weightUnit,
             completesSet: completesSet,
@@ -397,7 +393,7 @@ struct SetRowView: View, @MainActor Equatable {
         setInputRegistry.updateRegistration(
             commitRegistrationID,
             commit: { commitDraftsIfNeeded() },
-            prepareForRPESelection: prepareValuesForRPESelection
+            prepareForRPESelection: prepareValuesForSetAction
         )
     }
 
