@@ -44,11 +44,18 @@ struct RPEChipRow: View {
 enum RPEChipSelectionAction {
     static func apply(
         value: Double?,
+        preparedValues: ActiveWorkoutSetInput.Values? = nil,
         to set: LoggedSet,
         engine: ActiveWorkoutEngine,
         context: ModelContext,
         now: Date = .now
     ) throws {
-        try engine.updateActiveSetRPE(set, rpe: value, context: context, now: now)
+        try engine.applyActiveSetRPESelection(
+            set,
+            rpe: value,
+            preparedValues: preparedValues ?? .init(weight: set.weight, reps: set.reps),
+            context: context,
+            now: now
+        )
     }
 }

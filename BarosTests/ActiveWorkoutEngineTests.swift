@@ -749,7 +749,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(RPEChipRow.values, [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10])
     }
 
-    func testRPEChipSelectionWritesSelectedValueOntoSet() throws {
+    func testRPEChipSelectionCommitsPreparedValuesAndCompletesSet() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
@@ -768,18 +768,142 @@ final class ActiveWorkoutEngineTests: XCTestCase {
 
         try RPEChipSelectionAction.apply(
             value: 8.5,
+            preparedValues: .init(weight: 195, reps: 4),
             to: set,
             engine: engine,
             context: context,
             now: commitDate
         )
 
+        XCTAssertEqual(set.weight, 195)
+        XCTAssertEqual(set.reps, 4)
+        XCTAssertEqual(set.rpe, 8.5)
+        XCTAssertTrue(set.isCompleted)
+        XCTAssertEqual(set.completedAt, commitDate)
+        XCTAssertEqual(set.updatedAt, commitDate)
+        XCTAssertEqual(loggedExercise.updatedAt, commitDate)
+        XCTAssertEqual(session.updatedAt, commitDate)
+    }
+
+    func testSelectingExistingRPEStillCompletesIncompleteSet() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let completionDate = Date(timeIntervalSince1970: 300)
+        let set = LoggedSet(orderIndex: 0, weight: 185, reps: 5, rpe: 8, isCompleted: false)
+        context.insert(set)
+        try context.save()
+
+        try RPEChipSelectionAction.apply(
+            value: 8,
+            preparedValues: .init(weight: 185, reps: 5),
+            to: set,
+            engine: engine,
+            context: context,
+            now: completionDate
+        )
+
+        XCTAssertTrue(set.isCompleted)
+        XCTAssertEqual(set.completedAt, completionDate)
+    }
+
+    func testChangingCompletedSetRPEPreservesOriginalCompletionDate() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let completionDate = Date(timeIntervalSince1970: 100)
+        let editDate = Date(timeIntervalSince1970: 300)
+        let set = LoggedSet(
+            orderIndex: 0,
+            weight: 185,
+            reps: 5,
+            rpe: 8,
+            isCompleted: true,
+            completedAt: completionDate,
+            updatedAt: completionDate
+        )
+        context.insert(set)
+        try context.save()
+
+        try RPEChipSelectionAction.apply(
+            value: 9,
+            preparedValues: .init(weight: 185, reps: 5),
+            to: set,
+            engine: engine,
+            context: context,
+            now: editDate
+        )
+
+        XCTAssertTrue(set.isCompleted)
+        XCTAssertEqual(set.completedAt, completionDate)
+        XCTAssertEqual(set.rpe, 9)
+        XCTAssertEqual(set.updatedAt, editDate)
+    }
+
+    func testClearingRPEPreservesCompletionStateAndDate() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let completionDate = Date(timeIntervalSince1970: 100)
+        let completedSet = LoggedSet(
+            orderIndex: 0,
+            rpe: 8,
+            isCompleted: true,
+            completedAt: completionDate
+        )
+        let incompleteSet = LoggedSet(orderIndex: 1, rpe: 8, isCompleted: false)
+        context.insert(completedSet)
+        context.insert(incompleteSet)
+        try context.save()
+
+        try RPEChipSelectionAction.apply(
+            value: nil,
+            to: completedSet,
+            engine: engine,
+            context: context
+        )
+        try RPEChipSelectionAction.apply(
+            value: nil,
+            to: incompleteSet,
+            engine: engine,
+            context: context
+        )
+
+        XCTAssertNil(completedSet.rpe)
+        XCTAssertTrue(completedSet.isCompleted)
+        XCTAssertEqual(completedSet.completedAt, completionDate)
+        XCTAssertNil(incompleteSet.rpe)
+        XCTAssertFalse(incompleteSet.isCompleted)
+        XCTAssertNil(incompleteSet.completedAt)
+    }
+
+    func testRPEAutoCompletionUsesOneSaveBoundary() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let set = LoggedSet(orderIndex: 0)
+        context.insert(set)
+        try context.save()
+        var saveCount = 0
+
+        try engine.applyActiveSetRPESelection(
+            set,
+            rpe: 8,
+            preparedValues: .init(weight: 185, reps: 5),
+            context: context,
+            now: Date(timeIntervalSince1970: 300),
+            save: { context in
+                saveCount += 1
+                try context.save()
+            }
+        )
+
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertFalse(context.hasChanges)
         XCTAssertEqual(set.weight, 185)
         XCTAssertEqual(set.reps, 5)
-        XCTAssertEqual(set.rpe, 8.5)
-        XCTAssertEqual(set.updatedAt, commitDate)
-        XCTAssertEqual(loggedExercise.updatedAt, baseline)
-        XCTAssertEqual(session.updatedAt, baseline)
+        XCTAssertEqual(set.rpe, 8)
+        XCTAssertTrue(set.isCompleted)
     }
 
     func testUncheckingCompletedSetClearsCompletedAtAndPreservesValues() throws {

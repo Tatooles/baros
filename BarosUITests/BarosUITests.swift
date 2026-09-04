@@ -2898,7 +2898,6 @@ final class BarosUITests: XCTestCase {
         addBenchPress(in: app)
         fillFirstBenchSet(in: app)
         enterRPEViaChips("8", in: app)
-        app.buttons["SetCompletionButton-0-0"].tap()
         dismissKeyboardIfNeeded(in: app)
         openFinishWorkoutSheet(in: app)
         let saveButton = app.buttons["SaveWorkoutButton"]
@@ -2926,7 +2925,6 @@ final class BarosUITests: XCTestCase {
         app.textFields["SetRepsField-0-0"].tap()
         app.textFields["SetRepsField-0-0"].typeText(reps)
         enterRPEViaChips(rpe, in: app)
-        app.buttons["SetCompletionButton-0-0"].tap()
         dismissKeyboardIfNeeded(in: app)
         openFinishWorkoutSheet(in: app)
         XCTAssertTrue(app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3))
@@ -2944,7 +2942,6 @@ final class BarosUITests: XCTestCase {
         addBenchPress(in: app)
         fillFirstBenchSet(in: app)
         enterRPEViaChips("8", in: app)
-        app.buttons["SetCompletionButton-0-0"].tap()
 
         replaceText(in: app.textFields[fieldIdentifier], with: "")
         dismissKeyboardIfNeeded(in: app)

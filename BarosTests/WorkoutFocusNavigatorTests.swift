@@ -287,20 +287,19 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         XCTAssertEqual(revealedFields, [fields[2]])
     }
 
-    func testTransitioningOutOfAFieldCommitsItsRegisteredDraft() {
+    func testTransitioningOutOfAFieldRunsItsCommitCallback() {
         let field = WorkoutField.setWeight(UUID())
         let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
-        let registry = WorkoutFieldCommitRegistry()
         var commitCount = 0
         var assignedField: WorkoutField? = field
-        _ = registry.register(fields: [field]) {
-            commitCount += 1
-        }
         coordinator.synchronizeFocus(field)
 
         coordinator.transition(
             to: nil,
-            commit: registry.commit,
+            commit: { committedField in
+                XCTAssertEqual(committedField, field)
+                commitCount += 1
+            },
             assign: { assignedField = $0 },
             reveal: { _ in }
         )

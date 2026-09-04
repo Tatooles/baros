@@ -13,7 +13,7 @@ struct SetRowView: View, @MainActor Equatable {
     let exerciseIndex: Int
     let index: Int
     @Bindable var engine: ActiveWorkoutEngine
-    let fieldCommitRegistry: WorkoutFieldCommitRegistry
+    let setInputRegistry: ActiveSetInputRegistry
     var focusedField: FocusState<WorkoutField?>.Binding
     let isWeightFocused: Bool
     let isRepsFocused: Bool
@@ -61,16 +61,18 @@ struct SetRowView: View, @MainActor Equatable {
         }
         .onAppear {
             guard commitRegistrationID == nil else { return }
-            commitRegistrationID = fieldCommitRegistry.register(fields: ownFields) {
-                commitDraftsIfNeeded()
-            }
+            commitRegistrationID = setInputRegistry.register(
+                fields: ownFields,
+                commit: { commitDraftsIfNeeded() },
+                prepareForRPESelection: prepareValuesForRPESelection
+            )
         }
         .onDisappear {
             // Rows can leave the tree mid-edit (collapse, delete, finish); the
             // central focus transition can no longer reach them, so flush here.
             commitDraftsIfNeeded()
             if let commitRegistrationID {
-                fieldCommitRegistry.unregister(commitRegistrationID)
+                setInputRegistry.unregister(commitRegistrationID)
                 self.commitRegistrationID = nil
             }
         }
@@ -354,6 +356,18 @@ struct SetRowView: View, @MainActor Equatable {
         withAnimation(.easeInOut(duration: 0.2)) {
             try? engine.toggleSetCompletion(set, context: modelContext)
         }
+    }
+
+    private func prepareValuesForRPESelection(
+        completesSet: Bool
+    ) -> ActiveWorkoutSetInput.Values {
+        input.preparedValuesForRPESelection(
+            current: inputValues,
+            weightUnit: weightUnit,
+            completesSet: completesSet,
+            isCompleted: set.isCompleted,
+            previous: previous
+        )
     }
 
     private func fillFromPrevious(_ previous: PreviousSetPerformance) {
