@@ -16,10 +16,14 @@ struct ExerciseEditorView: View {
     @State private var notes: String
     @State private var validationMessage: String?
 
-    init(exercise: Exercise? = nil, onSave: ((Exercise) -> Void)? = nil) {
+    init(
+        exercise: Exercise? = nil,
+        initialName: String = "",
+        onSave: ((Exercise) -> Void)? = nil
+    ) {
         self.exercise = exercise
         self.onSave = onSave
-        _name = State(initialValue: exercise?.name ?? "")
+        _name = State(initialValue: exercise?.name ?? initialName)
         _category = State(initialValue: exercise?.category ?? .strength)
         _equipment = State(initialValue: exercise?.equipment ?? .barbell)
         _primaryMuscleGroup = State(initialValue: exercise?.primaryMuscleGroup ?? .chest)
