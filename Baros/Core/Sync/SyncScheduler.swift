@@ -45,10 +45,28 @@ final class SyncScheduler {
         case syncError
     }
 
+    enum FailureOrigin: Equatable {
+        case remotePull
+        case unknown
+    }
+
     struct Failure: Equatable {
         let message: String
         let occurredAt: Date
         let reason: FailureReason
+        let origin: FailureOrigin
+
+        init(
+            message: String,
+            occurredAt: Date,
+            reason: FailureReason,
+            origin: FailureOrigin = .unknown
+        ) {
+            self.message = message
+            self.occurredAt = occurredAt
+            self.reason = reason
+            self.origin = origin
+        }
     }
 
     struct TransientCondition: Equatable {
@@ -493,7 +511,19 @@ final class SyncScheduler {
                         ))
                         break
                     }
-                    lastFailure = Failure(message: error.localizedDescription, occurredAt: .now, reason: .syncError)
+                    let failureOrigin: FailureOrigin
+                    if let coordinatorError = error as? SyncCoordinatorError,
+                       case .remotePullFailed = coordinatorError {
+                        failureOrigin = .remotePull
+                    } else {
+                        failureOrigin = .unknown
+                    }
+                    lastFailure = Failure(
+                        message: error.localizedDescription,
+                        occurredAt: .now,
+                        reason: .syncError,
+                        origin: failureOrigin
+                    )
                     recordDurableFailure(
                         reason: .syncError,
                         ownerTokenIdentifier: syncOwnerTokenIdentifier,
@@ -541,7 +571,11 @@ final class SyncScheduler {
             }
         case .incompleteRemotePull:
             lastFailure = nil
-        case .syncError, nil:
+        case .syncError:
+            if lastFailure?.origin == .remotePull {
+                lastFailure = nil
+            }
+        case nil:
             break
         }
     }
