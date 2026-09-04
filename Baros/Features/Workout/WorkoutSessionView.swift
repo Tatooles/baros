@@ -28,11 +28,12 @@ struct WorkoutSessionView: View {
     @State private var collapsedExerciseIDs: Set<UUID> = []
     @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var isWorkoutNoteRevealed = false
+    @State private var cachedSortedLoggedExercises: [LoggedExercise]?
     @State private var cachedFocusOrder: [WorkoutField] = []
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
     @State private var rpeEditingSourceField: WorkoutField?
-    @State private var fieldCommitRegistry = WorkoutFieldCommitRegistry()
+    @State private var setInputRegistry = ActiveSetInputRegistry()
     @State private var focusTransitionCoordinator = WorkoutFocusTransitionCoordinator()
     @FocusState private var focusedField: WorkoutField?
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
@@ -62,7 +63,7 @@ struct WorkoutSessionView: View {
     }
 
     var body: some View {
-        let sortedLoggedExercises = session.sortedLoggedExercises
+        let sortedLoggedExercises = cachedSortedLoggedExercises ?? session.sortedLoggedExercises
         let canReorderExercises = sortedLoggedExercises.count >= 2
 
         ScrollViewReader { scrollProxy in
@@ -114,7 +115,7 @@ struct WorkoutSessionView: View {
                             engine: engine,
                             isCollapsed: isCollapsedBinding(for: loggedExercise),
                             isNoteRevealed: isNoteRevealedBinding(for: loggedExercise),
-                            fieldCommitRegistry: fieldCommitRegistry,
+                            setInputRegistry: setInputRegistry,
                             focusedField: $focusedField,
                             weightUnit: weightUnit,
                             previousSets: cachedPreviousSets[loggedExercise.id] ?? [],
@@ -180,7 +181,7 @@ struct WorkoutSessionView: View {
                 focusTransitionCoordinator.observeFocusChange(
                     from: previousField,
                     to: newField,
-                    commit: fieldCommitRegistry.commit,
+                    commit: setInputRegistry.commit,
                     reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
                 )
 
@@ -204,18 +205,27 @@ struct WorkoutSessionView: View {
                             RPEChipRow(
                                 selected: editingSet?.rpe,
                                 onSelect: { value in
+                                    let sourceField = rpeEditingSourceField
+                                        ?? focusTransitionCoordinator.currentField
                                     let nextField = WorkoutFocusNavigator.adjacentField(
-                                        from: rpeEditingSourceField ?? focusTransitionCoordinator.currentField,
+                                        from: sourceField,
                                         in: cachedFocusOrder,
                                         offset: 1
                                     )
                                     if let set = editingSet {
-                                        try? RPEChipSelectionAction.apply(
-                                            value: value,
-                                            to: set,
-                                            engine: engine,
-                                            context: modelContext
-                                        )
+                                        let preparedValues = setInputRegistry.prepareSetValues(
+                                            for: sourceField,
+                                            completesSet: value != nil
+                                        ) ?? .init(weight: set.weight, reps: set.reps)
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            try? RPEChipSelectionAction.apply(
+                                                value: value,
+                                                preparedValues: preparedValues,
+                                                to: set,
+                                                engine: engine,
+                                                context: modelContext
+                                            )
+                                        }
                                     }
                                     rpeEditingSetID = nil
                                     rpeEditingSourceField = nil
@@ -296,6 +306,9 @@ struct WorkoutSessionView: View {
                 resignFocus()
             }
         }
+        .onChange(of: loggedExerciseStructureKey, initial: true) { _, _ in
+            cachedSortedLoggedExercises = session.sortedLoggedExercises
+        }
         .onDisappear {
             resignFocus()
             onMinimizePreparationChanged(nil)
@@ -342,7 +355,7 @@ struct WorkoutSessionView: View {
         focusTransitionCoordinator.transition(
             to: focusedField,
             delay: .milliseconds(350),
-            commit: fieldCommitRegistry.commit,
+            commit: setInputRegistry.commit,
             assign: { self.focusedField = $0 },
             reveal: { _ in
                 if let scrollTarget {
@@ -381,12 +394,18 @@ struct WorkoutSessionView: View {
 
     private var editingSet: LoggedSet? {
         guard let rpeEditingSetID else { return nil }
-        for loggedExercise in session.sortedLoggedExercises {
-            if let match = loggedExercise.sortedSets.first(where: { $0.id == rpeEditingSetID }) {
+        for loggedExercise in cachedSortedLoggedExercises ?? session.sortedLoggedExercises {
+            if let match = loggedExercise.sets.first(where: {
+                $0.id == rpeEditingSetID && $0.deletedAt == nil
+            }) {
                 return match
             }
         }
         return nil
+    }
+
+    private var loggedExerciseStructureKey: Set<LoggedExerciseStructureValue> {
+        Set(session.loggedExercises.map(LoggedExerciseStructureValue.init))
     }
 
     private func isCollapsedBinding(for loggedExercise: LoggedExercise) -> Binding<Bool> {
@@ -422,7 +441,7 @@ struct WorkoutSessionView: View {
     private func moveFocus(offset: Int, scrollProxy: ScrollViewProxy) {
         focusTransitionCoordinator.move(
             offset: offset,
-            commit: fieldCommitRegistry.commit,
+            commit: setInputRegistry.commit,
             assign: { focusedField = $0 },
             reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
         )
@@ -431,7 +450,7 @@ struct WorkoutSessionView: View {
     private func transitionFocus(to target: WorkoutField?, scrollProxy: ScrollViewProxy) {
         focusTransitionCoordinator.transition(
             to: target,
-            commit: fieldCommitRegistry.commit,
+            commit: setInputRegistry.commit,
             assign: { focusedField = $0 },
             reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
         )
@@ -440,7 +459,7 @@ struct WorkoutSessionView: View {
     private func resignFocus() {
         focusTransitionCoordinator.transition(
             to: nil,
-            commit: fieldCommitRegistry.commit,
+            commit: setInputRegistry.commit,
             assign: { focusedField = $0 },
             reveal: { _ in }
         )
@@ -462,6 +481,18 @@ struct WorkoutSessionView: View {
     }
 
     private static let focusRevealAnchor = UnitPoint(x: 0.5, y: 0.72)
+}
+
+private struct LoggedExerciseStructureValue: Hashable {
+    let id: UUID
+    let orderIndex: Int
+    let deletedAt: Date?
+
+    init(_ loggedExercise: LoggedExercise) {
+        id = loggedExercise.id
+        orderIndex = loggedExercise.orderIndex
+        deletedAt = loggedExercise.deletedAt
+    }
 }
 
 /// Rebuilds the keyboard route only when structure, collapse, or note

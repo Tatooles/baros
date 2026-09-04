@@ -24,6 +24,35 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
         )
     }
 
+    func testPreparingRPECompletionKeepsTypedValuesAndFillsRemainingPreviousValue() {
+        var input = ActiveWorkoutSetInput()
+        input.update("200", for: .weight, isFocused: true)
+
+        let values = input.preparedValuesForRPESelection(
+            current: .init(weight: 185, reps: nil),
+            weightUnit: .pounds,
+            completesSet: true,
+            isCompleted: false,
+            previous: PreviousSetPerformance(weight: 175, reps: 5)
+        )
+
+        XCTAssertEqual(values, .init(weight: 200, reps: 5))
+    }
+
+    func testPreparingClearSelectionDoesNotFillPreviousValues() {
+        var input = ActiveWorkoutSetInput()
+
+        let values = input.preparedValuesForRPESelection(
+            current: .init(weight: nil, reps: nil),
+            weightUnit: .pounds,
+            completesSet: false,
+            isCompleted: false,
+            previous: PreviousSetPerformance(weight: 175, reps: 5)
+        )
+
+        XCTAssertEqual(values, .init(weight: nil, reps: nil))
+    }
+
     func testDoesNotReturnPreviousFillWithoutPreviousOrAfterCompletion() {
         let input = ActiveWorkoutSetInput()
 
@@ -229,5 +258,53 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
             ),
             "185"
         )
+    }
+
+    @MainActor
+    func testRegisteredSetPreparationReturnsValuesWithoutCommitting() {
+        let field = WorkoutField.setReps(UUID())
+        let registry = ActiveSetInputRegistry()
+        var commitCount = 0
+        _ = registry.register(
+            fields: [field],
+            commit: { commitCount += 1 },
+            prepareForRPESelection: { completesSet in
+                XCTAssertTrue(completesSet)
+                return .init(weight: 200, reps: 5)
+            }
+        )
+
+        let values = registry.prepareSetValues(for: field, completesSet: true)
+
+        XCTAssertEqual(values, .init(weight: 200, reps: 5))
+        XCTAssertEqual(commitCount, 0)
+    }
+
+    @MainActor
+    func testUpdateRegistrationReplacesPreparationForAllRegisteredFields() {
+        let setID = UUID()
+        let fields = [
+            WorkoutField.setWeight(setID),
+            WorkoutField.setReps(setID),
+        ]
+        let registry = ActiveSetInputRegistry()
+        let registrationID = registry.register(
+            fields: fields,
+            commit: {},
+            prepareForRPESelection: { _ in .init(weight: nil, reps: nil) }
+        )
+
+        registry.updateRegistration(
+            registrationID,
+            commit: {},
+            prepareForRPESelection: { _ in .init(weight: 185, reps: 5) }
+        )
+
+        for field in fields {
+            XCTAssertEqual(
+                registry.prepareSetValues(for: field, completesSet: true),
+                .init(weight: 185, reps: 5)
+            )
+        }
     }
 }

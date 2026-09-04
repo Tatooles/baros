@@ -9,7 +9,7 @@ struct ExerciseCardView: View {
     @Bindable var engine: ActiveWorkoutEngine
     @Binding var isCollapsed: Bool
     @Binding var isNoteRevealed: Bool
-    let fieldCommitRegistry: WorkoutFieldCommitRegistry
+    let setInputRegistry: ActiveSetInputRegistry
     var focusedField: FocusState<WorkoutField?>.Binding
     let weightUnit: MeasurementUnit
     let previousSets: [PreviousSetPerformance]
@@ -19,6 +19,7 @@ struct ExerciseCardView: View {
     let onReorderExercises: () -> Void
     let onEditRPE: (LoggedSet) -> Void
     @State private var showsRemoveConfirmation = false
+    @State private var cachedSortedSets: [LoggedSet]?
 
     init(
         loggedExercise: LoggedExercise,
@@ -26,7 +27,7 @@ struct ExerciseCardView: View {
         engine: ActiveWorkoutEngine,
         isCollapsed: Binding<Bool>,
         isNoteRevealed: Binding<Bool>,
-        fieldCommitRegistry: WorkoutFieldCommitRegistry,
+        setInputRegistry: ActiveSetInputRegistry,
         focusedField: FocusState<WorkoutField?>.Binding,
         weightUnit: MeasurementUnit,
         previousSets: [PreviousSetPerformance],
@@ -41,7 +42,7 @@ struct ExerciseCardView: View {
         self.engine = engine
         self._isCollapsed = isCollapsed
         self._isNoteRevealed = isNoteRevealed
-        self.fieldCommitRegistry = fieldCommitRegistry
+        self.setInputRegistry = setInputRegistry
         self.focusedField = focusedField
         self.weightUnit = weightUnit
         self.previousSets = previousSets
@@ -53,6 +54,9 @@ struct ExerciseCardView: View {
     }
 
     var body: some View {
+        let sortedSets = cachedSortedSets ?? loggedExercise.sortedSets
+        let focusedFieldValue = focusedField.wrappedValue
+
         SurfaceCard(role: .focus, padding: 0) {
             VStack(spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -65,7 +69,7 @@ struct ExerciseCardView: View {
                             WorkoutExerciseHeaderContent(
                                 title: loggedExercise.exerciseSnapshotName,
                                 metadata: loggedExercise.metadataDisplayText,
-                                progress: Self.setProgress(for: loggedExercise),
+                                progress: Self.setProgress(for: sortedSets),
                                 isCollapsed: isCollapsed
                             )
                         }
@@ -145,7 +149,7 @@ struct ExerciseCardView: View {
 
                         VStack(spacing: 0) {
                             VStack(spacing: 0) {
-                                ForEach(Array(loggedExercise.sortedSets.enumerated()), id: \.element.id) { index, set in
+                                ForEach(Array(sortedSets.enumerated()), id: \.element.id) { index, set in
                                     if index > 0 {
                                         Divider()
                                             .overlay(AppTheme.subtleBorder)
@@ -153,15 +157,23 @@ struct ExerciseCardView: View {
                                     }
                                     SetRowView(
                                         set: set,
+                                        setID: set.id,
+                                        weight: set.weight,
+                                        reps: set.reps,
+                                        isCompleted: set.isCompleted,
+                                        rpe: set.rpe,
                                         exerciseIndex: exerciseIndex,
                                         index: index,
                                         engine: engine,
-                                        fieldCommitRegistry: fieldCommitRegistry,
+                                        setInputRegistry: setInputRegistry,
                                         focusedField: focusedField,
+                                        isWeightFocused: focusedFieldValue == .setWeight(set.id),
+                                        isRepsFocused: focusedFieldValue == .setReps(set.id),
                                         weightUnit: weightUnit,
                                         previous: index < previousSetsForRows.count ? previousSetsForRows[index] : nil,
                                         onEditRPE: onEditRPE
                                     )
+                                        .equatable()
                                         .padding(.horizontal, 16)
                                 }
 
@@ -207,6 +219,9 @@ struct ExerciseCardView: View {
                 }
             }
         }
+        .onChange(of: setStructureKey, initial: true) { _, _ in
+            cachedSortedSets = loggedExercise.sortedSets
+        }
     }
 
     private var addSetButton: some View {
@@ -222,9 +237,28 @@ struct ExerciseCardView: View {
         }
     }
 
+    private var setStructureKey: Set<LoggedSetStructureValue> {
+        Set(loggedExercise.sets.map(LoggedSetStructureValue.init))
+    }
+
+    static func setProgress(for sets: [LoggedSet]) -> WorkoutExerciseProgress {
+        let completed = sets.filter(\.isCompleted).count
+        return WorkoutExerciseProgress(completed: completed, total: sets.count)
+    }
+
     static func setProgress(for loggedExercise: LoggedExercise) -> WorkoutExerciseProgress {
-        let visibleSets = loggedExercise.sortedSets
-        let completed = visibleSets.filter(\.isCompleted).count
-        return WorkoutExerciseProgress(completed: completed, total: visibleSets.count)
+        setProgress(for: loggedExercise.sortedSets)
+    }
+}
+
+private struct LoggedSetStructureValue: Hashable {
+    let id: UUID
+    let orderIndex: Int
+    let deletedAt: Date?
+
+    init(_ set: LoggedSet) {
+        id = set.id
+        orderIndex = set.orderIndex
+        deletedAt = set.deletedAt
     }
 }

@@ -593,6 +593,8 @@ final class SyncOutboxIntegrationTests: XCTestCase {
             now: Date(timeIntervalSince1970: 200)
         )
         try RPEChipSelectionAction.apply(value: 8, to: firstSet, engine: engine, context: context)
+        XCTAssertTrue(firstSet.isCompleted)
+        XCTAssertNotNil(firstSet.completedAt)
         let secondSet = try engine.addSet(to: loggedExercise, context: context)
 
         try engine.finishWorkout(session, context: context, now: Date(timeIntervalSince1970: 400))
@@ -759,11 +761,11 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         )
         try RPEChipSelectionAction.apply(value: 8, to: firstSet, engine: engine, context: context)
         _ = try engine.addSet(to: loggedExercise, context: context)
-        try engine.toggleSetCompletion(firstSet, context: context)
 
         XCTAssertEqual(firstSet.weight, 185)
         XCTAssertEqual(firstSet.reps, 5)
         XCTAssertEqual(firstSet.rpe, 8)
+        XCTAssertTrue(firstSet.isCompleted)
         XCTAssertTrue(try fetchEntries(context).isEmpty)
     }
 

@@ -332,6 +332,28 @@ final class BarosUITests: XCTestCase {
 
         let previousButton = app.buttons["PreviousWorkoutFieldButton"]
         XCTAssertTrue(previousButton.waitForExistence(timeout: 3))
+        nextButton.tap()
+        let nextExerciseField = app.textFields["SetWeightField-1-0"]
+        XCTAssertTrue(nextExerciseField.waitForExistence(timeout: 3))
+        let boundaryFocusExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: nextExerciseField
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [boundaryFocusExpectation], timeout: 3),
+            .completed,
+            "Next from the final set should cross into the next exercise."
+        )
+        previousButton.tap()
+        let reverseBoundaryFocusExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: expectedField
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [reverseBoundaryFocusExpectation], timeout: 3),
+            .completed,
+            "Previous should cross back to the prior exercise's final set."
+        )
         for _ in 0..<10 {
             previousButton.tap()
         }
@@ -2440,6 +2462,8 @@ final class BarosUITests: XCTestCase {
         let secondWeightField = app.textFields["SetWeightField-0-1"]
         XCTAssertTrue(secondWeightField.waitForExistence(timeout: 3))
 
+        secondWeightField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         secondWeightField.swipeLeft()
         let deleteButton = app.buttons["DeleteSetButton-0-1"]
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 2))
@@ -2874,7 +2898,6 @@ final class BarosUITests: XCTestCase {
         addBenchPress(in: app)
         fillFirstBenchSet(in: app)
         enterRPEViaChips("8", in: app)
-        app.buttons["SetCompletionButton-0-0"].tap()
         dismissKeyboardIfNeeded(in: app)
         openFinishWorkoutSheet(in: app)
         let saveButton = app.buttons["SaveWorkoutButton"]
@@ -2902,7 +2925,6 @@ final class BarosUITests: XCTestCase {
         app.textFields["SetRepsField-0-0"].tap()
         app.textFields["SetRepsField-0-0"].typeText(reps)
         enterRPEViaChips(rpe, in: app)
-        app.buttons["SetCompletionButton-0-0"].tap()
         dismissKeyboardIfNeeded(in: app)
         openFinishWorkoutSheet(in: app)
         XCTAssertTrue(app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3))
@@ -2920,7 +2942,6 @@ final class BarosUITests: XCTestCase {
         addBenchPress(in: app)
         fillFirstBenchSet(in: app)
         enterRPEViaChips("8", in: app)
-        app.buttons["SetCompletionButton-0-0"].tap()
 
         replaceText(in: app.textFields[fieldIdentifier], with: "")
         dismissKeyboardIfNeeded(in: app)
