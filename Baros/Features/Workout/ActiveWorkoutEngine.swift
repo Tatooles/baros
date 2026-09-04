@@ -382,11 +382,21 @@ final class ActiveWorkoutEngine {
         try context.save()
     }
 
-    func toggleSetCompletion(_ set: LoggedSet, context: ModelContext, now: Date = .now) throws {
+    func toggleSetCompletion(
+        _ set: LoggedSet,
+        preparedValues: ActiveWorkoutSetInput.Values? = nil,
+        context: ModelContext,
+        now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        if let preparedValues {
+            set.weight = WorkoutNumericInputPolicy.validatedWeight(preparedValues.weight)
+            set.reps = WorkoutNumericInputPolicy.validatedReps(preparedValues.reps)
+        }
         set.isCompleted.toggle()
         set.completedAt = set.isCompleted ? now : nil
         set.touch(now: now)
-        try context.save()
+        try save(context)
     }
 
     func finalizeWorkoutTitle(_ session: WorkoutSession, context: ModelContext) throws {

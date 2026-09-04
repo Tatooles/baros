@@ -1813,6 +1813,61 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testCheckmarkConsumesPendingInputAndKeepsRPEKeyboardNavigation() {
+        // Use an isolated in-memory fixture so this focused interaction can
+        // also run on a physical phone without resetting its workout store.
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store",
+            "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience",
+            "--uitest-seed-completed-bench-workout", "Past Push",
+        ]
+        app.launch()
+        openFirstPastWorkout(in: app)
+        confirmStartFromPastWorkout(in: app)
+
+        let weightField = app.textFields["SetWeightField-0-0"]
+        let repsField = app.textFields["SetRepsField-0-0"]
+        let completionButton = app.buttons["SetCompletionButton-0-0"]
+        XCTAssertTrue(weightField.waitForExistence(timeout: 3))
+        weightField.tap()
+        weightField.typeText("200")
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        completionButton.tap()
+
+        XCTAssertEqual(completionButton.label, "Mark set incomplete")
+        XCTAssertEqual(weightField.value as? String, "200")
+        XCTAssertEqual(repsField.value as? String, "5")
+        XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
+
+        // Re-enter the row and traverse the same keyboard path used before completion.
+        weightField.tap()
+        app.buttons["NextWorkoutFieldButton"].tap()
+        let repsFocus = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: repsField
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [repsFocus], timeout: 3), .completed)
+        enterRPEViaChips("8", in: app)
+        XCTAssertEqual(completionButton.label, "Mark set incomplete")
+        XCTAssertTrue(app.buttons["SetRPEBadge-0-0"].exists)
+        completionButton.tap()
+        XCTAssertEqual(completionButton.label, "Mark set complete")
+        XCTAssertEqual(weightField.value as? String, "200")
+        XCTAssertEqual(repsField.value as? String, "5")
+        XCTAssertTrue(app.buttons["SetRPEBadge-0-0"].exists)
+
+        // Checkmark while reps is still being edited.
+        replaceText(in: repsField, with: "6")
+        completionButton.tap()
+        XCTAssertEqual(repsField.value as? String, "6")
+        XCTAssertEqual(weightField.value as? String, "200")
+        XCTAssertEqual(completionButton.label, "Mark set incomplete")
+        XCTAssertTrue(app.buttons["SetRPEBadge-0-0"].exists)
+    }
+
+    @MainActor
     func testStartingFromPastWorkoutCopiesSetsAsIncomplete() {
         let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
         app.launch()
