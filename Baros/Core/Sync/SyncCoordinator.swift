@@ -28,7 +28,19 @@ final class SyncCoordinator {
         try Task.checkCancellation()
 
         let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
-        let pullSummary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        let pullSummary: SyncPullSummary
+        do {
+            pullSummary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        } catch {
+            guard let transientCondition = TransientSyncConditionClassifier.errorCode(for: error) else {
+                throw error
+            }
+            throw SyncPullInterruption(
+                transientCondition: transientCondition,
+                didCompleteInitialPull: false,
+                hasIncompleteInitialPull: false
+            )
+        }
         var hasIncompleteRemotePull = pullSummary.hasIncompleteRemotePull
         if !pullSummary.hasIncompleteRemotePull {
             observability.record(.syncPhaseCompleted(.pull))
@@ -75,7 +87,19 @@ final class SyncCoordinator {
             )
         }
         if pushResult.didPush {
-            let summary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            let summary: SyncPullSummary
+            do {
+                summary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            } catch {
+                guard let transientCondition = TransientSyncConditionClassifier.errorCode(for: error) else {
+                    throw error
+                }
+                throw SyncPullInterruption(
+                    transientCondition: transientCondition,
+                    didCompleteInitialPull: true,
+                    hasIncompleteInitialPull: pullSummary.hasIncompleteRemotePull
+                )
+            }
             hasIncompleteRemotePull = summary.hasIncompleteRemotePull
             if !summary.hasIncompleteRemotePull {
                 observability.record(.syncPhaseCompleted(.pull))
@@ -1629,6 +1653,12 @@ struct SyncRunResult {
     var hasMorePendingEntries = false
     var hasIncompleteRemotePull = false
     var transientCondition: SyncStableErrorCode?
+}
+
+struct SyncPullInterruption: Error {
+    let transientCondition: SyncStableErrorCode
+    let didCompleteInitialPull: Bool
+    let hasIncompleteInitialPull: Bool
 }
 
 private struct SyncPushResult {

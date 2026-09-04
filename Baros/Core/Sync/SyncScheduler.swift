@@ -397,24 +397,27 @@ final class SyncScheduler {
                             errorCode: transientCondition
                         ))
                     }
-                    guard !hasFailedActiveV1OutboxEntries(
-                        ownerTokenIdentifier: syncOwnerTokenIdentifier,
-                        context: modelContext
-                    ) else {
-                        lastFailure = Failure(
-                            message: Self.incompleteSyncFailureMessage,
-                            occurredAt: .now,
-                            reason: .failedOutboxPush
-                        )
-                        recordDurableFailure(
-                            reason: .failedOutboxPush,
-                            ownerTokenIdentifier: syncOwnerTokenIdentifier,
-                            context: modelContext
-                        )
-                        break
-                    }
                     if result.hasMorePendingEntries {
                         needsSync = true
+                    } else if hasFailedActiveV1OutboxEntries(
+                        ownerTokenIdentifier: syncOwnerTokenIdentifier,
+                        context: modelContext
+                    ) {
+                        if result.transientCondition == nil || lastFailure?.reason != .failedOutboxPush {
+                            lastFailure = Failure(
+                                message: Self.incompleteSyncFailureMessage,
+                                occurredAt: .now,
+                                reason: .failedOutboxPush
+                            )
+                        }
+                        if result.transientCondition == nil {
+                            recordDurableFailure(
+                                reason: .failedOutboxPush,
+                                ownerTokenIdentifier: syncOwnerTokenIdentifier,
+                                context: modelContext
+                            )
+                        }
+                        break
                     } else if result.hasIncompleteRemotePull {
                         lastFailure = Failure(
                             message: Self.incompleteSyncFailureMessage,
@@ -428,14 +431,15 @@ final class SyncScheduler {
                         )
                         break
                     } else if result.transientCondition != nil {
-                        // The completed pull and empty failed outbox prove that the
-                        // previously reported durable failure is no longer current.
-                        lastFailure = nil
+                        clearResolvedRetryFailureAfterCompletedInitialPull(
+                            ownerTokenIdentifier: syncOwnerTokenIdentifier,
+                            context: modelContext
+                        )
                         break
                     } else {
                         lastSyncedAt = .now
+                        lastFailure = nil
                     }
-                    lastFailure = nil
                 } catch is CancellationError {
                     if currentOwnerTokenIdentifier == syncOwnerTokenIdentifier {
                         observability.record(.transient(
@@ -444,15 +448,41 @@ final class SyncScheduler {
                         ))
                     }
                     break
+                } catch let interruption as SyncPullInterruption {
+                    guard !Task.isCancelled, currentOwnerTokenIdentifier == syncOwnerTokenIdentifier else {
+                        break
+                    }
+                    if interruption.hasIncompleteInitialPull {
+                        lastFailure = Failure(
+                            message: Self.incompleteSyncFailureMessage,
+                            occurredAt: .now,
+                            reason: .incompleteRemotePull
+                        )
+                        recordDurableFailure(
+                            reason: .incompleteRemotePull,
+                            ownerTokenIdentifier: syncOwnerTokenIdentifier,
+                            context: modelContext
+                        )
+                    } else if interruption.didCompleteInitialPull {
+                        clearResolvedRetryFailureAfterCompletedInitialPull(
+                            ownerTokenIdentifier: syncOwnerTokenIdentifier,
+                            context: modelContext
+                        )
+                    }
+                    lastTransientCondition = TransientCondition(
+                        errorCode: interruption.transientCondition,
+                        occurredAt: .now
+                    )
+                    observability.record(.transient(
+                        phase: .pull,
+                        errorCode: interruption.transientCondition
+                    ))
+                    break
                 } catch {
                     guard !Task.isCancelled, currentOwnerTokenIdentifier == syncOwnerTokenIdentifier else {
                         break
                     }
                     if let transientCondition = TransientSyncConditionClassifier.errorCode(for: error) {
-                        clearResolvedFailedOutboxFailureIfNeeded(
-                            ownerTokenIdentifier: syncOwnerTokenIdentifier,
-                            context: modelContext
-                        )
                         lastTransientCondition = TransientCondition(
                             errorCode: transientCondition,
                             occurredAt: .now
@@ -497,18 +527,23 @@ final class SyncScheduler {
         }
     }
 
-    private func clearResolvedFailedOutboxFailureIfNeeded(
+    private func clearResolvedRetryFailureAfterCompletedInitialPull(
         ownerTokenIdentifier: String?,
         context: ModelContext
     ) {
-        guard lastFailure?.reason == .failedOutboxPush,
-              !hasFailedActiveV1OutboxEntries(
-                  ownerTokenIdentifier: ownerTokenIdentifier,
-                  context: context
-              ) else {
-            return
+        switch lastFailure?.reason {
+        case .failedOutboxPush:
+            if !hasFailedActiveV1OutboxEntries(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            ) {
+                lastFailure = nil
+            }
+        case .incompleteRemotePull:
+            lastFailure = nil
+        case .syncError, nil:
+            break
         }
-        lastFailure = nil
     }
 
     private func hasFailedActiveV1OutboxEntries(

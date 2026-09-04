@@ -3682,7 +3682,9 @@ final class SyncCoordinatorTests: XCTestCase {
         try context.save()
 
         let client = FakeSyncClient()
-        client.error = CancellationError()
+        client.onUpsertExercise = { _ in
+            throw CancellationError()
+        }
 
         do {
             _ = try await SyncCoordinator(client: client).run(
