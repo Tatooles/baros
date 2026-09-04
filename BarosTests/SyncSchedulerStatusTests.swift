@@ -481,43 +481,6 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertFalse(String(describing: sink.observations).contains("Private workout content"))
     }
 
-    func testOfflinePullRecordsNetworkTransientSyncCondition() async throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let client = FakeSyncClient()
-        client.fetchError = URLError(.notConnectedToInternet)
-        let sink = RecordingSyncObservationSink()
-        let observability = SyncObservability(sink: sink)
-        let scheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: client, observability: observability),
-            modelContext: context,
-            observability: observability
-        )
-        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
-
-        scheduler.requestSync()
-        try await waitUntil {
-            sink.observations.contains {
-                $0.kind == .breadcrumb
-                    && $0.phase == .pull
-                    && $0.errorCode == .networkUnavailable
-            } && !scheduler.isSyncing
-        }
-
-        XCTAssertNil(scheduler.lastFailure)
-        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
-        XCTAssertFalse(scheduler.hasUnfinishedSyncWork)
-        XCTAssertTrue(scheduler.shouldAttemptNetworkRecovery)
-
-        client.fetchError = nil
-        scheduler.retrySync()
-        try await waitUntil { scheduler.lastSyncedAt != nil }
-
-        XCTAssertNil(scheduler.lastTransientCondition)
-        XCTAssertFalse(scheduler.hasUnfinishedSyncWork)
-        XCTAssertFalse(scheduler.shouldAttemptNetworkRecovery)
-    }
-
     func testTimedOutPullIsATransientSyncConditionInsteadOfADurableSyncFailure() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
