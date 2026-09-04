@@ -3742,6 +3742,22 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(entry.attemptCount, 2)
     }
 
+    func testInitialPullPropagatesCancellation() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let client = FakeSyncClient()
+        client.fetchError = CancellationError()
+
+        do {
+            _ = try await SyncCoordinator(client: client).run(
+                ownerTokenIdentifier: "issuer|owner_a",
+                context: container.mainContext
+            )
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        }
+    }
+
     func testRunRetriesPreviouslyFailedEntryOnNextRun() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
