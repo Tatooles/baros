@@ -402,6 +402,16 @@ final class SyncCoordinator {
         context: ModelContext,
         now: Date
     ) throws {
+        guard try !hasFailedBootstrapEquivalent(
+            entityKind: entityKind,
+            entityID: entityID,
+            isDeleted: isDeleted,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        ) else {
+            return
+        }
+
         if isDeleted {
             try recorder.recordDelete(
                 entityKind: entityKind,
@@ -1554,6 +1564,32 @@ final class SyncCoordinator {
         ))
             .contains { entry in
                 entry.isActive && entry.operation != nil
+            }
+    }
+
+    private func hasFailedBootstrapEquivalent(
+        entityKind: SyncEntityKind,
+        entityID: UUID,
+        isDeleted: Bool,
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws -> Bool {
+        let entityKindRaw = entityKind.rawValue
+        let failedStatus = SyncOutboxStatus.failed.rawValue
+        return try context.fetch(FetchDescriptor<SyncOutboxEntry>(
+            predicate: #Predicate { entry in
+                entry.entityKindRaw == entityKindRaw
+                    && entry.entityID == entityID
+                    && entry.ownerTokenIdentifier == ownerTokenIdentifier
+                    && entry.statusRaw == failedStatus
+                    && entry.operationRaw != ""
+            }
+        ))
+            .contains { entry in
+                guard entry.status == .failed, let operation = entry.operation else {
+                    return false
+                }
+                return isDeleted ? operation == .delete : operation == .create || operation == .update
             }
     }
 

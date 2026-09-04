@@ -3516,6 +3516,47 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(entry.attemptCount, 2)
     }
 
+    func testFirstRunTransientRetryPreservesPreviouslyDurableOutboxFailure() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Deadlift",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Hamstrings",
+            syncOwnerTokenIdentifier: owner
+        )
+        let entry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            operation: .update,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200),
+            lastAttemptAt: Date(timeIntervalSince1970: 150),
+            attemptCount: 1,
+            lastErrorMessage: "durable push failure"
+        )
+        context.insert(exercise)
+        context.insert(entry)
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.error = URLError(.notConnectedToInternet)
+
+        let result = try await SyncCoordinator(client: client).run(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertEqual(result.transientCondition, .networkUnavailable)
+        XCTAssertEqual(entry.status, .failed)
+        XCTAssertEqual(entry.lastErrorMessage, "durable push failure")
+        XCTAssertEqual(entry.attemptCount, 2)
+    }
+
     func testTransientExitDoesNotClearAnUnattemptedDurableOutboxFailure() async throws {
         let owner = "issuer|owner_a"
         let container = try SwiftDataTestSupport.makeInMemoryContainer()

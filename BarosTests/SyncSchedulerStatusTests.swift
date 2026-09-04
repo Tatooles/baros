@@ -558,15 +558,22 @@ final class SyncSchedulerStatusTests: XCTestCase {
         let context = container.mainContext
         let client = FakeSyncClient()
         client.fetchError = URLError(.notConnectedToInternet)
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
         let scheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: client),
-            modelContext: context
+            coordinator: SyncCoordinator(client: client, observability: observability),
+            modelContext: context,
+            observability: observability
         )
         scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
 
         scheduler.requestSync()
         try await waitUntil {
-            scheduler.lastTransientCondition != nil && !scheduler.isSyncing
+            sink.observations.contains {
+                $0.kind == .breadcrumb
+                    && $0.phase == .pull
+                    && $0.errorCode == .networkUnavailable
+            } && !scheduler.isSyncing
         }
 
         XCTAssertNil(scheduler.lastFailure)
