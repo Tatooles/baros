@@ -11,6 +11,7 @@ struct SettingsAccountSection: View {
         return SyncStatusDisplayState.make(
             ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
             isSyncing: syncScheduler.isSyncing,
+            networkAvailability: syncScheduler.networkAvailability,
             transientCondition: syncScheduler.lastTransientCondition?.errorCode,
             hasQueuedSyncRequest: syncScheduler.hasQueuedSyncRequest,
             lastSyncedAt: syncScheduler.lastSyncedAt,
