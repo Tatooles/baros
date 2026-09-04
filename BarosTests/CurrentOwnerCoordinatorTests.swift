@@ -647,6 +647,8 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
             harness.authenticationClient.loginFromCacheCallCount == 3
                 && harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
                 && harness.syncClient.fetchRequests.count > completedFetchCount
+                && !harness.syncScheduler.isSyncing
+                && !harness.syncScheduler.hasQueuedSyncRequest
         }
 
         XCTAssertFalse(harness.syncScheduler.hasQueuedSyncRequest)
