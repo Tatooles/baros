@@ -28,6 +28,7 @@ struct WorkoutSessionView: View {
     @State private var collapsedExerciseIDs: Set<UUID> = []
     @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var isWorkoutNoteRevealed = false
+    @State private var cachedSortedLoggedExercises: [LoggedExercise]?
     @State private var cachedFocusOrder: [WorkoutField] = []
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
@@ -62,7 +63,7 @@ struct WorkoutSessionView: View {
     }
 
     var body: some View {
-        let sortedLoggedExercises = session.sortedLoggedExercises
+        let sortedLoggedExercises = cachedSortedLoggedExercises ?? session.sortedLoggedExercises
         let canReorderExercises = sortedLoggedExercises.count >= 2
 
         ScrollViewReader { scrollProxy in
@@ -296,6 +297,9 @@ struct WorkoutSessionView: View {
                 resignFocus()
             }
         }
+        .onChange(of: loggedExerciseStructureKey, initial: true) { _, _ in
+            cachedSortedLoggedExercises = session.sortedLoggedExercises
+        }
         .onDisappear {
             resignFocus()
             onMinimizePreparationChanged(nil)
@@ -381,12 +385,18 @@ struct WorkoutSessionView: View {
 
     private var editingSet: LoggedSet? {
         guard let rpeEditingSetID else { return nil }
-        for loggedExercise in session.sortedLoggedExercises {
-            if let match = loggedExercise.sortedSets.first(where: { $0.id == rpeEditingSetID }) {
+        for loggedExercise in cachedSortedLoggedExercises ?? session.sortedLoggedExercises {
+            if let match = loggedExercise.sets.first(where: {
+                $0.id == rpeEditingSetID && $0.deletedAt == nil
+            }) {
                 return match
             }
         }
         return nil
+    }
+
+    private var loggedExerciseStructureKey: Set<LoggedExerciseStructureValue> {
+        Set(session.loggedExercises.map(LoggedExerciseStructureValue.init))
     }
 
     private func isCollapsedBinding(for loggedExercise: LoggedExercise) -> Binding<Bool> {
@@ -462,6 +472,18 @@ struct WorkoutSessionView: View {
     }
 
     private static let focusRevealAnchor = UnitPoint(x: 0.5, y: 0.72)
+}
+
+private struct LoggedExerciseStructureValue: Hashable {
+    let id: UUID
+    let orderIndex: Int
+    let deletedAt: Date?
+
+    init(_ loggedExercise: LoggedExercise) {
+        id = loggedExercise.id
+        orderIndex = loggedExercise.orderIndex
+        deletedAt = loggedExercise.deletedAt
+    }
 }
 
 /// Rebuilds the keyboard route only when structure, collapse, or note

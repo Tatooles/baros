@@ -332,6 +332,28 @@ final class BarosUITests: XCTestCase {
 
         let previousButton = app.buttons["PreviousWorkoutFieldButton"]
         XCTAssertTrue(previousButton.waitForExistence(timeout: 3))
+        nextButton.tap()
+        let nextExerciseField = app.textFields["SetWeightField-1-0"]
+        XCTAssertTrue(nextExerciseField.waitForExistence(timeout: 3))
+        let boundaryFocusExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: nextExerciseField
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [boundaryFocusExpectation], timeout: 3),
+            .completed,
+            "Next from the final set should cross into the next exercise."
+        )
+        previousButton.tap()
+        let reverseBoundaryFocusExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: expectedField
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [reverseBoundaryFocusExpectation], timeout: 3),
+            .completed,
+            "Previous should cross back to the prior exercise's final set."
+        )
         for _ in 0..<10 {
             previousButton.tap()
         }
@@ -2440,6 +2462,8 @@ final class BarosUITests: XCTestCase {
         let secondWeightField = app.textFields["SetWeightField-0-1"]
         XCTAssertTrue(secondWeightField.waitForExistence(timeout: 3))
 
+        secondWeightField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         secondWeightField.swipeLeft()
         let deleteButton = app.buttons["DeleteSetButton-0-1"]
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 2))

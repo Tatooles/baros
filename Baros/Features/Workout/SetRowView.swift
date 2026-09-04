@@ -1,20 +1,41 @@
 import SwiftData
 import SwiftUI
 
-struct SetRowView: View {
+struct SetRowView: View, @MainActor Equatable {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let set: LoggedSet
+    let setID: UUID
+    let weight: Double?
+    let reps: Int?
+    let isCompleted: Bool
+    let rpe: Double?
     let exerciseIndex: Int
     let index: Int
     @Bindable var engine: ActiveWorkoutEngine
     let fieldCommitRegistry: WorkoutFieldCommitRegistry
     var focusedField: FocusState<WorkoutField?>.Binding
+    let isWeightFocused: Bool
+    let isRepsFocused: Bool
     let weightUnit: MeasurementUnit
     let previous: PreviousSetPerformance?
     let onEditRPE: (LoggedSet) -> Void
     @State private var input = ActiveWorkoutSetInput()
     @State private var commitRegistrationID: UUID?
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.setID == rhs.setID
+            && lhs.weight == rhs.weight
+            && lhs.reps == rhs.reps
+            && lhs.isCompleted == rhs.isCompleted
+            && lhs.rpe == rhs.rpe
+            && lhs.index == rhs.index
+            && lhs.exerciseIndex == rhs.exerciseIndex
+            && lhs.weightUnit == rhs.weightUnit
+            && lhs.previous == rhs.previous
+            && lhs.isWeightFocused == rhs.isWeightFocused
+            && lhs.isRepsFocused == rhs.isRepsFocused
+    }
 
     var body: some View {
         SwipeToDeleteRow(
@@ -69,6 +90,7 @@ struct SetRowView: View {
                 text: weightBinding,
                 keyboard: .decimalPad,
                 focusTarget: .setWeight(set.id),
+                isFocused: isWeightFocused,
                 accessibilityIdentifier: "SetWeightField-\(exerciseIndex)-\(index)"
             )
 
@@ -108,6 +130,7 @@ struct SetRowView: View {
                         text: weightBinding,
                         keyboard: .decimalPad,
                         focusTarget: .setWeight(set.id),
+                        isFocused: isWeightFocused,
                         accessibilityIdentifier: "SetWeightField-\(exerciseIndex)-\(index)"
                     )
                 }
@@ -211,6 +234,7 @@ struct SetRowView: View {
             text: repsBinding,
             keyboard: .numberPad,
             focusTarget: .setReps(set.id),
+            isFocused: isRepsFocused,
             accessibilityIdentifier: "SetRepsField-\(exerciseIndex)-\(index)"
         )
         .overlay(alignment: .topTrailing) {
@@ -243,28 +267,55 @@ struct SetRowView: View {
         text: Binding<String>,
         keyboard: UIKeyboardType,
         focusTarget: WorkoutField,
+        isFocused: Bool,
         accessibilityIdentifier: String
     ) -> some View {
-        WorkoutNumericTextField(
-            placeholder: placeholder,
-            text: text,
-            keyboard: keyboard,
-            focusTarget: focusTarget,
-            focusedField: focusedField,
-            accessibilityIdentifier: accessibilityIdentifier,
-            verticalPadding: 8,
-            presentation: .grid
-        )
+        TextField(placeholder, text: text)
+            .keyboardType(keyboard)
+            .multilineTextAlignment(.center)
+            .font(.body.weight(.semibold))
+            .fontDesign(.rounded)
+            .foregroundStyle(AppTheme.textPrimary)
+            .focused(focusedField, equals: focusTarget)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(
+                RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+            )
+            .onTapGesture {
+                guard !isFocused else { return }
+                focusedField.wrappedValue = focusTarget
+            }
+            .background {
+                Rectangle()
+                    .fill(isFocused ? AppTheme.brandAccentMuted : .clear)
+                    .overlay(alignment: .bottom) {
+                        if isFocused {
+                            Rectangle()
+                                .fill(AppTheme.brandFocus)
+                                .frame(height: 2)
+                        }
+                    }
+            }
+            .animation(.easeOut(duration: 0.15), value: isFocused)
+            .accessibilityIdentifier(accessibilityIdentifier)
+            .id(focusTarget)
     }
 
     private var weightBinding: Binding<String> {
         Binding(
             get: { input.text(for: .weight, values: inputValues, weightUnit: weightUnit) },
             set: { value in
+                guard value != input.text(
+                    for: .weight,
+                    values: inputValues,
+                    weightUnit: weightUnit
+                ) else { return }
                 input.update(
                     value,
                     for: .weight,
-                    isFocused: focusedField.wrappedValue == .setWeight(set.id)
+                    isFocused: isWeightFocused
                 )
             }
         )
@@ -274,10 +325,15 @@ struct SetRowView: View {
         Binding(
             get: { input.text(for: .reps, values: inputValues, weightUnit: weightUnit) },
             set: { value in
+                guard value != input.text(
+                    for: .reps,
+                    values: inputValues,
+                    weightUnit: weightUnit
+                ) else { return }
                 input.update(
                     value,
                     for: .reps,
-                    isFocused: focusedField.wrappedValue == .setReps(set.id)
+                    isFocused: isRepsFocused
                 )
             }
         )
@@ -317,8 +373,7 @@ struct SetRowView: View {
     }
 
     private func clearFocusedFieldForThisSet() {
-        if focusedField.wrappedValue == .setWeight(set.id)
-            || focusedField.wrappedValue == .setReps(set.id) {
+        if isWeightFocused || isRepsFocused {
             focusedField.wrappedValue = nil
         }
     }
