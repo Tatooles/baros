@@ -46,7 +46,7 @@ final class SyncScheduler {
     }
 
     enum FailureOrigin: Equatable {
-        case initialPull
+        case remotePull
         case unknown
     }
 
@@ -508,8 +508,8 @@ final class SyncScheduler {
                     }
                     let failureOrigin: FailureOrigin
                     if let coordinatorError = error as? SyncCoordinatorError,
-                       case .initialPullFailed = coordinatorError {
-                        failureOrigin = .initialPull
+                       case .remotePullFailed = coordinatorError {
+                        failureOrigin = .remotePull
                     } else {
                         failureOrigin = .unknown
                     }
@@ -567,7 +567,7 @@ final class SyncScheduler {
         case .incompleteRemotePull:
             lastFailure = nil
         case .syncError:
-            if lastFailure?.origin == .initialPull {
+            if lastFailure?.origin == .remotePull {
                 lastFailure = nil
             }
         case nil:

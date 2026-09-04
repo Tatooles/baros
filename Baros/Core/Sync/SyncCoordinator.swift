@@ -35,7 +35,7 @@ final class SyncCoordinator {
             throw error
         } catch {
             guard let transientCondition = TransientSyncConditionClassifier.errorCode(for: error) else {
-                throw SyncCoordinatorError.initialPullFailed(error)
+                throw SyncCoordinatorError.remotePullFailed(error)
             }
             throw SyncPullInterruption(
                 transientCondition: transientCondition,
@@ -92,9 +92,11 @@ final class SyncCoordinator {
             let summary: SyncPullSummary
             do {
                 summary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            } catch let error as CancellationError {
+                throw error
             } catch {
                 guard let transientCondition = TransientSyncConditionClassifier.errorCode(for: error) else {
-                    throw error
+                    throw SyncCoordinatorError.remotePullFailed(error)
                 }
                 throw SyncPullInterruption(
                     transientCondition: transientCondition,
@@ -1641,12 +1643,12 @@ final class SyncCoordinator {
 }
 
 enum SyncCoordinatorError: LocalizedError {
-    case initialPullFailed(Error)
+    case remotePullFailed(Error)
     case ownerMismatch(entityKind: SyncEntityKind, entityID: UUID)
 
     var errorDescription: String? {
         switch self {
-        case let .initialPullFailed(error):
+        case let .remotePullFailed(error):
             error.localizedDescription
         case let .ownerMismatch(entityKind, entityID):
             "Cannot sync \(entityKind.displayName) \(entityID.uuidString) because the local record belongs to a different owner."

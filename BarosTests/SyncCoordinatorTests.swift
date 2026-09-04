@@ -3742,7 +3742,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(entry.attemptCount, 2)
     }
 
-    func testInitialPullPropagatesCancellation() async throws {
+    func testPullsPropagateCancellation() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let client = FakeSyncClient()
         client.fetchError = CancellationError()
@@ -3751,6 +3751,45 @@ final class SyncCoordinatorTests: XCTestCase {
             _ = try await SyncCoordinator(client: client).run(
                 ownerTokenIdentifier: "issuer|owner_a",
                 context: container.mainContext
+            )
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        let owner = "issuer|owner_a"
+        let postPushContainer = try SwiftDataTestSupport.makeInMemoryContainer()
+        let postPushContext = postPushContainer.mainContext
+        postPushContext.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        postPushContext.insert(exercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            ownerTokenIdentifier: owner,
+            context: postPushContext,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        try postPushContext.save()
+        let postPushClient = FakeSyncClient()
+        postPushClient.onUpsertExercise = { _ in
+            postPushClient.fetchError = CancellationError()
+        }
+
+        do {
+            _ = try await SyncCoordinator(client: postPushClient).run(
+                ownerTokenIdentifier: owner,
+                context: postPushContext
             )
             XCTFail("Expected cancellation")
         } catch is CancellationError {
