@@ -13,7 +13,7 @@ struct SetRowView: View, @MainActor Equatable {
     let exerciseIndex: Int
     let index: Int
     @Bindable var engine: ActiveWorkoutEngine
-    let fieldCommitRegistry: WorkoutFieldCommitRegistry
+    let setInputRegistry: ActiveSetInputRegistry
     var focusedField: FocusState<WorkoutField?>.Binding
     let isWeightFocused: Bool
     let isRepsFocused: Bool
@@ -61,16 +61,24 @@ struct SetRowView: View, @MainActor Equatable {
         }
         .onAppear {
             guard commitRegistrationID == nil else { return }
-            commitRegistrationID = fieldCommitRegistry.register(fields: ownFields) {
-                commitDraftsIfNeeded()
-            }
+            commitRegistrationID = setInputRegistry.register(
+                fields: ownFields,
+                commit: { commitDraftsIfNeeded() },
+                prepareForRPESelection: prepareValuesForRPESelection
+            )
+        }
+        .onChange(of: previous) { _, _ in
+            refreshSetInputRegistration()
+        }
+        .onChange(of: weightUnit) { _, _ in
+            refreshSetInputRegistration()
         }
         .onDisappear {
             // Rows can leave the tree mid-edit (collapse, delete, finish); the
             // central focus transition can no longer reach them, so flush here.
             commitDraftsIfNeeded()
             if let commitRegistrationID {
-                fieldCommitRegistry.unregister(commitRegistrationID)
+                setInputRegistry.unregister(commitRegistrationID)
                 self.commitRegistrationID = nil
             }
         }
@@ -356,6 +364,18 @@ struct SetRowView: View, @MainActor Equatable {
         }
     }
 
+    private func prepareValuesForRPESelection(
+        completesSet: Bool
+    ) -> ActiveWorkoutSetInput.Values {
+        input.preparedValuesForRPESelection(
+            current: inputValues,
+            weightUnit: weightUnit,
+            completesSet: completesSet,
+            isCompleted: set.isCompleted,
+            previous: previous
+        )
+    }
+
     private func fillFromPrevious(_ previous: PreviousSetPerformance) {
         // Commit rather than drop drafts: fillSetFromPrevious only fills fields
         // that are still nil, so a typed-but-uncommitted value must win.
@@ -370,6 +390,15 @@ struct SetRowView: View, @MainActor Equatable {
 
     private var ownFields: [WorkoutField] {
         [.setWeight(set.id), .setReps(set.id)]
+    }
+
+    private func refreshSetInputRegistration() {
+        guard let commitRegistrationID else { return }
+        setInputRegistry.updateRegistration(
+            commitRegistrationID,
+            commit: { commitDraftsIfNeeded() },
+            prepareForRPESelection: prepareValuesForRPESelection
+        )
     }
 
     private func clearFocusedFieldForThisSet() {

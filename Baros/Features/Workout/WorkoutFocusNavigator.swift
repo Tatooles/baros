@@ -229,32 +229,3 @@ final class WorkoutFocusTransitionCoordinator {
         }
     }
 }
-
-@MainActor
-final class WorkoutFieldCommitRegistry {
-    private struct Registration {
-        let id: UUID
-        let commit: () -> Void
-    }
-
-    private var registrations: [WorkoutField: Registration] = [:]
-
-    @discardableResult
-    func register(fields: [WorkoutField], commit: @escaping () -> Void) -> UUID {
-        let id = UUID()
-        let registration = Registration(id: id, commit: commit)
-        for field in fields {
-            registrations[field] = registration
-        }
-        return id
-    }
-
-    func commit(_ field: WorkoutField?) {
-        guard let field else { return }
-        registrations[field]?.commit()
-    }
-
-    func unregister(_ id: UUID) {
-        registrations = registrations.filter { $0.value.id != id }
-    }
-}

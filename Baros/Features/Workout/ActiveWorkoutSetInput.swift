@@ -77,6 +77,30 @@ struct ActiveWorkoutSetInput {
         return Commit(values: values, shouldPersist: values != storedValues)
     }
 
+    mutating func preparedValuesForRPESelection(
+        current: Values,
+        weightUnit: MeasurementUnit,
+        completesSet: Bool,
+        isCompleted: Bool,
+        previous: PreviousSetPerformance?
+    ) -> Values {
+        let committedValues = commit(current: current, weightUnit: weightUnit).values
+        guard completesSet,
+              let previousFill = previousFillBeforeCompletion(
+                isCompleted: isCompleted,
+                values: committedValues,
+                previous: previous
+              )
+        else { return committedValues }
+
+        let preparedValues = Values(
+            weight: committedValues.weight ?? previousFill.weight,
+            reps: committedValues.reps ?? previousFill.reps
+        )
+        clearRejectionsSatisfiedByPreviousFill(preparedValues)
+        return preparedValues
+    }
+
     func previousFillBeforeCompletion(
         isCompleted: Bool,
         values: Values,
@@ -104,5 +128,71 @@ struct ActiveWorkoutSetInput {
         if WorkoutNumericInputPolicy.validatedReps(values.reps) != nil {
             rejectedReps = false
         }
+    }
+}
+
+@MainActor
+final class ActiveSetInputRegistry {
+    private struct Registration {
+        let id: UUID
+        let commit: () -> Void
+        let prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)?
+    }
+
+    private var registrations: [WorkoutField: Registration] = [:]
+
+    @discardableResult
+    func register(
+        fields: [WorkoutField],
+        commit: @escaping () -> Void,
+        prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)? = nil
+    ) -> UUID {
+        let id = UUID()
+        let registration = Registration(
+            id: id,
+            commit: commit,
+            prepareForRPESelection: prepareForRPESelection
+        )
+        for field in fields {
+            registrations[field] = registration
+        }
+        return id
+    }
+
+    func commit(_ field: WorkoutField?) {
+        guard let field else { return }
+        registrations[field]?.commit()
+    }
+
+    func prepareSetValues(
+        for field: WorkoutField?,
+        completesSet: Bool
+    ) -> ActiveWorkoutSetInput.Values? {
+        guard let field else { return nil }
+        return registrations[field]?.prepareForRPESelection?(completesSet)
+    }
+
+    func updateRegistration(
+        _ id: UUID,
+        commit: @escaping () -> Void,
+        prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)?
+    ) {
+        let fields = registrations.compactMap { field, registration in
+            registration.id == id ? field : nil
+        }
+        guard !fields.isEmpty else { return }
+
+        let registration = Registration(
+            id: id,
+            commit: commit,
+            prepareForRPESelection: prepareForRPESelection
+        )
+        for field in fields {
+            registrations[field] = registration
+        }
+    }
+
+    func unregister(_ id: UUID) {
+        registrations = registrations.filter { $0.value.id != id }
     }
 }

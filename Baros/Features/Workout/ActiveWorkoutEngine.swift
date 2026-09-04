@@ -325,18 +325,35 @@ final class ActiveWorkoutEngine {
         return true
     }
 
-    func updateActiveSetRPE(
+    func applyActiveSetRPESelection(
         _ set: LoggedSet,
         rpe: Double?,
+        preparedValues: ActiveWorkoutSetInput.Values,
         context: ModelContext,
-        now: Date = .now
+        now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws {
         let rpe = WorkoutNumericInputPolicy.validatedRPE(rpe)
-        guard WorkoutNumericInputPolicy.validatedRPE(set.rpe) != rpe else { return }
+        let weight = WorkoutNumericInputPolicy.validatedWeight(preparedValues.weight)
+        let reps = WorkoutNumericInputPolicy.validatedReps(preparedValues.reps)
+        let completesSet = rpe != nil && !set.isCompleted
+        let valuesChanged = WorkoutNumericInputPolicy.validatedWeight(set.weight) != weight
+            || WorkoutNumericInputPolicy.validatedReps(set.reps) != reps
+            || WorkoutNumericInputPolicy.validatedRPE(set.rpe) != rpe
 
+        guard valuesChanged || completesSet else { return }
+
+        set.weight = weight
+        set.reps = reps
         set.rpe = rpe
-        set.touchActiveDraft(now: now)
-        try context.save()
+        if completesSet {
+            set.isCompleted = true
+            set.completedAt = now
+            set.touch(now: now)
+        } else {
+            set.touchActiveDraft(now: now)
+        }
+        try save(context)
     }
 
     func fillSetFromPrevious(
