@@ -41,6 +41,79 @@ final class SyncStatusDisplayStateTests: XCTestCase {
         XCTAssertFalse(state.canRetry)
     }
 
+    func testNetworkUnavailableInterruptionMapsToGenericWaiting() {
+        let state = SyncStatusDisplayState.make(
+            ownerTokenIdentifier: "issuer|owner_a",
+            isSyncing: false,
+            transientCondition: .networkUnavailable,
+            lastSyncedAt: nil,
+            lastFailureMessage: nil,
+            pendingCount: 0,
+            failedCount: 0,
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+
+        XCTAssertEqual(state.kind, .waiting)
+        XCTAssertEqual(state.subtitle, "Cloud sync was interrupted. Your data is saved on this iPhone.")
+        XCTAssertEqual(state.trailingText, "Retry")
+        XCTAssertTrue(state.canRetry)
+        XCTAssertFalse(state.showsGlobalFailureNotice)
+    }
+
+    func testTimedOutPullDoesNotAppearUpToDate() {
+        let state = SyncStatusDisplayState.make(
+            ownerTokenIdentifier: "issuer|owner_a",
+            isSyncing: false,
+            transientCondition: .requestTimedOut,
+            lastSyncedAt: nil,
+            lastFailureMessage: nil,
+            pendingCount: 0,
+            failedCount: 0,
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+
+        XCTAssertEqual(state.kind, .waiting)
+        XCTAssertEqual(state.subtitle, "Cloud sync was interrupted. Your data is saved on this iPhone.")
+        XCTAssertEqual(state.trailingText, "Retry")
+        XCTAssertTrue(state.canRetry)
+        XCTAssertFalse(state.showsGlobalFailureNotice)
+    }
+
+    func testQueuedSchedulerRequestMapsToWaiting() {
+        let state = SyncStatusDisplayState.make(
+            ownerTokenIdentifier: "issuer|owner_a",
+            isSyncing: false,
+            hasQueuedSyncRequest: true,
+            lastSyncedAt: nil,
+            lastFailureMessage: nil,
+            pendingCount: 0,
+            failedCount: 0,
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+
+        XCTAssertEqual(state.kind, .waiting)
+        XCTAssertEqual(state.subtitle, "Cloud sync is waiting to resume.")
+        XCTAssertEqual(state.trailingText, "Waiting")
+        XCTAssertTrue(state.canRetry)
+    }
+
+    func testDurableFailureWinsOverTransientInterruption() {
+        let state = SyncStatusDisplayState.make(
+            ownerTokenIdentifier: "issuer|owner_a",
+            isSyncing: false,
+            transientCondition: .networkUnavailable,
+            lastSyncedAt: nil,
+            lastFailureMessage: "Cloud sync could not finish.",
+            lastFailureReason: .failedOutboxPush,
+            pendingCount: 0,
+            failedCount: 1,
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+
+        XCTAssertEqual(state.kind, .needsAttention)
+        XCTAssertTrue(state.showsGlobalFailureNotice)
+    }
+
     func testFailedEntriesMapToNeedsAttentionAndGlobalNotice() {
         let state = SyncStatusDisplayState.make(
             ownerTokenIdentifier: "issuer|owner_a",
