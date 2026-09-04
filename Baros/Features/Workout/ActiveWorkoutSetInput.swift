@@ -172,6 +172,26 @@ final class ActiveSetInputRegistry {
         return registrations[field]?.prepareForRPESelection?(completesSet)
     }
 
+    func updateRegistration(
+        _ id: UUID,
+        commit: @escaping () -> Void,
+        prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)?
+    ) {
+        let fields = registrations.compactMap { field, registration in
+            registration.id == id ? field : nil
+        }
+        guard !fields.isEmpty else { return }
+
+        let registration = Registration(
+            id: id,
+            commit: commit,
+            prepareForRPESelection: prepareForRPESelection
+        )
+        for field in fields {
+            registrations[field] = registration
+        }
+    }
+
     func unregister(_ id: UUID) {
         registrations = registrations.filter { $0.value.id != id }
     }

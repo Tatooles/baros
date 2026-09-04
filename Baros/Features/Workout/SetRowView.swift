@@ -67,6 +67,12 @@ struct SetRowView: View, @MainActor Equatable {
                 prepareForRPESelection: prepareValuesForRPESelection
             )
         }
+        .onChange(of: previous) { _, _ in
+            refreshSetInputRegistration()
+        }
+        .onChange(of: weightUnit) { _, _ in
+            refreshSetInputRegistration()
+        }
         .onDisappear {
             // Rows can leave the tree mid-edit (collapse, delete, finish); the
             // central focus transition can no longer reach them, so flush here.
@@ -384,6 +390,15 @@ struct SetRowView: View, @MainActor Equatable {
 
     private var ownFields: [WorkoutField] {
         [.setWeight(set.id), .setReps(set.id)]
+    }
+
+    private func refreshSetInputRegistration() {
+        guard let commitRegistrationID else { return }
+        setInputRegistry.updateRegistration(
+            commitRegistrationID,
+            commit: { commitDraftsIfNeeded() },
+            prepareForRPESelection: prepareValuesForRPESelection
+        )
     }
 
     private func clearFocusedFieldForThisSet() {

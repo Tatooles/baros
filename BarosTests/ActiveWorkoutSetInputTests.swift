@@ -279,4 +279,32 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
         XCTAssertEqual(values, .init(weight: 200, reps: 5))
         XCTAssertEqual(commitCount, 0)
     }
+
+    @MainActor
+    func testUpdateRegistrationReplacesPreparationForAllRegisteredFields() {
+        let setID = UUID()
+        let fields = [
+            WorkoutField.setWeight(setID),
+            WorkoutField.setReps(setID),
+        ]
+        let registry = ActiveSetInputRegistry()
+        let registrationID = registry.register(
+            fields: fields,
+            commit: {},
+            prepareForRPESelection: { _ in .init(weight: nil, reps: nil) }
+        )
+
+        registry.updateRegistration(
+            registrationID,
+            commit: {},
+            prepareForRPESelection: { _ in .init(weight: 185, reps: 5) }
+        )
+
+        for field in fields {
+            XCTAssertEqual(
+                registry.prepareSetValues(for: field, completesSet: true),
+                .init(weight: 185, reps: 5)
+            )
+        }
+    }
 }
