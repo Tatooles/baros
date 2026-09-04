@@ -416,6 +416,12 @@ final class SyncScheduler {
                         ))
                     }
                     if result.hasMorePendingEntries {
+                        if !result.hasIncompleteRemotePull {
+                            clearResolvedRetryFailureAfterCompletedInitialPull(
+                                ownerTokenIdentifier: syncOwnerTokenIdentifier,
+                                context: modelContext
+                            )
+                        }
                         needsSync = true
                     } else if hasFailedActiveV1OutboxEntries(
                         ownerTokenIdentifier: syncOwnerTokenIdentifier,
@@ -561,18 +567,21 @@ final class SyncScheduler {
         ownerTokenIdentifier: String?,
         context: ModelContext
     ) {
+        let hasFailedOutboxEntries = hasFailedActiveV1OutboxEntries(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        )
         switch lastFailure?.reason {
         case .failedOutboxPush:
-            if !hasFailedActiveV1OutboxEntries(
-                ownerTokenIdentifier: ownerTokenIdentifier,
-                context: context
-            ) {
+            if !hasFailedOutboxEntries {
                 lastFailure = nil
             }
         case .incompleteRemotePull:
-            lastFailure = nil
+            if !hasFailedOutboxEntries {
+                lastFailure = nil
+            }
         case .syncError:
-            if lastFailure?.origin == .remotePull {
+            if lastFailure?.origin == .remotePull && !hasFailedOutboxEntries {
                 lastFailure = nil
             }
         case nil:
