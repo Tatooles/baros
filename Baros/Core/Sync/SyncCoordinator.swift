@@ -28,7 +28,19 @@ final class SyncCoordinator {
         try Task.checkCancellation()
 
         let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
-        let pullSummary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        let pullSummary: SyncPullSummary
+        do {
+            pullSummary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        } catch {
+            guard let transientCondition = TransientSyncConditionClassifier.errorCode(for: error) else {
+                throw error
+            }
+            throw SyncPullInterruption(
+                transientCondition: transientCondition,
+                didCompleteInitialPull: false,
+                hasIncompleteInitialPull: false
+            )
+        }
         var hasIncompleteRemotePull = pullSummary.hasIncompleteRemotePull
         if !pullSummary.hasIncompleteRemotePull {
             observability.record(.syncPhaseCompleted(.pull))
@@ -75,7 +87,19 @@ final class SyncCoordinator {
             )
         }
         if pushResult.didPush {
-            let summary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            let summary: SyncPullSummary
+            do {
+                summary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            } catch {
+                guard let transientCondition = TransientSyncConditionClassifier.errorCode(for: error) else {
+                    throw error
+                }
+                throw SyncPullInterruption(
+                    transientCondition: transientCondition,
+                    didCompleteInitialPull: true,
+                    hasIncompleteInitialPull: pullSummary.hasIncompleteRemotePull
+                )
+            }
             hasIncompleteRemotePull = summary.hasIncompleteRemotePull
             if !summary.hasIncompleteRemotePull {
                 observability.record(.syncPhaseCompleted(.pull))
@@ -156,7 +180,7 @@ final class SyncCoordinator {
                     context: context
                 )
             }
-            if entry.ownerTokenIdentifier == ownerTokenIdentifier, entry.status == .inFlight || entry.status == .failed {
+            if entry.ownerTokenIdentifier == ownerTokenIdentifier, entry.status == .inFlight {
                 recorder.markPendingForRetry(entry, now: .now)
             }
         }
@@ -447,7 +471,7 @@ final class SyncCoordinator {
     }
 
     private func pushPendingEntries(ownerTokenIdentifier: String, context: ModelContext) async throws -> SyncPushResult {
-        let fetchedEntries = try recorder.pendingEntries(
+        let fetchedEntries = try recorder.entriesForPush(
             ownerTokenIdentifier: ownerTokenIdentifier,
             context: context
         )
@@ -458,6 +482,11 @@ final class SyncCoordinator {
                 let rhsRank = syncPushRank(for: rhs)
                 if lhsRank != rhsRank {
                     return lhsRank < rhsRank
+                }
+                let lhsIsDurableRetry = lhs.status == .failed
+                let rhsIsDurableRetry = rhs.status == .failed
+                if lhsIsDurableRetry != rhsIsDurableRetry {
+                    return !lhsIsDurableRetry
                 }
                 if lhs.updatedAt == rhs.updatedAt {
                     return lhs.createdAt < rhs.createdAt
@@ -471,11 +500,13 @@ final class SyncCoordinator {
         for entry in entries {
             try Task.checkCancellation()
             let logicalUpdatedAt = logicalFallbackTimestamp(for: entry)
+            let previousDurableFailureMessage = entry.status == .failed ? entry.lastErrorMessage : nil
+            let wasDurableFailure = entry.status == .failed
             recorder.markInFlight(entry, now: .now)
             needsSave = true
-            try Task.checkCancellation()
 
             do {
+                try Task.checkCancellation()
                 let result = try await push(
                     entry: entry,
                     ownerTokenIdentifier: ownerTokenIdentifier,
@@ -496,6 +527,14 @@ final class SyncCoordinator {
                     needsSave = false
                     completedSinceLastSave = 0
                 }
+            } catch is CancellationError {
+                if wasDurableFailure {
+                    recorder.restoreFailed(entry, message: previousDurableFailureMessage, now: .now)
+                } else {
+                    recorder.markPendingForRetry(entry, now: .now)
+                }
+                try context.save()
+                throw CancellationError()
             } catch {
                 if let syncError = error as? SyncCoordinatorError, case .ownerMismatch = syncError {
                     observability.record(.durableFailure(DurableSyncFailure(
@@ -519,8 +558,17 @@ final class SyncCoordinator {
                     }
                     continue
                 }
+                let transientCondition = TransientSyncConditionClassifier.errorCode(for: error)
                 if entry.status == .inFlight {
-                    recorder.markFailed(entry, message: error.localizedDescription, now: .now)
+                    if transientCondition != nil {
+                        if wasDurableFailure {
+                            recorder.restoreFailed(entry, message: previousDurableFailureMessage, now: .now)
+                        } else {
+                            recorder.markPendingForRetry(entry, now: .now)
+                        }
+                    } else {
+                        recorder.markFailed(entry, message: error.localizedDescription, now: .now)
+                    }
                     needsSave = true
                 }
                 if needsSave {
@@ -529,7 +577,7 @@ final class SyncCoordinator {
                 return SyncPushResult(
                     didComplete: false,
                     didPush: true,
-                    transientCondition: TransientSyncConditionClassifier.errorCode(for: error)
+                    transientCondition: transientCondition
                 )
             }
         }
@@ -1605,6 +1653,12 @@ struct SyncRunResult {
     var hasMorePendingEntries = false
     var hasIncompleteRemotePull = false
     var transientCondition: SyncStableErrorCode?
+}
+
+struct SyncPullInterruption: Error {
+    let transientCondition: SyncStableErrorCode
+    let didCompleteInitialPull: Bool
+    let hasIncompleteInitialPull: Bool
 }
 
 private struct SyncPushResult {
