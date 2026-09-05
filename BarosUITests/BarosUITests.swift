@@ -1001,11 +1001,19 @@ final class BarosUITests: XCTestCase {
         app.buttons["ExerciseMenuButton-0"].tap()
         app.buttons["SwapExerciseButton-0"].tap()
         XCTAssertTrue(app.navigationBars["Swap Exercise"].waitForExistence(timeout: 3))
-        app.buttons["ExercisePickerCreateExerciseButton"].tap()
+
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.tap()
+        searchField.typeText("Swap Test Press")
+
+        let creationButton = app.buttons["ExercisePickerCreateExerciseFromSearchButton"]
+        XCTAssertTrue(creationButton.waitForExistence(timeout: 3))
+        XCTAssertEqual(creationButton.label, "Create new exercise “Swap Test Press”")
+        creationButton.tap()
 
         XCTAssertTrue(app.navigationBars["Create Exercise"].waitForExistence(timeout: 3))
-        app.textFields["ExerciseNameField"].tap()
-        app.textFields["ExerciseNameField"].typeText("Swap Test Press")
+        XCTAssertEqual(app.textFields["ExerciseNameField"].value as? String, "Swap Test Press")
         app.buttons["ExerciseEditorSaveButton"].tap()
 
         XCTAssertTrue(app.staticTexts["Swap Bench Press for Swap Test Press?"].waitForExistence(timeout: 3))

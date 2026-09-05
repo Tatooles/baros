@@ -94,7 +94,6 @@ private struct ExercisePickerList: View {
     }
 
     private var creationSuggestion: ExercisePickerCreationSuggestion? {
-        guard case .add = mode else { return nil }
         return ExercisePickerContent.creationSuggestion(for: rows, query: searchText)
     }
 
