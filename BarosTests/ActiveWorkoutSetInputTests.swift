@@ -28,7 +28,7 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
         var input = ActiveWorkoutSetInput()
         input.update("200", for: .weight, isFocused: true)
 
-        let values = input.preparedValuesForRPESelection(
+        let values = input.preparedValuesForSetAction(
             current: .init(weight: 185, reps: nil),
             weightUnit: .pounds,
             completesSet: true,
@@ -42,7 +42,7 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
     func testPreparingClearSelectionDoesNotFillPreviousValues() {
         var input = ActiveWorkoutSetInput()
 
-        let values = input.preparedValuesForRPESelection(
+        let values = input.preparedValuesForSetAction(
             current: .init(weight: nil, reps: nil),
             weightUnit: .pounds,
             completesSet: false,
@@ -51,6 +51,88 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
         )
 
         XCTAssertEqual(values, .init(weight: nil, reps: nil))
+    }
+
+    func testPreparingCompletionFillsClearedFieldsButKeepsInvalidFieldsMissing() {
+        for (weightText, repsText, expected) in [
+            ("", "", ActiveWorkoutSetInput.Values(weight: 175, reps: 5)),
+            ("invalid", "", .init(weight: nil, reps: 5)),
+            ("", "invalid", .init(weight: 175, reps: nil)),
+            ("invalid", "invalid", .init(weight: nil, reps: nil)),
+            ("200", "8", .init(weight: 200, reps: 8)),
+        ] {
+            var input = ActiveWorkoutSetInput()
+            input.update(weightText, for: .weight, isFocused: true)
+            input.update(repsText, for: .reps, isFocused: true)
+
+            let values = input.preparedValuesForSetAction(
+                current: .init(weight: 200, reps: 8),
+                weightUnit: .pounds,
+                completesSet: true,
+                isCompleted: false,
+                previous: .init(weight: 175, reps: 5)
+            )
+
+            XCTAssertEqual(values, expected, "Inputs: \(weightText), \(repsText)")
+            XCTAssertFalse(input.commit(current: values, weightUnit: .pounds).shouldPersist)
+        }
+    }
+
+    func testPreparingUncheckCommitsClearedAndTypedFieldsWithoutPreviousFill() {
+        var input = ActiveWorkoutSetInput()
+        input.update("", for: .weight, isFocused: true)
+        input.update("8", for: .reps, isFocused: true)
+
+        let values = input.preparedValuesForSetAction(
+            current: .init(weight: 200, reps: 5),
+            weightUnit: .pounds,
+            completesSet: false,
+            isCompleted: true,
+            previous: .init(weight: 175, reps: 6)
+        )
+
+        XCTAssertEqual(values, .init(weight: nil, reps: 8))
+        XCTAssertFalse(input.commit(current: values, weightUnit: .pounds).shouldPersist)
+    }
+
+    func testPreparingCompletedSetRPEEditDoesNotFillClearedFields() {
+        var input = ActiveWorkoutSetInput()
+        input.update("", for: .reps, isFocused: true)
+
+        let values = input.preparedValuesForSetAction(
+            current: .init(weight: 200, reps: 5),
+            weightUnit: .pounds,
+            completesSet: true,
+            isCompleted: true,
+            previous: .init(weight: 175, reps: 6)
+        )
+
+        XCTAssertEqual(values, .init(weight: 200, reps: nil))
+    }
+
+    func testPreparingCompletionConvertsTypedKilogramsAndKeepsPreviousWeightCanonical() throws {
+        var input = ActiveWorkoutSetInput()
+        input.update("100", for: .weight, isFocused: true)
+        let typedValues = input.preparedValuesForSetAction(
+            current: .init(weight: nil, reps: nil),
+            weightUnit: .kilograms,
+            completesSet: true,
+            isCompleted: false,
+            previous: .init(weight: 185, reps: 5)
+        )
+        XCTAssertEqual(try XCTUnwrap(typedValues.weight), 220.462262185, accuracy: 0.000001)
+        XCTAssertEqual(typedValues.reps, 5)
+        XCTAssertFalse(input.commit(current: typedValues, weightUnit: .kilograms).shouldPersist)
+
+        var emptyInput = ActiveWorkoutSetInput()
+        let previousValues = emptyInput.preparedValuesForSetAction(
+            current: .init(weight: nil, reps: nil),
+            weightUnit: .kilograms,
+            completesSet: true,
+            isCompleted: false,
+            previous: .init(weight: 185, reps: 5)
+        )
+        XCTAssertEqual(previousValues, .init(weight: 185, reps: 5))
     }
 
     func testDoesNotReturnPreviousFillWithoutPreviousOrAfterCompletion() {

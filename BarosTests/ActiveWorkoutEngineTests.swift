@@ -640,6 +640,61 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertFalse(progress.isComplete)
     }
 
+    func testCheckmarkCommitsTypedWeightAndPreviousRepsWithOneSaveAndNoFollowUpDraft() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let set = loggedExercise.sets[0]
+        let baseline = Date(timeIntervalSince1970: 100)
+        let completionDate = Date(timeIntervalSince1970: 200)
+        session.updatedAt = baseline
+        loggedExercise.updatedAt = baseline
+        set.updatedAt = baseline
+        set.rpe = 8
+        try context.save()
+        var input = ActiveWorkoutSetInput()
+        input.update("200", for: .weight, isFocused: true)
+        let preparedValues = input.preparedValuesForSetAction(
+            current: .init(weight: set.weight, reps: set.reps),
+            weightUnit: .pounds,
+            completesSet: !set.isCompleted,
+            isCompleted: set.isCompleted,
+            previous: .init(weight: 185, reps: 5)
+        )
+        var saveCount = 0
+
+        try engine.toggleSetCompletion(
+            set,
+            preparedValues: preparedValues,
+            context: context,
+            now: completionDate,
+            save: { context in
+                saveCount += 1
+                XCTAssertEqual(set.weight, 200)
+                XCTAssertEqual(set.reps, 5)
+                XCTAssertTrue(set.isCompleted)
+                try context.save()
+            }
+        )
+
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertEqual(set.rpe, 8)
+        XCTAssertEqual(set.completedAt, completionDate)
+        XCTAssertEqual(set.updatedAt, completionDate)
+        XCTAssertEqual(loggedExercise.updatedAt, completionDate)
+        XCTAssertEqual(session.updatedAt, completionDate)
+        for _ in 0..<2 {
+            let followUp = input.commit(current: .init(weight: set.weight, reps: set.reps), weightUnit: .pounds)
+            XCTAssertFalse(followUp.shouldPersist, "Unchanged blur and disappearance must not request another save.")
+        }
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
     func testCompletingSetUpdatesMetrics() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -906,7 +961,46 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertTrue(set.isCompleted)
     }
 
-    func testUncheckingCompletedSetClearsCompletedAtAndPreservesValues() throws {
+    func testRepeatedRPESelectionDoesNotSaveAndCompletedEditsOnlyTouchSet() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let completionDate = Date(timeIntervalSince1970: 100)
+        let editDate = Date(timeIntervalSince1970: 200)
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let set = loggedExercise.sets[0]
+        try engine.updateSet(set, weight: 185, reps: 5, rpe: 8, context: context)
+        try engine.toggleSetCompletion(set, context: context, now: completionDate)
+        var saveCount = 0
+
+        for rpe: Double? in [8, 9, nil, nil] {
+            try engine.applyActiveSetRPESelection(
+                set,
+                rpe: rpe,
+                preparedValues: .init(weight: 185, reps: 5),
+                context: context,
+                now: editDate,
+                save: { context in
+                    saveCount += 1
+                    try context.save()
+                }
+            )
+        }
+
+        XCTAssertEqual(saveCount, 2, "Only changing RPE and clearing it need saves.")
+        XCTAssertNil(set.rpe)
+        XCTAssertTrue(set.isCompleted)
+        XCTAssertEqual(set.completedAt, completionDate)
+        XCTAssertEqual(set.updatedAt, editDate)
+        XCTAssertEqual(loggedExercise.updatedAt, completionDate)
+        XCTAssertEqual(session.updatedAt, completionDate)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testUncheckingCommitsPendingEditsPreservesRPEAndClearsCompletedAt() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
@@ -915,15 +1009,99 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = loggedExercise.sets[0]
-        try engine.updateSet(set, weight: 195, reps: 4, rpe: nil, context: context)
+        try engine.updateSet(set, weight: 195, reps: 4, rpe: 8, context: context)
         try engine.toggleSetCompletion(set, context: context, now: Date(timeIntervalSince1970: 300))
+        var input = ActiveWorkoutSetInput()
+        input.update("", for: .weight, isFocused: true)
+        input.update("6", for: .reps, isFocused: true)
+        let preparedValues = input.preparedValuesForSetAction(
+            current: .init(weight: set.weight, reps: set.reps),
+            weightUnit: .pounds,
+            completesSet: !set.isCompleted,
+            isCompleted: set.isCompleted,
+            previous: .init(weight: 185, reps: 5)
+        )
+        let uncheckDate = Date(timeIntervalSince1970: 360)
+        var saveCount = 0
 
-        try engine.toggleSetCompletion(set, context: context, now: Date(timeIntervalSince1970: 360))
+        try engine.toggleSetCompletion(
+            set,
+            preparedValues: preparedValues,
+            context: context,
+            now: uncheckDate,
+            save: { context in
+                saveCount += 1
+                try context.save()
+            }
+        )
 
+        XCTAssertEqual(saveCount, 1)
         XCTAssertFalse(set.isCompleted)
-        XCTAssertEqual(set.weight, 195)
-        XCTAssertEqual(set.reps, 4)
+        XCTAssertNil(set.weight)
+        XCTAssertEqual(set.reps, 6)
+        XCTAssertEqual(set.rpe, 8)
         XCTAssertNil(set.completedAt)
+        XCTAssertEqual(set.updatedAt, uncheckDate)
+        XCTAssertEqual(loggedExercise.updatedAt, uncheckDate)
+        XCTAssertEqual(session.updatedAt, uncheckDate)
+        XCTAssertFalse(input.commit(current: preparedValues, weightUnit: .pounds).shouldPersist)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testCheckmarkWithOnlyDraftsOrOnlyPreviousFillSavesOnce() throws {
+        for usesPrevious in [false, true] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let engine = ActiveWorkoutEngine()
+            let set = LoggedSet(orderIndex: 0)
+            context.insert(set)
+            try context.save()
+            var input = ActiveWorkoutSetInput()
+            if !usesPrevious {
+                input.update("185", for: .weight, isFocused: true)
+                input.update("5", for: .reps, isFocused: true)
+            }
+            let preparedValues = input.preparedValuesForSetAction(
+                current: .init(weight: set.weight, reps: set.reps),
+                weightUnit: .pounds,
+                completesSet: true,
+                isCompleted: false,
+                previous: usesPrevious ? .init(weight: 185, reps: 5) : nil
+            )
+            var saveCount = 0
+
+            try engine.toggleSetCompletion(
+                set,
+                preparedValues: preparedValues,
+                context: context,
+                save: { context in
+                    saveCount += 1
+                    try context.save()
+                }
+            )
+
+            XCTAssertEqual(saveCount, 1)
+            XCTAssertEqual(set.weight, 185)
+            XCTAssertEqual(set.reps, 5)
+            XCTAssertTrue(set.isCompleted)
+            XCTAssertFalse(context.hasChanges)
+        }
+    }
+
+    func testCheckmarkPropagatesSaveFailure() throws {
+        enum SaveFailure: Error { case expected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let set = LoggedSet(orderIndex: 0)
+        container.mainContext.insert(set)
+
+        XCTAssertThrowsError(try ActiveWorkoutEngine().toggleSetCompletion(
+            set,
+            preparedValues: .init(weight: 185, reps: 5),
+            context: container.mainContext,
+            save: { _ in throw SaveFailure.expected }
+        )) { error in
+            XCTAssertTrue(error is SaveFailure)
+        }
     }
 
     func testFinalizingWorkoutTitleAppliesDefaultForBlankDraft() throws {
