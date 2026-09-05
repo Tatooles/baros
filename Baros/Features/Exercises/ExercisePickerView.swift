@@ -68,6 +68,7 @@ private struct ExercisePickerList: View {
     let onSelect: (Exercise) -> Void
     @State private var searchText = ""
     @State private var isCreatingExercise = false
+    @State private var creationName = ""
     @State private var sortOrder: ExercisePickerSortOrder
     private let sortPreferenceStore: ExercisePickerSortPreferenceStore
 
@@ -92,10 +93,15 @@ private struct ExercisePickerList: View {
         )
     }
 
+    private var creationSuggestion: ExercisePickerCreationSuggestion? {
+        return ExercisePickerContent.creationSuggestion(for: rows, query: searchText)
+    }
+
     var body: some View {
         List {
             Section {
                 Button {
+                    creationName = ""
                     isCreatingExercise = true
                 } label: {
                     Label("Create Exercise", systemImage: "plus.circle")
@@ -125,6 +131,22 @@ private struct ExercisePickerList: View {
                     .accessibilityIdentifier(
                         "ExercisePickerRow-\(row.exercise.name)-\(row.exercise.equipment.displayName)"
                     )
+                }
+
+                if let creationSuggestion {
+                    Button {
+                        creationName = creationSuggestion.name
+                        isCreatingExercise = true
+                    } label: {
+                        Label(creationSuggestion.title, systemImage: "plus.circle")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(AppTheme.brandAccentForeground)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("ExercisePickerCreateExerciseFromSearchButton")
+                    .accessibilityLabel(creationSuggestion.title)
                 }
             } header: {
                 HStack {
@@ -169,7 +191,7 @@ private struct ExercisePickerList: View {
             }
         }
         .navigationDestination(isPresented: $isCreatingExercise) {
-            ExerciseEditorView { exercise in
+            ExerciseEditorView(initialName: creationName) { exercise in
                 onSelect(exercise)
                 if mode.dismissesAfterCreatingExercise {
                     dismiss()

@@ -49,6 +49,63 @@ final class ExercisePickerModeTests: XCTestCase {
 }
 
 final class ExercisePickerContentTests: XCTestCase {
+    func testCreationSuggestionTrimsQueryAndPreservesCapitalizationForPartialNameMatch() {
+        let rows = pickerRows(
+            for: [exercise(named: "Dumbbell Incline Row")],
+            query: "  Incline Row  "
+        )
+
+        XCTAssertEqual(rows.map { $0.exercise.name }, ["Dumbbell Incline Row"])
+
+        let suggestion = ExercisePickerContent.creationSuggestion(
+            for: rows,
+            query: "  Incline Row  "
+        )
+
+        XCTAssertEqual(suggestion?.name, "Incline Row")
+        XCTAssertEqual(suggestion?.title, "Create new exercise “Incline Row”")
+    }
+
+    func testCreationSuggestionAppearsForMetadataOnlyMatch() {
+        let rows = pickerRows(
+            for: [exercise(named: "Bench Press", equipment: .barbell)],
+            query: "  barbell "
+        )
+
+        XCTAssertEqual(rows.map { $0.exercise.name }, ["Bench Press"])
+
+        let suggestion = ExercisePickerContent.creationSuggestion(for: rows, query: "  barbell ")
+
+        XCTAssertEqual(suggestion?.name, "barbell")
+    }
+
+    func testCreationSuggestionAppearsWhenThereAreNoMatchingRows() {
+        let rows = pickerRows(for: [exercise(named: "Bench Press")], query: "Incline Row")
+
+        XCTAssertTrue(rows.isEmpty)
+
+        let suggestion = ExercisePickerContent.creationSuggestion(for: rows, query: "Incline Row")
+
+        XCTAssertEqual(suggestion?.name, "Incline Row")
+    }
+
+    func testCreationSuggestionIsSuppressedByCaseInsensitiveExactNameMatch() {
+        let rows = pickerRows(for: [exercise(named: "Bench Press")], query: " bench press ")
+
+        XCTAssertEqual(rows.map { $0.exercise.name }, ["Bench Press"])
+
+        let suggestion = ExercisePickerContent.creationSuggestion(for: rows, query: " bench press ")
+
+        XCTAssertNil(suggestion)
+    }
+
+    func testCreationSuggestionIsAbsentForEmptyOrWhitespaceOnlyQuery() {
+        let rows = pickerRows(for: [exercise(named: "Bench Press")])
+
+        XCTAssertNil(ExercisePickerContent.creationSuggestion(for: rows, query: ""))
+        XCTAssertNil(ExercisePickerContent.creationSuggestion(for: rows, query: " \n\t "))
+    }
+
     func testRecentSortPlacesLatestPerformanceFirstAndNeverPerformedLast() {
         let benchPress = exercise(named: "Bench Press")
         let backSquat = exercise(named: "Back Squat", muscleGroup: .quads)
@@ -875,6 +932,19 @@ final class ExercisePickerContentTests: XCTestCase {
             category: .strength,
             equipment: equipment,
             primaryMuscleGroup: muscleGroup
+        )
+    }
+
+    private func pickerRows(
+        for exercises: [Exercise],
+        query: String = ""
+    ) -> [ExercisePickerRowContent] {
+        ExercisePickerContent.makeRows(
+            exercises: exercises,
+            sessions: [],
+            ownerTokenIdentifier: nil,
+            query: query,
+            sortOrder: .recent
         )
     }
 }

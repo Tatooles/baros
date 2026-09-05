@@ -31,6 +31,14 @@ struct ExercisePickerRowContent: Identifiable {
     }
 }
 
+struct ExercisePickerCreationSuggestion: Equatable {
+    let name: String
+
+    var title: String {
+        "Create new exercise “\(name)”"
+    }
+}
+
 enum ExercisePickerContent {
     static func makeRows(
         exercises: [Exercise],
@@ -92,6 +100,21 @@ enum ExercisePickerContent {
             return sorts(lhs.row, before: rhs.row, using: sortOrder)
         }
         .map(\.row)
+    }
+
+    static func creationSuggestion(
+        for rows: [ExercisePickerRowContent],
+        query: String
+    ) -> ExercisePickerCreationSuggestion? {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else { return nil }
+
+        let hasExactNameMatch = rows.contains {
+            $0.exercise.name.localizedCaseInsensitiveCompare(trimmedQuery) == .orderedSame
+        }
+        guard !hasExactNameMatch else { return nil }
+
+        return ExercisePickerCreationSuggestion(name: trimmedQuery)
     }
 
     private static func searchRank(for exercise: Exercise, query: String) -> Int? {

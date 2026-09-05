@@ -804,6 +804,47 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testExercisePickerPrefillsCreationFromSearchAndPreservesSearchOnBack() {
+        let app = makeApp()
+        app.launch()
+
+        startBlankWorkout(in: app)
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        app.buttons["AddExerciseButton"].tap()
+        XCTAssertTrue(app.navigationBars["Add Exercise"].waitForExistence(timeout: 3))
+
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.tap()
+        searchField.typeText("Press")
+
+        let creationButton = app.buttons["ExercisePickerCreateExerciseFromSearchButton"]
+        XCTAssertTrue(creationButton.waitForExistence(timeout: 3))
+        XCTAssertEqual(creationButton.label, "Create new exercise “Press”")
+        XCTAssertTrue(app.buttons["ExercisePickerCreateExerciseButton"].exists)
+
+        let matchingRow = app.buttons["ExercisePickerRow-Bench Press-Barbell"]
+        XCTAssertTrue(matchingRow.waitForExistence(timeout: 3))
+        XCTAssertGreaterThan(creationButton.frame.minY, matchingRow.frame.maxY)
+        creationButton.tap()
+
+        XCTAssertTrue(app.navigationBars["Create Exercise"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.textFields["ExerciseNameField"].value as? String, "Press")
+
+        app.navigationBars["Create Exercise"].buttons["Add Exercise"].tap()
+        XCTAssertTrue(creationButton.waitForExistence(timeout: 3))
+        XCTAssertEqual(app.searchFields.firstMatch.value as? String, "Press")
+
+        creationButton.tap()
+        XCTAssertTrue(app.navigationBars["Create Exercise"].waitForExistence(timeout: 3))
+        app.buttons["ExerciseEditorSaveButton"].tap()
+
+        let addedExerciseHeader = app.buttons["ExerciseHeader-0"]
+        XCTAssertTrue(addedExerciseHeader.waitForExistence(timeout: 3))
+        XCTAssertTrue(addedExerciseHeader.label.contains("Press"))
+    }
+
+    @MainActor
     func testExercisePickerPersistsSortSelectionAcrossRelaunch() {
         addTeardownBlock { @MainActor in
             let cleanupApp = self.makeDiskBackedApp(
@@ -960,11 +1001,19 @@ final class BarosUITests: XCTestCase {
         app.buttons["ExerciseMenuButton-0"].tap()
         app.buttons["SwapExerciseButton-0"].tap()
         XCTAssertTrue(app.navigationBars["Swap Exercise"].waitForExistence(timeout: 3))
-        app.buttons["ExercisePickerCreateExerciseButton"].tap()
+
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.tap()
+        searchField.typeText("Swap Test Press")
+
+        let creationButton = app.buttons["ExercisePickerCreateExerciseFromSearchButton"]
+        XCTAssertTrue(creationButton.waitForExistence(timeout: 3))
+        XCTAssertEqual(creationButton.label, "Create new exercise “Swap Test Press”")
+        creationButton.tap()
 
         XCTAssertTrue(app.navigationBars["Create Exercise"].waitForExistence(timeout: 3))
-        app.textFields["ExerciseNameField"].tap()
-        app.textFields["ExerciseNameField"].typeText("Swap Test Press")
+        XCTAssertEqual(app.textFields["ExerciseNameField"].value as? String, "Swap Test Press")
         app.buttons["ExerciseEditorSaveButton"].tap()
 
         XCTAssertTrue(app.staticTexts["Swap Bench Press for Swap Test Press?"].waitForExistence(timeout: 3))
