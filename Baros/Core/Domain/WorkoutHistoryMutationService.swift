@@ -6,6 +6,7 @@ enum WorkoutHistoryMutationError: LocalizedError, Equatable {
     case ownerMismatch
     case ownerlessBootstrapBlocked
     case invalidDuration
+    case invalidWorkoutDate
     case missingLoggedExercise
     case missingLoggedSet
 
@@ -19,6 +20,8 @@ enum WorkoutHistoryMutationError: LocalizedError, Equatable {
             return "This workout cannot be safely claimed for the current account."
         case .invalidDuration:
             return "Enter a valid duration in minutes."
+        case .invalidWorkoutDate:
+            return "Choose today or an earlier date."
         case .missingLoggedExercise:
             return "One of the edited exercises no longer exists."
         case .missingLoggedSet:
@@ -31,13 +34,56 @@ struct CompletedWorkoutEditDraft {
     var title: String
     var notes: String
     var durationSeconds: Int
+    var date: Date
     var exercises: [CompletedWorkoutEditExerciseDraft]
+    let calendar: Calendar
+    private let originalStartedAt: Date
 
-    init(session: WorkoutSession) {
+    init(session: WorkoutSession, calendar: Calendar = .current) {
         title = session.title
         notes = session.notes
         durationSeconds = session.effectiveDurationSeconds()
+        self.calendar = calendar
+        originalStartedAt = session.startedAt
+        date = calendar.startOfDay(for: session.startedAt)
         exercises = session.sortedLoggedExercises.map(CompletedWorkoutEditExerciseDraft.init(loggedExercise:))
+    }
+
+    var hasDateChange: Bool {
+        !calendar.isDate(date, inSameDayAs: originalStartedAt)
+    }
+
+    func resolvedStartedAt(now: Date) throws -> Date {
+        guard hasDateChange else {
+            return originalStartedAt
+        }
+
+        guard calendar.compare(date, to: now, toGranularity: .day) != .orderedDescending else {
+            throw WorkoutHistoryMutationError.invalidWorkoutDate
+        }
+
+        let time = calendar.dateComponents([.hour, .minute, .second, .nanosecond], from: originalStartedAt)
+        guard let hour = time.hour,
+              let minute = time.minute,
+              let second = time.second
+        else {
+            throw WorkoutHistoryMutationError.invalidWorkoutDate
+        }
+        var selectedDay = calendar.dateComponents([.era, .year, .month, .day, .isLeapMonth], from: date)
+        selectedDay.hour = hour
+        selectedDay.minute = minute
+        selectedDay.second = second
+        guard let resolvedSecond = calendar.date(from: selectedDay) else {
+            throw WorkoutHistoryMutationError.invalidWorkoutDate
+        }
+
+        let resolved = resolvedSecond.addingTimeInterval(
+            TimeInterval(time.nanosecond ?? 0) / 1_000_000_000
+        )
+        guard calendar.isDate(resolved, inSameDayAs: date) else {
+            throw WorkoutHistoryMutationError.invalidWorkoutDate
+        }
+        return resolved
     }
 }
 
@@ -141,6 +187,7 @@ struct WorkoutHistoryMutationService {
         now: Date = .now
     ) throws {
         try validateEditable(session, ownerTokenIdentifier: ownerTokenIdentifier)
+        try validateDraftReferences(draft, for: session)
 
         var didChange = false
         var didChangeSessionFields = false
@@ -152,9 +199,14 @@ struct WorkoutHistoryMutationService {
         )
 
         let normalizedDurationSeconds = max(0, draft.durationSeconds)
+        let resolvedStartedAt = draft.hasDateChange
+            ? try draft.resolvedStartedAt(now: now)
+            : session.startedAt
+        let willChangeDate = resolvedStartedAt != session.startedAt
         let willChangeSessionFields = session.title != draft.title ||
             session.notes != draft.notes ||
-            session.effectiveDurationSeconds() != normalizedDurationSeconds
+            session.effectiveDurationSeconds() != normalizedDurationSeconds ||
+            willChangeDate
 
         if willChangeSessionFields {
             try claimOwnerlessWorkoutGraphIfNeeded(
@@ -175,9 +227,10 @@ struct WorkoutHistoryMutationService {
             didChangeSessionFields = true
         }
 
-        if session.effectiveDurationSeconds() != normalizedDurationSeconds {
+        if willChangeDate || session.effectiveDurationSeconds() != normalizedDurationSeconds {
+            session.startedAt = resolvedStartedAt
             session.durationSeconds = normalizedDurationSeconds
-            session.endedAt = session.startedAt.addingTimeInterval(TimeInterval(normalizedDurationSeconds))
+            session.endedAt = resolvedStartedAt.addingTimeInterval(TimeInterval(normalizedDurationSeconds))
             didChangeSessionFields = true
         }
 
@@ -399,6 +452,24 @@ struct WorkoutHistoryMutationService {
 
         guard session.allowsHistoryMutation(ownerTokenIdentifier: ownerTokenIdentifier) else {
             throw WorkoutHistoryMutationError.ownerMismatch
+        }
+    }
+
+    private func validateDraftReferences(
+        _ draft: CompletedWorkoutEditDraft,
+        for session: WorkoutSession
+    ) throws {
+        let exercisesByID = Dictionary(uniqueKeysWithValues: session.sortedLoggedExercises.map { ($0.id, $0) })
+        for exerciseDraft in draft.exercises {
+            guard let loggedExercise = exercisesByID[exerciseDraft.id] else {
+                throw WorkoutHistoryMutationError.missingLoggedExercise
+            }
+            let setsByID = Dictionary(uniqueKeysWithValues: loggedExercise.sortedSets.map { ($0.id, $0) })
+            for setDraft in exerciseDraft.sets where setDraft.id != nil {
+                guard let setID = setDraft.id, setsByID[setID] != nil else {
+                    throw WorkoutHistoryMutationError.missingLoggedSet
+                }
+            }
         }
     }
 
