@@ -126,6 +126,12 @@ struct SyncOutboxRecorder {
         entry.updatedAt = now
     }
 
+    func restoreFailed(_ entry: SyncOutboxEntry, message: String?, now: Date) {
+        entry.status = .failed
+        entry.lastErrorMessage = message
+        entry.updatedAt = now
+    }
+
     func removeCompleted(_ entry: SyncOutboxEntry, context: ModelContext) {
         guard entry.status == .inFlight else {
             return
@@ -299,6 +305,33 @@ struct SyncOutboxRecorder {
             sortBy: [
                 SortDescriptor(\.updatedAt),
                 SortDescriptor(\.createdAt),
+            ]
+        )
+
+        return try context.fetch(descriptor)
+            .filter { entry in
+                guard let entityKind = entry.entityKind, entityKind.isV1Synced else {
+                    return false
+                }
+                return entry.operation != nil
+            }
+    }
+
+    func entriesForPush(
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws -> [SyncOutboxEntry] {
+        let pendingStatus = SyncOutboxStatus.pending.rawValue
+        let failedStatus = SyncOutboxStatus.failed.rawValue
+        let descriptor = FetchDescriptor<SyncOutboxEntry>(
+            predicate: #Predicate { entry in
+                (entry.statusRaw == pendingStatus || entry.statusRaw == failedStatus)
+                    && entry.ownerTokenIdentifier == ownerTokenIdentifier
+                    && entry.operationRaw != ""
+            },
+            sortBy: [
+                SortDescriptor(\SyncOutboxEntry.updatedAt),
+                SortDescriptor(\SyncOutboxEntry.createdAt),
             ]
         )
 

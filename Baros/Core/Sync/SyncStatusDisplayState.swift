@@ -32,6 +32,8 @@ struct SyncStatusDisplayState {
     static func make(
         ownerTokenIdentifier: String?,
         isSyncing: Bool,
+        transientCondition: SyncStableErrorCode? = nil,
+        hasQueuedSyncRequest: Bool = false,
         lastSyncedAt: Date?,
         lastFailureMessage: String?,
         lastFailureReason: SyncScheduler.FailureReason? = nil,
@@ -95,11 +97,38 @@ struct SyncStatusDisplayState {
             )
         }
 
-        if pendingCount > 0 {
+        if transientCondition != nil {
             return SyncStatusDisplayState(
                 kind: .waiting,
                 title: "Sync Status",
-                subtitle: "\(pendingCount) \(pendingCount == 1 ? "change" : "changes") waiting for cloud sync.",
+                subtitle: "Cloud sync was interrupted. Your data is saved on this iPhone.",
+                detailText: countsText(
+                    pendingCount: pendingCount,
+                    failedCount: failedCount,
+                    lastSyncedAt: lastSyncedAt,
+                    now: now
+                ),
+                trailingText: "Retry",
+                systemImage: "icloud.and.arrow.up",
+                tint: .secondary,
+                canRetry: true,
+                showsGlobalFailureNotice: false,
+                failureNoticeTitle: nil,
+                failureNoticeMessage: nil,
+                userVisibleFailureMessage: nil
+            )
+        }
+
+        if pendingCount > 0 || hasQueuedSyncRequest {
+            let subtitle = if pendingCount > 0 {
+                "\(pendingCount) \(pendingCount == 1 ? "change" : "changes") waiting for cloud sync."
+            } else {
+                "Cloud sync is waiting to resume."
+            }
+            return SyncStatusDisplayState(
+                kind: .waiting,
+                title: "Sync Status",
+                subtitle: subtitle,
                 detailText: lastSyncedText(lastSyncedAt, now: now).map { "Last synced \($0)." },
                 trailingText: "Waiting",
                 systemImage: "icloud.and.arrow.up",

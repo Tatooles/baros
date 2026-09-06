@@ -3456,7 +3456,10 @@ final class SyncCoordinatorTests: XCTestCase {
             observability: observability
         ).run(ownerTokenIdentifier: owner, context: context)
 
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
         XCTAssertEqual(result.transientCondition, .networkUnavailable)
+        XCTAssertEqual(entry.status, .pending)
+        XCTAssertNil(entry.lastErrorMessage)
         XCTAssertTrue(sink.observations.contains {
             $0.kind == .breadcrumb
                 && $0.phase == .pull
@@ -3465,6 +3468,333 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertFalse(sink.observations.contains { $0.kind == .durableFailure })
         XCTAssertFalse(String(describing: sink.observations).contains(owner))
         XCTAssertFalse(String(describing: sink.observations).contains("Private workout content"))
+    }
+
+    func testTransientRetryRestoresPreviouslyDurableOutboxFailure() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let exercise = Exercise(
+            name: "Deadlift",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Hamstrings",
+            syncOwnerTokenIdentifier: owner
+        )
+        let entry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            operation: .update,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200),
+            lastAttemptAt: Date(timeIntervalSince1970: 150),
+            attemptCount: 1,
+            lastErrorMessage: "durable push failure"
+        )
+        context.insert(exercise)
+        context.insert(entry)
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.error = URLError(.notConnectedToInternet)
+
+        let result = try await SyncCoordinator(client: client).run(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertEqual(result.transientCondition, .networkUnavailable)
+        XCTAssertEqual(entry.status, .failed)
+        XCTAssertEqual(entry.lastErrorMessage, "durable push failure")
+        XCTAssertEqual(entry.attemptCount, 2)
+    }
+
+    func testFirstRunTransientRetryPreservesPreviouslyDurableOutboxFailure() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Deadlift",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Hamstrings",
+            syncOwnerTokenIdentifier: owner
+        )
+        let entry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            operation: .update,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200),
+            lastAttemptAt: Date(timeIntervalSince1970: 150),
+            attemptCount: 1,
+            lastErrorMessage: "durable push failure"
+        )
+        context.insert(exercise)
+        context.insert(entry)
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.error = URLError(.notConnectedToInternet)
+
+        let result = try await SyncCoordinator(client: client).run(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertEqual(result.transientCondition, .networkUnavailable)
+        XCTAssertEqual(entry.status, .failed)
+        XCTAssertEqual(entry.lastErrorMessage, "durable push failure")
+        XCTAssertEqual(entry.attemptCount, 2)
+    }
+
+    func testTransientExitDoesNotClearAnUnattemptedDurableOutboxFailure() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let settings = UserSettings(syncOwnerTokenIdentifier: owner)
+        let exercise = Exercise(
+            name: "Deadlift",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Hamstrings",
+            syncOwnerTokenIdentifier: owner
+        )
+        let failedEntry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            operation: .update,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200),
+            lastAttemptAt: Date(timeIntervalSince1970: 150),
+            attemptCount: 1,
+            lastErrorMessage: "durable push failure"
+        )
+        context.insert(settings)
+        context.insert(exercise)
+        context.insert(failedEntry)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .userSettings,
+            entityID: settings.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 300)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.error = URLError(.notConnectedToInternet)
+
+        let result = try await SyncCoordinator(client: client).run(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertEqual(result.transientCondition, .networkUnavailable)
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        let settingsEntry = try XCTUnwrap(entries.first { $0.entityKind == .userSettings })
+        XCTAssertEqual(settingsEntry.status, .pending)
+        XCTAssertEqual(settingsEntry.attemptCount, 1)
+        XCTAssertEqual(failedEntry.status, .failed)
+        XCTAssertEqual(failedEntry.lastErrorMessage, "durable push failure")
+        XCTAssertEqual(failedEntry.attemptCount, 1)
+    }
+
+    func testPendingEntryPushesBeforeDurableRetryAtTheSameDependencyRank() async throws {
+        struct PushError: LocalizedError {
+            var errorDescription: String? { "durable push failure" }
+        }
+
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let failedExercise = Exercise(
+            name: "Failed Exercise",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Back",
+            syncOwnerTokenIdentifier: owner
+        )
+        let pendingExercise = Exercise(
+            name: "Pending Exercise",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        let failedEntry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: failedExercise.id,
+            operation: .update,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100),
+            lastAttemptAt: Date(timeIntervalSince1970: 100),
+            attemptCount: 1,
+            lastErrorMessage: "previous durable failure"
+        )
+        let pendingEntry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: pendingExercise.id,
+            operation: .update,
+            ownerTokenIdentifier: owner,
+            now: Date(timeIntervalSince1970: 200)
+        )
+        context.insert(failedExercise)
+        context.insert(pendingExercise)
+        context.insert(failedEntry)
+        context.insert(pendingEntry)
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.onUpsertExercise = { payload in
+            if payload.clientId == failedExercise.id.uuidString.lowercased() {
+                throw PushError()
+            }
+        }
+
+        _ = try await SyncCoordinator(client: client).run(
+            ownerTokenIdentifier: owner,
+            context: context
+        )
+
+        XCTAssertEqual(client.upsertedExercises.map(\.clientId), [
+            pendingExercise.id.uuidString.lowercased(),
+        ])
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertFalse(entries.contains { $0.id == pendingEntry.id })
+        XCTAssertEqual(failedEntry.status, .failed)
+        XCTAssertEqual(failedEntry.lastErrorMessage, "durable push failure")
+        XCTAssertEqual(failedEntry.attemptCount, 2)
+    }
+
+    func testCancellationRestoresPreviouslyDurableOutboxFailure() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let exercise = Exercise(
+            name: "Deadlift",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Hamstrings",
+            syncOwnerTokenIdentifier: owner
+        )
+        let entry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            operation: .update,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200),
+            lastAttemptAt: Date(timeIntervalSince1970: 150),
+            attemptCount: 1,
+            lastErrorMessage: "durable push failure"
+        )
+        context.insert(exercise)
+        context.insert(entry)
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.onUpsertExercise = { _ in
+            throw CancellationError()
+        }
+
+        do {
+            _ = try await SyncCoordinator(client: client).run(
+                ownerTokenIdentifier: owner,
+                context: context
+            )
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        XCTAssertEqual(entry.status, .failed)
+        XCTAssertEqual(entry.lastErrorMessage, "durable push failure")
+        XCTAssertEqual(entry.attemptCount, 2)
+    }
+
+    func testPullsPropagateCancellation() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let client = FakeSyncClient()
+        client.fetchError = CancellationError()
+
+        do {
+            _ = try await SyncCoordinator(client: client).run(
+                ownerTokenIdentifier: "issuer|owner_a",
+                context: container.mainContext
+            )
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        let owner = "issuer|owner_a"
+        let postPushContainer = try SwiftDataTestSupport.makeInMemoryContainer()
+        let postPushContext = postPushContainer.mainContext
+        postPushContext.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        postPushContext.insert(exercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            ownerTokenIdentifier: owner,
+            context: postPushContext,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        try postPushContext.save()
+        let postPushClient = FakeSyncClient()
+        postPushClient.onUpsertExercise = { _ in
+            postPushClient.fetchError = CancellationError()
+        }
+
+        do {
+            _ = try await SyncCoordinator(client: postPushClient).run(
+                ownerTokenIdentifier: owner,
+                context: postPushContext
+            )
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        }
     }
 
     func testRunRetriesPreviouslyFailedEntryOnNextRun() async throws {
@@ -4163,6 +4493,7 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
         hasMore: SyncHasMore(userSettings: false, exercises: false)
     )
     var onFetchChanges: (() -> Void)?
+    var onUpsertExercise: ((ExerciseSyncPayload) throws -> Void)?
     var onUpsertLoggedExercise: ((LoggedExerciseSyncPayload) throws -> Void)?
     var onUpsertLoggedSet: ((LoggedSetSyncPayload) throws -> Void)?
     var error: Error?
@@ -4179,6 +4510,7 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
 
     func upsertExercise(_ record: ExerciseSyncPayload) async throws -> SyncMutationResult {
         if let error { throw error }
+        try onUpsertExercise?(record)
         upsertedExercises.append(record)
         if !exerciseMutationResults.isEmpty {
             return exerciseMutationResults.removeFirst()
