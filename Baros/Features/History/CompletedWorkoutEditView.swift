@@ -14,7 +14,6 @@ struct CompletedWorkoutEditView: View {
     @State private var durationSelection: CompletedWorkoutDurationSelection
     @State private var hasEditedDuration = false
     @State private var isDurationEditorPresented = false
-    @State private var isDateEditorPresented = false
     @State private var numberInputTexts: [CompletedWorkoutEditFocusedField: WorkoutNumberInputText] = [:]
     @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var errorMessage: String?
@@ -82,12 +81,6 @@ struct CompletedWorkoutEditView: View {
                     hasEditedDuration: $hasEditedDuration
                 )
             }
-            .sheet(isPresented: $isDateEditorPresented) {
-                CompletedWorkoutDateEditor(
-                    selection: $draft.date,
-                    calendar: draft.calendar
-                )
-            }
             .alert(
                 "Remove Set?",
                 isPresented: Binding(
@@ -149,35 +142,32 @@ struct CompletedWorkoutEditView: View {
                 editAffordanceIdentifier: "CompletedWorkoutTitleEditAffordance"
             )
 
-            Button {
-                focusedField = nil
-                isDateEditorPresented = true
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "calendar")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppTheme.brandAccentForeground)
-                    Text("Date")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppTheme.textSecondary)
-                    Spacer()
-                    Text(dateDisplayText)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppTheme.textPrimary)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(AppTheme.textTertiary)
-                }
-                .padding(.horizontal, 14)
-                .frame(minHeight: 48)
-                .background(
-                    AppTheme.fieldSurface,
-                    in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+            HStack(spacing: 10) {
+                Image(systemName: "calendar")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                Text("Date")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.textSecondary)
+                Spacer()
+                DatePicker(
+                    "Date",
+                    selection: $draft.date,
+                    in: ...draft.calendar.startOfDay(for: .now),
+                    displayedComponents: .date
                 )
+                .datePickerStyle(.compact)
+                .labelsHidden()
+                .environment(\.calendar, draft.calendar)
+                .environment(\.timeZone, draft.calendar.timeZone)
+                .accessibilityIdentifier("CompletedWorkoutDatePicker")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Date \(dateDisplayText)")
-            .accessibilityIdentifier("CompletedWorkoutDateButton")
+            .padding(.horizontal, 14)
+            .frame(minHeight: 48)
+            .background(
+                AppTheme.fieldSurface,
+                in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+            )
 
             Button {
                 focusedField = nil
@@ -214,15 +204,6 @@ struct CompletedWorkoutEditView: View {
 
     private var durationDisplayText: String {
         hasDurationChange ? durationSelection.displayText : AppTheme.formatDuration(initialDurationSeconds)
-    }
-
-    private var dateDisplayText: String {
-        let formatter = DateFormatter()
-        formatter.calendar = draft.calendar
-        formatter.timeZone = draft.calendar.timeZone
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: draft.date)
     }
 
     private var hasDurationChange: Bool {
@@ -555,39 +536,6 @@ struct CompletedWorkoutEditView: View {
         } catch {
             modelContext.rollback()
             errorMessage = error.localizedDescription
-        }
-    }
-}
-
-private struct CompletedWorkoutDateEditor: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var selection: Date
-    let calendar: Calendar
-
-    var body: some View {
-        NavigationStack {
-            DatePicker(
-                "Date",
-                selection: $selection,
-                in: ...calendar.startOfDay(for: .now),
-                displayedComponents: .date
-            )
-            .datePickerStyle(.graphical)
-            .labelsHidden()
-            .environment(\.calendar, calendar)
-            .environment(\.timeZone, calendar.timeZone)
-            .padding(AppTheme.shellPadding)
-            .background(AppTheme.canvasBackground.ignoresSafeArea())
-            .navigationTitle("Date")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .accessibilityIdentifier("DoneDateEditButton")
-                }
-            }
         }
     }
 }

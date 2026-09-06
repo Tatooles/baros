@@ -1679,7 +1679,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testCompletedWorkoutDateSheetDoneCancelAndCombinedSave() {
+    func testCompletedWorkoutCompactDatePickerCancelAndCombinedSave() {
         let app = makeApp(completedBenchWorkoutTitles: ["Date Editable Push"])
         app.launch()
 
@@ -1689,15 +1689,14 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["EditWorkoutButton"].waitForExistence(timeout: 3))
         app.buttons["EditWorkoutButton"].tap()
 
-        let dateButton = app.buttons["CompletedWorkoutDateButton"]
-        XCTAssertTrue(dateButton.waitForExistence(timeout: 3))
-        dateButton.tap()
-        XCTAssertTrue(app.navigationBars["Date"].waitForExistence(timeout: 3))
+        let datePicker = app.datePickers["CompletedWorkoutDatePicker"]
+        XCTAssertTrue(datePicker.waitForExistence(timeout: 3))
+        datePicker.tap()
         let previousDay = app.buttons["Monday, November 13"]
         XCTAssertTrue(previousDay.waitForExistence(timeout: 3))
         previousDay.tap()
-        app.buttons["DoneDateEditButton"].tap()
-        XCTAssertTrue(dateButton.waitForExistence(timeout: 3))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.85)).tap()
+        XCTAssertTrue(datePicker.waitForExistence(timeout: 3))
 
         setCompletedWorkoutDuration(minutes: 5, in: app)
         app.navigationBars["Edit Workout"].buttons["Cancel"].tap()
@@ -1706,11 +1705,11 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["1:00:00"].exists)
 
         app.buttons["EditWorkoutButton"].tap()
-        XCTAssertTrue(dateButton.waitForExistence(timeout: 3))
-        dateButton.tap()
+        XCTAssertTrue(datePicker.waitForExistence(timeout: 3))
+        datePicker.tap()
         XCTAssertTrue(previousDay.waitForExistence(timeout: 3))
         previousDay.tap()
-        app.buttons["DoneDateEditButton"].tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.85)).tap()
         setCompletedWorkoutDuration(minutes: 5, in: app)
         app.buttons["SaveCompletedWorkoutEditButton"].tap()
 

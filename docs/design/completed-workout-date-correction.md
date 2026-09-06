@@ -16,7 +16,7 @@ Accepted design for [issue #248](https://github.com/Tatooles/baros/issues/248).
 
 ## Accepted interaction and timing policies
 
-- Replace the read-only date with a Date row beside the existing Duration control. Tapping it opens a sheet with a native calendar date picker and Done. Done returns to the workout draft; only the outer Save persists changes, and outer Cancel discards them.
+- Replace the read-only date with a Date row beside the existing Duration control. Its native compact picker opens the standard iOS calendar overlay above the editor. Dismissing that overlay leaves the selection in the workout draft; only the outer Save persists changes, and outer Cancel discards them.
 - Use the device calendar and time zone captured when the editor opens, keeping that interpretation stable throughout the edit. Preserve the original local time of day on the selected date. Do not add a stored workout time zone or a time-zone selector.
 - Across a daylight-saving gap, advance the nonexistent local time by the gap (for example, 2:30 a.m. becomes 3:30 a.m. for a one-hour gap). For a repeated local time, choose its earlier occurrence. Selecting the original calendar date leaves the original timestamp exactly unchanged, including any daylight-saving ambiguity.
 - Validation concerns the selected calendar date, not the hidden clock time or calculated end time. Preserve duration even if the end crosses midnight or falls later than the current instant. This avoids rejecting choices based on a time the user cannot see or edit.
@@ -36,7 +36,7 @@ The issue's accepted validation scope covers the edit draft and mutation/outbox 
 ## Implementation notes
 
 - `CompletedWorkoutEditDraft` captures the device calendar and time zone when the editor opens. It keeps the original instant separately, so returning to the original calendar day uses that exact value instead of reconstructing an ambiguous local time.
-- The edit screen uses a native graphical `DatePicker` in a Date sheet. Its maximum is the captured calendar's current day; the outer Save validates a changed date again and leaves a failed draft visible.
+- The edit screen uses a native compact `DatePicker` in the Date row. Its standard iOS calendar overlay has the captured calendar's current day as its maximum; the outer Save validates a changed date again and leaves a failed draft visible.
 - A timing mutation captures the original effective duration before moving the start. It updates the session's start, duration, and end together, preserving child set completion timestamps and recording only the workout-session update for an owned date-only correction.
 - The date resolver preserves the selected day’s calendar components, including leap-month identity. Missing local times advance through the daylight-saving gap, and repeated local times resolve to the first occurrence.
 - Draft child references are validated before any mutation or outbox record is created, so a stale editor reference cannot partially apply a date correction.
@@ -44,4 +44,4 @@ The issue's accepted validation scope covers the edit draft and mutation/outbox 
 ## Local validation
 
 - The focused completed-workout date suite covers date-only and combined edits, duration preservation including legacy records, no-op and concurrent-update behavior, future-date validation, DST gaps and repeated times, disk reopening, ownership, rollback preflight, outbox behavior, chronology projections, and export/sync push-and-pull timing.
-- The completed-workout editor UI test covers the graphical calendar sheet, Date Done, outer Cancel, and combined Date/Duration Save. The established completed-edit UI test and the unchanged four-test smoke shard run alongside it.
+- The completed-workout editor UI test covers the compact picker’s calendar overlay, overlay dismissal, outer Cancel, and combined Date/Duration Save. The established completed-edit UI test and the unchanged four-test smoke shard run alongside it.
