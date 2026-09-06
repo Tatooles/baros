@@ -439,11 +439,18 @@ struct WorkoutSessionView: View {
     }
 
     private func moveFocus(offset: Int, scrollProxy: ScrollViewProxy) {
+        // Move focus and its reveal together. A delayed scrollTo starts a
+        // second movement after the keyboard's native reveal settles.
         focusTransitionCoordinator.move(
             offset: offset,
             commit: setInputRegistry.commit,
-            assign: { focusedField = $0 },
-            reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
+            assign: { target in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    focusedField = target
+                    scrollProxy.scrollTo(target, anchor: Self.focusRevealAnchor)
+                }
+            },
+            reveal: { _ in }
         )
     }
 

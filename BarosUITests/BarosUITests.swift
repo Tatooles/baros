@@ -294,7 +294,6 @@ final class BarosUITests: XCTestCase {
     func testLargeActiveWorkoutRapidNextNavigationKeepsLatestTarget() {
         let app = makeApp(extraArguments: [
             "--uitest-seed-large-active-workout",
-            "--uitest-disable-animations",
         ])
         app.launch()
 
@@ -344,6 +343,9 @@ final class BarosUITests: XCTestCase {
             .completed,
             "Next from the final set should cross into the next exercise."
         )
+        let doneButton = app.buttons["DismissKeyboardButton"]
+        XCTAssertTrue(doneButton.waitForExistence(timeout: 3))
+        XCTAssertLessThan(nextExerciseField.frame.maxY, doneButton.frame.minY)
         previousButton.tap()
         let reverseBoundaryFocusExpectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "hasKeyboardFocus == true"),
@@ -354,6 +356,8 @@ final class BarosUITests: XCTestCase {
             .completed,
             "Previous should cross back to the prior exercise's final set."
         )
+        XCTAssertGreaterThan(expectedField.frame.minY, app.buttons["FinishWorkoutButton"].frame.maxY)
+        XCTAssertLessThan(expectedField.frame.maxY, doneButton.frame.minY)
         for _ in 0..<10 {
             previousButton.tap()
         }
