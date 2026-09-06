@@ -67,6 +67,7 @@ private struct ExercisePickerList: View {
     let mode: ExercisePickerMode
     let onSelect: (Exercise) -> Void
     @State private var searchText = ""
+    @State private var isSearchPresented = false
     @State private var isCreatingExercise = false
     @State private var creationName = ""
     @State private var sortOrder: ExercisePickerSortOrder
@@ -179,7 +180,19 @@ private struct ExercisePickerList: View {
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle(mode.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchText, prompt: "Search exercises")
+        .searchable(
+            text: $searchText,
+            isPresented: $isSearchPresented,
+            prompt: "Search exercises"
+        )
+        .onChange(of: isSearchPresented) { _, isPresented in
+            guard mode.isAddExercise else { return }
+            UIHangContextObservability.shared.exerciseSearchEditingChanged(isEditing: isPresented)
+        }
+        .onDisappear {
+            guard mode.isAddExercise else { return }
+            UIHangContextObservability.shared.exerciseSearchEditingChanged(isEditing: false)
+        }
         .onChange(of: sortOrder) { _, newValue in
             sortPreferenceStore.sortOrder = newValue
         }
@@ -215,5 +228,12 @@ private struct ExercisePickerList: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+}
+
+private extension ExercisePickerMode {
+    var isAddExercise: Bool {
+        if case .add = self { return true }
+        return false
     }
 }

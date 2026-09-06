@@ -289,6 +289,43 @@ final class SyncObservabilityTests: XCTestCase {
         inconsistentEvent.tags?["sync_phase"] = "pull"
         XCTAssertNil(SentrySyncEventScrubber.scrub(inconsistentEvent))
     }
+
+    func testCompositeScrubberKeepsSyncPrivacyBoundaryWhenUIContextIsActive() throws {
+        let observation = SanitizedSyncObservation(
+            kind: .durableFailure,
+            level: .error,
+            phase: .push,
+            entityKind: .exercise,
+            operation: .update,
+            outcome: .failure,
+            failureCategory: .outbox,
+            errorCode: .failedOutboxPush,
+            counts: SyncObservationCounts(attempt: 1, pending: 1, failed: 1),
+            fingerprint: [
+                "baros-sync-v1", "push", "exercises", "update",
+                "outbox", "failed_outbox_push", "failure",
+            ],
+            pseudonymousCurrentOwnerID: nil
+        )
+        let event = SentrySyncObservationSink.makeEvent(from: observation)
+        event.tags?["ui_surface"] = "active_workout"
+        event.context?["ui"] = [
+            "schema_version": 1,
+            "exercise_count_bucket": "2_5",
+            "set_count_bucket": "6_10",
+            "focused_field": "set_reps",
+        ]
+        event.breadcrumbs = [
+            SentrySyncObservationSink.makeBreadcrumb(from: observation),
+            SentryUIHangContextSink.makeBreadcrumb(.addExercisePresented),
+        ]
+
+        let scrubbed = try XCTUnwrap(SentryEventScrubber.scrub(event))
+
+        XCTAssertNil(scrubbed.tags?["ui_surface"])
+        XCTAssertNil(scrubbed.context?["ui"])
+        XCTAssertEqual(scrubbed.breadcrumbs?.map(\.category), ["baros.sync"])
+    }
 }
 
 @MainActor
