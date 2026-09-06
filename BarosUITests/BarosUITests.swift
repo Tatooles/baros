@@ -1,6 +1,11 @@
 import XCTest
 
 final class BarosUITests: XCTestCase {
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        continueAfterFailure = false
+    }
+
     @MainActor
     func testStartBlankWorkoutFlow() {
         let app = makeApp()
@@ -576,11 +581,11 @@ final class BarosUITests: XCTestCase {
         app.buttons["KeepGoingButton"].tap()
 
         minimizeActiveWorkout(in: app)
-        app.buttons["HistoryTab"].tap()
+        tapTab(identifier: "HistoryTab", label: "History", in: app)
         XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 3))
 
-        app.buttons["ProfileTab"].tap()
+        tapTab(identifier: "ProfileTab", label: "Profile", in: app)
         XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.searchFields.firstMatch.exists)
         XCTAssertTrue(app.staticTexts["ProfileEnvironmentBadge"].exists)
@@ -596,7 +601,7 @@ final class BarosUITests: XCTestCase {
 
         createCompletedBenchWorkout(in: app)
 
-        app.buttons["HistoryTab"].tap()
+        tapTab(identifier: "HistoryTab", label: "History", in: app)
         let completedWorkout = app.buttons["WorkoutHistoryButton-0"]
         XCTAssertTrue(completedWorkout.waitForExistence(timeout: 3))
         completedWorkout.tap()
@@ -2310,8 +2315,7 @@ final class BarosUITests: XCTestCase {
         app.buttons["SettingsDeleteLocalDataRow"].tap()
         XCTAssertTrue(app.navigationBars["Delete Local Data"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["DeleteDataConfirmButton"].isEnabled)
-        app.textFields["DeleteDataConfirmationField"].tap()
-        app.textFields["DeleteDataConfirmationField"].typeText("DELETE")
+        enterDeleteConfirmation(in: app)
         XCTAssertTrue(app.buttons["DeleteDataConfirmButton"].isEnabled)
     }
 
@@ -2328,8 +2332,7 @@ final class BarosUITests: XCTestCase {
         app.buttons["SettingsDeleteLocalDataRow"].tap()
 
         XCTAssertTrue(app.navigationBars["Delete Local Data"].waitForExistence(timeout: 3))
-        app.textFields["DeleteDataConfirmationField"].tap()
-        app.textFields["DeleteDataConfirmationField"].typeText("DELETE")
+        enterDeleteConfirmation(in: app)
         app.buttons["DeleteDataConfirmButton"].tap()
 
         XCTAssertTrue(app.staticTexts["ProfileTitle"].waitForExistence(timeout: 3))
@@ -2352,8 +2355,7 @@ final class BarosUITests: XCTestCase {
         app.buttons["SettingsDeleteAccountRow"].tap()
         XCTAssertTrue(app.navigationBars["Delete Account"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["DeleteDataConfirmButton"].isEnabled)
-        app.textFields["DeleteDataConfirmationField"].tap()
-        app.textFields["DeleteDataConfirmationField"].typeText("DELETE")
+        enterDeleteConfirmation(in: app)
         XCTAssertTrue(app.buttons["DeleteDataConfirmButton"].isEnabled)
     }
 
@@ -2781,27 +2783,33 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     private func tapTab(identifier: String, label: String, in app: XCUIApplication) {
-        let identifiedTab = app.buttons[identifier]
-        if identifiedTab.waitForExistence(timeout: 5) {
-            identifiedTab.tap()
-            return
-        }
-
-        let labeledTab = app.buttons[label]
-        XCTAssertTrue(labeledTab.waitForExistence(timeout: 2))
-        labeledTab.tap()
+        let tab = app.buttons.matching(
+            NSPredicate(format: "identifier == %@ OR label == %@", identifier, label)
+        ).firstMatch
+        XCTAssertTrue(waitForHittable(tab, timeout: 3), "Expected tab \(identifier) or \(label) to be ready")
+        tab.tap()
     }
 
     @MainActor
     private func openFinishWorkoutSheet(in app: XCUIApplication) {
         let finishButton = app.buttons["FinishWorkoutButton"]
-        XCTAssertTrue(finishButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(waitForHittable(finishButton, timeout: 3))
         finishButton.tap()
 
-        XCTAssertTrue(
-            app.buttons["SaveWorkoutButton"].waitForExistence(timeout: 3)
-                || app.buttons["KeepGoingButton"].waitForExistence(timeout: 3)
-        )
+        let sheetAction = app.buttons.matching(
+            NSPredicate(format: "identifier == 'SaveWorkoutButton' OR identifier == 'KeepGoingButton'")
+        ).firstMatch
+        XCTAssertTrue(waitForHittable(sheetAction, timeout: 3), "Expected finish sheet action to be ready")
+    }
+
+    @MainActor
+    private func enterDeleteConfirmation(in app: XCUIApplication) {
+        let field = app.textFields["DeleteDataConfirmationField"]
+        XCTAssertTrue(waitForHittable(field, timeout: 3))
+        field.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        field.typeText("DELETE")
+        XCTAssertEqual(field.value as? String, "DELETE")
     }
 
     @MainActor
@@ -2884,6 +2892,7 @@ final class BarosUITests: XCTestCase {
     @MainActor
     private func minimizeActiveWorkout(in app: XCUIApplication) {
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(waitForAbsence(app.buttons["KeepGoingButton"], timeout: 3))
         dismissKeyboardIfNeeded(in: app)
 
         let sheetGrabber = app.buttons["Sheet Grabber"]
@@ -2894,8 +2903,8 @@ final class BarosUITests: XCTestCase {
         grabber.press(forDuration: 0.1, thenDragTo: lowerScreen)
 
         let accessory = app.buttons["ActiveWorkoutAccessory"]
-        XCTAssertTrue(accessory.waitForExistence(timeout: 3))
-        XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
+        XCTAssertTrue(waitForHittable(accessory, timeout: 3))
+        XCTAssertTrue(waitForAbsence(app.textFields["WorkoutTitle"], timeout: 3))
     }
 
     @MainActor
@@ -3211,8 +3220,35 @@ final class BarosUITests: XCTestCase {
     @MainActor
     private func dismissKeyboardIfNeeded(in app: XCUIApplication) {
         if app.keyboards.firstMatch.waitForExistence(timeout: 1) {
-            app.buttons["DismissKeyboardButton"].tap()
+            let dismissButton = app.buttons["DismissKeyboardButton"]
+            XCTAssertTrue(waitForHittable(dismissButton, timeout: 2))
+            dismissButton.tap()
+            XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
         }
+    }
+
+    @MainActor
+    private func waitForHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if element.exists && element.isHittable {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+        return element.exists && element.isHittable
+    }
+
+    @MainActor
+    private func waitForAbsence(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if !element.exists {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+        return !element.exists
     }
 
     @MainActor
