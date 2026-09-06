@@ -1,12 +1,12 @@
 import Foundation
 
-enum UIHangSurface: String, CaseIterable, Equatable {
+enum UIHangSurface: String, Equatable {
     case activeWorkout = "active_workout"
     case exercisePicker = "exercise_picker"
 }
 
 /// Shared, bounded buckets keep workout scale useful without sending exact counts.
-enum UIHangCountBucket: String, CaseIterable, Equatable {
+enum UIHangCountBucket: String, Equatable {
     case zero = "0"
     case one = "1"
     case twoToFive = "2_5"
@@ -52,7 +52,7 @@ enum UIHangFocusedField: String, CaseIterable, Equatable {
     }
 }
 
-enum UIHangBreadcrumb: String, CaseIterable, Equatable {
+enum UIHangBreadcrumb: String, Equatable {
     case addExercisePresented = "add_exercise_presented"
     case addExerciseDismissed = "add_exercise_dismissed"
     case exerciseSearchBegan = "exercise_search_began"

@@ -518,15 +518,17 @@ struct WorkoutSessionView: View {
 
 private struct LoggedExerciseStructureValue: Hashable {
     let id: UUID
-    let orderIndex: Int
     let deletedAt: Date?
-    let setIDs: [UUID]
+    let activeSetIDs: Set<UUID>
 
     init(_ loggedExercise: LoggedExercise) {
         id = loggedExercise.id
-        orderIndex = loggedExercise.orderIndex
         deletedAt = loggedExercise.deletedAt
-        setIDs = loggedExercise.sortedSets.map(\.id)
+        activeSetIDs = Set(
+            loggedExercise.sets.lazy.compactMap { set in
+                set.deletedAt == nil ? set.id : nil
+            }
+        )
     }
 }
 
