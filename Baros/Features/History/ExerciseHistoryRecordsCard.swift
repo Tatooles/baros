@@ -10,13 +10,12 @@ struct ExerciseHistoryRecordsCard: View {
     var body: some View {
         SurfaceCard {
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
+                HStack(spacing: 0) {
                     Text("Records")
                         .font(.footnote.weight(.semibold))
                         .textCase(.uppercase)
                         .tracking(0.5)
                         .foregroundStyle(BarosAdaptiveColor.dynamic(light: 0x594115, dark: 0xD8B764))
-                    Spacer()
                     Button { showsInformation = true } label: {
                         Image(systemName: "info.circle")
                             .font(.subheadline)
@@ -28,6 +27,7 @@ struct ExerciseHistoryRecordsCard: View {
                     .accessibilityLabel("About strength records")
                     .accessibilityIdentifier("AboutStrengthRecordsButton")
                     .padding(.vertical, -10)
+                    Spacer()
                 }
 
                 if records.hasMixedEquipment {
