@@ -1675,8 +1675,8 @@ final class BarosUITests: XCTestCase {
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
         app.buttons["ExerciseHistoryButton-0"].tap()
-        XCTAssertTrue(app.staticTexts["205.5 x 6 @ 8"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["135 x 8 @ 7.5"].exists)
+        XCTAssertTrue(exerciseHistorySetValue("205.5 x 6 @ 8", in: app).waitForExistence(timeout: 3))
+        XCTAssertTrue(exerciseHistorySetValue("135 x 8 @ 7.5", in: app).exists)
     }
 
     @MainActor
@@ -1825,8 +1825,8 @@ final class BarosUITests: XCTestCase {
         relaunchedApp.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
         XCTAssertTrue(relaunchedApp.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
         relaunchedApp.buttons["ExerciseHistoryButton-0"].tap()
-        XCTAssertTrue(relaunchedApp.staticTexts["185 x 5 @ 8"].waitForExistence(timeout: 3))
-        XCTAssertTrue(relaunchedApp.staticTexts["135 x 8 @ 7.5"].exists)
+        XCTAssertTrue(exerciseHistorySetValue("185 x 5 @ 8", in: relaunchedApp).waitForExistence(timeout: 3))
+        XCTAssertTrue(exerciseHistorySetValue("135 x 8 @ 7.5", in: relaunchedApp).exists)
     }
 
     @MainActor
@@ -2222,7 +2222,7 @@ final class BarosUITests: XCTestCase {
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
         app.buttons["ExerciseHistoryButton-0"].tap()
-        XCTAssertTrue(app.staticTexts["83.91 x 5 @ 8"].waitForExistence(timeout: 3))
+        XCTAssertTrue(exerciseHistorySetValue("83.91 x 5 @ 8", in: app).waitForExistence(timeout: 3))
     }
 
     @MainActor
@@ -2736,6 +2736,14 @@ final class BarosUITests: XCTestCase {
         let firstExercise = app.buttons["ExerciseHistoryButton-0"]
         XCTAssertTrue(firstExercise.waitForExistence(timeout: 3))
         firstExercise.tap()
+    }
+
+    @MainActor
+    private func exerciseHistorySetValue(_ summary: String, in app: XCUIApplication) -> XCUIElement {
+        app.staticTexts.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+            "ExerciseHistorySetValue-", summary
+        )).firstMatch
     }
 
     @MainActor

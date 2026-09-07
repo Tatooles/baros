@@ -35,8 +35,10 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         attachScreenshot(named: "Gold inline source set badges", app: app)
 
         let values = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"))
-        let heaviestValue = values.matching(NSPredicate(format: "label == %@", "225 x 1")).firstMatch
-        let estimateValue = values.matching(NSPredicate(format: "label == %@", "210 x 5")).firstMatch
+        let heaviestValue = values.matching(NSPredicate(format: "label CONTAINS %@", "225 x 1")).firstMatch
+        let estimateValue = values.matching(NSPredicate(format: "label CONTAINS %@", "210 x 5")).firstMatch
+        XCTAssertTrue(heaviestValue.label.contains("Heaviest Rep"))
+        XCTAssertTrue(estimateValue.label.contains("Estimated 1RM"))
         XCTAssertLessThanOrEqual(heaviestBadge.frame.maxX, heaviestValue.frame.minX)
         XCTAssertLessThanOrEqual(estimateBadge.frame.maxX, estimateValue.frame.minX)
         XCTAssertLessThan(abs(estimateBadge.frame.midY - estimateValue.frame.midY), 5)
@@ -54,6 +56,34 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(badge.frame.minX, 0)
         XCTAssertLessThanOrEqual(badge.frame.maxX, app.frame.maxX)
         attachScreenshot(named: "Source badges at accessibility text size", app: app)
+    }
+
+    func testSparseHistoryAndDoubleBadgesWithLongWorkoutTitle() {
+        for scenario in ["same-set", "no-estimate", "empty"] {
+            let app = openRecords(extraArguments: ["--uitest-strength-records-scenario", scenario])
+            switch scenario {
+            case "same-set":
+                let value = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"))
+                    .matching(NSPredicate(format: "label CONTAINS %@", "225 x 5")).firstMatch
+                for _ in 0..<5 where !value.isHittable { app.swipeUp() }
+                XCTAssertTrue(value.isHittable)
+                XCTAssertTrue(value.label.contains("Heaviest Rep"))
+                XCTAssertTrue(value.label.contains("Estimated 1RM"))
+                let badges = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseRecordBadge-"))
+                XCTAssertEqual(badges.count, 2)
+                for badge in badges.allElementsBoundByIndex {
+                    XCTAssertLessThanOrEqual(badge.frame.maxX, value.frame.minX)
+                }
+            case "no-estimate":
+                XCTAssertTrue(app.staticTexts["No estimate yet"].waitForExistence(timeout: 3))
+                XCTAssertFalse(app.descendants(matching: .any)["ExerciseRecord-estimated1RM"].exists)
+            default:
+                XCTAssertTrue(app.staticTexts["No records yet"].waitForExistence(timeout: 3))
+                XCTAssertFalse(app.descendants(matching: .any)["ExerciseRecord-heaviestRep"].exists)
+            }
+            attachScreenshot(named: "Strength records \(scenario)", app: app)
+            app.terminate()
+        }
     }
 
     private func openRecords(extraArguments: [String] = []) -> XCUIApplication {

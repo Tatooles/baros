@@ -49,18 +49,28 @@ enum UITestFixtureSeeder {
         }
 
         if arguments.contains("--uitest-seed-strength-records") {
-            try seedStrengthRecords(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            try seedStrengthRecords(
+                scenario: values(after: "--uitest-strength-records-scenario", in: arguments).first,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
         }
     }
 
-    private static func seedStrengthRecords(ownerTokenIdentifier: String?, context: ModelContext) throws {
+    private static func seedStrengthRecords(scenario: String?, ownerTokenIdentifier: String?, context: ModelContext) throws {
         let exercises = try context.fetch(FetchDescriptor<Exercise>())
         let benchPress = Exercise.visibleActiveExercises(from: exercises, ownerTokenIdentifier: ownerTokenIdentifier)
             .first { $0.seedIdentifier == "bench-press" }
-        let performances: [(Date, [(Double, Int)])] = [
+        var performances: [(Date, [(Double?, Int)])] = [
             (Date(timeIntervalSince1970: 1_788_544_800), [(185, 5), (205, 3), (225, 1)]),
             (Date(timeIntervalSince1970: 1_788_372_000), [(205, 5), (210, 5), (195, 6)]),
         ]
+        switch scenario {
+        case "same-set": performances = [(performances[0].0, [(185, 5), (205, 3), (225, 5)])]
+        case "no-estimate": performances = [(performances[0].0, [(185, 12), (205, 12), (225, 12)])]
+        case "empty": performances = [(performances[0].0, [(nil, 5)])]
+        default: break
+        }
         for (date, values) in performances {
             let sets = values.enumerated().map { index, value in
                 LoggedSet(orderIndex: index, weight: value.0, reps: value.1, isCompleted: true)
@@ -74,7 +84,7 @@ enum UITestFixtureSeeder {
                 sets: sets
             )
             context.insert(WorkoutSession(
-                title: "Upper Body",
+                title: scenario == "same-set" ? "Upper Body — Bench Press, Paused Reps and Accessories" : "Upper Body",
                 startedAt: date,
                 endedAt: date.addingTimeInterval(3_600),
                 durationSeconds: 3_600,

@@ -192,6 +192,10 @@ struct ExerciseHistorySessionGroupCard: View {
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(AppTheme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(
+                    (["Set \(entry.displaySetNumber)", setSummary(for: entry.set)] + kinds.map(\.title))
+                        .joined(separator: ", ")
+                )
                 .accessibilityIdentifier("ExerciseHistorySetValue-\(entry.id.uuidString)")
         }
     }
