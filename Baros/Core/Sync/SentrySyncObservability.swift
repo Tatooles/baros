@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 import Sentry
 import StoreKit
@@ -134,7 +135,7 @@ enum SentryUIHangEventScrubber {
     private static func isValid(surface: String, context: [String: Any]) -> Bool {
         guard UIHangSurface(rawValue: surface) != nil,
               Set(context.keys).isSubset(of: allowedContextKeys),
-              (context["schema_version"] as? NSNumber)?.intValue == 1 else {
+              isExactSchemaVersionOne(context["schema_version"]) else {
             return false
         }
 
@@ -170,10 +171,18 @@ enum SentryUIHangEventScrubber {
               UIHangBreadcrumb(rawValue: message) != nil,
               let data = breadcrumb.data as? [String: Any],
               Set(data.keys) == ["schema_version"],
-              (data["schema_version"] as? NSNumber)?.intValue == 1 else {
+              isExactSchemaVersionOne(data["schema_version"]) else {
             return false
         }
         return true
+    }
+
+    private static func isExactSchemaVersionOne(_ value: Any?) -> Bool {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else {
+            return false
+        }
+        return number.doubleValue == 1
     }
 }
 

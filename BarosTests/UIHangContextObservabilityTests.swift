@@ -159,6 +159,33 @@ final class UIHangContextObservabilityTests: XCTestCase {
         }
     }
 
+    func testUIScrubberRequiresExactIntegerSchemaVersion() throws {
+        let invalidVersions: [Any] = [true, 1.5, 1.9, 0, 2, "1", NSNull()]
+
+        for invalidVersion in invalidVersions {
+            let event = Event(level: .fatal)
+            event.tags = ["ui_surface": "active_workout"]
+            event.context = [
+                "ui": [
+                    "schema_version": invalidVersion,
+                    "exercise_count_bucket": "2_5",
+                    "set_count_bucket": "6_10",
+                ],
+            ]
+            let breadcrumb = Breadcrumb(level: .info, category: "baros.ui")
+            breadcrumb.type = "navigation"
+            breadcrumb.message = "exercise_search_began"
+            breadcrumb.setData(value: invalidVersion, key: "schema_version")
+            event.breadcrumbs = [breadcrumb]
+
+            let scrubbed = try XCTUnwrap(SentryUIHangEventScrubber.scrub(event))
+
+            XCTAssertNil(scrubbed.tags?["ui_surface"], "context schema version: \(invalidVersion)")
+            XCTAssertNil(scrubbed.context?["ui"], "context schema version: \(invalidVersion)")
+            XCTAssertTrue(scrubbed.breadcrumbs?.isEmpty == true, "breadcrumb schema version: \(invalidVersion)")
+        }
+    }
+
     func testUIScrubberRemovesProhibitedContextAndBreadcrumbData() throws {
         let event = Event(level: .fatal)
         event.tags = [
