@@ -1934,6 +1934,10 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(weight.value as? String, "Suggested 90")
         XCTAssertEqual(weight.label, "LBS")
         XCTAssertEqual(weight.placeholderValue, "90")
+        let suggestionsScreenshot = XCTAttachment(screenshot: app.screenshot())
+        suggestionsScreenshot.name = "Suggestions at accessibility text size"
+        suggestionsScreenshot.lifetime = .keepAlways
+        add(suggestionsScreenshot)
         let row = app.descendants(matching: .any)["SetAccessibilityBottomRow-0-1"]
         XCTAssertTrue(row.exists)
         XCTAssertLessThanOrEqual(row.frame.maxX, app.windows.firstMatch.frame.maxX)
@@ -1966,6 +1970,10 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(secondWeight.value as? String, "Suggested 90")
         XCTAssertEqual(secondReps.value as? String, "Suggested 12")
         XCTAssertEqual(thirdReps.value as? String, "Suggested 12")
+        let suggestionsScreenshot = XCTAttachment(screenshot: app.screenshot())
+        suggestionsScreenshot.name = "Earlier-set suggestions before acceptance"
+        suggestionsScreenshot.lifetime = .keepAlways
+        add(suggestionsScreenshot)
         secondWeight.tap()
         dismissKeyboardIfNeeded(in: app)
         XCTAssertEqual(secondWeight.value as? String, "Suggested 90")
