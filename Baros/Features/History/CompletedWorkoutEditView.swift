@@ -8,6 +8,7 @@ struct CompletedWorkoutEditView: View {
 
     let session: WorkoutSession
     let weightUnit: MeasurementUnit
+    private let initialDate: Date
     private let initialDurationSeconds: Int
     private let initialDurationSelection: CompletedWorkoutDurationSelection
     @State private var draft: CompletedWorkoutEditDraft
@@ -23,6 +24,7 @@ struct CompletedWorkoutEditView: View {
     init(session: WorkoutSession, draft: CompletedWorkoutEditDraft, weightUnit: MeasurementUnit) {
         self.session = session
         self.weightUnit = weightUnit
+        initialDate = draft.date
         initialDurationSeconds = draft.durationSeconds
         initialDurationSelection = CompletedWorkoutDurationSelection(seconds: draft.durationSeconds)
         _draft = State(initialValue: draft)
@@ -153,7 +155,7 @@ struct CompletedWorkoutEditView: View {
                 DatePicker(
                     "Date",
                     selection: $draft.date,
-                    in: ...draft.calendar.startOfDay(for: .now),
+                    in: ...datePickerMaximum,
                     displayedComponents: .date
                 )
                 .datePickerStyle(.compact)
@@ -204,6 +206,11 @@ struct CompletedWorkoutEditView: View {
 
     private var durationDisplayText: String {
         hasDurationChange ? durationSelection.displayText : AppTheme.formatDuration(initialDurationSeconds)
+    }
+
+    private var datePickerMaximum: Date {
+        // Keep existing future dates visible; Save rejects newly chosen future days.
+        max(initialDate, draft.calendar.startOfDay(for: .now))
     }
 
     private var hasDurationChange: Bool {

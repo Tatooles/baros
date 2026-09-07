@@ -1719,6 +1719,76 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testEditingExistingFutureDatedWorkoutDoesNotClampItsDate() {
+        let app = makeApp(
+            extraArguments: ["--uitest-seed-future-completed-bench-workout", "Future Imported Push"]
+        )
+        app.launch()
+
+        app.buttons["HistoryTab"].tap()
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["WorkoutHistoryButton-0"].tap()
+        XCTAssertTrue(app.staticTexts["Dec 31, 2030"].waitForExistence(timeout: 3))
+
+        app.buttons["EditWorkoutButton"].tap()
+        let datePicker = app.datePickers["CompletedWorkoutDatePicker"]
+        XCTAssertTrue(datePicker.waitForExistence(timeout: 3))
+        replaceText(in: app.textFields["CompletedWorkoutTitleField"], with: "Future Title Corrected")
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+
+        XCTAssertTrue(app.navigationBars["Future Title Corrected"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Dec 31, 2030"].exists)
+
+        app.buttons["EditWorkoutButton"].tap()
+        XCTAssertTrue(datePicker.waitForExistence(timeout: 3))
+        let dateControlScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        dateControlScreenshot.name = "Future completed workout date control"
+        dateControlScreenshot.lifetime = .keepAlways
+        add(dateControlScreenshot)
+        datePicker.tap()
+        XCTAssertTrue(app.buttons["Tuesday, December 31"].waitForExistence(timeout: 3))
+        let pickerScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        pickerScreenshot.name = "Future completed workout compact date picker"
+        pickerScreenshot.lifetime = .keepAlways
+        add(pickerScreenshot)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.85)).tap()
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+
+        XCTAssertTrue(app.navigationBars["Future Title Corrected"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Dec 31, 2030"].exists)
+
+        app.buttons["EditWorkoutButton"].tap()
+        XCTAssertTrue(datePicker.waitForExistence(timeout: 3))
+        datePicker.tap()
+        let differentFutureDay = app.buttons["Monday, December 30"]
+        XCTAssertTrue(differentFutureDay.waitForExistence(timeout: 3))
+        differentFutureDay.tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.85)).tap()
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+        XCTAssertTrue(app.alerts["Couldn't Save Workout"].waitForExistence(timeout: 3))
+        app.alerts.buttons["OK"].tap()
+
+        datePicker.tap()
+        XCTAssertTrue(app.buttons["Tuesday, December 31"].waitForExistence(timeout: 3))
+        app.buttons["Tuesday, December 31"].tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.85)).tap()
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+        XCTAssertTrue(app.navigationBars["Future Title Corrected"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Dec 31, 2030"].exists)
+
+        app.buttons["EditWorkoutButton"].tap()
+        XCTAssertTrue(datePicker.waitForExistence(timeout: 3))
+        datePicker.tap()
+        XCTAssertTrue(differentFutureDay.waitForExistence(timeout: 3))
+        differentFutureDay.tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.85)).tap()
+        app.navigationBars["Edit Workout"].buttons["Cancel"].tap()
+
+        XCTAssertTrue(app.navigationBars["Future Title Corrected"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Dec 31, 2030"].exists)
+    }
+
+    @MainActor
     func testEditingCompletedWorkoutExerciseNoteCancelsAndSavesToHistory() {
         let originalNote = "Pause at the bottom\nKeep wrists stacked"
         let savedNote = "Keep the bar path steady"
