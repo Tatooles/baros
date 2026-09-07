@@ -25,23 +25,16 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         attachScreenshot(named: "Strength records explanation", app: app)
         app.buttons["Done"].tap()
 
-        let badges = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseRecordBadge-"))
-        let heaviestBadge = badges.matching(NSPredicate(format: "label == %@", "Heaviest Rep")).firstMatch
-        let estimateBadge = badges.matching(NSPredicate(format: "label == %@", "Estimated 1RM")).firstMatch
-        for _ in 0..<5 where !estimateBadge.isHittable { app.swipeUp() }
-        XCTAssertTrue(heaviestBadge.exists)
-        XCTAssertTrue(estimateBadge.isHittable)
-        XCTAssertEqual(badges.count, 2)
-        attachScreenshot(named: "Gold inline source set badges", app: app)
-
-        let values = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"))
+        let values = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"))
         let heaviestValue = values.matching(NSPredicate(format: "label CONTAINS %@", "225 x 1")).firstMatch
         let estimateValue = values.matching(NSPredicate(format: "label CONTAINS %@", "210 x 5")).firstMatch
-        XCTAssertTrue(heaviestValue.label.contains("Heaviest Rep"))
-        XCTAssertTrue(estimateValue.label.contains("Estimated 1RM"))
-        XCTAssertLessThanOrEqual(heaviestBadge.frame.maxX, heaviestValue.frame.minX)
-        XCTAssertLessThanOrEqual(estimateBadge.frame.maxX, estimateValue.frame.minX)
-        XCTAssertLessThan(abs(estimateBadge.frame.midY - estimateValue.frame.midY), 5)
+        for _ in 0..<5 where !estimateValue.isHittable { app.swipeUp() }
+        XCTAssertEqual(heaviestValue.label, "Set 3, 225 x 1, Heaviest Rep")
+        XCTAssertEqual(estimateValue.label, "Set 2, 210 x 5, Estimated 1RM")
+        XCTAssertEqual(values.count, 6)
+        XCTAssertFalse(app.staticTexts["Set 3"].exists, app.debugDescription)
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseRecordBadge-")).count, 0)
+        attachScreenshot(named: "Gold inline source set badges", app: app)
     }
 
     func testRecordsAndBadgesSupportAccessibilityTextSizes() {
@@ -49,7 +42,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             "--uitest-accessibility-dynamic-type",
         ])
         XCTAssertTrue(app.descendants(matching: .any)["ExerciseRecord-heaviestRep"].waitForExistence(timeout: 5))
-        let badge = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseRecordBadge-estimated1RM-")).firstMatch
+        let badge = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "ExerciseHistorySetValue-", "Estimated 1RM")).firstMatch
         for _ in 0..<12 where !badge.isHittable { app.swipeUp() }
         XCTAssertTrue(badge.isHittable)
         XCTAssertGreaterThanOrEqual(badge.frame.minX, 0)
@@ -62,17 +55,15 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             let app = openRecords(extraArguments: ["--uitest-strength-records-scenario", scenario])
             switch scenario {
             case "same-set":
-                let value = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"))
+                let value = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"))
                     .matching(NSPredicate(format: "label CONTAINS %@", "225 x 5")).firstMatch
                 for _ in 0..<5 where !value.isHittable { app.swipeUp() }
                 XCTAssertTrue(value.isHittable)
                 XCTAssertTrue(value.label.contains("Heaviest Rep"))
                 XCTAssertTrue(value.label.contains("Estimated 1RM"))
-                let badges = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseRecordBadge-"))
-                XCTAssertEqual(badges.count, 2)
-                for badge in badges.allElementsBoundByIndex {
-                    XCTAssertLessThanOrEqual(badge.frame.maxX, value.frame.minX)
-                }
+                XCTAssertEqual(value.label, "Set 3, 225 x 5, Heaviest Rep, Estimated 1RM")
+                XCTAssertFalse(app.staticTexts["Set 3"].exists)
+                XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseRecordBadge-")).count, 0)
             case "no-estimate":
                 XCTAssertTrue(app.staticTexts["No estimate yet"].waitForExistence(timeout: 3))
                 XCTAssertFalse(app.descendants(matching: .any)["ExerciseRecord-estimated1RM"].exists)

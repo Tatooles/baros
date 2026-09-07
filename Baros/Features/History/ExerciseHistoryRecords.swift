@@ -73,7 +73,10 @@ struct ExerciseHistoryRecords {
         var hasMixedEquipment = false
         for group in groups {
             for entry in group.setEntries {
-                guard entry.loggedExercise.resolvedSnapshotEquipmentRaw == equipmentRaw else {
+                let occurrence = entry.loggedExercise
+                guard occurrence.hasSnapshotMetadata
+                    || occurrence.exerciseSnapshotEquipmentRaw != ExerciseEquipment.other.rawValue else { continue }
+                guard occurrence.exerciseSnapshotEquipmentRaw == equipmentRaw else {
                     hasMixedEquipment = true
                     continue
                 }

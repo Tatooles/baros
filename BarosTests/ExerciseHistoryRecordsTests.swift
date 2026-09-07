@@ -48,6 +48,28 @@ final class ExerciseHistoryRecordsTests: XCTestCase {
         }
     }
 
+    func testLegacyEquipmentCannotFollowLibraryEditsIntoRecords() throws {
+        let set = LoggedSet(orderIndex: 0, weight: 300, reps: 5, isCompleted: true)
+        let session = makeSession(sets: [set])
+        let occurrence = session.loggedExercises[0]
+        occurrence.hasSnapshotMetadata = false
+        occurrence.exerciseSnapshotEquipmentRaw = ExerciseEquipment.other.rawValue
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        occurrence.exercise = exercise
+
+        for equipment in [ExerciseEquipment.barbell, .dumbbell] {
+            exercise.equipmentRaw = equipment.rawValue
+            let result = try records(from: [session])
+            XCTAssertNil(result.heaviestRep)
+            XCTAssertNil(result.estimated1RM)
+            XCTAssertTrue(result.kinds(for: set.id).isEmpty)
+        }
+
+        // Explicit legacy snapshot values are known history even without the newer flag.
+        occurrence.exerciseSnapshotEquipmentRaw = ExerciseEquipment.barbell.rawValue
+        XCTAssertEqual(try records(from: [session]).heaviestRep?.setID, set.id)
+    }
+
     func testTiesSelectNewestWorkoutRegardlessOfInputOrderAndShareBadgeSources() throws {
         let olderSet = LoggedSet(orderIndex: 0, weight: 225, reps: 5, isCompleted: true)
         let newerSet = LoggedSet(orderIndex: 0, weight: 225, reps: 5, isCompleted: true)

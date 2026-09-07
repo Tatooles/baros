@@ -17,7 +17,6 @@ struct ExerciseHistoryHeading: View {
                         Image(systemName: "dumbbell.fill")
                             .font(.system(size: 19, weight: .semibold))
                             .foregroundStyle(AppTheme.brandAccentForeground)
-                            .accessibilityHidden(true)
                     }
                     .accessibilityHidden(true)
             }
@@ -168,16 +167,26 @@ struct ExerciseHistorySessionGroupCard: View {
                         Text("Set \(entry.displaySetNumber)")
                         Spacer(minLength: 8)
                         setResult(for: entry)
+                            .accessibilityHidden(true)
                             .fixedSize(horizontal: true, vertical: false)
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Set \(entry.displaySetNumber)")
                         setResult(for: entry)
+                            .accessibilityHidden(true)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 }
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(AppTheme.textSecondary)
+                .accessibilityRepresentation {
+                    Text(
+                        (["Set \(entry.displaySetNumber)", setSummary(for: entry.set)]
+                            + (records?.kinds(for: entry.id) ?? []).map(\.title))
+                            .joined(separator: ", ")
+                    )
+                    .accessibilityIdentifier("ExerciseHistorySetValue-\(entry.id.uuidString)")
+                }
             }
         }
     }
@@ -192,11 +201,6 @@ struct ExerciseHistorySessionGroupCard: View {
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(AppTheme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
-                .accessibilityLabel(
-                    (["Set \(entry.displaySetNumber)", setSummary(for: entry.set)] + kinds.map(\.title))
-                        .joined(separator: ", ")
-                )
-                .accessibilityIdentifier("ExerciseHistorySetValue-\(entry.id.uuidString)")
         }
     }
 

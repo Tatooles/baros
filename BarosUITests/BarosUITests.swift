@@ -1462,7 +1462,10 @@ final class BarosUITests: XCTestCase {
         openFirstExerciseHistory(in: app)
 
         let performanceButton = exercisePerformanceButtons(in: app).firstMatch
-        let setLabel = app.staticTexts["Set 1"]
+        let setLabel = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label BEGINSWITH %@",
+            "ExerciseHistorySetValue-", "Set 1,"
+        )).firstMatch
         for _ in 0..<10 where !performanceButton.isHittable { app.swipeUp() }
         XCTAssertTrue(performanceButton.waitForExistence(timeout: 3))
         XCTAssertTrue(setLabel.waitForExistence(timeout: 3))
@@ -2013,7 +2016,10 @@ final class BarosUITests: XCTestCase {
             ).count,
             0
         )
-        let setLabel = app.staticTexts["Set 1"]
+        let setLabel = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label BEGINSWITH %@",
+            "ExerciseHistorySetValue-", "Set 1,"
+        )).firstMatch
         let noteText = app.staticTexts["ExerciseHistoryNoteText"]
         XCTAssertTrue(setLabel.waitForExistence(timeout: 3))
         XCTAssertTrue(noteText.waitForExistence(timeout: 3))
@@ -2740,7 +2746,7 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     private func exerciseHistorySetValue(_ summary: String, in app: XCUIApplication) -> XCUIElement {
-        app.staticTexts.matching(NSPredicate(
+        app.descendants(matching: .any).matching(NSPredicate(
             format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
             "ExerciseHistorySetValue-", summary
         )).firstMatch
