@@ -3,23 +3,30 @@ import SwiftUI
 struct ExerciseHistoryRecordsCard: View {
     let records: ExerciseHistoryRecords
     let weightUnit: MeasurementUnit
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showsInformation = false
 
     var body: some View {
         SurfaceCard {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("Records")
-                        .font(.headline)
+                        .font(.footnote.weight(.semibold))
+                        .textCase(.uppercase)
+                        .tracking(0.5)
+                        .foregroundStyle(AppTheme.textSecondary)
                     Spacer()
                     Button { showsInformation = true } label: {
                         Image(systemName: "info.circle")
-                            .frame(minWidth: 44, minHeight: 44)
+                            .font(.subheadline)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(AppTheme.textSecondary)
                     .accessibilityLabel("About strength records")
                     .accessibilityIdentifier("AboutStrengthRecordsButton")
+                    .padding(.vertical, -10)
                 }
 
                 if records.hasMixedEquipment {
@@ -29,17 +36,17 @@ struct ExerciseHistoryRecordsCard: View {
                 }
 
                 if let heaviest = records.heaviestRep {
-                    recordRow(heaviest, kind: .heaviestRep)
-                    Divider()
-                    if let estimated = records.estimated1RM {
-                        recordRow(estimated, kind: .estimated1RM)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        stackedRecords(heaviest)
                     } else {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Estimated 1RM").font(.subheadline)
-                            emptyState(
-                                title: "No estimate yet",
-                                message: "Requires a completed working or failure set of 1–10 reps with weight."
-                            )
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .top, spacing: 20) {
+                                recordRow(heaviest, kind: .heaviestRep)
+                                    .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
+                                estimatedRecord
+                                    .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
+                            }
+                            stackedRecords(heaviest)
                         }
                     }
                 } else {
@@ -56,6 +63,31 @@ struct ExerciseHistoryRecordsCard: View {
         }
     }
 
+    private func stackedRecords(_ heaviest: ExerciseHistoryRecord) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            recordRow(heaviest, kind: .heaviestRep)
+            Divider()
+            estimatedRecord
+        }
+    }
+
+    @ViewBuilder
+    private var estimatedRecord: some View {
+        if let estimated = records.estimated1RM {
+            recordRow(estimated, kind: .estimated1RM)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Estimated 1RM")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.textSecondary)
+                emptyState(
+                    title: "No estimate yet",
+                    message: "Requires a completed working or failure set of 1–10 reps with weight."
+                )
+            }
+        }
+    }
+
     private func recordRow(_ record: ExerciseHistoryRecord, kind: ExerciseHistoryRecordKind) -> some View {
         let unit = weightUnit.fieldLabel.lowercased()
         let value = WorkoutFormatters.number(weightUnit.displayWeight(fromCanonicalPounds: record.value) ?? 0)
@@ -67,11 +99,15 @@ struct ExerciseHistoryRecordsCard: View {
                 .font(.subheadline)
                 .foregroundStyle(AppTheme.textSecondary)
             Text("\(kind == .estimated1RM ? "≈ " : "")\(value) \(unit)")
-                .font(.title.weight(.bold))
+                .font(.title2.weight(.bold))
+                .fixedSize(horizontal: true, vertical: false)
                 .monospacedDigit()
-            Text("\(weight) \(unit) × \(reps) · Set \(record.displaySetNumber)")
+            Text("\(weight) \(unit) × \(reps)")
                 .font(.footnote.weight(.medium))
-            Text("\(record.workoutTitle) · \(date)")
+            Text("Set \(record.displaySetNumber) · \(date)")
+                .font(.footnote)
+                .foregroundStyle(AppTheme.textSecondary)
+            Text(record.workoutTitle)
                 .font(.footnote)
                 .foregroundStyle(AppTheme.textSecondary)
         }
