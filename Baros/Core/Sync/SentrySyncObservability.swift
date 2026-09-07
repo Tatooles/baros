@@ -138,6 +138,14 @@ enum SentryUIHangEventScrubber {
             return false
         }
 
+        // A failed cast must not make a present value look like an absent
+        // optional field: nested data must never survive under an approved key.
+        for key in ["exercise_count_bucket", "set_count_bucket", "focused_field"] {
+            if let value = context[key], !(value is String) {
+                return false
+            }
+        }
+
         let exerciseBucket = context["exercise_count_bucket"] as? String
         let setBucket = context["set_count_bucket"] as? String
         guard (exerciseBucket == nil) == (setBucket == nil),

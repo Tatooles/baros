@@ -100,6 +100,65 @@ final class UIHangContextObservabilityTests: XCTestCase {
         XCTAssertTrue(SentryUIHangContextSink.contextValues(for: .empty).isEmpty)
     }
 
+    func testUIScrubberRejectsWrongTypesUnderAllowedContextKeys() throws {
+        let invalidValues: [Any] = [
+            ["note": "Private workout note"],
+            ["Private search text"],
+            42,
+            true,
+            NSNull(),
+        ]
+
+        for surface in ["active_workout", "exercise_picker"] {
+            for key in ["focused_field", "exercise_count_bucket", "set_count_bucket"] {
+                for invalidValue in invalidValues {
+                    var context: [String: Any] = [
+                        "schema_version": 1,
+                        "exercise_count_bucket": "2_5",
+                        "set_count_bucket": "6_10",
+                        "focused_field": "set_reps",
+                    ]
+                    context[key] = invalidValue
+                    // Both failed casts used to look like absent, optional picker buckets.
+                    if key != "focused_field" {
+                        context["exercise_count_bucket"] = invalidValue
+                        context["set_count_bucket"] = invalidValue
+                    }
+                    let event = Event(level: .fatal)
+                    event.tags = ["ui_surface": surface, "distribution_channel": "app_store"]
+                    event.context = ["ui": context]
+
+                    let scrubbed = try XCTUnwrap(SentryUIHangEventScrubber.scrub(event))
+
+                    XCTAssertNil(scrubbed.tags?["ui_surface"], "\(surface), \(key): \(invalidValue)")
+                    XCTAssertNil(scrubbed.context?["ui"], "\(surface), \(key): \(invalidValue)")
+                    XCTAssertEqual(scrubbed.tags?["distribution_channel"], "app_store")
+                }
+            }
+        }
+    }
+
+    func testUIScrubberPreservesValidContextWithOptionalFieldsAbsent() throws {
+        let contexts: [(String, [String: Any])] = [
+            ("exercise_picker", ["schema_version": 1]),
+            ("active_workout", [
+                "schema_version": 1,
+                "exercise_count_bucket": "2_5",
+                "set_count_bucket": "6_10",
+            ]),
+        ]
+        for (surface, context) in contexts {
+            let event = Event(level: .fatal)
+            event.tags = ["ui_surface": surface]
+            event.context = ["ui": context]
+
+            let scrubbed = try XCTUnwrap(SentryUIHangEventScrubber.scrub(event))
+
+            XCTAssertEqual(scrubbed.tags?["ui_surface"], surface)
+            XCTAssertEqual(try XCTUnwrap(scrubbed.context?["ui"]) as NSDictionary, context as NSDictionary)
+        }
+    }
+
     func testUIScrubberRemovesProhibitedContextAndBreadcrumbData() throws {
         let event = Event(level: .fatal)
         event.tags = [

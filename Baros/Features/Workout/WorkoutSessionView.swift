@@ -417,18 +417,22 @@ struct WorkoutSessionView: View {
     }
 
     private func updateUIHangWorkoutContext(becameCurrent: Bool) {
-        let loggedExercises = session.sortedLoggedExercises
-        let setCount = loggedExercises.reduce(into: 0) { count, loggedExercise in
-            count += loggedExercise.sortedSets.count
+        var exerciseCount = 0
+        var setCount = 0
+        for loggedExercise in session.loggedExercises where loggedExercise.deletedAt == nil {
+            exerciseCount += 1
+            for set in loggedExercise.sets where set.deletedAt == nil {
+                setCount += 1
+            }
         }
         if becameCurrent {
             UIHangContextObservability.shared.activeWorkoutBecameCurrent(
-                exerciseCount: loggedExercises.count,
+                exerciseCount: exerciseCount,
                 setCount: setCount
             )
         } else {
             UIHangContextObservability.shared.activeWorkoutStructureChanged(
-                exerciseCount: loggedExercises.count,
+                exerciseCount: exerciseCount,
                 setCount: setCount
             )
         }
@@ -518,11 +522,14 @@ struct WorkoutSessionView: View {
 
 private struct LoggedExerciseStructureValue: Hashable {
     let id: UUID
+    // This key also invalidates the rendered exercise-order cache.
+    let orderIndex: Int
     let deletedAt: Date?
     let activeSetIDs: Set<UUID>
 
     init(_ loggedExercise: LoggedExercise) {
         id = loggedExercise.id
+        orderIndex = loggedExercise.orderIndex
         deletedAt = loggedExercise.deletedAt
         activeSetIDs = Set(
             loggedExercise.sets.lazy.compactMap { set in
