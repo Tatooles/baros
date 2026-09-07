@@ -135,6 +135,9 @@ struct ExerciseCardView: View {
 
                 if !isCollapsed {
                     let previousSetsForRows = previousSets
+                    let suggestions = ActiveWorkoutSetSuggestions.resolve(for: sortedSets.map {
+                        .init(weight: $0.weight, reps: $0.reps)
+                    })
                     VStack(spacing: 14) {
                         if !dynamicTypeSize.isAccessibilitySize {
                             HStack(spacing: 10) {
@@ -171,6 +174,7 @@ struct ExerciseCardView: View {
                                         isRepsFocused: focusedFieldValue == .setReps(set.id),
                                         weightUnit: weightUnit,
                                         previous: index < previousSetsForRows.count ? previousSetsForRows[index] : nil,
+                                        suggestions: suggestions[index],
                                         onEditRPE: onEditRPE
                                     )
                                         .equatable()

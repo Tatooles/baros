@@ -2,6 +2,146 @@ import XCTest
 @testable import Baros
 
 final class ActiveWorkoutSetInputTests: XCTestCase {
+    func testSuggestionsSkipInvalidSourcesPreserveZeroAndDoNotLeakBetweenExercises() {
+        XCTAssertEqual(ActiveWorkoutSetSuggestions.resolve(for: [
+            .init(weight: 0, reps: 12),
+            .init(weight: -1, reps: 0),
+            .init(weight: .infinity, reps: nil),
+            .init(weight: nil, reps: nil),
+        ]), [
+            .init(weight: nil, reps: nil),
+            .init(weight: 0, reps: 12),
+            .init(weight: 0, reps: 12),
+            .init(weight: 0, reps: 12),
+        ])
+        XCTAssertEqual(ActiveWorkoutSetSuggestions.resolve(for: [
+            .init(weight: nil, reps: nil),
+        ]), [.init(weight: nil, reps: nil)])
+    }
+
+    func testSuggestionsDoNotReplaceRejectedInputButDoFillDeliberatelyClearedFields() {
+        for (weightText, repsText, expected) in [
+            ("", "", ActiveWorkoutSetInput.Values(weight: 90, reps: 12)),
+            ("invalid", "", .init(weight: nil, reps: 12)),
+            ("", "invalid", .init(weight: 90, reps: nil)),
+        ] {
+            var input = ActiveWorkoutSetInput()
+            input.update(weightText, for: .weight, isFocused: true)
+            input.update(repsText, for: .reps, isFocused: true)
+            // Rejections must survive a focus-boundary commit before the action.
+            let commit = input.commit(current: .init(weight: 100, reps: 8), weightUnit: .pounds)
+            XCTAssertEqual(input.preparedValuesForSetAction(
+                current: commit.values,
+                weightUnit: .pounds,
+                completesSet: true,
+                isCompleted: false,
+                previous: .init(weight: 185, reps: 5),
+                suggestions: .init(weight: 90, reps: 12)
+            ), expected)
+        }
+    }
+
+    func testSuggestionsAreNotAcceptedByClearUncompletionOrCompletedSetRPEEdit() {
+        for (completesSet, isCompleted) in [(false, false), (false, true), (true, true)] {
+            var input = ActiveWorkoutSetInput()
+            XCTAssertEqual(input.preparedValuesForSetAction(
+                current: .init(weight: 100, reps: nil),
+                weightUnit: .pounds,
+                completesSet: completesSet,
+                isCompleted: isCompleted,
+                previous: .init(weight: 185, reps: 5),
+                suggestions: .init(weight: 90, reps: 12)
+            ), .init(weight: 100, reps: nil))
+        }
+    }
+
+    func testSuggestionDisplayConvertsUnitsButAcceptanceKeepsCanonicalWeight() {
+        var input = ActiveWorkoutSetInput()
+        let empty = ActiveWorkoutSetInput.Values(weight: nil, reps: nil)
+        let suggestions = ActiveWorkoutSetInput.Values(weight: 220.462262185, reps: 12)
+        XCTAssertEqual(input.suggestionText(
+            for: .weight, current: empty, suggestions: suggestions, weightUnit: .kilograms
+        ), "100")
+        XCTAssertNil(input.suggestionText(
+            for: .weight, current: .init(weight: 0, reps: nil),
+            suggestions: suggestions, weightUnit: .kilograms
+        ))
+        XCTAssertEqual(input.preparedValuesForSetAction(
+            current: empty,
+            weightUnit: .kilograms,
+            completesSet: true,
+            isCompleted: false,
+            previous: nil,
+            suggestions: suggestions
+        ), suggestions)
+    }
+
+    func testSuggestionDisplayDoesNotAcceptValuesAndStaysHiddenForDraftsOrRejections() {
+        var input = ActiveWorkoutSetInput()
+        let empty = ActiveWorkoutSetInput.Values(weight: nil, reps: nil)
+        let suggestions = ActiveWorkoutSetInput.Values(weight: 90, reps: 12)
+        XCTAssertEqual(input.suggestionText(
+            for: .weight, current: empty, suggestions: suggestions, weightUnit: .pounds
+        ), "90")
+        XCTAssertEqual(input.text(for: .weight, values: empty, weightUnit: .pounds), "")
+        XCTAssertEqual(input.commit(current: empty, weightUnit: .pounds),
+                       .init(values: empty, shouldPersist: false))
+
+        input.update("", for: .weight, isFocused: true)
+        XCTAssertNil(input.suggestionText(
+            for: .weight, current: empty, suggestions: suggestions, weightUnit: .pounds
+        ))
+        input.update("invalid", for: .weight, isFocused: true)
+        _ = input.commit(current: empty, weightUnit: .pounds)
+        XCTAssertNil(input.suggestionText(
+            for: .weight, current: empty, suggestions: suggestions, weightUnit: .pounds
+        ))
+        XCTAssertEqual(input.suggestionText(
+            for: .reps, current: empty, suggestions: suggestions, weightUnit: .pounds
+        ), "12")
+    }
+
+    func testCompletionUsesTypedValuesThenSuggestionsThenHistoricalFallback() {
+        var input = ActiveWorkoutSetInput()
+        input.update("100", for: .weight, isFocused: true)
+        XCTAssertEqual(input.preparedValuesForSetAction(
+            current: .init(weight: nil, reps: nil),
+            weightUnit: .pounds,
+            completesSet: true,
+            isCompleted: false,
+            previous: .init(weight: 185, reps: 5),
+            suggestions: .init(weight: 90, reps: 12)
+        ), .init(weight: 100, reps: 12))
+
+        var partialInput = ActiveWorkoutSetInput()
+        XCTAssertEqual(partialInput.preparedValuesForSetAction(
+            current: .init(weight: nil, reps: nil),
+            weightUnit: .pounds,
+            completesSet: true,
+            isCompleted: false,
+            previous: .init(weight: 185, reps: 5),
+            suggestions: .init(weight: 90, reps: nil)
+        ), .init(weight: 90, reps: 5))
+    }
+
+    func testSuggestionsUseNearestEarlierActualValueIndependentlyForEachField() {
+        let suggestions = ActiveWorkoutSetSuggestions.resolve(for: [
+            .init(weight: 90, reps: 12),
+            .init(weight: nil, reps: nil),
+            .init(weight: nil, reps: 10),
+            .init(weight: 100, reps: nil),
+            .init(weight: nil, reps: nil),
+        ])
+
+        XCTAssertEqual(suggestions, [
+            .init(weight: nil, reps: nil),
+            .init(weight: 90, reps: 12),
+            .init(weight: 90, reps: 12),
+            .init(weight: 90, reps: 10),
+            .init(weight: 100, reps: 10),
+        ])
+    }
+
     func testReturnsOnlyMissingPreviousValueBeforeCompletion() {
         let input = ActiveWorkoutSetInput()
         let previous = PreviousSetPerformance(weight: 185, reps: 5)

@@ -19,6 +19,7 @@ struct SetRowView: View, @MainActor Equatable {
     let isRepsFocused: Bool
     let weightUnit: MeasurementUnit
     let previous: PreviousSetPerformance?
+    let suggestions: ActiveWorkoutSetInput.Values
     let onEditRPE: (LoggedSet) -> Void
     @State private var input = ActiveWorkoutSetInput()
     @State private var commitRegistrationID: UUID?
@@ -33,6 +34,7 @@ struct SetRowView: View, @MainActor Equatable {
             && lhs.exerciseIndex == rhs.exerciseIndex
             && lhs.weightUnit == rhs.weightUnit
             && lhs.previous == rhs.previous
+            && lhs.suggestions == rhs.suggestions
             && lhs.isWeightFocused == rhs.isWeightFocused
             && lhs.isRepsFocused == rhs.isRepsFocused
     }
@@ -70,6 +72,9 @@ struct SetRowView: View, @MainActor Equatable {
         .onChange(of: previous) { _, _ in
             refreshSetInputRegistration()
         }
+        .onChange(of: suggestions) { _, _ in
+            refreshSetInputRegistration()
+        }
         .onChange(of: weightUnit) { _, _ in
             refreshSetInputRegistration()
         }
@@ -95,6 +100,7 @@ struct SetRowView: View, @MainActor Equatable {
 
             numericField(
                 placeholder: weightUnit.fieldPlaceholder,
+                suggestion: suggestionText(for: .weight),
                 text: weightBinding,
                 keyboard: .decimalPad,
                 focusTarget: .setWeight(set.id),
@@ -135,6 +141,7 @@ struct SetRowView: View, @MainActor Equatable {
                 ) {
                     numericField(
                         placeholder: weightUnit.fieldPlaceholder,
+                        suggestion: suggestionText(for: .weight),
                         text: weightBinding,
                         keyboard: .decimalPad,
                         focusTarget: .setWeight(set.id),
@@ -239,6 +246,7 @@ struct SetRowView: View, @MainActor Equatable {
     private var repsField: some View {
         numericField(
             placeholder: "REPS",
+            suggestion: suggestionText(for: .reps),
             text: repsBinding,
             keyboard: .numberPad,
             focusTarget: .setReps(set.id),
@@ -272,13 +280,14 @@ struct SetRowView: View, @MainActor Equatable {
 
     private func numericField(
         placeholder: String,
+        suggestion: String?,
         text: Binding<String>,
         keyboard: UIKeyboardType,
         focusTarget: WorkoutField,
         isFocused: Bool,
         accessibilityIdentifier: String
     ) -> some View {
-        TextField(placeholder, text: text)
+        TextField(placeholder, text: text, prompt: Text(suggestion ?? placeholder))
             .keyboardType(keyboard)
             .multilineTextAlignment(.center)
             .font(.body.weight(.semibold))
@@ -307,8 +316,22 @@ struct SetRowView: View, @MainActor Equatable {
                     }
             }
             .animation(.easeOut(duration: 0.15), value: isFocused)
+            .accessibilityLabel(placeholder)
+            .accessibilityValue(suggestion.map { "Suggested \($0)" }
+                ?? (text.wrappedValue.isEmpty ? placeholder : text.wrappedValue))
+            .accessibilityHint(suggestion == nil ? "" : "Complete the set or select an RPE to use this value.")
             .accessibilityIdentifier(accessibilityIdentifier)
             .id(focusTarget)
+    }
+
+    private func suggestionText(for field: ActiveWorkoutSetInput.Field) -> String? {
+        guard !set.isCompleted else { return nil }
+        return input.suggestionText(
+            for: field,
+            current: inputValues,
+            suggestions: suggestions,
+            weightUnit: weightUnit
+        )
     }
 
     private var weightBinding: Binding<String> {
@@ -368,7 +391,8 @@ struct SetRowView: View, @MainActor Equatable {
             weightUnit: weightUnit,
             completesSet: completesSet,
             isCompleted: set.isCompleted,
-            previous: previous
+            previous: previous,
+            suggestions: suggestions
         )
     }
 
