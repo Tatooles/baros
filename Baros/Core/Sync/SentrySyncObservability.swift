@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 import Sentry
 import StoreKit
@@ -24,13 +25,164 @@ enum SentryRuntime {
             options.enableMetrics = false
             options.attachScreenshot = false
             options.attachViewHierarchy = false
-            options.beforeSend = SentrySyncEventScrubber.scrub
+            options.beforeSend = SentryEventScrubber.scrub
         }
+
+        UIHangContextObservability.shared.install(sink: SentryUIHangContextSink())
 
         Task { @MainActor in
             await SentryDistributionChannelTagger.updateTag()
         }
         return SyncObservability(sink: SentrySyncObservationSink())
+    }
+}
+
+enum SentryEventScrubber {
+    static func scrub(_ event: Event) -> Event? {
+        if event.tags?["component"] == "sync" {
+            // Sync events retain their original strict allowlist. UI scope data
+            // is useful for automatic hangs, but is intentionally excluded
+            // from manually captured durable sync failures.
+            event.tags?.removeValue(forKey: "ui_surface")
+            event.context?.removeValue(forKey: "ui")
+            return SentrySyncEventScrubber.scrub(event)
+        }
+        guard let syncScrubbedEvent = SentrySyncEventScrubber.scrub(event) else {
+            return nil
+        }
+        return SentryUIHangEventScrubber.scrub(syncScrubbedEvent)
+    }
+}
+
+@MainActor
+final class SentryUIHangContextSink: UIHangContextSink {
+    private static let surfaceTagKey = "ui_surface"
+    private static let contextKey = "ui"
+
+    func apply(_ snapshot: UIHangContextSnapshot) {
+        let tags = Self.tagValues(for: snapshot)
+        let context = Self.contextValues(for: snapshot)
+        SentrySDK.configureScope { scope in
+            if let surface = tags[Self.surfaceTagKey] {
+                scope.setTag(value: surface, key: Self.surfaceTagKey)
+            } else {
+                scope.removeTag(key: Self.surfaceTagKey)
+            }
+            if context.isEmpty {
+                scope.removeContext(key: Self.contextKey)
+            } else {
+                scope.setContext(value: context, key: Self.contextKey)
+            }
+        }
+    }
+
+    func addBreadcrumb(_ breadcrumb: UIHangBreadcrumb) {
+        SentrySDK.addBreadcrumb(Self.makeBreadcrumb(breadcrumb))
+    }
+
+    static func tagValues(for snapshot: UIHangContextSnapshot) -> [String: String] {
+        guard let surface = snapshot.surface else { return [:] }
+        return [surfaceTagKey: surface.rawValue]
+    }
+
+    static func contextValues(for snapshot: UIHangContextSnapshot) -> [String: Any] {
+        guard snapshot.surface != nil else { return [:] }
+        var context: [String: Any] = ["schema_version": 1]
+        if let exerciseCountBucket = snapshot.exerciseCountBucket {
+            context["exercise_count_bucket"] = exerciseCountBucket.rawValue
+        }
+        if let setCountBucket = snapshot.setCountBucket {
+            context["set_count_bucket"] = setCountBucket.rawValue
+        }
+        if let focusedField = snapshot.focusedField {
+            context["focused_field"] = focusedField.rawValue
+        }
+        return context
+    }
+
+    static func makeBreadcrumb(_ transition: UIHangBreadcrumb) -> Breadcrumb {
+        let breadcrumb = Breadcrumb(level: .info, category: "baros.ui")
+        breadcrumb.type = "navigation"
+        breadcrumb.message = transition.rawValue
+        breadcrumb.setData(value: 1, key: "schema_version")
+        return breadcrumb
+    }
+}
+
+enum SentryUIHangEventScrubber {
+    private static let allowedContextKeys: Set<String> = [
+        "schema_version",
+        "exercise_count_bucket",
+        "set_count_bucket",
+        "focused_field",
+    ]
+
+    static func scrub(_ event: Event) -> Event? {
+        let surface = event.tags?["ui_surface"]
+        let context = event.context?["ui"]
+        if let surface, let context, isValid(surface: surface, context: context) {
+            // The scope already contains only approved typed values.
+        } else {
+            event.tags?.removeValue(forKey: "ui_surface")
+            event.context?.removeValue(forKey: "ui")
+        }
+        event.breadcrumbs = event.breadcrumbs?.filter { breadcrumb in
+            breadcrumb.category != "baros.ui" || isValidUIBreadcrumb(breadcrumb)
+        }
+        return event
+    }
+
+    private static func isValid(surface: String, context: [String: Any]) -> Bool {
+        guard UIHangSurface(rawValue: surface) != nil,
+              Set(context.keys).isSubset(of: allowedContextKeys),
+              isExactSchemaVersionOne(context["schema_version"]) else {
+            return false
+        }
+
+        // A failed cast must not make a present value look like an absent
+        // optional field: nested data must never survive under an approved key.
+        for key in ["exercise_count_bucket", "set_count_bucket", "focused_field"] {
+            if let value = context[key], !(value is String) {
+                return false
+            }
+        }
+
+        let exerciseBucket = context["exercise_count_bucket"] as? String
+        let setBucket = context["set_count_bucket"] as? String
+        guard (exerciseBucket == nil) == (setBucket == nil),
+              exerciseBucket.map({ UIHangCountBucket(rawValue: $0) != nil }) ?? true,
+              setBucket.map({ UIHangCountBucket(rawValue: $0) != nil }) ?? true else {
+            return false
+        }
+        if surface == UIHangSurface.activeWorkout.rawValue,
+           exerciseBucket == nil || setBucket == nil {
+            return false
+        }
+        if let focusedField = context["focused_field"] as? String,
+           UIHangFocusedField(rawValue: focusedField) == nil {
+            return false
+        }
+        return true
+    }
+
+    private static func isValidUIBreadcrumb(_ breadcrumb: Breadcrumb) -> Bool {
+        guard breadcrumb.type == "navigation",
+              let message = breadcrumb.message,
+              UIHangBreadcrumb(rawValue: message) != nil,
+              let data = breadcrumb.data as? [String: Any],
+              Set(data.keys) == ["schema_version"],
+              isExactSchemaVersionOne(data["schema_version"]) else {
+            return false
+        }
+        return true
+    }
+
+    private static func isExactSchemaVersionOne(_ value: Any?) -> Bool {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else {
+            return false
+        }
+        return number.doubleValue == 1
     }
 }
 

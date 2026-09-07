@@ -1,0 +1,237 @@
+import Sentry
+import XCTest
+@testable import Baros
+
+@MainActor
+final class UIHangContextObservabilityTests: XCTestCase {
+    func testCountBucketsUseDocumentedBoundaries() {
+        let expectations: [(Int, UIHangCountBucket)] = [
+            (-1, .zero),
+            (0, .zero),
+            (1, .one),
+            (2, .twoToFive),
+            (5, .twoToFive),
+            (6, .sixToTen),
+            (10, .sixToTen),
+            (11, .elevenToTwenty),
+            (20, .elevenToTwenty),
+            (21, .twentyOneOrMore),
+            (10_000, .twentyOneOrMore),
+        ]
+
+        for (count, expectedBucket) in expectations {
+            XCTAssertEqual(UIHangCountBucket(count: count), expectedBucket, "count: \(count)")
+        }
+    }
+
+    func testWorkoutFieldsMapToCategoriesWithoutIdentifiers() {
+        let firstID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        let secondID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+
+        XCTAssertEqual(UIHangFocusedField(workoutField: .workoutTitle), .workoutText)
+        XCTAssertEqual(UIHangFocusedField(workoutField: .workoutNotes), .workoutText)
+        XCTAssertEqual(UIHangFocusedField(workoutField: .exerciseNotes(firstID)), .exerciseNote)
+        XCTAssertEqual(UIHangFocusedField(workoutField: .setWeight(firstID)), .setWeight)
+        XCTAssertEqual(UIHangFocusedField(workoutField: .setReps(secondID)), .setReps)
+        XCTAssertFalse(UIHangFocusedField.allCases.map(\.rawValue).contains { value in
+            value.contains(firstID.uuidString) || value.contains(secondID.uuidString)
+        })
+    }
+
+    func testPresentationFocusStructureAndClearingProduceBoundedSnapshots() throws {
+        let sink = RecordingUIHangContextSink()
+        let observability = UIHangContextObservability(sink: sink)
+
+        observability.activeWorkoutBecameCurrent(exerciseCount: 2, setCount: 11)
+        XCTAssertEqual(sink.snapshots.last, UIHangContextSnapshot(
+            surface: .activeWorkout,
+            exerciseCountBucket: .twoToFive,
+            setCountBucket: .elevenToTwenty,
+            focusedField: nil
+        ))
+
+        observability.focusChanged(to: .setWeight(UUID()))
+        XCTAssertEqual(sink.snapshots.last?.focusedField, .setWeight)
+
+        observability.activeWorkoutStructureChanged(exerciseCount: 6, setCount: 21)
+        XCTAssertEqual(sink.snapshots.last?.exerciseCountBucket, .sixToTen)
+        XCTAssertEqual(sink.snapshots.last?.setCountBucket, .twentyOneOrMore)
+
+        observability.addExercisePresented()
+        XCTAssertEqual(sink.snapshots.last?.surface, .exercisePicker)
+        XCTAssertNil(sink.snapshots.last?.focusedField)
+        XCTAssertEqual(sink.breadcrumbs, [.addExercisePresented])
+
+        observability.exerciseSearchEditingChanged(isEditing: true)
+        observability.exerciseSearchEditingChanged(isEditing: true)
+        observability.exerciseSearchEditingChanged(isEditing: false)
+        XCTAssertEqual(sink.breadcrumbs, [
+            .addExercisePresented,
+            .exerciseSearchBegan,
+            .exerciseSearchEnded,
+        ])
+
+        observability.addExerciseDismissed()
+        XCTAssertEqual(sink.snapshots.last?.surface, .activeWorkout)
+        XCTAssertEqual(sink.breadcrumbs.last, .addExerciseDismissed)
+
+        observability.activeWorkoutCeasedBeingCurrent()
+        XCTAssertEqual(try XCTUnwrap(sink.snapshots.last), .empty)
+    }
+
+    func testSentryScopeMappingUsesOnlyApprovedKeysAndValues() {
+        let snapshot = UIHangContextSnapshot(
+            surface: .activeWorkout,
+            exerciseCountBucket: .twoToFive,
+            setCountBucket: .sixToTen,
+            focusedField: .exerciseNote
+        )
+
+        XCTAssertEqual(SentryUIHangContextSink.tagValues(for: snapshot), [
+            "ui_surface": "active_workout",
+        ])
+        XCTAssertEqual(SentryUIHangContextSink.contextValues(for: snapshot) as NSDictionary, [
+            "schema_version": 1,
+            "exercise_count_bucket": "2_5",
+            "set_count_bucket": "6_10",
+            "focused_field": "exercise_note",
+        ] as NSDictionary)
+        XCTAssertEqual(SentryUIHangContextSink.tagValues(for: .empty), [:])
+        XCTAssertTrue(SentryUIHangContextSink.contextValues(for: .empty).isEmpty)
+    }
+
+    func testUIScrubberRejectsWrongTypesUnderAllowedContextKeys() throws {
+        let invalidValues: [Any] = [
+            ["note": "Private workout note"],
+            ["Private search text"],
+            42,
+            true,
+            NSNull(),
+        ]
+
+        for surface in ["active_workout", "exercise_picker"] {
+            for key in ["focused_field", "exercise_count_bucket", "set_count_bucket"] {
+                for invalidValue in invalidValues {
+                    var context: [String: Any] = [
+                        "schema_version": 1,
+                        "exercise_count_bucket": "2_5",
+                        "set_count_bucket": "6_10",
+                        "focused_field": "set_reps",
+                    ]
+                    context[key] = invalidValue
+                    // Both failed casts used to look like absent, optional picker buckets.
+                    if key != "focused_field" {
+                        context["exercise_count_bucket"] = invalidValue
+                        context["set_count_bucket"] = invalidValue
+                    }
+                    let event = Event(level: .fatal)
+                    event.tags = ["ui_surface": surface, "distribution_channel": "app_store"]
+                    event.context = ["ui": context]
+
+                    let scrubbed = try XCTUnwrap(SentryUIHangEventScrubber.scrub(event))
+
+                    XCTAssertNil(scrubbed.tags?["ui_surface"], "\(surface), \(key): \(invalidValue)")
+                    XCTAssertNil(scrubbed.context?["ui"], "\(surface), \(key): \(invalidValue)")
+                    XCTAssertEqual(scrubbed.tags?["distribution_channel"], "app_store")
+                }
+            }
+        }
+    }
+
+    func testUIScrubberPreservesValidContextWithOptionalFieldsAbsent() throws {
+        let contexts: [(String, [String: Any])] = [
+            ("exercise_picker", ["schema_version": 1]),
+            ("active_workout", [
+                "schema_version": 1,
+                "exercise_count_bucket": "2_5",
+                "set_count_bucket": "6_10",
+            ]),
+        ]
+        for (surface, context) in contexts {
+            let event = Event(level: .fatal)
+            event.tags = ["ui_surface": surface]
+            event.context = ["ui": context]
+
+            let scrubbed = try XCTUnwrap(SentryUIHangEventScrubber.scrub(event))
+
+            XCTAssertEqual(scrubbed.tags?["ui_surface"], surface)
+            XCTAssertEqual(try XCTUnwrap(scrubbed.context?["ui"]) as NSDictionary, context as NSDictionary)
+        }
+    }
+
+    func testUIScrubberRequiresExactIntegerSchemaVersion() throws {
+        let invalidVersions: [Any] = [true, 1.5, 1.9, 0, 2, "1", NSNull()]
+
+        for invalidVersion in invalidVersions {
+            let event = Event(level: .fatal)
+            event.tags = ["ui_surface": "active_workout"]
+            event.context = [
+                "ui": [
+                    "schema_version": invalidVersion,
+                    "exercise_count_bucket": "2_5",
+                    "set_count_bucket": "6_10",
+                ],
+            ]
+            let breadcrumb = Breadcrumb(level: .info, category: "baros.ui")
+            breadcrumb.type = "navigation"
+            breadcrumb.message = "exercise_search_began"
+            breadcrumb.setData(value: invalidVersion, key: "schema_version")
+            event.breadcrumbs = [breadcrumb]
+
+            let scrubbed = try XCTUnwrap(SentryUIHangEventScrubber.scrub(event))
+
+            XCTAssertNil(scrubbed.tags?["ui_surface"], "context schema version: \(invalidVersion)")
+            XCTAssertNil(scrubbed.context?["ui"], "context schema version: \(invalidVersion)")
+            XCTAssertTrue(scrubbed.breadcrumbs?.isEmpty == true, "breadcrumb schema version: \(invalidVersion)")
+        }
+    }
+
+    func testUIScrubberRemovesProhibitedContextAndBreadcrumbData() throws {
+        let event = Event(level: .fatal)
+        event.tags = [
+            "ui_surface": "active_workout",
+            "distribution_channel": "app_store",
+        ]
+        event.context = [
+            "ui": [
+                "schema_version": 1,
+                "exercise_count_bucket": "2_5",
+                "set_count_bucket": "6_10",
+                "focused_field": "set_reps",
+                "workout_name": "Private Workout",
+            ],
+        ]
+        let unsafeBreadcrumb = Breadcrumb(level: .info, category: "baros.ui")
+        unsafeBreadcrumb.type = "navigation"
+        unsafeBreadcrumb.message = "exercise_search_began"
+        unsafeBreadcrumb.setData(value: "private query", key: "search_text")
+        let safeBreadcrumb = SentryUIHangContextSink.makeBreadcrumb(.exerciseSearchEnded)
+        event.breadcrumbs = [unsafeBreadcrumb, safeBreadcrumb]
+
+        let scrubbed = try XCTUnwrap(SentryUIHangEventScrubber.scrub(event))
+
+        XCTAssertNil(scrubbed.tags?["ui_surface"])
+        XCTAssertNil(scrubbed.context?["ui"])
+        XCTAssertEqual(scrubbed.breadcrumbs?.filter { $0.category == "baros.ui" }.count, 1)
+        XCTAssertEqual(
+            scrubbed.breadcrumbs?.first { $0.category == "baros.ui" }?.message,
+            "exercise_search_ended"
+        )
+        XCTAssertFalse(String(describing: scrubbed).contains("Private Workout"))
+        XCTAssertFalse(String(describing: scrubbed).contains("private query"))
+    }
+}
+
+@MainActor
+private final class RecordingUIHangContextSink: UIHangContextSink {
+    private(set) var snapshots: [UIHangContextSnapshot] = []
+    private(set) var breadcrumbs: [UIHangBreadcrumb] = []
+
+    func apply(_ snapshot: UIHangContextSnapshot) {
+        snapshots.append(snapshot)
+    }
+
+    func addBreadcrumb(_ breadcrumb: UIHangBreadcrumb) {
+        breadcrumbs.append(breadcrumb)
+    }
+}
