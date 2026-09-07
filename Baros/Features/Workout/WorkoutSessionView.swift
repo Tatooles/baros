@@ -174,10 +174,15 @@ struct WorkoutSessionView: View {
                 }
             }
             .onChange(of: isAddExercisePresented) { _, isPresented in
-                guard !isPresented else { return }
+                if isPresented {
+                    UIHangContextObservability.shared.addExercisePresented()
+                    return
+                }
+                UIHangContextObservability.shared.addExerciseDismissed()
                 completeExerciseSelection(scrollProxy: scrollProxy)
             }
             .onChange(of: focusedField) { previousField, newField in
+                UIHangContextObservability.shared.focusChanged(to: newField)
                 focusTransitionCoordinator.observeFocusChange(
                     from: previousField,
                     to: newField,
@@ -299,6 +304,7 @@ struct WorkoutSessionView: View {
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
+            updateUIHangWorkoutContext(becameCurrent: true)
             focusTransitionCoordinator.synchronizeFocus(focusedField)
             onMinimizePreparationChanged {
                 // Resigning focus commits leaf-owned drafts before the shell
@@ -308,9 +314,11 @@ struct WorkoutSessionView: View {
         }
         .onChange(of: loggedExerciseStructureKey, initial: true) { _, _ in
             cachedSortedLoggedExercises = session.sortedLoggedExercises
+            updateUIHangWorkoutContext(becameCurrent: false)
         }
         .onDisappear {
             resignFocus()
+            UIHangContextObservability.shared.activeWorkoutCeasedBeingCurrent()
             onMinimizePreparationChanged(nil)
         }
         .sheet(isPresented: $isFinishSheetPresented) {
@@ -408,6 +416,28 @@ struct WorkoutSessionView: View {
         Set(session.loggedExercises.map(LoggedExerciseStructureValue.init))
     }
 
+    private func updateUIHangWorkoutContext(becameCurrent: Bool) {
+        var exerciseCount = 0
+        var setCount = 0
+        for loggedExercise in session.loggedExercises where loggedExercise.deletedAt == nil {
+            exerciseCount += 1
+            for set in loggedExercise.sets where set.deletedAt == nil {
+                setCount += 1
+            }
+        }
+        if becameCurrent {
+            UIHangContextObservability.shared.activeWorkoutBecameCurrent(
+                exerciseCount: exerciseCount,
+                setCount: setCount
+            )
+        } else {
+            UIHangContextObservability.shared.activeWorkoutStructureChanged(
+                exerciseCount: exerciseCount,
+                setCount: setCount
+            )
+        }
+    }
+
     private func isCollapsedBinding(for loggedExercise: LoggedExercise) -> Binding<Bool> {
         Binding(
             get: { collapsedExerciseIDs.contains(loggedExercise.id) },
@@ -492,13 +522,20 @@ struct WorkoutSessionView: View {
 
 private struct LoggedExerciseStructureValue: Hashable {
     let id: UUID
+    // This key also invalidates the rendered exercise-order cache.
     let orderIndex: Int
     let deletedAt: Date?
+    let activeSetIDs: Set<UUID>
 
     init(_ loggedExercise: LoggedExercise) {
         id = loggedExercise.id
         orderIndex = loggedExercise.orderIndex
         deletedAt = loggedExercise.deletedAt
+        activeSetIDs = Set(
+            loggedExercise.sets.lazy.compactMap { set in
+                set.deletedAt == nil ? set.id : nil
+            }
+        )
     }
 }
 

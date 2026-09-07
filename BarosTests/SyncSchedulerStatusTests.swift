@@ -381,6 +381,150 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertEqual(sink.observations.filter { $0.kind == .durableFailure }.count, 1)
     }
 
+    func testTransientPushAfterSuccessfulInitialPullClearsResolvedInitialPullSyncError() async throws {
+        struct FetchError: LocalizedError {
+            var errorDescription: String? { "initial fetch failed" }
+        }
+
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(exercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.fetchError = FetchError()
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client),
+            modelContext: context
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+
+        scheduler.requestSync()
+        try await waitUntil { scheduler.lastFailure != nil && !scheduler.isSyncing }
+        XCTAssertEqual(scheduler.lastFailure?.reason, .syncError)
+        XCTAssertEqual(scheduler.lastFailure?.origin, .remotePull)
+
+        client.fetchError = nil
+        client.error = URLError(.notConnectedToInternet)
+        scheduler.retrySync()
+        try await waitUntil {
+            scheduler.lastTransientCondition != nil && !scheduler.isSyncing
+        }
+
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertNil(scheduler.lastSyncedAt)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
+
+        scheduler.recordFailureForTesting(message: "unattributed sync error")
+        scheduler.retrySync()
+        try await waitUntil {
+            client.fetchRequests.count == 2
+                && scheduler.lastTransientCondition != nil
+                && !scheduler.isSyncing
+        }
+
+        XCTAssertEqual(scheduler.lastFailure?.message, "unattributed sync error")
+        XCTAssertEqual(scheduler.lastFailure?.reason, .syncError)
+        XCTAssertEqual(scheduler.lastFailure?.origin, .unknown)
+    }
+
+    func testTransientPushAfterSuccessfulInitialPullClearsResolvedPostPushPullSyncError() async throws {
+        struct PullError: LocalizedError {
+            var errorDescription: String? { "post-push pull failed" }
+        }
+
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let firstExercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(firstExercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: firstExercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.onUpsertExercise = { _ in
+            client.fetchError = PullError()
+        }
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client),
+            modelContext: context
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+
+        scheduler.requestSync()
+        try await waitUntil { scheduler.lastFailure != nil && !scheduler.isSyncing }
+        XCTAssertEqual(scheduler.lastFailure?.reason, .syncError)
+        XCTAssertEqual(scheduler.lastFailure?.origin, .remotePull)
+
+        let retryExercise = Exercise(
+            name: "Deadlift",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Hamstrings",
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(retryExercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: retryExercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 200)
+        )
+        try context.save()
+        client.onUpsertExercise = nil
+        client.fetchError = nil
+        client.error = URLError(.notConnectedToInternet)
+
+        scheduler.retrySync()
+        try await waitUntil {
+            client.fetchRequests.count == 2
+                && scheduler.lastTransientCondition != nil
+                && !scheduler.isSyncing
+        }
+
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertNil(scheduler.lastSyncedAt)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
+    }
+
     func testOfflinePushIsATransientSyncConditionInsteadOfADurableSyncFailure() async throws {
         let owner = "issuer|owner_private"
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
@@ -414,8 +558,16 @@ final class SyncSchedulerStatusTests: XCTestCase {
         scheduler.currentOwnerTokenIdentifier = owner
 
         scheduler.requestSync()
-        try await waitUntil { scheduler.lastFailure != nil }
+        try await waitUntil {
+            let entry = try? context.fetch(FetchDescriptor<SyncOutboxEntry>()).first
+            return entry?.attemptCount == 1 && !scheduler.isSyncing
+        }
 
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
+        XCTAssertEqual(entry.status, .pending)
+        XCTAssertNil(entry.lastErrorMessage)
         XCTAssertTrue(sink.observations.contains {
             $0.kind == .breadcrumb
                 && $0.phase == .push
@@ -488,14 +640,61 @@ final class SyncSchedulerStatusTests: XCTestCase {
         scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
 
         scheduler.requestSync()
-        try await waitUntil { scheduler.lastFailure != nil }
+        try await waitUntil {
+            sink.observations.contains {
+                $0.kind == .breadcrumb
+                    && $0.phase == .pull
+                    && $0.errorCode == .requestTimedOut
+            } && !scheduler.isSyncing
+        }
 
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .requestTimedOut)
+        XCTAssertFalse(scheduler.hasUnfinishedSyncWork)
+        XCTAssertTrue(scheduler.shouldAttemptNetworkRecovery)
         XCTAssertTrue(sink.observations.contains {
             $0.kind == .breadcrumb
                 && $0.phase == .pull
                 && $0.errorCode == .requestTimedOut
         })
         XCTAssertFalse(sink.observations.contains { $0.kind == .durableFailure })
+    }
+
+    func testOfflinePullRecordsNetworkTransientSyncCondition() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let client = FakeSyncClient()
+        client.fetchError = URLError(.notConnectedToInternet)
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client, observability: observability),
+            modelContext: context,
+            observability: observability
+        )
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+
+        scheduler.requestSync()
+        try await waitUntil {
+            sink.observations.contains {
+                $0.kind == .breadcrumb
+                    && $0.phase == .pull
+                    && $0.errorCode == .networkUnavailable
+            } && !scheduler.isSyncing
+        }
+
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
+        XCTAssertFalse(scheduler.hasUnfinishedSyncWork)
+        XCTAssertTrue(scheduler.shouldAttemptNetworkRecovery)
+
+        client.fetchError = nil
+        scheduler.retrySync()
+        try await waitUntil { scheduler.lastSyncedAt != nil }
+
+        XCTAssertNil(scheduler.lastTransientCondition)
+        XCTAssertFalse(scheduler.hasUnfinishedSyncWork)
+        XCTAssertFalse(scheduler.shouldAttemptNetworkRecovery)
     }
 
     func testResolvingCurrentOwnerQueuesSyncAsATransientAuthorizationCondition() throws {
@@ -683,6 +882,140 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertFalse(sink.observations.contains { $0.kind == .durableFailure })
     }
 
+    func testTransientPushAfterSuccessfulDurableRetryClearsResolvedFailure() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        let failedEntry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            operation: .create,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100),
+            lastAttemptAt: Date(timeIntervalSince1970: 100),
+            attemptCount: 1,
+            lastErrorMessage: "durable failure"
+        )
+        let session = WorkoutSession(
+            title: "Later pending workout",
+            startedAt: Date(timeIntervalSince1970: 200),
+            endedAt: Date(timeIntervalSince1970: 300),
+            durationSeconds: 100,
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        context.insert(exercise)
+        context.insert(failedEntry)
+        context.insert(session)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .workoutSession,
+            entityID: session.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 200)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.onUpsertExercise = { _ in
+            client.error = URLError(.notConnectedToInternet)
+        }
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client),
+            modelContext: context
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+        scheduler.recordFailureForTesting(
+            message: "Cloud sync could not finish.",
+            reason: .failedOutboxPush
+        )
+
+        scheduler.retrySync()
+        try await waitUntil {
+            !scheduler.isSyncing && scheduler.lastTransientCondition != nil
+        }
+
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertNil(scheduler.lastSyncedAt)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.entityKind, .workoutSession)
+        XCTAssertEqual(entries.first?.status, .pending)
+    }
+
+    func testTransientPostPushPullAfterSuccessfulDurableRetryClearsResolvedFailure() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        let failedEntry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            operation: .create,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100),
+            lastAttemptAt: Date(timeIntervalSince1970: 100),
+            attemptCount: 1,
+            lastErrorMessage: "durable failure"
+        )
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        context.insert(exercise)
+        context.insert(failedEntry)
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.onUpsertExercise = { _ in
+            client.fetchError = URLError(.notConnectedToInternet)
+        }
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client),
+            modelContext: context
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+        scheduler.recordFailureForTesting(
+            message: "Cloud sync could not finish.",
+            reason: .failedOutboxPush
+        )
+
+        scheduler.retrySync()
+        try await waitUntil {
+            !scheduler.isSyncing && scheduler.lastTransientCondition != nil
+        }
+
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertNil(scheduler.lastSyncedAt)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
     func testSchedulerDoesNotRecordSuccessWhenPushLeavesFailedOutboxEntry() async throws {
         struct PushError: LocalizedError {
             var errorDescription: String? { "push failed" }
@@ -786,6 +1119,100 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertEqual(failure.errorCode, .incompleteRemotePull)
     }
 
+    func testTransientPushPreservesKnownIncompleteRemotePullFailure() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(exercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.fetchResponses = [
+            SyncFetchChangesResponse(
+                userSettings: [],
+                exercises: [],
+                workoutSessions: [],
+                loggedExercises: [
+                    LoggedExerciseSyncRecord(
+                        clientId: "00000000-0000-0000-0000-000000006621",
+                        createdAt: 1,
+                        updatedAt: 2,
+                        deletedAt: nil,
+                        serverUpdatedAt: 50,
+                        sessionClientId: "00000000-0000-0000-0000-000000006622",
+                        exerciseClientId: nil,
+                        orderIndex: 0,
+                        exerciseSnapshotName: "Standing Calf Raise",
+                        exerciseSnapshotEquipmentRaw: "machine",
+                        exerciseSnapshotPrimaryMuscleGroupRaw: "legs",
+                        hasSnapshotMetadata: true,
+                        notes: "",
+                        referenceNotes: nil,
+                        sourceLoggedExerciseID: nil
+                    )
+                ],
+                loggedSets: [],
+                cursors: SyncChangeCursors(
+                    userSettings: 0,
+                    exercises: 0,
+                    workoutSessions: 0,
+                    loggedExercises: 50,
+                    loggedSets: 0
+                ),
+                hasMore: SyncHasMore(
+                    userSettings: false,
+                    exercises: false,
+                    loggedExercises: true
+                )
+            )
+        ]
+        client.error = URLError(.notConnectedToInternet)
+        let sink = RecordingSyncObservationSink()
+        let observability = SyncObservability(sink: sink)
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client, observability: observability),
+            modelContext: context,
+            observability: observability
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+
+        scheduler.requestSync()
+        try await waitUntil { scheduler.lastFailure != nil && !scheduler.isSyncing }
+
+        XCTAssertNil(scheduler.lastSyncedAt)
+        XCTAssertEqual(scheduler.lastFailure?.reason, .incompleteRemotePull)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
+        XCTAssertEqual(entry.status, .pending)
+        XCTAssertTrue(sink.observations.contains {
+            $0.kind == .durableFailure && $0.errorCode == .incompleteRemotePull
+        })
+        XCTAssertTrue(sink.observations.contains {
+            $0.kind == .breadcrumb
+                && $0.phase == .push
+                && $0.errorCode == .networkUnavailable
+        })
+    }
+
     func testSchedulerDrainsMorePendingEntriesBeforeFailingIncompleteRemotePull() async throws {
         let owner = "issuer|owner_a"
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
@@ -853,6 +1280,279 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertNotNil(scheduler.lastSyncedAt)
         XCTAssertEqual(client.upsertedExercises.count, 51)
         XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
+    func testSuccessfulCappedPageDrainsPendingWorkBeforeUntouchedDurableRetry() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let recorder = SyncOutboxRecorder()
+        for index in 0..<51 {
+            let exercise = Exercise(
+                name: "Pending Exercise \(index)",
+                category: .strength,
+                equipment: .barbell,
+                primaryMuscle: "Back",
+                syncOwnerTokenIdentifier: owner
+            )
+            context.insert(exercise)
+            try recorder.recordUpdate(
+                entityKind: .exercise,
+                entityID: exercise.id,
+                ownerTokenIdentifier: owner,
+                context: context,
+                now: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+        }
+        let retryExercise = Exercise(
+            name: "Durable Retry",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Back",
+            syncOwnerTokenIdentifier: owner
+        )
+        let failedEntry = SyncOutboxEntry(
+            entityKind: .exercise,
+            entityID: retryExercise.id,
+            operation: .update,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100),
+            lastAttemptAt: Date(timeIntervalSince1970: 100),
+            attemptCount: 1,
+            lastErrorMessage: "previous durable failure"
+        )
+        context.insert(retryExercise)
+        context.insert(failedEntry)
+        try context.save()
+
+        let client = FakeSyncClient()
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client),
+            modelContext: context
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+        scheduler.recordFailureForTesting(
+            message: "Cloud sync could not finish.",
+            reason: .failedOutboxPush
+        )
+
+        scheduler.retrySync()
+        try await waitUntil {
+            (scheduler.lastSyncedAt != nil || client.upsertedExercises.count >= 50)
+                && !scheduler.isSyncing
+        }
+
+        XCTAssertNotNil(scheduler.lastSyncedAt)
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertEqual(client.upsertedExercises.count, 52)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
+    func testSuccessfulCappedPageClearsResolvedFailureBeforeNextInitialPullInterruption() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let settings = UserSettings(syncOwnerTokenIdentifier: owner)
+        let failedEntry = SyncOutboxEntry(
+            entityKind: .userSettings,
+            entityID: settings.id,
+            operation: .update,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100),
+            lastAttemptAt: Date(timeIntervalSince1970: 100),
+            attemptCount: 1,
+            lastErrorMessage: "previous durable failure"
+        )
+        context.insert(settings)
+        context.insert(failedEntry)
+        let recorder = SyncOutboxRecorder()
+        for index in 0..<50 {
+            let exercise = Exercise(
+                name: "Pending Exercise \(index)",
+                category: .strength,
+                equipment: .barbell,
+                primaryMuscle: "Back",
+                syncOwnerTokenIdentifier: owner
+            )
+            context.insert(exercise)
+            try recorder.recordUpdate(
+                entityKind: .exercise,
+                entityID: exercise.id,
+                ownerTokenIdentifier: owner,
+                context: context,
+                now: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+        }
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.onUpsertExercise = { _ in
+            if client.upsertedExercises.count == 48 {
+                client.fetchError = URLError(.notConnectedToInternet)
+            }
+        }
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client),
+            modelContext: context
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+        scheduler.recordFailureForTesting(
+            message: "Cloud sync could not finish.",
+            reason: .failedOutboxPush
+        )
+
+        scheduler.retrySync()
+        try await waitUntil {
+            scheduler.lastTransientCondition != nil && !scheduler.isSyncing
+        }
+
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertNil(scheduler.lastSyncedAt)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .networkUnavailable)
+        XCTAssertEqual(client.upsertedSettings.count, 1)
+        XCTAssertEqual(client.upsertedExercises.count, 49)
+        let remainingEntries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertEqual(remainingEntries.count, 1)
+        XCTAssertEqual(remainingEntries.first?.status, .pending)
+    }
+
+    func testPostPushPullInterruptionClearsResolvedIncompletePullFailure() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(exercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.onUpsertExercise = { _ in
+            client.fetchError = URLError(.timedOut)
+        }
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client),
+            modelContext: context
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+        scheduler.recordFailureForTesting(
+            message: "Cloud sync could not finish.",
+            reason: .incompleteRemotePull
+        )
+
+        scheduler.retrySync()
+        try await waitUntil {
+            scheduler.lastTransientCondition != nil && !scheduler.isSyncing
+        }
+
+        XCTAssertNil(scheduler.lastFailure)
+        XCTAssertNil(scheduler.lastSyncedAt)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .requestTimedOut)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
+    func testInitialPullInterruptionPreservesIncompletePullFailure() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let client = FakeSyncClient()
+        client.fetchError = URLError(.timedOut)
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client),
+            modelContext: context
+        )
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+        scheduler.recordFailureForTesting(
+            message: "Cloud sync could not finish.",
+            reason: .incompleteRemotePull
+        )
+
+        scheduler.retrySync()
+        try await waitUntil {
+            scheduler.lastTransientCondition != nil && !scheduler.isSyncing
+        }
+
+        XCTAssertEqual(scheduler.lastFailure?.reason, .incompleteRemotePull)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .requestTimedOut)
+    }
+
+    func testIncompleteInitialPullSurvivesPostPushPullInterruption() async throws {
+        let owner = "issuer|owner_a"
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(SyncCursorState(
+            ownerTokenIdentifier: owner,
+            hasBootstrappedSettingsExercises: true,
+            hasBootstrappedWorkoutGraph: true
+        ))
+        let exercise = Exercise(
+            name: "Bench Press",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Chest",
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(exercise)
+        try SyncOutboxRecorder().recordUpdate(
+            entityKind: .exercise,
+            entityID: exercise.id,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        try context.save()
+
+        let client = FakeSyncClient()
+        client.fetchResponses = [Self.incompleteRemotePullResponse]
+        client.onUpsertExercise = { _ in
+            client.fetchError = URLError(.timedOut)
+        }
+        let scheduler = SyncScheduler(
+            coordinator: SyncCoordinator(client: client),
+            modelContext: context
+        )
+        scheduler.currentOwnerTokenIdentifier = owner
+        scheduler.recordFailureForTesting(
+            message: "Cloud sync could not finish.",
+            reason: .incompleteRemotePull
+        )
+
+        scheduler.retrySync()
+        try await waitUntil {
+            scheduler.lastTransientCondition != nil && !scheduler.isSyncing
+        }
+
+        XCTAssertEqual(scheduler.lastFailure?.reason, .incompleteRemotePull)
+        XCTAssertEqual(scheduler.lastTransientCondition?.errorCode, .requestTimedOut)
     }
 
     func testSchedulerDiscardsOutboxEntryWhenLocalRecordBelongsToDifferentOwner() async throws {
@@ -1183,5 +1883,45 @@ final class SyncSchedulerStatusTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         return LastKnownSyncOwnerTokenStore(userDefaults: defaults)
+    }
+
+    private static var incompleteRemotePullResponse: SyncFetchChangesResponse {
+        SyncFetchChangesResponse(
+            userSettings: [],
+            exercises: [],
+            workoutSessions: [],
+            loggedExercises: [
+                LoggedExerciseSyncRecord(
+                    clientId: "00000000-0000-0000-0000-000000006701",
+                    createdAt: 1,
+                    updatedAt: 2,
+                    deletedAt: nil,
+                    serverUpdatedAt: 50,
+                    sessionClientId: "00000000-0000-0000-0000-000000006702",
+                    exerciseClientId: nil,
+                    orderIndex: 0,
+                    exerciseSnapshotName: "Standing Calf Raise",
+                    exerciseSnapshotEquipmentRaw: "machine",
+                    exerciseSnapshotPrimaryMuscleGroupRaw: "legs",
+                    hasSnapshotMetadata: true,
+                    notes: "",
+                    referenceNotes: nil,
+                    sourceLoggedExerciseID: nil
+                )
+            ],
+            loggedSets: [],
+            cursors: SyncChangeCursors(
+                userSettings: 0,
+                exercises: 0,
+                workoutSessions: 0,
+                loggedExercises: 50,
+                loggedSets: 0
+            ),
+            hasMore: SyncHasMore(
+                userSettings: false,
+                exercises: false,
+                loggedExercises: true
+            )
+        )
     }
 }

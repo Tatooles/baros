@@ -166,11 +166,16 @@ struct BarosApp: App {
                 currentOwnerCoordinator.start()
                 networkRecoveryActivity.setActive(scenePhase == .active)
                 if observesNetworkRecovery {
-                    networkPathObserver.start { candidate in
-                        networkRecoveryActivity.performIfCurrent(candidate) { ownerCandidate in
-                            currentOwnerCoordinator.networkDidRecover(ownerCandidate)
+                    networkPathObserver.start(
+                        onAvailabilityChange: { availability in
+                            syncScheduler.updateNetworkAvailability(availability)
+                        },
+                        onNetworkRecovery: { candidate in
+                            networkRecoveryActivity.performIfCurrent(candidate) { ownerCandidate in
+                                currentOwnerCoordinator.networkDidRecover(ownerCandidate)
+                            }
                         }
-                    }
+                    )
                 }
                 if let uiTestSyncFailureMessage {
                     syncScheduler.recordFailureForTesting(message: uiTestSyncFailureMessage)

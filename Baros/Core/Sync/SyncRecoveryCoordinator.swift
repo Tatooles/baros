@@ -242,7 +242,7 @@ final class SyncRecoveryCoordinator {
                 guard isRecoveryValid(
                     activeRecovery.recoveryInvalidationGeneration,
                     sessionIdentifier: activeRecovery.sessionIdentifier
-                ), syncScheduler.hasUnfinishedSyncWork else {
+                ), syncScheduler.shouldAttemptNetworkRecovery else {
                     return
                 }
                 if let newerRecovery = self.activeRecovery,

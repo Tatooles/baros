@@ -4,6 +4,7 @@ struct SyncStatusDisplayState {
     enum Kind: Equatable {
         case localOnly
         case syncing
+        case waitingForConnection
         case waiting
         case upToDate
         case needsAttention
@@ -32,6 +33,9 @@ struct SyncStatusDisplayState {
     static func make(
         ownerTokenIdentifier: String?,
         isSyncing: Bool,
+        networkAvailability: NetworkAvailability = .unknown,
+        transientCondition: SyncStableErrorCode? = nil,
+        hasQueuedSyncRequest: Bool = false,
         lastSyncedAt: Date?,
         lastFailureMessage: String?,
         lastFailureReason: SyncScheduler.FailureReason? = nil,
@@ -56,7 +60,35 @@ struct SyncStatusDisplayState {
             )
         }
 
-        if isSyncing {
+        if networkAvailability == .unavailable || networkAvailability == .requiresConnection,
+           lastFailureMessage == nil,
+           failedCount == 0,
+           isSyncing || pendingCount > 0 || hasQueuedSyncRequest || transientCondition != nil {
+            let canRetry = networkAvailability == .requiresConnection
+            return SyncStatusDisplayState(
+                kind: .waitingForConnection,
+                title: "Sync Status",
+                subtitle: "Waiting for connection. Your data is saved on this iPhone.",
+                detailText: countsText(
+                    pendingCount: pendingCount,
+                    failedCount: failedCount,
+                    lastSyncedAt: lastSyncedAt,
+                    now: now
+                ),
+                trailingText: canRetry ? "Retry" : "Offline",
+                systemImage: "icloud.slash",
+                tint: .secondary,
+                canRetry: canRetry,
+                showsGlobalFailureNotice: false,
+                failureNoticeTitle: nil,
+                failureNoticeMessage: nil,
+                userVisibleFailureMessage: nil
+            )
+        }
+
+        if isSyncing,
+           networkAvailability != .unavailable,
+           networkAvailability != .requiresConnection {
             return SyncStatusDisplayState(
                 kind: .syncing,
                 title: "Sync Status",
@@ -95,11 +127,61 @@ struct SyncStatusDisplayState {
             )
         }
 
-        if pendingCount > 0 {
+        if transientCondition == .networkUnavailable {
+            let isKnownOffline = networkAvailability == .unavailable
+            return SyncStatusDisplayState(
+                kind: .waitingForConnection,
+                title: "Sync Status",
+                subtitle: "Waiting for connection. Your data is saved on this iPhone.",
+                detailText: countsText(
+                    pendingCount: pendingCount,
+                    failedCount: failedCount,
+                    lastSyncedAt: lastSyncedAt,
+                    now: now
+                ),
+                trailingText: isKnownOffline ? "Offline" : "Retry",
+                systemImage: "icloud.slash",
+                tint: .secondary,
+                canRetry: !isKnownOffline,
+                showsGlobalFailureNotice: false,
+                failureNoticeTitle: nil,
+                failureNoticeMessage: nil,
+                userVisibleFailureMessage: nil
+            )
+        }
+
+        if transientCondition != nil {
             return SyncStatusDisplayState(
                 kind: .waiting,
                 title: "Sync Status",
-                subtitle: "\(pendingCount) \(pendingCount == 1 ? "change" : "changes") waiting for cloud sync.",
+                subtitle: "Cloud sync was interrupted. Your data is saved on this iPhone.",
+                detailText: countsText(
+                    pendingCount: pendingCount,
+                    failedCount: failedCount,
+                    lastSyncedAt: lastSyncedAt,
+                    now: now
+                ),
+                trailingText: "Retry",
+                systemImage: "icloud.and.arrow.up",
+                tint: .secondary,
+                canRetry: true,
+                showsGlobalFailureNotice: false,
+                failureNoticeTitle: nil,
+                failureNoticeMessage: nil,
+                userVisibleFailureMessage: nil
+            )
+        }
+
+        if pendingCount > 0 || hasQueuedSyncRequest {
+            let subtitle = if pendingCount > 0 {
+                "\(pendingCount) \(pendingCount == 1 ? "change" : "changes") waiting for cloud sync."
+            } else {
+                "Cloud sync is waiting to resume."
+            }
+            return SyncStatusDisplayState(
+                kind: .waiting,
+                title: "Sync Status",
+                subtitle: subtitle,
                 detailText: lastSyncedText(lastSyncedAt, now: now).map { "Last synced \($0)." },
                 trailingText: "Waiting",
                 systemImage: "icloud.and.arrow.up",
