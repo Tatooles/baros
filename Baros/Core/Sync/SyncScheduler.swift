@@ -93,6 +93,7 @@ final class SyncScheduler {
     private(set) var lastTransientCondition: TransientCondition?
     private(set) var isDeletionModeEnabled = false
     private(set) var isCloudSyncAuthorized = true
+    private(set) var networkAvailability: NetworkAvailability = .unknown
     private(set) var recoveryInvalidationGeneration: UInt = 0
 
     private var coordinator: SyncCoordinator?
@@ -206,6 +207,10 @@ final class SyncScheduler {
 
     func authorizeCloudSync() {
         isCloudSyncAuthorized = true
+    }
+
+    func updateNetworkAvailability(_ availability: NetworkAvailability) {
+        networkAvailability = availability
     }
 
     func beginDeletionMode() {
