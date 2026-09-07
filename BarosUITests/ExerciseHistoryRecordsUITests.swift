@@ -46,8 +46,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
 
     func testRecordsAndBadgesSupportAccessibilityTextSizes() {
         let app = openRecords(extraArguments: [
-            "-UIPreferredContentSizeCategoryName",
-            "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+            "--uitest-accessibility-dynamic-type",
         ])
         XCTAssertTrue(app.descendants(matching: .any)["ExerciseRecord-heaviestRep"].waitForExistence(timeout: 5))
         let badge = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseRecordBadge-estimated1RM-")).firstMatch
@@ -94,7 +93,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             "--uitest-skip-first-run-experience", "--uitest-seed-strength-records",
         ] + extraArguments
         app.launch()
-        let history = app.buttons["HistoryTab"]
+        let history = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "HistoryTab", "History")).firstMatch
         XCTAssertTrue(history.waitForExistence(timeout: 5))
         history.tap()
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
