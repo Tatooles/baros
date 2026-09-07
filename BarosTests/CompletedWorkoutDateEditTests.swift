@@ -278,6 +278,8 @@ final class CompletedWorkoutDateEditTests: XCTestCase {
         context.insert(session)
         try context.save()
         var draft = CompletedWorkoutEditDraft(session: session, calendar: utcCalendar)
+        draft.date = date("2026-09-05T12:00:00Z")
+        XCTAssertFalse(draft.didEditDate)
         let concurrentlyUpdatedStart = date("2026-09-04T10:15:00Z")
         session.startedAt = concurrentlyUpdatedStart
         session.endedAt = date("2026-09-04T11:09:07Z")
@@ -294,6 +296,74 @@ final class CompletedWorkoutDateEditTests: XCTestCase {
         XCTAssertEqual(session.title, "Corrected title")
         XCTAssertEqual(session.startedAt, concurrentlyUpdatedStart)
         XCTAssertEqual(session.endedAt, date("2026-09-04T11:09:07Z"))
+    }
+
+    func testRestoringOriginalDayWinsAConcurrentTimingUpdateAfterDateEdit() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let originalStart = date("2026-09-05T21:30:17Z")
+        let session = WorkoutSession(
+            title: "Concurrent",
+            startedAt: originalStart,
+            endedAt: date("2026-09-05T22:24:24Z"),
+            durationSeconds: 3_247,
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: "owner"
+        )
+        context.insert(session)
+        try context.save()
+        var draft = CompletedWorkoutEditDraft(session: session, calendar: utcCalendar)
+        draft.date = date("2026-09-04T00:00:00Z")
+        draft.date = date("2026-09-05T00:00:00Z")
+        session.startedAt = date("2026-09-03T10:15:00Z")
+        session.endedAt = date("2026-09-03T11:09:07Z")
+
+        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+            draft,
+            for: session,
+            ownerTokenIdentifier: "owner",
+            context: context,
+            now: date("2026-09-06T23:00:00Z")
+        )
+
+        XCTAssertEqual(session.startedAt, originalStart)
+        XCTAssertEqual(session.endedAt, date("2026-09-05T22:24:24Z"))
+    }
+
+    func testRestoringOriginalDayIsNoOpWithoutConcurrentTimingUpdate() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let originalStart = date("2026-09-05T21:30:17Z")
+        let originalEnd = date("2026-09-05T22:24:24Z")
+        let session = WorkoutSession(
+            title: "Round trip",
+            startedAt: originalStart,
+            endedAt: originalEnd,
+            durationSeconds: 3_247,
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: "owner"
+        )
+        context.insert(session)
+        try context.save()
+        let originalUpdatedAt = session.updatedAt
+        var draft = CompletedWorkoutEditDraft(session: session, calendar: utcCalendar)
+        draft.date = date("2026-09-04T00:00:00Z")
+        draft.date = date("2026-09-05T00:00:00Z")
+
+        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+            draft,
+            for: session,
+            ownerTokenIdentifier: "owner",
+            context: context,
+            now: date("2026-09-06T23:00:00Z")
+        )
+
+        XCTAssertEqual(session.startedAt, originalStart)
+        XCTAssertEqual(session.endedAt, originalEnd)
+        XCTAssertEqual(session.updatedAt, originalUpdatedAt)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
     }
 
     func testDateEditReopensFromDiskWithOriginalIDsAndSetCompletion() throws {

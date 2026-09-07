@@ -34,7 +34,14 @@ struct CompletedWorkoutEditDraft {
     var title: String
     var notes: String
     var durationSeconds: Int
-    var date: Date
+    var date: Date {
+        didSet {
+            if !calendar.isDate(date, inSameDayAs: oldValue) {
+                didEditDate = true
+            }
+        }
+    }
+    private(set) var didEditDate = false
     var exercises: [CompletedWorkoutEditExerciseDraft]
     let calendar: Calendar
     private let originalStartedAt: Date
@@ -199,7 +206,7 @@ struct WorkoutHistoryMutationService {
         )
 
         let normalizedDurationSeconds = max(0, draft.durationSeconds)
-        let resolvedStartedAt = draft.hasDateChange
+        let resolvedStartedAt = draft.didEditDate
             ? try draft.resolvedStartedAt(now: now)
             : session.startedAt
         let willChangeDate = resolvedStartedAt != session.startedAt
