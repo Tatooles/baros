@@ -4,6 +4,7 @@ struct ExerciseHistoryRecordsCard: View {
     let records: ExerciseHistoryRecords
     let weightUnit: MeasurementUnit
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showsInformation = false
 
     var body: some View {
@@ -14,7 +15,7 @@ struct ExerciseHistoryRecordsCard: View {
                         .font(.footnote.weight(.semibold))
                         .textCase(.uppercase)
                         .tracking(0.5)
-                        .foregroundStyle(AppTheme.textSecondary)
+                        .foregroundStyle(BarosAdaptiveColor.dynamic(light: 0x594115, dark: 0xD8B764))
                     Spacer()
                     Button { showsInformation = true } label: {
                         Image(systemName: "info.circle")
@@ -57,6 +58,16 @@ struct ExerciseHistoryRecordsCard: View {
                 }
             }
             .foregroundStyle(AppTheme.textPrimary)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius, style: .continuous)
+                .strokeBorder(
+                    BarosAdaptiveColor.dynamic(light: 0xB98A2E, dark: 0xD8B764)
+                        .opacity(colorScheme == .dark ? 0.35 : 0.30),
+                    lineWidth: 1
+                )
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
         .sheet(isPresented: $showsInformation) {
             StrengthRecordsInformationView()

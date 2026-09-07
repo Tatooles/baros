@@ -33,7 +33,7 @@ Keep the full chronological history visible. If it contains equipment different 
 
 ## Presentation elaboration
 
-Use the existing card treatment and typography. Place “Records” and an accessible information button in the card header. Following the 2026-09-07 refinement, use a quiet uppercase section label and two equal-width record columns separated by generous space. Align labels and values at the top; put weight/reps, set/date, and workout title on separate lines. Fall back to vertically stacked records with a divider at accessibility text sizes or when the columns cannot fit, allowing long source titles to wrap. Following visual review, the record rows have no tap action or disclosure chevron. Show the record sources directly in the history below using set badges.
+Use the existing card treatment and typography. Place “Records” and an accessible information button in the card header. Following the 2026-09-07 refinement, use a quiet gold uppercase section label, a subtle one-point gold border, and two equal-width record columns separated by generous space. Align labels and values at the top; put weight/reps, set/date, and workout title on separate lines. Fall back to vertically stacked records with a divider at accessibility text sizes or when the columns cannot fit, allowing long source titles to wrap. Following visual review, the record rows have no tap action or disclosure chevron. Show the record sources directly in the history below using set badges.
 
 Illustrative content, not real user data:
 
