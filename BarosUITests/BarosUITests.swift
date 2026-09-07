@@ -1882,7 +1882,8 @@ final class BarosUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
         let sourceWeight = app.textFields["SetWeightField-9-0"]
-        for _ in 0..<30 where !sourceWeight.isHittable {
+        for _ in 0..<30 {
+            if sourceWeight.isHittable { break }
             app.swipeUp()
         }
         XCTAssertTrue(sourceWeight.isHittable)
