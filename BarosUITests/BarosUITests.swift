@@ -1463,6 +1463,7 @@ final class BarosUITests: XCTestCase {
 
         let performanceButton = exercisePerformanceButtons(in: app).firstMatch
         let setLabel = app.staticTexts["Set 1"]
+        for _ in 0..<10 where !performanceButton.isHittable { app.swipeUp() }
         XCTAssertTrue(performanceButton.waitForExistence(timeout: 3))
         XCTAssertTrue(setLabel.waitForExistence(timeout: 3))
         XCTAssertTrue(performanceButton.isHittable)

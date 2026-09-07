@@ -38,6 +38,14 @@ _Avoid_: Completed set count, exercise appearance
 A note attached to one exercise occurrence within a workout. Separate occurrences of the same exercise have independent Exercise Notes.
 _Avoid_: Exercise library note, reference note, set note
 
+**Heaviest Rep**:
+The greatest positive recorded load lifted for at least one completed repetition in a finished workout, for an exercise and matching equipment. Warmup, working, drop, and failure sets can qualify.
+_Avoid_: Actual 1RM, actual maximum
+
+**Estimated 1RM**:
+An estimate of a one-repetition maximum from an exercise's eligible completed working or failure sets of one to ten repetitions with matching equipment. It describes recorded performance without adjusting for effort and does not establish what the person can currently lift.
+_Avoid_: Actual 1RM, predicted ability
+
 **Durable Sync Failure**:
 A sync problem that Baros already classifies as a failed outbox push, incomplete remote pull, safely mapped sync error, or owner-boundary problem. It warrants an external technical report without workout content or Current Owner identity.
 _Avoid_: Sync error, Sentry event, persistent error
