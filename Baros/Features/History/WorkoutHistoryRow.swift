@@ -21,13 +21,17 @@ struct WorkoutHistoryRow: View {
                     Text(WorkoutFormatters.compactDate(session.startedAt))
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(AppTheme.textSecondary)
-                    HStack(spacing: 12) {
-                        Label(AppTheme.formatDuration(metrics.durationSeconds), systemImage: "clock")
-                        Text("\(session.visibleExerciseCount) exercises")
-                        Text("\(metrics.completedSetCount) sets")
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) {
+                            workoutMetrics
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            workoutMetrics
+                        }
                     }
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(AppTheme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
@@ -37,5 +41,20 @@ struct WorkoutHistoryRow: View {
                     .foregroundStyle(AppTheme.textTertiary)
             }
         }
+    }
+
+    @ViewBuilder
+    private var workoutMetrics: some View {
+        ViewThatFits(in: .horizontal) {
+            durationLabel
+            // Keep long durations intact even at the largest text size.
+            durationLabel.labelStyle(.titleOnly)
+        }
+        Text("\(session.visibleExerciseCount) exercises")
+        Text("\(metrics.completedSetCount) sets")
+    }
+
+    private var durationLabel: some View {
+        Label(AppTheme.formatDuration(metrics.durationSeconds), systemImage: "clock")
     }
 }

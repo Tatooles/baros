@@ -28,6 +28,10 @@ enum UITestFixtureSeeder {
             )
         }
 
+        if arguments.contains("--uitest-seed-workout-history-layout") {
+            try seedWorkoutHistoryLayoutFixture(context: context)
+        }
+
         for title in values(after: futureCompletedBenchWorkoutArgument, in: arguments) {
             try seedCompletedBenchWorkout(
                 title: title,
@@ -57,6 +61,32 @@ enum UITestFixtureSeeder {
                 context: context
             )
         }
+    }
+
+    private static func seedWorkoutHistoryLayoutFixture(context: ModelContext) throws {
+        let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        for (index, duration) in [2_723, 929_536].enumerated() {
+            let endedAt = startedAt.addingTimeInterval(Double(duration))
+            let exercises = (0..<9).map { exerciseIndex in
+                LoggedExercise(
+                    orderIndex: exerciseIndex,
+                    exerciseSnapshotName: "Exercise \(exerciseIndex + 1)",
+                    sets: (0..<(exerciseIndex < 4 ? 3 : 2)).map { setIndex in
+                        LoggedSet(orderIndex: setIndex, isCompleted: true, completedAt: endedAt)
+                    }
+                )
+            }
+            context.insert(WorkoutSession(
+                title: index == 0 ? "Workout" : "Long Workout",
+                startedAt: startedAt.addingTimeInterval(Double(-index)),
+                endedAt: endedAt.addingTimeInterval(Double(-index)),
+                durationSeconds: duration,
+                status: .completed,
+                source: .blank,
+                loggedExercises: exercises
+            ))
+        }
+        try context.save()
     }
 
     static func seedCompletedBenchWorkout(
