@@ -1,9 +1,95 @@
+import UIKit
 import XCTest
 
 final class BarosUITests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
         continueAfterFailure = false
+    }
+
+    @MainActor
+    func testWorkoutHistoryMetricsStayOnSingleLinesAtAccessibilitySize() {
+        let app = makeApp(
+            extraArguments: [
+                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXL",
+            ],
+            completedBenchWorkoutTitles: ["Accessible Workout"]
+        )
+        app.launch()
+        tapTab(identifier: "HistoryTab", label: "History", in: app)
+
+        let historyRow = app.buttons["WorkoutHistoryButton-0"]
+        XCTAssertTrue(historyRow.waitForExistence(timeout: 3))
+        assertWorkoutMetricsFit(in: historyRow, category: .accessibilityExtraLarge)
+
+        tapTab(identifier: "HomeTab", label: "Home", in: app)
+        app.buttons["StartWorkoutButton"].tap()
+        app.buttons["UsePastWorkoutButton"].tap()
+        let pastWorkoutRow = app.buttons["PastWorkoutButton-0"]
+        XCTAssertTrue(pastWorkoutRow.waitForExistence(timeout: 3))
+        assertWorkoutMetricsFit(in: pastWorkoutRow, category: .accessibilityExtraLarge)
+        pastWorkoutRow.tap()
+        assertPastWorkoutReview(in: app, title: "Accessible Workout")
+    }
+
+    @MainActor
+    func testWorkoutHistoryMetricsFitAtStandardAndLargestTextSizes() {
+        for (category, argument) in [
+            (UIContentSizeCategory.large, "UICTContentSizeCategoryL"),
+            (.extraExtraExtraLarge, "UICTContentSizeCategoryXXXL"),
+            (.accessibilityExtraExtraExtraLarge, "UICTContentSizeCategoryAccessibilityXXXL"),
+        ] {
+            let app = makeApp(extraArguments: [
+                "--uitest-seed-workout-history-layout",
+                "-UIPreferredContentSizeCategoryName", argument,
+            ])
+            app.launch()
+            tapTab(identifier: "HistoryTab", label: "History", in: app)
+            for (index, duration) in ["45:23", "258:12:16"].enumerated() {
+                let row = app.buttons["WorkoutHistoryButton-\(index)"]
+                XCTAssertTrue(row.waitForExistence(timeout: 3))
+                for _ in 0..<3 where !row.staticTexts["22 sets"].isHittable {
+                    app.swipeUp()
+                }
+                XCTAssertTrue(row.staticTexts["22 sets"].isHittable)
+                assertWorkoutMetricsFit(
+                    in: row, category: category,
+                    labels: [duration, "9 exercises", "22 sets"]
+                )
+                let screenshot = XCTAttachment(screenshot: app.screenshot())
+                screenshot.name = "Workout History - \(category.rawValue) - \(index)"
+                screenshot.lifetime = .keepAlways
+                add(screenshot)
+            }
+        }
+    }
+
+    @MainActor
+    private func assertWorkoutMetricsFit(
+        in row: XCUIElement,
+        category: UIContentSizeCategory,
+        labels: [String] = ["1:00:00", "1 exercises", "1 sets"],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let lineHeight = UIFont.preferredFont(
+            forTextStyle: .footnote,
+            compatibleWith: UITraitCollection(preferredContentSizeCategory: category)
+        ).lineHeight
+        for label in labels {
+            let metric = row.staticTexts[label]
+            XCTAssertTrue(metric.exists, file: file, line: line)
+            XCTAssertGreaterThanOrEqual(
+                metric.frame.height, floor(lineHeight) - 2,
+                "Metric must honor the requested text size: \(label)", file: file, line: line
+            )
+            XCTAssertLessThanOrEqual(
+                metric.frame.height, ceil(lineHeight) + 2,
+                "Metric should occupy one readable line: \(label)", file: file, line: line
+            )
+            XCTAssertGreaterThanOrEqual(metric.frame.minX, row.frame.minX, file: file, line: line)
+            XCTAssertLessThanOrEqual(metric.frame.maxX, row.frame.maxX, file: file, line: line)
+        }
     }
 
     @MainActor
