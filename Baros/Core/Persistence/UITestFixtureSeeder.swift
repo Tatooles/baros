@@ -4,6 +4,7 @@ import SwiftData
 #if DEBUG
 enum UITestFixtureSeeder {
     static let completedBenchWorkoutArgument = "--uitest-seed-completed-bench-workout"
+    static let futureCompletedBenchWorkoutArgument = "--uitest-seed-future-completed-bench-workout"
     static let historyExerciseNoteArgument = "--uitest-seed-history-exercise-note"
     static let exerciseHistoryPerformanceArgument = "--uitest-seed-exercise-history-performance"
     static let matchingExercisePerformanceWorkoutsArgument =
@@ -29,6 +30,15 @@ enum UITestFixtureSeeder {
 
         if arguments.contains("--uitest-seed-workout-history-layout") {
             try seedWorkoutHistoryLayoutFixture(context: context)
+        }
+
+        for title in values(after: futureCompletedBenchWorkoutArgument, in: arguments) {
+            try seedCompletedBenchWorkout(
+                title: title,
+                startedAt: Date(timeIntervalSince1970: 1_924_972_200),
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
         }
 
         if arguments.contains(exerciseHistoryPerformanceArgument) {
@@ -82,6 +92,7 @@ enum UITestFixtureSeeder {
     static func seedCompletedBenchWorkout(
         title: String,
         exerciseNotes: String = "",
+        startedAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
         ownerTokenIdentifier: String? = nil,
         context: ModelContext
     ) throws {
@@ -102,7 +113,6 @@ enum UITestFixtureSeeder {
         let benchPress = Exercise.visibleActiveExercises(from: exercises, ownerTokenIdentifier: ownerTokenIdentifier)
             .first { $0.seedIdentifier == "bench-press" }
 
-        let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let endedAt = startedAt.addingTimeInterval(3_600)
         let set = LoggedSet(
             orderIndex: 0,
