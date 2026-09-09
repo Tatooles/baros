@@ -8,6 +8,7 @@ struct CompletedWorkoutEditView: View {
 
     let session: WorkoutSession
     let weightUnit: MeasurementUnit
+    private let initialDate: Date
     private let initialDurationSeconds: Int
     private let initialDurationSelection: CompletedWorkoutDurationSelection
     @State private var draft: CompletedWorkoutEditDraft
@@ -23,6 +24,7 @@ struct CompletedWorkoutEditView: View {
     init(session: WorkoutSession, draft: CompletedWorkoutEditDraft, weightUnit: MeasurementUnit) {
         self.session = session
         self.weightUnit = weightUnit
+        initialDate = draft.date
         initialDurationSeconds = draft.durationSeconds
         initialDurationSelection = CompletedWorkoutDurationSelection(seconds: draft.durationSeconds)
         _draft = State(initialValue: draft)
@@ -142,10 +144,32 @@ struct CompletedWorkoutEditView: View {
                 editAffordanceIdentifier: "CompletedWorkoutTitleEditAffordance"
             )
 
-            Text(WorkoutFormatters.compactDate(session.startedAt))
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(AppTheme.textSecondary)
-                .padding(.horizontal, 12)
+            HStack(spacing: 10) {
+                Image(systemName: "calendar")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                Text("Date")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.textSecondary)
+                Spacer()
+                DatePicker(
+                    "Date",
+                    selection: $draft.date,
+                    in: ...datePickerMaximum,
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.compact)
+                .labelsHidden()
+                .environment(\.calendar, draft.calendar)
+                .environment(\.timeZone, draft.calendar.timeZone)
+                .accessibilityIdentifier("CompletedWorkoutDatePicker")
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 48)
+            .background(
+                AppTheme.fieldSurface,
+                in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+            )
 
             Button {
                 focusedField = nil
@@ -182,6 +206,11 @@ struct CompletedWorkoutEditView: View {
 
     private var durationDisplayText: String {
         hasDurationChange ? durationSelection.displayText : AppTheme.formatDuration(initialDurationSeconds)
+    }
+
+    private var datePickerMaximum: Date {
+        // Keep existing future dates visible; Save rejects newly chosen future days.
+        max(initialDate, draft.calendar.startOfDay(for: .now))
     }
 
     private var hasDurationChange: Bool {
