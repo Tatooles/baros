@@ -24,6 +24,8 @@ struct ExerciseHistoryDetailView: View {
     }
 
     var body: some View {
+        let groups = sessionGroups
+        let records = ExerciseHistoryRecords.make(from: groups, equipmentRaw: summary.equipmentRaw)
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 ExerciseHistoryHeading(
@@ -33,7 +35,11 @@ struct ExerciseHistoryDetailView: View {
                 )
                 .accessibilityIdentifier("ExerciseHistoryHeading")
 
-                ForEach(sessionGroups) { group in
+                if let records {
+                    ExerciseHistoryRecordsCard(records: records, weightUnit: weightUnit)
+                }
+
+                ForEach(groups) { group in
                     ExerciseHistorySessionGroupCard(
                         group: group,
                         headingIdentity: ExerciseHistoryDisplayIdentity(
@@ -41,6 +47,7 @@ struct ExerciseHistoryDetailView: View {
                             metadataDisplayText: summary.metadataDisplayText
                         ),
                         weightUnit: weightUnit,
+                        records: records,
                         openWorkout: {
                             workoutSelection = WorkoutHistorySelection(id: group.session.id)
                         }

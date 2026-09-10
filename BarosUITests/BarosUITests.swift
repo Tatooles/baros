@@ -1548,7 +1548,11 @@ final class BarosUITests: XCTestCase {
         openFirstExerciseHistory(in: app)
 
         let performanceButton = exercisePerformanceButtons(in: app).firstMatch
-        let setLabel = app.staticTexts["Set 1"]
+        let setLabel = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label BEGINSWITH %@",
+            "ExerciseHistorySetValue-", "Set 1,"
+        )).firstMatch
+        for _ in 0..<10 where !performanceButton.isHittable { app.swipeUp() }
         XCTAssertTrue(performanceButton.waitForExistence(timeout: 3))
         XCTAssertTrue(setLabel.waitForExistence(timeout: 3))
         XCTAssertTrue(performanceButton.isHittable)
@@ -1760,8 +1764,8 @@ final class BarosUITests: XCTestCase {
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
         app.buttons["ExerciseHistoryButton-0"].tap()
-        XCTAssertTrue(app.staticTexts["205.5 x 6 @ 8"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["135 x 8 @ 7.5"].exists)
+        XCTAssertTrue(exerciseHistorySetValue("205.5 x 6 @ 8", in: app).waitForExistence(timeout: 3))
+        XCTAssertTrue(exerciseHistorySetValue("135 x 8 @ 7.5", in: app).exists)
     }
 
     @MainActor
@@ -2020,8 +2024,8 @@ final class BarosUITests: XCTestCase {
         relaunchedApp.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
         XCTAssertTrue(relaunchedApp.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
         relaunchedApp.buttons["ExerciseHistoryButton-0"].tap()
-        XCTAssertTrue(relaunchedApp.staticTexts["185 x 5 @ 8"].waitForExistence(timeout: 3))
-        XCTAssertTrue(relaunchedApp.staticTexts["135 x 8 @ 7.5"].exists)
+        XCTAssertTrue(exerciseHistorySetValue("185 x 5 @ 8", in: relaunchedApp).waitForExistence(timeout: 3))
+        XCTAssertTrue(exerciseHistorySetValue("135 x 8 @ 7.5", in: relaunchedApp).exists)
     }
 
     @MainActor
@@ -2208,7 +2212,10 @@ final class BarosUITests: XCTestCase {
             ).count,
             0
         )
-        let setLabel = app.staticTexts["Set 1"]
+        let setLabel = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label BEGINSWITH %@",
+            "ExerciseHistorySetValue-", "Set 1,"
+        )).firstMatch
         let noteText = app.staticTexts["ExerciseHistoryNoteText"]
         XCTAssertTrue(setLabel.waitForExistence(timeout: 3))
         XCTAssertTrue(noteText.waitForExistence(timeout: 3))
@@ -2417,7 +2424,7 @@ final class BarosUITests: XCTestCase {
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
         app.buttons["ExerciseHistoryButton-0"].tap()
-        XCTAssertTrue(app.staticTexts["83.91 x 5 @ 8"].waitForExistence(timeout: 3))
+        XCTAssertTrue(exerciseHistorySetValue("83.91 x 5 @ 8", in: app).waitForExistence(timeout: 3))
     }
 
     @MainActor
@@ -2931,6 +2938,14 @@ final class BarosUITests: XCTestCase {
         let firstExercise = app.buttons["ExerciseHistoryButton-0"]
         XCTAssertTrue(firstExercise.waitForExistence(timeout: 3))
         firstExercise.tap()
+    }
+
+    @MainActor
+    private func exerciseHistorySetValue(_ summary: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+            "ExerciseHistorySetValue-", summary
+        )).firstMatch
     }
 
     @MainActor

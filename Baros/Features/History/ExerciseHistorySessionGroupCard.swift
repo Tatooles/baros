@@ -17,7 +17,6 @@ struct ExerciseHistoryHeading: View {
                         Image(systemName: "dumbbell.fill")
                             .font(.system(size: 19, weight: .semibold))
                             .foregroundStyle(AppTheme.brandAccentForeground)
-                            .accessibilityHidden(true)
                     }
                     .accessibilityHidden(true)
             }
@@ -56,6 +55,7 @@ struct ExerciseHistorySessionGroupCard: View {
     let group: ExerciseHistorySessionGroup
     let headingIdentity: ExerciseHistoryDisplayIdentity
     var weightUnit: MeasurementUnit = .pounds
+    var records: ExerciseHistoryRecords? = nil
     var showsExerciseNotes: Bool = true
     var openWorkout: (() -> Void)? = nil
 
@@ -162,16 +162,45 @@ struct ExerciseHistorySessionGroupCard: View {
     private func setRows(for entries: [ExerciseHistorySetEntry]) -> some View {
         VStack(spacing: 8) {
             ForEach(entries) { entry in
-                HStack {
-                    Text("Set \(entry.displaySetNumber)")
-                    Spacer()
-                    Text(setSummary(for: entry.set))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(AppTheme.textPrimary)
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        Text("Set \(entry.displaySetNumber)")
+                        Spacer(minLength: 8)
+                        setResult(for: entry)
+                            .accessibilityHidden(true)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Set \(entry.displaySetNumber)")
+                        setResult(for: entry)
+                            .accessibilityHidden(true)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
                 }
-                .font(.system(size: 14, weight: .medium))
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(AppTheme.textSecondary)
+                .accessibilityRepresentation {
+                    Text(
+                        (["Set \(entry.displaySetNumber)", setSummary(for: entry.set)]
+                            + (records?.kinds(for: entry.id) ?? []).map(\.title))
+                            .joined(separator: ", ")
+                    )
+                    .accessibilityIdentifier("ExerciseHistorySetValue-\(entry.id.uuidString)")
+                }
             }
+        }
+    }
+
+    private func setResult(for entry: ExerciseHistorySetEntry) -> some View {
+        let kinds = records?.kinds(for: entry.id) ?? []
+        return HStack(spacing: 8) {
+            if !kinds.isEmpty {
+                ExerciseHistoryRecordBadges(kinds: kinds, setID: entry.id)
+            }
+            Text(setSummary(for: entry.set))
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(AppTheme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
