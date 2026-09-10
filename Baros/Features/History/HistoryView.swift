@@ -132,13 +132,19 @@ private struct HistorySearchContent: View {
                 message: "Try a workout title or exercise name."
             )
         } else {
-            LazyVStack(spacing: 10) {
-                ForEach(Array(filteredCompletedSessions.enumerated()), id: \.element.id) { index, session in
-                    NavigationLink(value: HistoryRoute.workout(session.id)) {
-                        WorkoutHistoryRow(session: session)
+            SurfaceCard(padding: 0) {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(filteredCompletedSessions.enumerated()), id: \.element.id) { index, session in
+                        NavigationLink(value: HistoryRoute.workout(session.id)) {
+                            WorkoutHistoryRow(
+                                session: session,
+                                presentation: .historyList,
+                                showsDivider: index < filteredCompletedSessions.count - 1
+                            )
+                        }
+                        .buttonStyle(HistoryOverviewRowButtonStyle())
+                        .accessibilityIdentifier("WorkoutHistoryButton-\(index)")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("WorkoutHistoryButton-\(index)")
                 }
             }
         }
@@ -170,7 +176,7 @@ private struct HistorySearchContent: View {
                                 showsDivider: index < filteredSummaries.count - 1
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(HistoryOverviewRowButtonStyle())
                         .accessibilityIdentifier("ExerciseHistoryButton-\(index)")
                     }
                 }
