@@ -6,6 +6,7 @@ enum UITestFixtureSeeder {
     static let completedBenchWorkoutArgument = "--uitest-seed-completed-bench-workout"
     static let futureCompletedBenchWorkoutArgument = "--uitest-seed-future-completed-bench-workout"
     static let historyExerciseNoteArgument = "--uitest-seed-history-exercise-note"
+    static let historyUncompletedSetArgument = "--uitest-seed-history-uncompleted-set"
     static let exerciseHistoryPerformanceArgument = "--uitest-seed-exercise-history-performance"
     static let matchingExercisePerformanceWorkoutsArgument =
         "--uitest-seed-matching-exercise-performance-workouts"
@@ -23,6 +24,7 @@ enum UITestFixtureSeeder {
                 exerciseNotes: arguments.contains(historyExerciseNoteArgument)
                     ? "Pause at the bottom\nKeep wrists stacked"
                     : "",
+                includesUncompletedSet: arguments.contains(historyUncompletedSetArgument),
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context
             )
@@ -140,6 +142,7 @@ enum UITestFixtureSeeder {
     static func seedCompletedBenchWorkout(
         title: String,
         exerciseNotes: String = "",
+        includesUncompletedSet: Bool = false,
         startedAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
         ownerTokenIdentifier: String? = nil,
         context: ModelContext
@@ -172,6 +175,20 @@ enum UITestFixtureSeeder {
             createdAt: startedAt,
             updatedAt: endedAt
         )
+        var sets = [set]
+        if includesUncompletedSet {
+            sets.append(
+                LoggedSet(
+                    orderIndex: 1,
+                    weight: 155,
+                    reps: 8,
+                    rpe: 7.5,
+                    isCompleted: false,
+                    createdAt: startedAt,
+                    updatedAt: endedAt
+                )
+            )
+        }
         let loggedExercise = LoggedExercise(
             orderIndex: 0,
             exercise: benchPress,
@@ -181,7 +198,7 @@ enum UITestFixtureSeeder {
             notes: exerciseNotes,
             createdAt: startedAt,
             updatedAt: endedAt,
-            sets: [set]
+            sets: sets
         )
         let session = WorkoutSession(
             title: fixtureTitle,

@@ -42,6 +42,7 @@ struct WorkoutHistoryDetailView: View {
     @State private var showsDeleteConfirmation = false
     @State private var editPresentation: CompletedWorkoutEditPresentation?
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var metrics: WorkoutMetrics {
         WorkoutMetrics(session: session)
@@ -60,64 +61,44 @@ struct WorkoutHistoryDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 if !allowsHistoryMutation {
                     readOnlyNoticeBanner
+                        .padding(.bottom, 20)
                 }
 
-                Text(WorkoutFormatters.compactDate(session.startedAt))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppTheme.textSecondary)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(session.title)
+                        .font(.title.weight(.bold))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 10) {
-                    metricCard(title: "Duration", value: AppTheme.formatDuration(metrics.durationSeconds))
-                    metricCard(title: "Exercises", value: "\(session.sortedLoggedExercises.count)")
-                    metricCard(title: "Sets", value: "\(metrics.completedSetCount)")
+                    Text(WorkoutFormatters.compactDate(session.startedAt))
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("WorkoutHistoryHeading")
+
+                Text(summaryText)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 15)
+                    .accessibilityLabel(summaryAccessibilityLabel)
+                    .accessibilityIdentifier("WorkoutHistorySummary")
 
                 if !session.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    SurfaceCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Notes")
-                                .font(.system(size: 16, weight: .bold))
-                            Text(session.notes)
-                                .font(.system(size: 14))
-                                .foregroundStyle(AppTheme.textSecondary)
-                        }
-                    }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("WorkoutHistoryNotesCard")
+                    Text(session.notes)
+                        .font(.body)
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 14)
+                        .accessibilityIdentifier("WorkoutHistoryNoteText")
                 }
 
-                ForEach(session.sortedLoggedExercises) { loggedExercise in
-                    SurfaceCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(loggedExercise.exerciseSnapshotName)
-                                    .font(.system(size: 18, weight: .bold))
-                                if let metadataDisplayText = loggedExercise.metadataDisplayText {
-                                    Text(metadataDisplayText)
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(AppTheme.textSecondary)
-                                        .lineLimit(1)
-                                }
-                            }
-
-                            ForEach(loggedExercise.sortedSets) { set in
-                                HStack {
-                                    Text("Set \(set.orderIndex + 1)")
-                                    Spacer()
-                                    Text(setSummary(for: set))
-                                        .foregroundStyle(set.isCompleted ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
-                                }
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(AppTheme.textSecondary)
-                                .accessibilityIdentifier("WorkoutHistorySetSummary-\(loggedExercise.orderIndex)-\(set.orderIndex)")
-                            }
-
-                            ExerciseHistoryNoteBlock(note: loggedExercise.notes)
-                        }
-                    }
+                ForEach(Array(session.sortedLoggedExercises.enumerated()), id: \.element.id) { _, loggedExercise in
+                    workoutExerciseSection(loggedExercise)
                 }
 
                 if allowsHistoryMutation {
@@ -135,12 +116,13 @@ struct WorkoutHistoryDetailView: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .padding(.top, 16)
                 }
             }
             .padding(AppTheme.shellPadding)
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
-        .navigationTitle(session.title)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if allowsHistoryMutation {
@@ -228,25 +210,147 @@ struct WorkoutHistoryDetailView: View {
         .accessibilityIdentifier("WorkoutHistoryReadOnlyNotice")
     }
 
-    private func metricCard(title: String, value: String) -> some View {
-        SurfaceCard {
-            VStack(spacing: 4) {
-                Text(value)
-                    .font(.system(size: 20, weight: .bold))
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppTheme.textSecondary)
+    private var summaryText: String {
+        "\(AppTheme.formatDuration(metrics.durationSeconds)) · "
+            + "\(session.sortedLoggedExercises.count) \(exerciseCountLabel) · "
+            + "\(metrics.totalSetCount) \(setCountLabel)"
+    }
+
+    private var summaryAccessibilityLabel: String {
+        "\(AppTheme.formatDuration(metrics.durationSeconds)), "
+            + "\(session.sortedLoggedExercises.count) \(exerciseCountLabel), "
+            + "\(metrics.totalSetCount) \(setCountLabel)"
+    }
+
+    private var exerciseCountLabel: String {
+        session.sortedLoggedExercises.count == 1 ? "exercise" : "exercises"
+    }
+
+    private var setCountLabel: String {
+        metrics.totalSetCount == 1 ? "set" : "sets"
+    }
+
+    private func workoutExerciseSection(_ loggedExercise: LoggedExercise) -> some View {
+        VStack(alignment: .leading, spacing: 13) {
+            Divider()
+                .overlay(AppTheme.subtleBorder)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(loggedExercise.exerciseSnapshotName)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let metadataDisplayText = loggedExercise.metadataDisplayText {
+                    Text(metadataDisplayText)
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .frame(maxWidth: .infinity)
+
+            if !dynamicTypeSize.isAccessibilitySize {
+                setColumnHeadings
+            }
+
+            VStack(spacing: 10) {
+                ForEach(loggedExercise.sortedSets) { set in
+                    workoutSetRow(set, exerciseOrderIndex: loggedExercise.orderIndex)
+                }
+            }
+
+            ExerciseHistoryNoteBlock(note: loggedExercise.notes)
+        }
+        .padding(.top, 20)
+    }
+
+    private var setColumnHeadings: some View {
+        HStack(spacing: 12) {
+            Text("Set")
+                .frame(width: 54, alignment: .leading)
+            Text("Weight (\(weightUnit.fieldLabel.lowercased()))")
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Reps")
+                .frame(width: 112, alignment: .trailing)
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(AppTheme.textSecondary)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func workoutSetRow(_ set: LoggedSet, exerciseOrderIndex: Int) -> some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Set \(set.orderIndex + 1)")
+                        .foregroundStyle(AppTheme.textSecondary)
+                    accessibleValueRow(label: "Weight (\(weightUnit.fieldLabel.lowercased()))") {
+                        Text(weightText(for: set))
+                    }
+                    accessibleValueRow(label: "Reps") {
+                        repsText(for: set)
+                    }
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text("\(set.orderIndex + 1)")
+                        .monospacedDigit()
+                        .frame(width: 54, alignment: .leading)
+
+                    Text(weightText(for: set))
+                        .monospacedDigit()
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+
+                    repsText(for: set)
+                        .frame(width: 112, alignment: .trailing)
+                }
+            }
+        }
+        .font(.subheadline.weight(.medium))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(setAccessibilityLabel(for: set))
+        .accessibilityIdentifier("WorkoutHistorySetSummary-\(exerciseOrderIndex)-\(set.orderIndex)")
+    }
+
+    private func accessibleValueRow<Content: View>(
+        label: String,
+        @ViewBuilder value: () -> Content
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+            Spacer(minLength: 12)
+            value()
         }
     }
 
-    private func setSummary(for set: LoggedSet) -> String {
-        let weight = weightText(for: set)
+    private func repsText(for set: LoggedSet) -> Text {
         let reps = WorkoutNumericInputPolicy.validatedReps(set.reps).map(String.init) ?? "-"
-        let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe).map { " @ \(WorkoutFormatters.number($0))" } ?? ""
-        let status = set.isCompleted ? "Done" : "Open"
-        return "\(weight) x \(reps)\(rpe) · \(status)"
+        var result = Text(reps)
+            .foregroundColor(AppTheme.textPrimary)
+
+        if let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe) {
+            result = Text(
+                "\(result)\(Text(" @ \(WorkoutFormatters.number(rpe))").foregroundColor(AppTheme.textSecondary))"
+            )
+        }
+
+        return result.monospacedDigit()
+    }
+
+    private func setAccessibilityLabel(for set: LoggedSet) -> String {
+        let validWeight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
+        let displayWeight = weightUnit.displayWeight(fromCanonicalPounds: validWeight)
+        let weightLabel = displayWeight.map {
+            "\(WorkoutFormatters.number($0)) \(weightUnit.displayName.lowercased())"
+        } ?? "no weight"
+        let reps = WorkoutNumericInputPolicy.validatedReps(set.reps)
+        let repsLabel = reps.map { "\($0) \($0 == 1 ? "rep" : "reps")" } ?? "no reps"
+        let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe)
+            .map { ", RPE \(WorkoutFormatters.number($0))" } ?? ""
+        return "Set \(set.orderIndex + 1), \(weightLabel), \(repsLabel)\(rpe)"
     }
 
     private func weightText(for set: LoggedSet) -> String {

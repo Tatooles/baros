@@ -31,12 +31,17 @@ struct ExerciseHistoryDetailView: View {
                 ExerciseHistoryHeading(
                     name: summary.name,
                     metadata: summary.metadataDisplayText,
-                    performanceSummary: summary.historyDetailSummaryLabel
+                    performanceSummary: summary.historyDetailSummaryLabel,
+                    presentation: .openJournal
                 )
                 .accessibilityIdentifier("ExerciseHistoryHeading")
 
                 if let records {
-                    ExerciseHistoryRecordsCard(records: records, weightUnit: weightUnit)
+                    ExerciseHistoryRecordsCard(
+                        records: records,
+                        weightUnit: weightUnit,
+                        presentation: .openJournal
+                    )
                 }
 
                 ForEach(groups) { group in
@@ -50,7 +55,8 @@ struct ExerciseHistoryDetailView: View {
                         records: records,
                         openWorkout: {
                             workoutSelection = WorkoutHistorySelection(id: group.session.id)
-                        }
+                        },
+                        presentation: .openJournal
                     )
                 }
             }

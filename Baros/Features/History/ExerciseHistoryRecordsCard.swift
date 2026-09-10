@@ -3,75 +3,88 @@ import SwiftUI
 struct ExerciseHistoryRecordsCard: View {
     let records: ExerciseHistoryRecords
     let weightUnit: MeasurementUnit
+    var presentation: ExerciseHistoryPresentation = .card
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
     @State private var showsInformation = false
 
     var body: some View {
-        SurfaceCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 0) {
+        Group {
+            if presentation == .openJournal {
+                recordsContent(showsTitle: false)
+            } else {
+                SurfaceCard {
+                    recordsContent(showsTitle: true)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius, style: .continuous)
+                        .strokeBorder(
+                            BarosAdaptiveColor.dynamic(light: 0xB98A2E, dark: 0xD8B764)
+                                .opacity(colorScheme == .dark ? 0.35 : 0.30),
+                            lineWidth: 1
+                        )
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .sheet(isPresented: $showsInformation) {
+            StrengthRecordsInformationView()
+        }
+    }
+
+    private func recordsContent(showsTitle: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 0) {
+                if showsTitle {
                     Text("Records")
                         .font(.footnote.weight(.semibold))
                         .textCase(.uppercase)
                         .tracking(0.5)
                         .foregroundStyle(BarosAdaptiveColor.dynamic(light: 0x594115, dark: 0xD8B764))
-                    Button { showsInformation = true } label: {
-                        Image(systemName: "info.circle")
-                            .font(.subheadline)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .accessibilityLabel("About strength records")
-                    .accessibilityIdentifier("AboutStrengthRecordsButton")
-                    .padding(.vertical, -10)
-                    Spacer()
                 }
-
-                if records.hasMixedEquipment {
-                    Text("\(records.equipment.displayName) records")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.textSecondary)
+                Spacer()
+                Button { showsInformation = true } label: {
+                    Image(systemName: "info.circle")
+                        .font(.subheadline)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
-
-                if let heaviest = records.heaviestRep {
-                    if dynamicTypeSize.isAccessibilitySize {
-                        stackedRecords(heaviest)
-                    } else {
-                        ViewThatFits(in: .horizontal) {
-                            HStack(alignment: .top, spacing: 20) {
-                                recordRow(heaviest, kind: .heaviestRep)
-                                    .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
-                                estimatedRecord
-                                    .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
-                            }
-                            stackedRecords(heaviest)
-                        }
-                    }
-                } else {
-                    emptyState(
-                        title: "No records yet",
-                        message: "Requires a completed set with weight and reps in a finished workout."
-                    )
-                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AppTheme.textSecondary)
+                .accessibilityLabel("About strength records")
+                .accessibilityIdentifier("AboutStrengthRecordsButton")
+                .padding(.vertical, -10)
             }
-            .foregroundStyle(AppTheme.textPrimary)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius, style: .continuous)
-                .strokeBorder(
-                    BarosAdaptiveColor.dynamic(light: 0xB98A2E, dark: 0xD8B764)
-                        .opacity(colorScheme == .dark ? 0.35 : 0.30),
-                    lineWidth: 1
+
+            if records.hasMixedEquipment {
+                Text("\(records.equipment.displayName) records")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+
+            if let heaviest = records.heaviestRep {
+                if dynamicTypeSize.isAccessibilitySize {
+                    stackedRecords(heaviest)
+                } else {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 20) {
+                            recordRow(heaviest, kind: .heaviestRep)
+                                .frame(minWidth: 140, maxWidth: .infinity, alignment: .leading)
+                            estimatedRecord
+                                .frame(minWidth: 140, maxWidth: .infinity, alignment: .leading)
+                        }
+                        stackedRecords(heaviest)
+                    }
+                }
+            } else {
+                emptyState(
+                    title: "No records yet",
+                    message: "Requires a completed set with weight and reps in a finished workout."
                 )
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+            }
         }
-        .sheet(isPresented: $showsInformation) {
-            StrengthRecordsInformationView()
-        }
+        .foregroundStyle(AppTheme.textPrimary)
     }
 
     private func stackedRecords(_ heaviest: ExerciseHistoryRecord) -> some View {
@@ -197,7 +210,6 @@ private struct StrengthRecordsInformationView: View {
 
 struct ExerciseHistoryRecordBadges: View {
     let kinds: [ExerciseHistoryRecordKind]
-    let setID: UUID
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -220,7 +232,7 @@ struct ExerciseHistoryRecordBadges: View {
                 )
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel(kind.title)
-                .accessibilityIdentifier("ExerciseRecordBadge-\(kind.rawValue)-\(setID.uuidString)")
+                .accessibilityHidden(true)
         }
     }
 }
