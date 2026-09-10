@@ -78,6 +78,13 @@ struct ActiveWorkoutSetInput {
         }
     }
 
+    /// Resolve a copy so previews share commit parsing without consuming the editor's drafts.
+    func previewValues(current: Values, weightUnit: MeasurementUnit) -> Values? {
+        guard weightInput.draftText != nil || repsInput.draftText != nil else { return nil }
+        var preview = self
+        return preview.commit(current: current, weightUnit: weightUnit).values
+    }
+
     mutating func commit(current: Values, weightUnit: MeasurementUnit) -> Commit {
         let storedValues = Values(
             weight: WorkoutNumericInputPolicy.validatedWeight(current.weight),

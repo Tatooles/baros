@@ -20,6 +20,7 @@ struct SetRowView: View, @MainActor Equatable {
     let weightUnit: MeasurementUnit
     let previous: PreviousSetPerformance?
     let suggestions: ActiveWorkoutSetInput.Values
+    let onPreviewChange: (ActiveWorkoutSetInput.Values?) -> Void
     let onEditRPE: (LoggedSet) -> Void
     @State private var input = ActiveWorkoutSetInput()
     @State private var commitRegistrationID: UUID?
@@ -76,7 +77,11 @@ struct SetRowView: View, @MainActor Equatable {
             refreshSetInputRegistration()
         }
         .onChange(of: weightUnit) { _, _ in
+            publishPreview()
             refreshSetInputRegistration()
+        }
+        .onChange(of: inputValues) { _, _ in
+            publishPreview()
         }
         .onDisappear {
             // Rows can leave the tree mid-edit (collapse, delete, finish); the
@@ -197,6 +202,7 @@ struct SetRowView: View, @MainActor Equatable {
     /// their prepared values and completion/RPE together, never per keystroke.
     @discardableResult
     private func commitDraftsIfNeeded() -> ActiveWorkoutSetInput.Commit {
+        defer { onPreviewChange(nil) }
         let commit = input.commit(current: inputValues, weightUnit: weightUnit)
         guard commit.shouldPersist else { return commit }
 
@@ -348,6 +354,7 @@ struct SetRowView: View, @MainActor Equatable {
                     for: .weight,
                     isFocused: isWeightFocused
                 )
+                publishPreview()
             }
         )
     }
@@ -366,6 +373,7 @@ struct SetRowView: View, @MainActor Equatable {
                     for: .reps,
                     isFocused: isRepsFocused
                 )
+                publishPreview()
             }
         )
     }
@@ -386,7 +394,8 @@ struct SetRowView: View, @MainActor Equatable {
     private func prepareValuesForSetAction(
         completesSet: Bool
     ) -> ActiveWorkoutSetInput.Values {
-        input.preparedValuesForSetAction(
+        defer { onPreviewChange(nil) }
+        return input.preparedValuesForSetAction(
             current: inputValues,
             weightUnit: weightUnit,
             completesSet: completesSet,
@@ -397,11 +406,19 @@ struct SetRowView: View, @MainActor Equatable {
     }
 
     private func fillFromPrevious(_ previous: PreviousSetPerformance) {
-        // Commit rather than drop drafts: fillSetFromPrevious only fills fields
-        // that are still nil, so a typed-but-uncommitted value must win.
-        commitDraftsIfNeeded()
-        try? engine.fillSetFromPrevious(set, previous: previous, context: modelContext)
+        defer { onPreviewChange(nil) }
+        let values = input.commit(current: inputValues, weightUnit: weightUnit).values
+        try? engine.fillSetFromPrevious(
+            set,
+            previous: previous,
+            preparedValues: values,
+            context: modelContext
+        )
         input.clearRejectionsSatisfiedByPreviousFill(inputValues)
+    }
+
+    private func publishPreview() {
+        onPreviewChange(input.previewValues(current: inputValues, weightUnit: weightUnit))
     }
 
     private var inputValues: ActiveWorkoutSetInput.Values {

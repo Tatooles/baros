@@ -20,6 +20,7 @@ struct ExerciseCardView: View {
     let onEditRPE: (LoggedSet) -> Void
     @State private var showsRemoveConfirmation = false
     @State private var cachedSortedSets: [LoggedSet]?
+    @State private var setPreviews: [UUID: ActiveWorkoutSetInput.Values] = [:]
 
     init(
         loggedExercise: LoggedExercise,
@@ -136,7 +137,7 @@ struct ExerciseCardView: View {
                 if !isCollapsed {
                     let previousSetsForRows = previousSets
                     let suggestions = ActiveWorkoutSetSuggestions.resolve(for: sortedSets.map {
-                        .init(weight: $0.weight, reps: $0.reps)
+                        setPreviews[$0.id] ?? .init(weight: $0.weight, reps: $0.reps)
                     })
                     VStack(spacing: 14) {
                         if !dynamicTypeSize.isAccessibilitySize {
@@ -175,6 +176,10 @@ struct ExerciseCardView: View {
                                         weightUnit: weightUnit,
                                         previous: index < previousSetsForRows.count ? previousSetsForRows[index] : nil,
                                         suggestions: suggestions[index],
+                                        onPreviewChange: { values in
+                                            guard setPreviews[set.id] != values else { return }
+                                            setPreviews[set.id] = values
+                                        },
                                         onEditRPE: onEditRPE
                                     )
                                         .equatable()

@@ -1905,13 +1905,19 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(reps.value as? String, "5")
         XCTAssertEqual(app.buttons["SetCompletionButton-9-1"].label, "Mark set complete")
 
-        // A typed value still wins over an explicit historical fill.
+        // An explicit tap replaces a draft even while its field is focused.
         replaceText(in: reps, with: "")
         dismissKeyboardIfNeeded(in: app)
         replaceText(in: weight, with: "130")
+        XCTAssertTrue(previous.isEnabled)
         previous.tap()
-        XCTAssertEqual(weight.value as? String, "130")
+        XCTAssertEqual(weight.value as? String, "109")
         XCTAssertEqual(reps.value as? String, "5")
+        dismissKeyboardIfNeeded(in: app)
+        app.buttons["SetCompletionButton-9-1"].tap()
+        XCTAssertFalse(previous.isEnabled)
+        app.buttons["SetCompletionButton-9-1"].tap()
+        XCTAssertTrue(previous.isEnabled)
     }
 
     @MainActor
@@ -1957,16 +1963,24 @@ final class BarosUITests: XCTestCase {
 
         let firstWeight = app.textFields["SetWeightField-0-0"]
         let firstReps = app.textFields["SetRepsField-0-0"]
-        firstWeight.tap()
-        firstWeight.typeText("90")
-        firstReps.tap()
-        firstReps.typeText("12")
-        dismissKeyboardIfNeeded(in: app)
-
         let secondWeight = app.textFields["SetWeightField-0-1"]
         let secondReps = app.textFields["SetRepsField-0-1"]
         let thirdWeight = app.textFields["SetWeightField-0-2"]
         let thirdReps = app.textFields["SetRepsField-0-2"]
+        firstWeight.tap()
+        firstWeight.typeText("9")
+        XCTAssertEqual(secondWeight.value as? String, "Suggested 9")
+        XCTAssertEqual(thirdWeight.value as? String, "Suggested 9")
+        XCTAssertTrue(NSPredicate(format: "hasKeyboardFocus == true").evaluate(with: firstWeight))
+        firstWeight.typeText("0")
+        XCTAssertEqual(secondWeight.value as? String, "Suggested 90")
+        firstReps.tap()
+        firstReps.typeText("1")
+        XCTAssertEqual(secondReps.value as? String, "Suggested 1")
+        firstReps.typeText("2")
+        XCTAssertEqual(thirdReps.value as? String, "Suggested 12")
+        XCTAssertTrue(NSPredicate(format: "hasKeyboardFocus == true").evaluate(with: firstReps))
+        dismissKeyboardIfNeeded(in: app)
         XCTAssertEqual(secondWeight.value as? String, "Suggested 90")
         XCTAssertEqual(secondReps.value as? String, "Suggested 12")
         XCTAssertEqual(thirdReps.value as? String, "Suggested 12")

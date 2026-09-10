@@ -2,6 +2,21 @@ import XCTest
 @testable import Baros
 
 final class ActiveWorkoutSetInputTests: XCTestCase {
+    func testLivePreviewTracksTypingWithoutConsumingDraftsOrChangingStoredValues() {
+        var input = ActiveWorkoutSetInput()
+        let stored = ActiveWorkoutSetInput.Values(weight: 185, reps: 12)
+        XCTAssertNil(input.previewValues(current: stored, weightUnit: .pounds))
+        input.update("9", for: .weight, isFocused: true)
+        XCTAssertEqual(input.previewValues(current: stored, weightUnit: .pounds), .init(weight: 9, reps: 12))
+        input.update("90.", for: .weight, isFocused: true)
+        XCTAssertEqual(input.previewValues(current: stored, weightUnit: .pounds), .init(weight: 90, reps: 12))
+        XCTAssertEqual(input.text(for: .weight, values: stored, weightUnit: .pounds), "90.")
+        XCTAssertEqual(stored, .init(weight: 185, reps: 12))
+        XCTAssertEqual(input.commit(current: stored, weightUnit: .pounds),
+                       .init(values: .init(weight: 90, reps: 12), shouldPersist: true))
+        XCTAssertNil(input.previewValues(current: stored, weightUnit: .pounds))
+    }
+
     func testSuggestionsSkipInvalidSourcesPreserveZeroAndDoNotLeakBetweenExercises() {
         XCTAssertEqual(ActiveWorkoutSetSuggestions.resolve(for: [
             .init(weight: 0, reps: 12),
