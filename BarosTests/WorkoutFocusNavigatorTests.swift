@@ -287,6 +287,34 @@ final class WorkoutFocusNavigatorTests: XCTestCase {
         XCTAssertEqual(revealedFields, [fields[2]])
     }
 
+    func testDismissalCancelsFocusDeferredUntilAfterArrowScroll() async {
+        let target = WorkoutField.setWeight(UUID())
+        let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
+        coordinator.updateFocusOrder([.workoutTitle, target])
+        coordinator.synchronizeFocus(.workoutTitle)
+        var visibleFocus: WorkoutField? = .workoutTitle
+        let staleFocus = expectation(description: "dismissed field must not regain focus")
+        staleFocus.isInverted = true
+
+        coordinator.move(
+            offset: 1,
+            delay: .milliseconds(20),
+            commit: { _ in },
+            assign: { _ in },
+            reveal: { visibleFocus = $0; staleFocus.fulfill() }
+        )
+        XCTAssertEqual(visibleFocus, .workoutTitle)
+        coordinator.transition(
+            to: nil,
+            commit: { _ in },
+            assign: { visibleFocus = $0 },
+            reveal: { _ in }
+        )
+        await fulfillment(of: [staleFocus], timeout: 0.1)
+        XCTAssertNil(visibleFocus)
+        XCTAssertNil(coordinator.currentField)
+    }
+
     func testTransitioningOutOfAFieldRunsItsCommitCallback() {
         let field = WorkoutField.setWeight(UUID())
         let coordinator = WorkoutFocusTransitionCoordinator(revealDelay: .zero)
