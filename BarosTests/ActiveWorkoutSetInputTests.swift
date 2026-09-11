@@ -544,4 +544,30 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
             )
         }
     }
+    @MainActor
+    func testReplacedRegistrationCannotOverwriteOrRemoveNewFieldOwner() {
+        let setID = UUID()
+        let weight = WorkoutField.setWeight(setID)
+        let reps = WorkoutField.setReps(setID)
+        let registry = ActiveSetInputRegistry()
+        var commits: [String] = []
+        let original = registry.register(fields: [weight, reps], commit: { commits.append("original") })
+        let replacement = registry.register(fields: [weight], commit: { commits.append("replacement") })
+
+        registry.updateRegistration(original, commit: { commits.append("updated") }, prepareForRPESelection: nil)
+        registry.commit(weight)
+        registry.commit(reps)
+        XCTAssertEqual(commits, ["replacement", "updated"])
+
+        registry.unregister(original)
+        registry.commit(reps)
+        registry.commit(weight)
+        XCTAssertEqual(commits, ["replacement", "updated", "replacement"])
+
+        registry.unregister(replacement)
+        registry.updateRegistration(replacement, commit: { XCTFail("Removed registration was revived") }, prepareForRPESelection: nil)
+        registry.commit(weight)
+        XCTAssertNil(registry.prepareSetValues(for: weight, completesSet: true))
+    }
+
 }
