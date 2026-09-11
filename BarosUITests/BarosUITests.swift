@@ -65,6 +65,41 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testExerciseHistoryOverviewSupportsAccessibilityDynamicType() {
+        let category = UIContentSizeCategory.accessibilityExtraExtraExtraLarge
+        let app = makeApp(extraArguments: [
+            "--uitest-seed-exercise-history-performance",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+        ])
+        app.launch()
+        tapTab(identifier: "HistoryTab", label: "History", in: app)
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+
+        let row = app.buttons["ExerciseHistoryButton-0"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.isHittable)
+        for labelFragment in ["Back Squat", "Barbell", "Quads", "Last:", "50 workouts"] {
+            XCTAssertTrue(row.label.contains(labelFragment))
+        }
+
+        let title = row.staticTexts["Back Squat"]
+        XCTAssertTrue(title.exists)
+        let titleLineHeight = UIFont.preferredFont(
+            forTextStyle: .headline,
+            compatibleWith: UITraitCollection(preferredContentSizeCategory: category)
+        ).lineHeight
+        XCTAssertGreaterThanOrEqual(title.frame.height, floor(titleLineHeight) - 2)
+        XCTAssertGreaterThanOrEqual(title.frame.minX, row.frame.minX)
+        XCTAssertLessThanOrEqual(title.frame.maxX, row.frame.maxX)
+        XCTAssertGreaterThan(row.frame.height, titleLineHeight * 3)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Exercise History - Accessibility XXXL"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    @MainActor
     private func assertWorkoutMetricsFit(
         in row: XCUIElement,
         category: UIContentSizeCategory,
@@ -1655,6 +1690,72 @@ final class BarosUITests: XCTestCase {
         replaceText(in: app.searchFields.firstMatch, with: "No Such Exercise")
         XCTAssertTrue(app.staticTexts["No Matching Exercises"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.staticTexts["No Exercise History"].exists)
+    }
+
+    @MainActor
+    func testHistoryOverviewListsUseContiguousRowsAndPastWorkoutPickerKeepsCards() {
+        let app = makeApp(extraArguments: ["--uitest-seed-workout-history-layout"])
+        app.launch()
+        app.buttons["HistoryTab"].tap()
+
+        let firstWorkout = app.buttons["WorkoutHistoryButton-0"]
+        let secondWorkout = app.buttons["WorkoutHistoryButton-1"]
+        XCTAssertTrue(firstWorkout.waitForExistence(timeout: 3))
+        XCTAssertTrue(secondWorkout.exists)
+        XCTAssertTrue(firstWorkout.label.contains("45:23"))
+        XCTAssertTrue(firstWorkout.label.contains("9 exercises"))
+        XCTAssertTrue(firstWorkout.label.contains("22 sets"))
+        XCTAssertLessThanOrEqual(
+            secondWorkout.frame.minY - firstWorkout.frame.maxY,
+            2,
+            "Workout History should present contiguous rows in one shared surface"
+        )
+
+        firstWorkout.tap()
+        XCTAssertTrue(app.navigationBars["Workout"].waitForExistence(timeout: 3))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+        let firstExercise = app.buttons["ExerciseHistoryButton-0"]
+        let secondExercise = app.buttons["ExerciseHistoryButton-1"]
+        XCTAssertTrue(firstExercise.waitForExistence(timeout: 3))
+        XCTAssertTrue(secondExercise.exists)
+        XCTAssertTrue(firstExercise.label.contains("Exercise 1"))
+        XCTAssertTrue(firstExercise.label.contains("workouts"))
+        XCTAssertLessThanOrEqual(
+            secondExercise.frame.minY - firstExercise.frame.maxY,
+            2,
+            "Exercise History should retain contiguous rows in one shared surface"
+        )
+
+        let lastExercise = app.buttons["ExerciseHistoryButton-8"]
+        for _ in 0..<3 where !lastExercise.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(lastExercise.isHittable)
+        for _ in 0..<3 where !firstExercise.isHittable {
+            app.swipeDown()
+        }
+        XCTAssertTrue(firstExercise.isHittable)
+
+        firstExercise.tap()
+        let exerciseHeading = app.descendants(matching: .any)["ExerciseHistoryHeading"]
+        XCTAssertTrue(exerciseHeading.waitForExistence(timeout: 3))
+        XCTAssertTrue(exerciseHeading.label.contains("Exercise 1"))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        app.buttons["HomeTab"].tap()
+        app.buttons["StartWorkoutButton"].tap()
+        app.buttons["UsePastWorkoutButton"].tap()
+        let firstPastWorkout = app.buttons["PastWorkoutButton-0"]
+        let secondPastWorkout = app.buttons["PastWorkoutButton-1"]
+        XCTAssertTrue(firstPastWorkout.waitForExistence(timeout: 3))
+        XCTAssertTrue(secondPastWorkout.exists)
+        XCTAssertGreaterThanOrEqual(
+            secondPastWorkout.frame.minY - firstPastWorkout.frame.maxY,
+            8,
+            "The Home past-workout picker should retain separate workout cards"
+        )
     }
 
     @MainActor
