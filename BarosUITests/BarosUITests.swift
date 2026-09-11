@@ -2172,6 +2172,150 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testPreviousOverridesSuggestionsInLaterRowsOfLargeWorkout() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store",
+            "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience",
+            "--uitest-seed-large-active-workout",
+        ]
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        let sourceWeight = app.textFields["SetWeightField-9-0"]
+        for _ in 0..<30 {
+            if sourceWeight.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(sourceWeight.isHittable)
+        replaceText(in: sourceWeight, with: "120")
+        dismissKeyboardIfNeeded(in: app)
+        let weight = app.textFields["SetWeightField-9-1"]
+        let reps = app.textFields["SetRepsField-9-1"]
+        replaceText(in: weight, with: "")
+        dismissKeyboardIfNeeded(in: app)
+        replaceText(in: reps, with: "")
+        dismissKeyboardIfNeeded(in: app)
+        XCTAssertEqual(weight.value as? String, "Suggested 120")
+        XCTAssertEqual(reps.value as? String, "Suggested 5")
+
+        let previous = app.buttons["SetPreviousValue-9-1"]
+        XCTAssertEqual(previous.label, "Previous: 109 × 5")
+        previous.tap()
+        XCTAssertEqual(weight.value as? String, "109")
+        XCTAssertEqual(reps.value as? String, "5")
+        XCTAssertEqual(app.buttons["SetCompletionButton-9-1"].label, "Mark set complete")
+
+        // An explicit tap replaces a draft even while its field is focused.
+        replaceText(in: reps, with: "")
+        dismissKeyboardIfNeeded(in: app)
+        replaceText(in: weight, with: "130")
+        XCTAssertTrue(previous.isEnabled)
+        previous.tap()
+        XCTAssertEqual(weight.value as? String, "109")
+        XCTAssertEqual(reps.value as? String, "5")
+        dismissKeyboardIfNeeded(in: app)
+        app.buttons["SetCompletionButton-9-1"].tap()
+        XCTAssertFalse(previous.isEnabled)
+        app.buttons["SetCompletionButton-9-1"].tap()
+        XCTAssertTrue(previous.isEnabled)
+    }
+
+    @MainActor
+    func testSuggestionsRemainAccessibleAtAccessibilityTextSize() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store",
+            "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL",
+        ]
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        addSets(1, in: app)
+        let source = app.textFields["SetWeightField-0-0"]
+        source.tap()
+        source.typeText("90")
+        dismissKeyboardIfNeeded(in: app)
+        let weight = app.textFields["SetWeightField-0-1"]
+        XCTAssertEqual(weight.value as? String, "Suggested 90")
+        XCTAssertEqual(weight.label, "LBS")
+        XCTAssertEqual(weight.placeholderValue, "90")
+        let suggestionsScreenshot = XCTAttachment(screenshot: app.screenshot())
+        suggestionsScreenshot.name = "Suggestions at accessibility text size"
+        suggestionsScreenshot.lifetime = .keepAlways
+        add(suggestionsScreenshot)
+        let row = app.descendants(matching: .any)["SetAccessibilityBottomRow-0-1"]
+        XCTAssertTrue(row.exists)
+        XCTAssertLessThanOrEqual(row.frame.maxX, app.windows.firstMatch.frame.maxX)
+    }
+
+    @MainActor
+    func testEarlierSetSuggestionsStayUnrecordedUntilCheckmarkOrRPE() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store",
+            "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience",
+        ]
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        addSets(2, in: app)
+
+        let firstWeight = app.textFields["SetWeightField-0-0"]
+        let firstReps = app.textFields["SetRepsField-0-0"]
+        let secondWeight = app.textFields["SetWeightField-0-1"]
+        let secondReps = app.textFields["SetRepsField-0-1"]
+        let thirdWeight = app.textFields["SetWeightField-0-2"]
+        let thirdReps = app.textFields["SetRepsField-0-2"]
+        firstWeight.tap()
+        firstWeight.typeText("9")
+        XCTAssertEqual(secondWeight.value as? String, "Suggested 9")
+        XCTAssertEqual(thirdWeight.value as? String, "Suggested 9")
+        XCTAssertTrue(NSPredicate(format: "hasKeyboardFocus == true").evaluate(with: firstWeight))
+        firstWeight.typeText("0")
+        XCTAssertEqual(secondWeight.value as? String, "Suggested 90")
+        firstReps.tap()
+        firstReps.typeText("1")
+        XCTAssertEqual(secondReps.value as? String, "Suggested 1")
+        firstReps.typeText("2")
+        XCTAssertEqual(thirdReps.value as? String, "Suggested 12")
+        XCTAssertTrue(NSPredicate(format: "hasKeyboardFocus == true").evaluate(with: firstReps))
+        dismissKeyboardIfNeeded(in: app)
+        XCTAssertEqual(secondWeight.value as? String, "Suggested 90")
+        XCTAssertEqual(secondReps.value as? String, "Suggested 12")
+        XCTAssertEqual(thirdReps.value as? String, "Suggested 12")
+        let suggestionsScreenshot = XCTAttachment(screenshot: app.screenshot())
+        suggestionsScreenshot.name = "Earlier-set suggestions before acceptance"
+        suggestionsScreenshot.lifetime = .keepAlways
+        add(suggestionsScreenshot)
+        secondWeight.tap()
+        dismissKeyboardIfNeeded(in: app)
+        XCTAssertEqual(secondWeight.value as? String, "Suggested 90")
+
+        app.buttons["SetCompletionButton-0-1"].tap()
+        XCTAssertEqual(secondWeight.value as? String, "90")
+        XCTAssertEqual(secondReps.value as? String, "12")
+        XCTAssertEqual(app.buttons["SetCompletionButton-0-1"].label, "Mark set incomplete")
+
+        // A changed source must reach an already registered RPE callback.
+        replaceText(in: secondReps, with: "10")
+        thirdWeight.tap()
+        XCTAssertEqual(thirdReps.value as? String, "Suggested 10")
+        enterRPEViaChips("8", in: app)
+        XCTAssertEqual(thirdWeight.value as? String, "90")
+        XCTAssertEqual(thirdReps.value as? String, "10")
+        XCTAssertEqual(app.buttons["SetCompletionButton-0-2"].label, "Mark set incomplete")
+        XCTAssertTrue(app.buttons["SetRPEBadge-0-2"].exists)
+
+        dismissKeyboardIfNeeded(in: app)
+        replaceText(in: firstWeight, with: "100")
+        dismissKeyboardIfNeeded(in: app)
+        XCTAssertEqual(secondWeight.value as? String, "90")
+        XCTAssertEqual(thirdWeight.value as? String, "90")
+    }
+
+    @MainActor
     func testCheckmarkConsumesPendingInputAndKeepsRPEKeyboardNavigation() {
         // Use an isolated in-memory fixture so this focused interaction can
         // also run on a physical phone without resetting its workout store.
