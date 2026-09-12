@@ -141,6 +141,7 @@ final class UIHangContextObservability {
     private var snapshot = UIHangContextSnapshot.empty
     private var baseScreen: UIHangScreen?
     private var presentation: UIHangPresentation?
+    private var settingsWhatsNewIsPresented = false
     private var scenePhase: UIHangScenePhase?
     private var activeWorkoutIsCurrent = false
     private var exercisePickerIsCurrent = false
@@ -183,7 +184,17 @@ final class UIHangContextObservability {
         }
         baseScreen = screen
         self.presentation = presentation
+        if screen != .profile || presentation != nil { settingsWhatsNewIsPresented = false }
         if presentation != .activeWorkout { clearWorkout() }
+        publish()
+    }
+
+    func settingsWhatsNewChanged(isPresented: Bool) {
+        // This sheet belongs to Settings, independently of the shell's launch sheet.
+        guard !isPresented || (baseScreen == .profile && presentation == nil),
+              isPresented != settingsWhatsNewIsPresented else { return }
+        settingsWhatsNewIsPresented = isPresented
+        sink.addBreadcrumb(isPresented ? .whatsNewPresented : .presentationDismissed)
         publish()
     }
 
@@ -272,7 +283,9 @@ final class UIHangContextObservability {
             return
         }
         let surface: UIHangSurface?
-        if exercisePickerIsCurrent {
+        if settingsWhatsNewIsPresented {
+            surface = .whatsNew
+        } else if exercisePickerIsCurrent {
             surface = .exercisePicker
         } else if activeWorkoutIsCurrent {
             surface = .activeWorkout

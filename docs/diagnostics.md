@@ -15,7 +15,7 @@ This improves the evidence available for investigation; it does not guarantee a 
 
 ## UI context
 
-The existing `ui_surface` tag names the top covered surface. The allowlisted `ui` context adds `base_screen` (`launch`, `home`, `history`, `profile`) and `scene_phase` (`active`, `inactive`). Launch presentations distinguish `onboarding`, `whats_new`, and `active_workout`; `exercise_picker` identifies Add Exercise over Active Workout. These labels identify covered surfaces, not every nested navigation destination or modal in the app.
+The existing `ui_surface` tag names the top covered surface. The allowlisted `ui` context adds `base_screen` (`launch`, `home`, `history`, `profile`) and `scene_phase` (`active`, `inactive`). What's New opened independently from Settings is also covered and restores Profile on dismissal. Launch presentations distinguish `onboarding`, `whats_new`, and `active_workout`; `exercise_picker` identifies Add Exercise over Active Workout. These labels identify covered surfaces, not every nested navigation destination or modal in the app.
 
 Workout scale remains bucketed, and focused fields remain categories. Counts may be absent while the shell begins presenting a workout before its content appears. Backgrounding removes visible UI context; foregrounding restores the current surface without stale field focus. Dismissal restores the underlying tab. Predefined, deduplicated breadcrumbs record tab/presentation/lifecycle transitions and existing Add Exercise/search transitions.
 

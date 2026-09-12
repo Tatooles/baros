@@ -110,6 +110,31 @@ final class UIHangContextObservabilityTests: XCTestCase {
         }
     }
 
+    func testSettingsWhatsNewRestoresProfileAndCannotOverrideAnotherPresentation() {
+        let sink = RecordingUIHangContextSink()
+        let context = UIHangContextObservability(sink: sink)
+        context.shellChanged(screen: .profile, presentation: nil)
+        context.settingsWhatsNewChanged(isPresented: true)
+        XCTAssertEqual(sink.snapshots.last?.surface, .whatsNew)
+        XCTAssertEqual(sink.snapshots.last?.baseScreen, .profile)
+        let breadcrumbCount = sink.breadcrumbs.count
+        context.settingsWhatsNewChanged(isPresented: true)
+        XCTAssertEqual(sink.breadcrumbs.count, breadcrumbCount)
+        context.sceneChanged(to: .background)
+        context.sceneChanged(to: .active)
+        XCTAssertEqual(sink.snapshots.last?.surface, .whatsNew)
+        context.settingsWhatsNewChanged(isPresented: false)
+        XCTAssertEqual(sink.snapshots.last?.surface, .profile)
+        context.settingsWhatsNewChanged(isPresented: true)
+        context.shellChanged(screen: .home, presentation: .activeWorkout)
+        context.settingsWhatsNewChanged(isPresented: false)
+        context.settingsWhatsNewChanged(isPresented: true)
+        XCTAssertEqual(sink.snapshots.last?.surface, .activeWorkout)
+        XCTAssertEqual(sink.snapshots.last?.baseScreen, .home)
+        context.shellChanged(screen: .profile, presentation: nil)
+        XCTAssertEqual(sink.snapshots.last?.surface, .profile)
+    }
+
     func testLaunchPresentationRestoresUnderlyingTabAndClearsWorkoutContext() throws {
         let sink = RecordingUIHangContextSink()
         let context = UIHangContextObservability(sink: sink)
