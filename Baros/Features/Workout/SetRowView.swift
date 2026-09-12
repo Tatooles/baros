@@ -308,6 +308,7 @@ struct SetRowView: View, @MainActor Equatable {
             }
             .animation(.easeOut(duration: 0.15), value: isFocused)
             .accessibilityIdentifier(accessibilityIdentifier)
+            .workoutScrollTarget(focusTarget)
             .id(focusTarget)
     }
 
