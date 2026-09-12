@@ -100,13 +100,8 @@ struct AppShellView: View {
                    let activeSession {
                     // Seed counts at the shell boundary too: the child's onAppear
                     // may run before this initial shell-state observation.
-                    var exercises = 0
-                    var sets = 0
-                    for exercise in activeSession.loggedExercises where exercise.deletedAt == nil {
-                        exercises += 1
-                        sets += exercise.sets.lazy.filter { $0.deletedAt == nil }.count
-                    }
-                    context.activeWorkoutBecameCurrent(exerciseCount: exercises, setCount: sets)
+                    let size = UIHangWorkoutSize(session: activeSession)
+                    context.activeWorkoutBecameCurrent(exerciseCount: size.exerciseCount, setCount: size.setCount)
                 }
             }
             .onChange(of: scenePhase, initial: true) { _, phase in

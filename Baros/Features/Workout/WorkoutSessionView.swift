@@ -417,23 +417,16 @@ struct WorkoutSessionView: View {
     }
 
     private func updateUIHangWorkoutContext(becameCurrent: Bool) {
-        var exerciseCount = 0
-        var setCount = 0
-        for loggedExercise in session.loggedExercises where loggedExercise.deletedAt == nil {
-            exerciseCount += 1
-            for set in loggedExercise.sets where set.deletedAt == nil {
-                setCount += 1
-            }
-        }
+        let size = UIHangWorkoutSize(session: session)
         if becameCurrent {
             UIHangContextObservability.shared.activeWorkoutBecameCurrent(
-                exerciseCount: exerciseCount,
-                setCount: setCount
+                exerciseCount: size.exerciseCount,
+                setCount: size.setCount
             )
         } else {
             UIHangContextObservability.shared.activeWorkoutStructureChanged(
-                exerciseCount: exerciseCount,
-                setCount: setCount
+                exerciseCount: size.exerciseCount,
+                setCount: size.setCount
             )
         }
     }

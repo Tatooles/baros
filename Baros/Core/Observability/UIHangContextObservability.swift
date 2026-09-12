@@ -29,6 +29,23 @@ enum UIHangSurface: String, Equatable {
     case exercisePicker = "exercise_picker"
 }
 
+/// Count only the visible workout structure, without sorting or recording content.
+struct UIHangWorkoutSize {
+    let exerciseCount: Int
+    let setCount: Int
+
+    init(session: WorkoutSession) {
+        var exercises = 0
+        var sets = 0
+        for exercise in session.loggedExercises where exercise.deletedAt == nil {
+            exercises += 1
+            for set in exercise.sets where set.deletedAt == nil { sets += 1 }
+        }
+        exerciseCount = exercises
+        setCount = sets
+    }
+}
+
 /// Shared, bounded buckets keep workout scale useful without sending exact counts.
 enum UIHangCountBucket: String, Equatable {
     case zero = "0"
