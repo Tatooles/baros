@@ -17,6 +17,10 @@ enum SentryRuntime {
             options.releaseName = configuration.releaseName
             options.dist = configuration.dist
             options.sampleRate = 1.0
+            options.enableMetricKit = true
+            options.enableMetricKitRawPayload = false
+            // Retain the existing hang detector until device ingestion and
+            // symbolication are verified. See docs/diagnostics.md for cutover.
 
             options.sendDefaultPii = false
             options.enableCaptureFailedRequests = false
@@ -29,6 +33,7 @@ enum SentryRuntime {
         }
 
         UIHangContextObservability.shared.install(sink: SentryUIHangContextSink())
+        UIHangContextObservability.shared.launchStarted()
 
         Task { @MainActor in
             await SentryDistributionChannelTagger.updateTag()
@@ -50,7 +55,46 @@ enum SentryEventScrubber {
         guard let syncScrubbedEvent = SentrySyncEventScrubber.scrub(event) else {
             return nil
         }
-        return SentryUIHangEventScrubber.scrub(syncScrubbedEvent)
+        guard let event = SentryUIHangEventScrubber.scrub(syncScrubbedEvent) else { return nil }
+        return SentryMetricKitEventScrubber.scrub(event)
+    }
+}
+
+/// MetricKit's timestamp is the payload interval start; the SDK applies the
+/// current scope/build. Delivery state must not masquerade as incident evidence.
+enum SentryMetricKitEventScrubber {
+    static func scrub(_ event: Event) -> Event {
+        let mechanisms: Set<String> = ["mx_hang_diagnostic", "mx_cpu_exception", "mx_disk_write_exception"]
+        guard event.exceptions?.contains(where: { mechanisms.contains($0.mechanism?.type ?? "") }) == true else {
+            return event
+        }
+        var delivery: [String: Any] = ["received_at": Date().timeIntervalSince1970]
+        delivery["release"] = event.releaseName
+        delivery["dist"] = event.dist
+        delivery["ui_surface"] = event.tags?["ui_surface"]
+        delivery["ui"] = event.context?["ui"]
+        for key in ["app", "device", "os"] {
+            delivery[key] = event.context?[key]
+        }
+        delivery["distribution_channel"] = event.tags?["distribution_channel"]
+        var context = event.context ?? [:]
+        context["diagnostic_delivery"] = delivery
+        for key in ["ui", "app", "device", "os", "trace"] {
+            context.removeValue(forKey: key)
+        }
+        event.context = context
+        var tags = event.tags ?? [:]
+        tags["diagnostic_timestamp_basis"] = "payload_interval_start"
+        tags.removeValue(forKey: "ui_surface")
+        tags.removeValue(forKey: "distribution_channel")
+        event.tags = tags
+        event.releaseName = nil
+        event.dist = nil
+        event.user = nil
+        event.breadcrumbs = nil
+        // Original exceptions, stacks and binary UUIDs remain intact. dSYM
+        // symbolication uses those UUIDs, not the delivery build's release.
+        return event
     }
 }
 
@@ -88,6 +132,8 @@ final class SentryUIHangContextSink: UIHangContextSink {
     static func contextValues(for snapshot: UIHangContextSnapshot) -> [String: Any] {
         guard snapshot.surface != nil else { return [:] }
         var context: [String: Any] = ["schema_version": 1]
+        context["base_screen"] = snapshot.baseScreen?.rawValue
+        context["scene_phase"] = snapshot.scenePhase?.rawValue
         if let exerciseCountBucket = snapshot.exerciseCountBucket {
             context["exercise_count_bucket"] = exerciseCountBucket.rawValue
         }
@@ -115,6 +161,8 @@ enum SentryUIHangEventScrubber {
         "exercise_count_bucket",
         "set_count_bucket",
         "focused_field",
+        "base_screen",
+        "scene_phase",
     ]
 
     static func scrub(_ event: Event) -> Event? {
@@ -141,7 +189,7 @@ enum SentryUIHangEventScrubber {
 
         // A failed cast must not make a present value look like an absent
         // optional field: nested data must never survive under an approved key.
-        for key in ["exercise_count_bucket", "set_count_bucket", "focused_field"] {
+        for key in ["exercise_count_bucket", "set_count_bucket", "focused_field", "base_screen", "scene_phase"] {
             if let value = context[key], !(value is String) {
                 return false
             }
@@ -154,7 +202,18 @@ enum SentryUIHangEventScrubber {
               setBucket.map({ UIHangCountBucket(rawValue: $0) != nil }) ?? true else {
             return false
         }
-        if surface == UIHangSurface.activeWorkout.rawValue,
+        let baseScreen = context["base_screen"] as? String
+        let scenePhase = context["scene_phase"] as? String
+        guard baseScreen.map({ UIHangScreen(rawValue: $0) != nil }) ?? true,
+              scenePhase.map({ UIHangScenePhase(rawValue: $0) != nil && $0 != "background" }) ?? true else {
+            return false
+        }
+        let isWorkout = surface == UIHangSurface.activeWorkout.rawValue || surface == UIHangSurface.exercisePicker.rawValue
+        if !isWorkout && (exerciseBucket != nil || context["focused_field"] != nil) { return false }
+        if surface == UIHangSurface.exercisePicker.rawValue && context["focused_field"] != nil { return false }
+        // A shell presentation can be identified before its workout view has
+        // appeared and supplied counts. Legacy workout context still requires them.
+        if surface == UIHangSurface.activeWorkout.rawValue, baseScreen == nil,
            exerciseBucket == nil || setBucket == nil {
             return false
         }

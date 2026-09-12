@@ -96,6 +96,9 @@ struct SettingsView: View {
                 dismissButton: .cancel(Text("OK"))
             )
         }
+        .onChange(of: isWhatsNewPresented, initial: true) { _, isPresented in
+            UIHangContextObservability.shared.settingsWhatsNewChanged(isPresented: isPresented)
+        }
         .sheet(item: $sheetPresentation) { presentation in
             switch presentation {
             case .export(let exportFile):
@@ -107,10 +110,16 @@ struct SettingsView: View {
             }
         }
         .onDisappear {
+            UIHangContextObservability.shared.settingsWhatsNewChanged(isPresented: false)
             copyFeedbackResetTask?.cancel()
             copyFeedbackResetTask = nil
             copyFeedbackState = .idle
         }
+    }
+
+    private var isWhatsNewPresented: Bool {
+        if case .appInfo(.whatsNew)? = sheetPresentation { return true }
+        return false
     }
 
     private var appInfoSection: some View {
