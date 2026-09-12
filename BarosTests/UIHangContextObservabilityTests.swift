@@ -23,7 +23,7 @@ final class UIHangContextObservabilityTests: XCTestCase {
         let scrubbed = try XCTUnwrap(SentryEventScrubber.scrub(event))
 
         XCTAssertEqual(scrubbed.timestamp, Date(timeIntervalSince1970: 1_700_000_000))
-        XCTAssertEqual(scrubbed.exceptions?.first?.value, exception.value)
+        XCTAssertEqual(scrubbed.exceptions?.first?.value, "MXHangDiagnostic hangDuration:3 seconds")
         XCTAssertEqual(scrubbed.exceptions?.first?.mechanism?.type, "mx_hang_diagnostic")
         XCTAssertNil(scrubbed.releaseName)
         XCTAssertNil(scrubbed.dist)
@@ -63,7 +63,7 @@ final class UIHangContextObservabilityTests: XCTestCase {
 
             XCTAssertTrue(scrubbed.threads?.first?.stacktrace === stacktrace)
             XCTAssertTrue(scrubbed.exceptions?.first?.stacktrace === stacktrace)
-            XCTAssertEqual(scrubbed.debugMeta?.first?.debugID, image.debugID)
+            XCTAssertEqual(scrubbed.debugMeta?.first?.debugID, "00112233-4455-6677-8899-AABBCCDDEEFF")
             XCTAssertNotNil(scrubbed.context?["diagnostic_delivery"])
             XCTAssertEqual(scrubbed.tags?["diagnostic_timestamp_basis"], "payload_interval_start")
         }
@@ -80,7 +80,7 @@ final class UIHangContextObservabilityTests: XCTestCase {
 
         let scrubbed = try XCTUnwrap(SentryEventScrubber.scrub(event))
 
-        XCTAssertEqual(scrubbed.releaseName, event.releaseName)
+        XCTAssertEqual(scrubbed.releaseName, "com.example.Baros@1.3+90")
         XCTAssertEqual(scrubbed.dist, "90")
         XCTAssertEqual(scrubbed.user?.userId, "incident-user")
         XCTAssertEqual(scrubbed.tags?["ui_surface"], "whats_new")
