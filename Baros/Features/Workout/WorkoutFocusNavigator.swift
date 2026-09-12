@@ -148,7 +148,6 @@ final class WorkoutFocusTransitionCoordinator {
     @discardableResult
     func move(
         offset: Int,
-        delay: Duration? = nil,
         commit: (WorkoutField?) -> Void,
         assign: (WorkoutField) -> Void,
         reveal: @escaping @MainActor (WorkoutField) -> Void
@@ -157,7 +156,6 @@ final class WorkoutFocusTransitionCoordinator {
 
         transition(
             to: target,
-            delay: delay,
             commit: commit,
             assign: { field in
                 guard let field else { return }

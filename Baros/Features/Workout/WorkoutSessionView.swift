@@ -469,28 +469,18 @@ struct WorkoutSessionView: View {
     }
 
     private func moveFocus(offset: Int, scrollProxy: ScrollViewProxy) {
-        guard let target = focusTransitionCoordinator.adjacentField(offset: offset) else { return }
-        let changesFromTextToNumber = !Self.isSetField(focusedField) && Self.isSetField(target)
-        // Finish positioning the field before changing keyboard layouts. A focus
-        // change during the scroll can interrupt it and apply the final offset abruptly.
-        // The coordinator cancels the deferred focus when a newer move or dismissal wins.
+        // Move focus and its reveal together. A delayed scrollTo starts a
+        // second movement after the keyboard's native reveal settles.
         focusTransitionCoordinator.move(
             offset: offset,
-            delay: changesFromTextToNumber ? .milliseconds(350) : nil,
             commit: setInputRegistry.commit,
             assign: { target in
                 withAnimation(.easeInOut(duration: 0.25)) {
-                    if !changesFromTextToNumber {
-                        focusedField = target
-                    }
+                    focusedField = target
                     scrollProxy.scrollTo(target, anchor: Self.focusRevealAnchor)
                 }
             },
-            reveal: { target in
-                if changesFromTextToNumber {
-                    focusedField = target
-                }
-            }
+            reveal: { _ in }
         )
     }
 
