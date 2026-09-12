@@ -112,6 +112,7 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
                 .animation(.easeOut(duration: 0.15), value: isFocused)
                 .accessibilityLabel(Text(verbatim: accessibilityLabel))
                 .accessibilityIdentifier(fieldAccessibilityIdentifier)
+                .workoutScrollTarget(focusTarget)
                 .id(focusTarget)
                 .onChange(of: focusedField.wrappedValue) { previousField, newField in
                     if newField == focusTarget {
@@ -157,6 +158,9 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
         Binding(
             get: { currentText },
             set: { newValue in
+                // Focus changes can write the current value back into the binding.
+                // Do not create a draft (and a later model save) for that no-op.
+                guard newValue != currentText else { return }
                 if commitOnFocusLoss == nil {
                     notes = newValue
                 } else {
@@ -286,6 +290,7 @@ struct WorkoutTitleField<Focus: Hashable>: View {
                     .strokeBorder(isFocused ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
             )
             .animation(.easeOut(duration: 0.15), value: isFocused)
+            .workoutScrollTarget(focusTarget)
             .id(focusTarget)
     }
 

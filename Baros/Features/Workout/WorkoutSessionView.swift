@@ -35,6 +35,7 @@ struct WorkoutSessionView: View {
     @State private var rpeEditingSourceField: WorkoutField?
     @State private var setInputRegistry = ActiveSetInputRegistry()
     @State private var focusTransitionCoordinator = WorkoutFocusTransitionCoordinator()
+    @State private var scrollAnimator = WorkoutScrollAnimator()
     @FocusState private var focusedField: WorkoutField?
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
@@ -156,6 +157,7 @@ struct WorkoutSessionView: View {
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
                 .padding(.bottom, contentBottomPadding)
+                .environment(\.workoutScrollAnimator, scrollAnimator)
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 ActiveWorkoutMetricsHeader(session: session) {
@@ -165,6 +167,17 @@ struct WorkoutSessionView: View {
                     isFinishSheetPresented = true
                 }
                 .equatable()
+            }
+            .onScrollGeometryChange(for: WorkoutScrollViewport.self) {
+                WorkoutScrollViewport(size: $0.containerSize, insets: $0.contentInsets)
+            } action: { _, _ in
+                scrollAnimator.viewportDidChange()
+            }
+            .onDisappear { scrollAnimator.cancel() }
+            .onScrollPhaseChange { _, phase in
+                if phase == .tracking || phase == .interacting {
+                    scrollAnimator.cancel()
+                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 // Resigning focus routes pending drafts through the normal
@@ -182,6 +195,7 @@ struct WorkoutSessionView: View {
                 completeExerciseSelection(scrollProxy: scrollProxy)
             }
             .onChange(of: focusedField) { previousField, newField in
+                scrollAnimator.focusDidChange(to: newField)
                 UIHangContextObservability.shared.focusChanged(to: newField)
                 focusTransitionCoordinator.observeFocusChange(
                     from: previousField,
@@ -469,16 +483,18 @@ struct WorkoutSessionView: View {
     }
 
     private func moveFocus(offset: Int, scrollProxy: ScrollViewProxy) {
-        // Move focus and its reveal together. A delayed scrollTo starts a
-        // second movement after the keyboard's native reveal settles.
+        // Submit one native scroll before focus changes, without delaying focus.
+        // The compositor keeps it moving through text-commit layout work.
         focusTransitionCoordinator.move(
             offset: offset,
             commit: setInputRegistry.commit,
             assign: { target in
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    focusedField = target
-                    scrollProxy.scrollTo(target, anchor: Self.focusRevealAnchor)
+                if !scrollAnimator.reveal(target, anchor: Self.focusRevealAnchor) {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        scrollProxy.scrollTo(target, anchor: Self.focusRevealAnchor)
+                    }
                 }
+                focusedField = target
             },
             reveal: { _ in }
         )
@@ -494,6 +510,7 @@ struct WorkoutSessionView: View {
     }
 
     private func resignFocus() {
+        scrollAnimator.cancel()
         focusTransitionCoordinator.transition(
             to: nil,
             commit: setInputRegistry.commit,
@@ -774,7 +791,10 @@ private struct WorkoutTitleDraftField: View {
             placeholder: "Workout Name",
             text: Binding(
                 get: { draft ?? title },
-                set: { draft = $0 }
+                set: { newValue in
+                    guard newValue != (draft ?? title) else { return }
+                    draft = newValue
+                }
             ),
             focusTarget: .workoutTitle,
             focusedField: focusedField,
