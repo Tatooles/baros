@@ -57,6 +57,7 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
     @Binding var isRevealed: Bool
     var focusedField: FocusState<Focus?>.Binding
     @State private var draft: String?
+    @State private var editorID = UUID()
 
     init(
         notes: Binding<String>,
@@ -100,6 +101,7 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
                 .font(.body)
                 .foregroundStyle(AppTheme.textPrimary)
                 .lineLimit(1...6)
+                .id(editorID)
                 .focused(focusedField, equals: focusTarget)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 10)
@@ -119,6 +121,9 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
                         isRevealed = true
                     } else if previousField == focusTarget {
                         commitAndUpdateDisclosure()
+                        // Retire the text view's keyboard-reveal tracking after editing.
+                        // Keep the outer focus/scroll target stable while replacing only the editor.
+                        editorID = UUID()
                     }
                 }
                 .onDisappear {
