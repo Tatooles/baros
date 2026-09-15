@@ -10,15 +10,24 @@ final class WorkoutScrollAnimator {
         init(_ view: UIView) { self.view = view }
     }
 
-    private struct Request {
+    private final class Request {
         let id = UUID()
         let field: WorkoutField
+        let destination: CGFloat
+        var didReassert = false
+
+        init(field: WorkoutField, destination: CGFloat) {
+            self.field = field
+            self.destination = destination
+        }
     }
 
     private var targets: [AnyHashable: WeakView] = [:]
     private var request: Request?
     private var animator: UIViewPropertyAnimator?
     private weak var scrollView: UIScrollView?
+    private var offsetObservation: NSKeyValueObservation?
+    private var isWritingOffset = false
 
     func register(_ view: UIView, for field: AnyHashable) {
         guard targets[field]?.view !== view else { return }
@@ -35,6 +44,7 @@ final class WorkoutScrollAnimator {
 
     func cancel() {
         request = nil
+        offsetObservation = nil
         if let animator {
             let visibleOffset = scrollView?.layer.presentation()?.bounds.origin
             animator.stopAnimation(true)
@@ -66,17 +76,44 @@ final class WorkoutScrollAnimator {
         cancel()
         let scroll = destination.scroll
         scrollView = scroll
-        let next = Request(field: field)
+        let next = Request(field: field, destination: destination.y)
         request = next
+        offsetObservation = scroll.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.reassertDestinationIfNeeded() }
+        }
+        animate(next, in: scroll)
+        reassertDestinationIfNeeded()
+        return true
+    }
 
-        guard !UIAccessibility.isReduceMotionEnabled, abs(scroll.contentOffset.y - destination.y) > 0.5 else {
-            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: destination.y), animated: false)
-            return true
+    private func reassertDestinationIfNeeded() {
+        guard let request, let scroll = scrollView, !isWritingOffset,
+              !scroll.isTracking, !scroll.isDragging, !scroll.isDecelerating,
+              !request.didReassert, abs(scroll.contentOffset.y - request.destination) > 0.5 else { return }
+        // A departing SwiftUI multiline editor can enqueue a reveal after losing
+        // its window. Keep that stale request from replacing the arrow destination.
+        // Retry once so a synchronous layout clamp cannot cause an offset loop.
+        request.didReassert = true
+        let visible = scroll.layer.presentation()?.bounds.origin ?? scroll.contentOffset
+        animator?.stopAnimation(true)
+        animator = nil
+        isWritingOffset = true
+        scroll.setContentOffset(visible, animated: false)
+        isWritingOffset = false
+        animate(request, in: scroll)
+    }
+
+    private func animate(_ next: Request, in scroll: UIScrollView) {
+        isWritingOffset = true
+        defer { isWritingOffset = false }
+        guard !UIAccessibility.isReduceMotionEnabled, abs(scroll.contentOffset.y - next.destination) > 0.5 else {
+            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: next.destination), animated: false)
+            return
         }
 
         let animation = UIViewPropertyAnimator(duration: 0.25, curve: .easeInOut) { [weak scroll] in
             guard let scroll else { return }
-            scroll.contentOffset.y = destination.y
+            scroll.contentOffset.y = next.destination
         }
         animator = animation
         animation.addCompletion { [weak self] _ in
@@ -88,7 +125,6 @@ final class WorkoutScrollAnimator {
         // Keep this destination for the whole arrow transition. Re-centering as
         // the text/number keyboards resize creates a second, reversing scroll.
         CATransaction.flush()
-        return true
     }
 }
 

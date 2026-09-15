@@ -95,8 +95,77 @@ final class WorkoutScrollAnimatorTests: XCTestCase {
         XCTAssertEqual(scroll.contentOffset.y, 200)
     }
 
-    private func makeScroll(markerY: CGFloat) -> (UIScrollView, UIView) {
-        let scroll = UIScrollView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))
+    func testKeyboardRevealCannotOverrideAnActiveArrowDestination() async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
+        let (scroll, marker) = makeScroll(markerY: 600)
+        window.addSubview(scroll)
+        window.isHidden = false
+        defer { window.isHidden = true }
+        window.layoutIfNeeded()
+        scroll.contentOffset.y = 100
+        CATransaction.flush()
+        let animator = WorkoutScrollAnimator()
+        let field = WorkoutField.setWeight(UUID())
+        animator.register(marker, for: field)
+        defer { animator.cancel() }
+        animator.reveal(field, anchor: .center)
+        let destination = scroll.contentOffset.y
+        try await Task.sleep(for: .milliseconds(80))
+        // The detached note supplies a rectangle at a fixed distance from bounds.origin.
+        scroll.scrollRectToVisible(CGRect(x: 0, y: scroll.contentOffset.y + 21, width: 40, height: 32), animated: true)
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertEqual(scroll.contentOffset.y, destination, accuracy: 0.5)
+    }
+
+    func testUserTrackingCanMoveAwayFromTheArrowDestination() {
+        let trackingScroll = TrackingScrollView()
+        let (scroll, marker) = makeScroll(markerY: 600, scrolling: trackingScroll)
+        let animator = WorkoutScrollAnimator()
+        let field = WorkoutField.setWeight(UUID())
+        animator.register(marker, for: field)
+        defer { animator.cancel() }
+        animator.reveal(field, anchor: .center)
+
+        trackingScroll.simulatesTracking = true
+        scroll.contentOffset.y = 150
+        XCTAssertEqual(scroll.contentOffset.y, 150, accuracy: 0.5)
+    }
+
+    func testLayoutClampDoesNotCauseAnOffsetCorrectionLoop() {
+        let clampingScroll = ClampingScrollView()
+        let (_, marker) = makeScroll(markerY: 600, scrolling: clampingScroll)
+        let animator = WorkoutScrollAnimator()
+        let field = WorkoutField.setWeight(UUID())
+        animator.register(marker, for: field)
+        defer { animator.cancel() }
+        clampingScroll.writes = 0
+
+        animator.reveal(field, anchor: .center)
+        XCTAssertEqual(clampingScroll.contentOffset.y, 200, accuracy: 0.5)
+        XCTAssertLessThanOrEqual(clampingScroll.writes, 4)
+    }
+
+    private final class TrackingScrollView: UIScrollView {
+        var simulatesTracking = false
+        override var isTracking: Bool { simulatesTracking }
+    }
+
+    private final class ClampingScrollView: UIScrollView {
+        var writes = 0
+        override var contentOffset: CGPoint {
+            get { super.contentOffset }
+            set {
+                writes += 1
+                super.contentOffset = CGPoint(x: newValue.x, y: min(newValue.y, 200))
+            }
+        }
+    }
+
+    private func makeScroll(markerY: CGFloat, scrolling: UIScrollView? = nil) -> (UIScrollView, UIView) {
+        let scroll = scrolling ?? UIScrollView()
+        scroll.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
         scroll.contentInsetAdjustmentBehavior = .never
         scroll.contentInset = UIEdgeInsets(top: 40, left: 0, bottom: 20, right: 0)
         scroll.contentSize = CGSize(width: 320, height: 1_200)
