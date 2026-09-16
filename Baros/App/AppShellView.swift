@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 
 struct AppShellView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var modelContext
     @Environment(SyncScheduler.self) private var syncScheduler
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
@@ -91,6 +92,27 @@ struct AppShellView: View {
 
     var body: some View {
         tabShell
+            .onChange(of: uiHangShellState, initial: true) { oldState, newState in
+                let context = UIHangContextObservability.shared
+                context.shellChanged(screen: newState.screen, presentation: newState.presentation)
+                if newState.presentation == .activeWorkout,
+                   oldState.presentation != .activeWorkout || oldState == newState,
+                   let activeSession {
+                    // Seed counts at the shell boundary too: the child's onAppear
+                    // may run before this initial shell-state observation.
+                    let size = UIHangWorkoutSize(session: activeSession)
+                    context.activeWorkoutBecameCurrent(exerciseCount: size.exerciseCount, setCount: size.setCount)
+                }
+            }
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                let diagnosticPhase: UIHangScenePhase = switch phase {
+                case .active: .active
+                case .inactive: .inactive
+                case .background: .background
+                @unknown default: .inactive
+                }
+                UIHangContextObservability.shared.sceneChanged(to: diagnosticPhase)
+            }
             .tint(AppTheme.brandAccentForeground)
             .tabBarMinimizeBehavior(.never)
             .safeAreaInset(edge: .bottom) {
@@ -190,6 +212,25 @@ struct AppShellView: View {
                 )
             }
             .accessibilityDynamicTypeForUITesting()
+    }
+
+    private struct UIHangShellState: Equatable {
+        let screen: UIHangScreen
+        let presentation: UIHangPresentation?
+    }
+
+    private var uiHangShellState: UIHangShellState {
+        let presentation: UIHangPresentation?
+        if navigationState.isActiveWorkoutPresented, activeSession != nil {
+            presentation = .activeWorkout
+        } else {
+            presentation = switch launchPresentation {
+            case .onboarding: .onboarding
+            case .whatsNew: .whatsNew
+            case nil: nil
+            }
+        }
+        return UIHangShellState(screen: UIHangScreen(tab: navigationState.selectedTab), presentation: presentation)
     }
 
     @ViewBuilder
