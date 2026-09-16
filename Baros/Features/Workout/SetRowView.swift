@@ -327,6 +327,7 @@ struct SetRowView: View, @MainActor Equatable {
                 ?? (text.wrappedValue.isEmpty ? placeholder : text.wrappedValue))
             .accessibilityHint(suggestion == nil ? "" : "Complete the set or select an RPE to use this value.")
             .accessibilityIdentifier(accessibilityIdentifier)
+            .workoutScrollTarget(focusTarget)
             .id(focusTarget)
     }
 
