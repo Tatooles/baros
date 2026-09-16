@@ -1,32 +1,31 @@
 import SwiftUI
 import UIKit
 
-/// Owns arrow scrolling on the scroll view's layer, so focus-loss model updates
-/// cannot interrupt a SwiftUI-driven, frame-by-frame scroll animation.
+/// Drives arrow-navigation scrolling directly on the workout `UIScrollView`.
+/// SwiftUI's `scrollTo` animation advances frame by frame on the main thread, so
+/// the focus-loss commit that follows an arrow press could stall it. A Core
+/// Animation scroll submitted before the focus change keeps moving through that work.
 @MainActor
 final class WorkoutScrollAnimator {
+    private struct Request {
+        let field: WorkoutField
+        let destination: CGFloat
+        var didReassert = false
+    }
+
     private final class WeakView {
         weak var view: UIView?
         init(_ view: UIView) { self.view = view }
     }
 
-    private final class Request {
-        let id = UUID()
-        let field: WorkoutField
-        let destination: CGFloat
-        var didReassert = false
-
-        init(field: WorkoutField, destination: CGFloat) {
-            self.field = field
-            self.destination = destination
-        }
-    }
+    private static let duration: TimeInterval = 0.25
 
     private var targets: [AnyHashable: WeakView] = [:]
     private var request: Request?
     private var animator: UIViewPropertyAnimator?
     private weak var scrollView: UIScrollView?
     private var offsetObservation: NSKeyValueObservation?
+    private var offsetObservationExpiry: Task<Void, Never>?
     private var isWritingOffset = false
 
     func register(_ view: UIView, for field: AnyHashable) {
@@ -38,21 +37,45 @@ final class WorkoutScrollAnimator {
         if targets[field]?.view === view { targets[field] = nil }
     }
 
+    /// Scrolls `field` into view, replacing any scroll still in flight. Returns
+    /// `false` when the field has no marker in the hierarchy so the caller can
+    /// fall back to `ScrollViewProxy`.
+    @discardableResult
+    func reveal(_ field: WorkoutField, anchor: UnitPoint) -> Bool {
+        cancel()
+        guard let destination = destination(for: field, anchor: anchor) else { return false }
+        let scroll = destination.scroll
+        scrollView = scroll
+        request = Request(field: field, destination: destination.y)
+
+        // On iOS 27 a departing multiline note editor can enqueue one stale
+        // keyboard reveal after losing its window. Watch for competing offset
+        // writes only while the arrow transition is in flight.
+        offsetObservation = scroll.observe(\.contentOffset) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.reassertDestinationIfNeeded() }
+        }
+        offsetObservationExpiry = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(Self.duration)) } catch { return }
+            self?.offsetObservation = nil
+        }
+
+        animate(to: destination.y, in: scroll)
+        // Also covers a scroll view that clamps the offset synchronously.
+        reassertDestinationIfNeeded()
+        return true
+    }
+
+    /// Manual focus changes (taps, dismissal) take over the viewport.
     func focusDidChange(to field: WorkoutField?) {
         if let request, request.field != field { cancel() }
     }
 
     func cancel() {
         request = nil
+        offsetObservationExpiry?.cancel()
+        offsetObservationExpiry = nil
         offsetObservation = nil
-        if let animator {
-            let visibleOffset = scrollView?.layer.presentation()?.bounds.origin
-            animator.stopAnimation(true)
-            if let visibleOffset, let scrollView {
-                scrollView.setContentOffset(visibleOffset, animated: false)
-            }
-        }
-        animator = nil
+        stopAnimationAtVisiblePosition()
     }
 
     private func destination(for field: WorkoutField, anchor: UnitPoint) -> (scroll: UIScrollView, y: CGFloat)? {
@@ -70,61 +93,51 @@ final class WorkoutScrollAnimator {
         return (scroll, min(maximum, max(minimum, y)))
     }
 
-    @discardableResult
-    func reveal(_ field: WorkoutField, anchor: UnitPoint) -> Bool {
-        guard let destination = destination(for: field, anchor: anchor) else { return false }
-        cancel()
-        let scroll = destination.scroll
-        scrollView = scroll
-        let next = Request(field: field, destination: destination.y)
-        request = next
-        offsetObservation = scroll.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.reassertDestinationIfNeeded() }
-        }
-        animate(next, in: scroll)
-        reassertDestinationIfNeeded()
-        return true
-    }
-
     private func reassertDestinationIfNeeded() {
-        guard let request, let scroll = scrollView, !isWritingOffset,
+        guard let request, let scroll = scrollView, !isWritingOffset, !request.didReassert,
               !scroll.isTracking, !scroll.isDragging, !scroll.isDecelerating,
-              !request.didReassert, abs(scroll.contentOffset.y - request.destination) > 0.5 else { return }
-        // A departing SwiftUI multiline editor can enqueue a reveal after losing
-        // its window. Keep that stale request from replacing the arrow destination.
-        // Retry once so a synchronous layout clamp cannot cause an offset loop.
-        request.didReassert = true
-        let visible = scroll.layer.presentation()?.bounds.origin ?? scroll.contentOffset
-        animator?.stopAnimation(true)
-        animator = nil
-        isWritingOffset = true
-        scroll.setContentOffset(visible, animated: false)
-        isWritingOffset = false
-        animate(request, in: scroll)
+              abs(scroll.contentOffset.y - request.destination) > 0.5 else { return }
+        // Correct at most once so a clamping scroll view cannot cause a loop.
+        self.request?.didReassert = true
+        stopAnimationAtVisiblePosition()
+        animate(to: request.destination, in: scroll)
     }
 
-    private func animate(_ next: Request, in scroll: UIScrollView) {
-        isWritingOffset = true
-        defer { isWritingOffset = false }
-        guard !UIAccessibility.isReduceMotionEnabled, abs(scroll.contentOffset.y - next.destination) > 0.5 else {
-            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: next.destination), animated: false)
+    private func stopAnimationAtVisiblePosition() {
+        guard let animator else { return }
+        let visible = scrollView?.layer.presentation()?.bounds.origin
+        animator.stopAnimation(true)
+        self.animator = nil
+        if let visible, let scrollView {
+            write(visible, to: scrollView)
+        }
+    }
+
+    private func animate(to destination: CGFloat, in scroll: UIScrollView) {
+        guard !UIAccessibility.isReduceMotionEnabled, abs(scroll.contentOffset.y - destination) > 0.5 else {
+            write(CGPoint(x: scroll.contentOffset.x, y: destination), to: scroll)
             return
         }
 
-        let animation = UIViewPropertyAnimator(duration: 0.25, curve: .easeInOut) { [weak scroll] in
-            guard let scroll else { return }
-            scroll.contentOffset.y = next.destination
+        let animation = UIViewPropertyAnimator(duration: Self.duration, curve: .easeInOut) { [weak scroll] in
+            scroll?.contentOffset.y = destination
+        }
+        animation.addCompletion { [weak self, weak animation] _ in
+            if let self, self.animator === animation { self.animator = nil }
         }
         animator = animation
-        animation.addCompletion { [weak self] _ in
-            guard let self, self.request?.id == next.id else { return }
-            self.animator = nil
-        }
+        isWritingOffset = true
         animation.startAnimation()
-        // Submit before assigning focus so text commits cannot stall the motion.
-        // Keep this destination for the whole arrow transition. Re-centering as
-        // the text/number keyboards resize creates a second, reversing scroll.
+        isWritingOffset = false
+        // Commit the animation to the render server before the caller assigns
+        // focus, so the focus-loss commit cannot delay its first frame.
         CATransaction.flush()
+    }
+
+    private func write(_ offset: CGPoint, to scroll: UIScrollView) {
+        isWritingOffset = true
+        scroll.setContentOffset(offset, animated: false)
+        isWritingOffset = false
     }
 }
 
@@ -140,6 +153,7 @@ extension EnvironmentValues {
 }
 
 extension View {
+    /// Registers this view's UIKit frame as the scroll destination for `field`.
     func workoutScrollTarget<Focus: Hashable>(_ field: Focus) -> some View {
         modifier(WorkoutScrollTargetModifier(field: AnyHashable(field)))
     }

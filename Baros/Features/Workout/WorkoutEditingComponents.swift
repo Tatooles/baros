@@ -121,8 +121,8 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
                         isRevealed = true
                     } else if previousField == focusTarget {
                         commitAndUpdateDisclosure()
-                        // Retire the text view's keyboard-reveal tracking after editing.
-                        // Keep the outer focus/scroll target stable while replacing only the editor.
+                        // Replace the editor so the departing UITextView stops issuing
+                        // keyboard reveals. The outer focus/scroll identity is unchanged.
                         editorID = UUID()
                     }
                 }

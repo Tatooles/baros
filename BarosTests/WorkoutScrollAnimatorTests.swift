@@ -46,16 +46,8 @@ final class WorkoutScrollAnimatorTests: XCTestCase {
     }
 
     func testManualFocusCancelsAnInFlightScrollAtItsVisiblePosition() async throws {
-        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-        let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
-        let (scroll, marker) = makeScroll(markerY: 600)
-        window.addSubview(scroll)
-        window.isHidden = false
+        let (window, scroll, marker) = try makeWindowedScroll(markerY: 600)
         defer { window.isHidden = true }
-        window.layoutIfNeeded()
-        scroll.contentOffset.y = 100
-        CATransaction.flush()
         let animator = WorkoutScrollAnimator()
         let field = WorkoutField.setWeight(UUID())
         animator.register(marker, for: field)
@@ -66,6 +58,24 @@ final class WorkoutScrollAnimatorTests: XCTestCase {
         let stoppedOffset = scroll.contentOffset.y
         XCTAssertGreaterThan(stoppedOffset, 100)
         XCTAssertLessThan(stoppedOffset, 370, "Cancellation must not jump to the animation's destination")
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(scroll.contentOffset.y, stoppedOffset, accuracy: 0.5)
+    }
+
+    func testRevealWithoutATargetStopsThePreviousScrollBeforeTheFallback() async throws {
+        let (window, scroll, marker) = try makeWindowedScroll(markerY: 600)
+        defer { window.isHidden = true }
+        let animator = WorkoutScrollAnimator()
+        let field = WorkoutField.setWeight(UUID())
+        animator.register(marker, for: field)
+        defer { animator.cancel() }
+        animator.reveal(field, anchor: .center)
+        try await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertFalse(animator.reveal(.setWeight(UUID()), anchor: .center))
+        let stoppedOffset = scroll.contentOffset.y
+        XCTAssertGreaterThan(stoppedOffset, 100)
+        XCTAssertLessThan(stoppedOffset, 370, "The old scroll must stop where it is, not at its destination")
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertEqual(scroll.contentOffset.y, stoppedOffset, accuracy: 0.5)
     }
@@ -96,16 +106,8 @@ final class WorkoutScrollAnimatorTests: XCTestCase {
     }
 
     func testKeyboardRevealCannotOverrideAnActiveArrowDestination() async throws {
-        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-        let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
-        let (scroll, marker) = makeScroll(markerY: 600)
-        window.addSubview(scroll)
-        window.isHidden = false
+        let (window, scroll, marker) = try makeWindowedScroll(markerY: 600)
         defer { window.isHidden = true }
-        window.layoutIfNeeded()
-        scroll.contentOffset.y = 100
-        CATransaction.flush()
         let animator = WorkoutScrollAnimator()
         let field = WorkoutField.setWeight(UUID())
         animator.register(marker, for: field)
@@ -117,6 +119,23 @@ final class WorkoutScrollAnimatorTests: XCTestCase {
         scroll.scrollRectToVisible(CGRect(x: 0, y: scroll.contentOffset.y + 21, width: 40, height: 32), animated: true)
         try await Task.sleep(for: .milliseconds(600))
         XCTAssertEqual(scroll.contentOffset.y, destination, accuracy: 0.5)
+    }
+
+    func testOffsetChangesAfterTheTransitionAreLeftAlone() async throws {
+        let (window, scroll, marker) = try makeWindowedScroll(markerY: 600)
+        defer { window.isHidden = true }
+        let animator = WorkoutScrollAnimator()
+        let field = WorkoutField.setWeight(UUID())
+        animator.register(marker, for: field)
+        defer { animator.cancel() }
+        animator.reveal(field, anchor: .center)
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(scroll.contentOffset.y, 372, accuracy: 0.5)
+
+        // A later scroll-to-top or layout clamp must not snap back to the arrow destination.
+        scroll.setContentOffset(CGPoint(x: 0, y: 50), animated: false)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(scroll.contentOffset.y, 50, accuracy: 0.5)
     }
 
     func testUserTrackingCanMoveAwayFromTheArrowDestination() {
@@ -172,5 +191,19 @@ final class WorkoutScrollAnimatorTests: XCTestCase {
         let marker = UIView(frame: CGRect(x: 40, y: markerY, width: 80, height: 44))
         scroll.addSubview(marker)
         return (scroll, marker)
+    }
+
+    /// A scroll view in a live window, so property animations produce presentation values.
+    private func makeWindowedScroll(markerY: CGFloat) throws -> (UIWindow, UIScrollView, UIView) {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
+        let (scroll, marker) = makeScroll(markerY: markerY)
+        window.addSubview(scroll)
+        window.isHidden = false
+        window.layoutIfNeeded()
+        scroll.contentOffset.y = 100
+        CATransaction.flush()
+        return (window, scroll, marker)
     }
 }

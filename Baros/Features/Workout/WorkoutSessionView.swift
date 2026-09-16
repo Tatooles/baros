@@ -478,8 +478,8 @@ struct WorkoutSessionView: View {
     }
 
     private func moveFocus(offset: Int, scrollProxy: ScrollViewProxy) {
-        // Submit one native scroll before focus changes, without delaying focus.
-        // The compositor keeps it moving through text-commit layout work.
+        // Start the native scroll before assigning focus so the focus-loss
+        // commit cannot stall it. Fall back to SwiftUI when the target has no marker.
         focusTransitionCoordinator.move(
             offset: offset,
             commit: setInputRegistry.commit,

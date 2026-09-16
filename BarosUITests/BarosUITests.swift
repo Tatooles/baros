@@ -423,8 +423,12 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
         app.buttons["AddExerciseNoteButton-0"].tap()
         let note = app.textFields["ExerciseNotesField-0"]
+        XCTAssertTrue(note.waitForExistence(timeout: 3))
+        let noteFocus = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: note
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [noteFocus], timeout: 3), .completed)
         note.typeText("Pause reps")
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         app.buttons["NextWorkoutFieldButton"].tap()
         let target = app.textFields["SetWeightField-1-0"]
         let focus = XCTNSPredicateExpectation(
@@ -434,8 +438,7 @@ final class BarosUITests: XCTestCase {
         let headerBottom = app.buttons["FinishWorkoutButton"].frame.maxY
         let toolbarTop = app.buttons["DismissKeyboardButton"].frame.minY
         XCTAssertGreaterThan(target.frame.minY, headerBottom)
-        // Visibility alone allowed the rejected native-only implementation to pass.
-        // Require deliberate positioning with room below the destination, too.
+        // Require room below the destination, not just visibility.
         XCTAssertLessThan(target.frame.maxY, toolbarTop - 40)
         XCTAssertEqual(note.value as? String, "Pause reps")
     }
