@@ -2,16 +2,25 @@ import SwiftUI
 
 struct ExerciseHistoryNoteBlock: View {
     let note: String
+    var presentation: ExerciseHistoryPresentation = .card
 
     var body: some View {
         if let displayNote = Self.displayNote(from: note) {
             VStack(alignment: .leading, spacing: 8) {
-                Divider()
-                    .overlay(AppTheme.subtleBorder)
-                    .accessibilityHidden(true)
+                if presentation == .card {
+                    Divider()
+                        .overlay(AppTheme.subtleBorder)
+                        .accessibilityHidden(true)
+                }
 
-                Text(displayNote)
-                    .font(.subheadline)
+                Group {
+                    if presentation == .openJournal {
+                        Label(displayNote, systemImage: "note.text")
+                    } else {
+                        Text(displayNote)
+                    }
+                }
+                    .font(presentation == .openJournal ? .footnote : .subheadline)
                     .foregroundStyle(AppTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityLabel("Exercise note")

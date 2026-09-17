@@ -34,7 +34,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         XCTAssertEqual(values.count, 6)
         XCTAssertFalse(app.staticTexts["Set 3"].exists, app.debugDescription)
         XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseRecordBadge-")).count, 0)
-        attachScreenshot(named: "Gold inline source set badges", app: app)
+        attachScreenshot(named: "Inline source record glyphs", app: app)
     }
 
     func testRecordsAndBadgesSupportAccessibilityTextSizes() {
@@ -53,7 +53,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
     func testExerciseHistoryDetailPresentsJournalSectionsAndCompleteSetAnnouncements() {
         let app = openRecords()
 
-        XCTAssertFalse(app.staticTexts["Records"].exists)
+        XCTAssertTrue(app.staticTexts["Records"].exists)
         XCTAssertTrue(app.buttons["AboutStrengthRecordsButton"].exists)
 
         let sourceWorkout = app.buttons.matching(

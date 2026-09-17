@@ -30,7 +30,7 @@ struct ExerciseHistoryHeading: View {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(name)
-                        .font(.title2.weight(.bold))
+                        .font(presentation == .openJournal ? .largeTitle.bold() : .title2.bold())
                         .foregroundStyle(AppTheme.textPrimary)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -46,11 +46,7 @@ struct ExerciseHistoryHeading: View {
                 if let performanceSummary {
                     Text(performanceSummary)
                         .font(.footnote.weight(.medium))
-                        .foregroundStyle(
-                            presentation == .openJournal
-                                ? AppTheme.brandAccentForeground
-                                : AppTheme.textSecondary
-                        )
+                        .foregroundStyle(AppTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -69,8 +65,6 @@ struct ExerciseHistorySessionGroupCard: View {
     var showsExerciseNotes: Bool = true
     var openWorkout: (() -> Void)? = nil
     var presentation: ExerciseHistoryPresentation = .card
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         if presentation == .openJournal {
@@ -94,16 +88,17 @@ struct ExerciseHistorySessionGroupCard: View {
     }
 
     private var openJournalContent: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            Divider()
-                .overlay(AppTheme.subtleBorder)
-                .accessibilityHidden(true)
-
+        VStack(alignment: .leading, spacing: 16) {
             header
-
             loggedExerciseEntries
         }
-        .padding(.top, 4)
+        .padding(.leading, 16)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(AppTheme.subtleBorder)
+                .frame(width: 1)
+                .accessibilityHidden(true)
+        }
     }
 
     @ViewBuilder
@@ -128,11 +123,11 @@ struct ExerciseHistorySessionGroupCard: View {
     @ViewBuilder
     private func headerContent(showsDisclosureIndicator: Bool) -> some View {
         if presentation == .openJournal {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text(WorkoutFormatters.compactDate(group.startedAt))
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(AppTheme.brandAccentForeground)
+                        .font(.headline)
+                        .foregroundStyle(AppTheme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(group.title)
                         .font(.subheadline)
@@ -188,21 +183,28 @@ struct ExerciseHistorySessionGroupCard: View {
     }
 
     private var loggedExerciseEntries: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: presentation == .openJournal ? 16 : 12) {
             ForEach(Array(group.loggedExerciseEntries.enumerated()), id: \.element.id) { index, entry in
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: presentation == .openJournal ? 8 : 10) {
                     if entry.showsIdentity(comparedTo: headingIdentity) {
                         entryIdentity(entry.displayIdentity)
                     }
 
-                    if presentation == .openJournal && !dynamicTypeSize.isAccessibilitySize {
-                        setColumnHeadings
+                    if presentation == .openJournal {
+                        HistorySetTable(rows: entry.setEntries.map { item in
+                            HistorySetTable.Row(
+                                set: item.set,
+                                number: item.displaySetNumber,
+                                recordKinds: records?.kinds(for: item.id) ?? [],
+                                accessibilityIdentifier: "ExerciseHistorySetValue-\(item.id.uuidString)"
+                            )
+                        }, weightUnit: weightUnit)
+                    } else {
+                        setRows(for: entry.setEntries)
                     }
 
-                    setRows(for: entry.setEntries)
-
                     if showsExerciseNotes {
-                        ExerciseHistoryNoteBlock(note: entry.exerciseNotes)
+                        ExerciseHistoryNoteBlock(note: entry.exerciseNotes, presentation: presentation)
                     }
                 }
 
@@ -217,17 +219,13 @@ struct ExerciseHistorySessionGroupCard: View {
     private func entryIdentity(_ identity: ExerciseHistoryDisplayIdentity) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(identity.name)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(
-                    presentation == .openJournal
-                        ? AppTheme.brandAccentForeground
-                        : AppTheme.textPrimary
-                )
+                .font(presentation == .openJournal ? .title3.bold() : .system(size: 15, weight: .bold))
+                .foregroundStyle(AppTheme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let metadataDisplayText = identity.metadataDisplayText {
                 Text(metadataDisplayText)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(presentation == .openJournal ? .caption : .system(size: 13, weight: .medium))
                     .foregroundStyle(AppTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -237,116 +235,29 @@ struct ExerciseHistorySessionGroupCard: View {
     private func setRows(for entries: [ExerciseHistorySetEntry]) -> some View {
         VStack(spacing: 8) {
             ForEach(entries) { entry in
-                if presentation == .openJournal {
-                    openJournalSetRow(entry)
-                } else {
-                    ViewThatFits(in: .horizontal) {
-                        HStack {
-                            Text("Set \(entry.displaySetNumber)")
-                            Spacer(minLength: 8)
-                            setResult(for: entry)
-                                .accessibilityHidden(true)
-                                .fixedSize(horizontal: true, vertical: false)
-                        }
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Set \(entry.displaySetNumber)")
-                            setResult(for: entry)
-                                .accessibilityHidden(true)
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-                        }
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        Text("Set \(entry.displaySetNumber)")
+                        Spacer(minLength: 8)
+                        setResult(for: entry)
+                            .accessibilityHidden(true)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .accessibilityRepresentation {
-                        Text(cardSetAccessibilityLabel(for: entry))
-                            .accessibilityIdentifier("ExerciseHistorySetValue-\(entry.id.uuidString)")
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Set \(entry.displaySetNumber)")
+                        setResult(for: entry)
+                            .accessibilityHidden(true)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 }
-            }
-        }
-    }
-
-    private var setColumnHeadings: some View {
-        HStack(spacing: 12) {
-            Text("Set")
-                .frame(width: 42, alignment: .leading)
-            Text("Weight (\(weightUnit.fieldLabel.lowercased()))")
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            Text("Reps")
-                .frame(width: 108, alignment: .trailing)
-        }
-        .font(.caption.weight(.medium))
-        .foregroundStyle(AppTheme.textSecondary)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func openJournalSetRow(_ entry: ExerciseHistorySetEntry) -> some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("Set \(entry.displaySetNumber)")
-                        .foregroundStyle(AppTheme.textSecondary)
-                    valueRow(label: "Weight (\(weightUnit.fieldLabel.lowercased()))") {
-                        weightAndBadges(for: entry)
-                    }
-                    valueRow(label: "Reps") {
-                        repsText(for: entry.set)
-                    }
-                }
-            } else {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text("\(entry.displaySetNumber)")
-                        .monospacedDigit()
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .frame(width: 42, alignment: .leading)
-                    weightAndBadges(for: entry)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                    repsText(for: entry.set)
-                        .frame(width: 108, alignment: .trailing)
-                }
-            }
-        }
-        .font(.subheadline.weight(.medium))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(setAccessibilityLabel(for: entry))
-        .accessibilityIdentifier("ExerciseHistorySetValue-\(entry.id.uuidString)")
-    }
-
-    private func valueRow<Content: View>(
-        label: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label)
-                .font(.caption)
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(AppTheme.textSecondary)
-            Spacer(minLength: 12)
-            content()
-        }
-    }
-
-    private func weightAndBadges(for entry: ExerciseHistorySetEntry) -> some View {
-        let kinds = records?.kinds(for: entry.id) ?? []
-        return VStack(alignment: .trailing, spacing: 3) {
-            Text(weightText(for: entry.set))
-                .font(.subheadline.weight(.semibold).monospacedDigit())
-                .foregroundStyle(AppTheme.textPrimary)
-            if !kinds.isEmpty {
-                ExerciseHistoryRecordBadges(kinds: kinds)
-                    .accessibilityHidden(true)
+                .accessibilityRepresentation {
+                    Text(cardSetAccessibilityLabel(for: entry))
+                        .accessibilityIdentifier("ExerciseHistorySetValue-\(entry.id.uuidString)")
+                }
             }
         }
-    }
-
-    private func repsText(for set: LoggedSet) -> Text {
-        let reps = WorkoutNumericInputPolicy.validatedReps(set.reps).map(String.init) ?? "-"
-        var result = Text(reps).foregroundColor(AppTheme.textPrimary)
-        if let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe) {
-            result = Text(
-                "\(result)\(Text(" @ \(WorkoutFormatters.number(rpe))").foregroundColor(AppTheme.textSecondary))"
-            )
-        }
-        return result.monospacedDigit()
     }
 
     private func setResult(for entry: ExerciseHistorySetEntry) -> some View {
@@ -372,27 +283,6 @@ struct ExerciseHistorySessionGroupCard: View {
         }
 
         return "\(weight) x \(reps)"
-    }
-
-    private func weightText(for set: LoggedSet) -> String {
-        let validWeight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
-        return weightUnit.displayWeight(fromCanonicalPounds: validWeight)
-            .map(WorkoutFormatters.number) ?? "-"
-    }
-
-    private func setAccessibilityLabel(for entry: ExerciseHistorySetEntry) -> String {
-        let validWeight = WorkoutNumericInputPolicy.validatedWeight(entry.set.weight)
-        let displayWeight = weightUnit.displayWeight(fromCanonicalPounds: validWeight)
-        let weightLabel = displayWeight.map {
-            "\(WorkoutFormatters.number($0)) \(weightUnit.displayName.lowercased())"
-        } ?? "no weight"
-        let reps = WorkoutNumericInputPolicy.validatedReps(entry.set.reps)
-        let repsLabel = reps.map { "\($0) \($0 == 1 ? "rep" : "reps")" } ?? "no reps"
-        let rpe = WorkoutNumericInputPolicy.validatedRPE(entry.set.rpe)
-            .map { ", RPE \(WorkoutFormatters.number($0))" } ?? ""
-        let badges = (records?.kinds(for: entry.id) ?? []).map(\.title)
-        return (["Set \(entry.displaySetNumber), \(weightLabel), \(repsLabel)\(rpe)"] + badges)
-            .joined(separator: ", ")
     }
 
     private func cardSetAccessibilityLabel(for entry: ExerciseHistorySetEntry) -> String {

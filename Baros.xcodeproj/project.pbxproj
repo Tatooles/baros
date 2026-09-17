@@ -11,6 +11,7 @@
 		022D2CDFE81EF43740F85662 /* WorkoutLiveActivityIntegrationModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95813DD67E0E433F16D1D571 /* WorkoutLiveActivityIntegrationModifier.swift */; };
 		024088D9604EDD6CAB43BEA3 /* AccountDeletionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A02924849ADF947CBA1478E /* AccountDeletionCoordinator.swift */; };
 		027EBA91D68B66C15784925F /* NetworkPathObserverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A450CECE2EFEC02180515B6E /* NetworkPathObserverTests.swift */; };
+		03F4DE5F9529981CAF4B7229 /* HistorySetTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 857EFC239F41F1B8BFF58873 /* HistorySetTable.swift */; };
 		0461D369DDD5B15D75075F58 /* AppNavigationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A422AEA968D8813BD7F386AE /* AppNavigationState.swift */; };
 		04E069D87D269379B9F4C34D /* SyncRecoveryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DA22E7754C61C4BB3D503DB /* SyncRecoveryCoordinator.swift */; };
 		074D7EEC71998629B1ADC44E /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BA26BCEE247C3F186E88695 /* ActivityView.swift */; };
@@ -356,6 +357,7 @@
 		84EA7E27926EFEAA5C6E5D93 /* HistoryPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPersistenceTests.swift; sourceTree = "<group>"; };
 		84F0A83D24B8236F27CB0935 /* WorkoutTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutTemplate.swift; sourceTree = "<group>"; };
 		8552E82D3C1C75E25C71DFE9 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
+		857EFC239F41F1B8BFF58873 /* HistorySetTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySetTable.swift; sourceTree = "<group>"; };
 		8746E9D6BAEBDF7062B16003 /* WhatsNewVersion1_2View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewVersion1_2View.swift; sourceTree = "<group>"; };
 		87B573FDF309E99E1D02F1C9 /* AccountDeletionFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionFactory.swift; sourceTree = "<group>"; };
 		891A7966461F2C13DC209A71 /* BarosLiveActivity.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = BarosLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -579,6 +581,7 @@
 				D4846247A29E8830EC391BD0 /* ExerciseHistorySessionGroupCard.swift */,
 				048080FA1DABA6005F0519F3 /* ExerciseHistorySummary.swift */,
 				2EF137D98357FEA8704CE9BF /* HistorySearch.swift */,
+				857EFC239F41F1B8BFF58873 /* HistorySetTable.swift */,
 				1E183433B1845E81797DCE67 /* HistoryView.swift */,
 				DAF3E952AAABF0D77BF003D2 /* WorkoutHistoryDetailView.swift */,
 				A818C833AC1D3BA4E797C7CD /* WorkoutHistoryRow.swift */,
@@ -1198,6 +1201,7 @@
 				A2A107F75E6D8397EDBD6A3D /* HealthDataLink.swift in Sources */,
 				39057CB1EBD3BBFD990B4153 /* HealthSyncStatus.swift in Sources */,
 				8EAFBC7141424D7D4618D632 /* HistorySearch.swift in Sources */,
+				03F4DE5F9529981CAF4B7229 /* HistorySetTable.swift in Sources */,
 				91EB3D646631398A9F52C3DB /* HistoryView.swift in Sources */,
 				0B28B27745E98C02935138E8 /* HomeContent.swift in Sources */,
 				415B459746BBE028B6F138AA /* HomePastWorkoutReviewView.swift in Sources */,

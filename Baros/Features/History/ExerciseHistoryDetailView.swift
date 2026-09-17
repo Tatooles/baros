@@ -27,7 +27,7 @@ struct ExerciseHistoryDetailView: View {
         let groups = sessionGroups
         let records = ExerciseHistoryRecords.make(from: groups, equipmentRaw: summary.equipmentRaw)
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 24) {
                 ExerciseHistoryHeading(
                     name: summary.name,
                     metadata: summary.metadataDisplayText,
