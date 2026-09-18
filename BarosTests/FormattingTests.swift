@@ -127,6 +127,25 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(WorkoutFormatters.parseNumber("8,5", locale: locale), 8.5)
     }
 
+    func testNumberParserHonorsLocaleChangesBetweenCalls() {
+        for _ in 0..<3 {
+            XCTAssertEqual(WorkoutFormatters.parseNumber("1,234.5", locale: Locale(identifier: "en_US")), 1234.5)
+            XCTAssertEqual(WorkoutFormatters.parseNumber("1.234,5", locale: Locale(identifier: "de_DE")), 1234.5)
+            XCTAssertEqual(WorkoutFormatters.parseNumber("8,5", locale: Locale(identifier: "fr_FR")), 8.5)
+            XCTAssertNil(WorkoutFormatters.parseNumber("invalid", locale: Locale(identifier: "en_US")))
+            XCTAssertNil(WorkoutFormatters.parseNumber("  ", locale: Locale(identifier: "fr_FR")))
+        }
+    }
+
+    func testNumberParserKeepsConcurrentCallersLocalesIndependent() {
+        DispatchQueue.concurrentPerform(iterations: 100) { index in
+            let usesDecimalComma = index.isMultiple(of: 2)
+            let locale = Locale(identifier: usesDecimalComma ? "de_DE" : "en_US")
+            let expected = usesDecimalComma ? 1.234 : 1234.0
+            XCTAssertEqual(WorkoutFormatters.parseNumber("1,234", locale: locale), expected)
+        }
+    }
+
     func testNumberFormatterRoundsConvertedWeightForDisplay() {
         XCTAssertEqual(WorkoutFormatters.number(102.058), "102.06")
     }

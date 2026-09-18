@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 enum WorkoutFormatters {
     static func duration(_ seconds: Int) -> String {
@@ -91,20 +92,29 @@ enum WorkoutFormatters {
         number(unit.displayWeight(fromCanonicalPounds: canonicalPounds) ?? canonicalPounds)
     }
 
+    // One bounded cache shared by input callers. Synchronize locale selection
+    // and parsing together so concurrent callers cannot use each other's locale.
+    private static let inputNumberFormatter = Mutex<NumberFormatter?>(nil)
+
     static func parseNumber(_ value: String, locale: Locale = .current) -> Double? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        let formatter = NumberFormatter()
-        formatter.locale = locale
-        formatter.numberStyle = .decimal
-
-        let parsedNumber: Double?
-        if let number = formatter.number(from: trimmed) {
-            parsedNumber = number.doubleValue
-        } else {
-            parsedNumber = Double(trimmed.replacingOccurrences(of: ",", with: "."))
+        let number = inputNumberFormatter.withLock { cachedFormatter -> Double? in
+            let formatter: NumberFormatter
+            if let cachedFormatter {
+                formatter = cachedFormatter
+            } else {
+                formatter = NumberFormatter()
+                formatter.numberStyle = .decimal
+                cachedFormatter = formatter
+            }
+            if formatter.locale != locale {
+                formatter.locale = locale
+            }
+            return formatter.number(from: trimmed)?.doubleValue
         }
+        let parsedNumber = number ?? Double(trimmed.replacingOccurrences(of: ",", with: "."))
 
         guard let parsedNumber, parsedNumber.isFinite else { return nil }
         return parsedNumber

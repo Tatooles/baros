@@ -65,6 +65,41 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testExerciseHistoryOverviewSupportsAccessibilityDynamicType() {
+        let category = UIContentSizeCategory.accessibilityExtraExtraExtraLarge
+        let app = makeApp(extraArguments: [
+            "--uitest-seed-exercise-history-performance",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+        ])
+        app.launch()
+        tapTab(identifier: "HistoryTab", label: "History", in: app)
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+
+        let row = app.buttons["ExerciseHistoryButton-0"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.isHittable)
+        for labelFragment in ["Back Squat", "Barbell", "Quads", "Last:", "50 workouts"] {
+            XCTAssertTrue(row.label.contains(labelFragment))
+        }
+
+        let title = row.staticTexts["Back Squat"]
+        XCTAssertTrue(title.exists)
+        let titleLineHeight = UIFont.preferredFont(
+            forTextStyle: .headline,
+            compatibleWith: UITraitCollection(preferredContentSizeCategory: category)
+        ).lineHeight
+        XCTAssertGreaterThanOrEqual(title.frame.height, floor(titleLineHeight) - 2)
+        XCTAssertGreaterThanOrEqual(title.frame.minX, row.frame.minX)
+        XCTAssertLessThanOrEqual(title.frame.maxX, row.frame.maxX)
+        XCTAssertGreaterThan(row.frame.height, titleLineHeight * 3)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Exercise History - Accessibility XXXL"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    @MainActor
     private func assertWorkoutMetricsFit(
         in row: XCUIElement,
         category: UIContentSizeCategory,
@@ -379,6 +414,33 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         XCTAssertEqual(title.value as? String, "Owner Launch Priority")
         XCTAssertFalse(relaunchedApp.staticTexts["LaunchExperienceTitle"].exists)
+    }
+
+    @MainActor
+    func testExerciseNoteArrowPositionsTheNextField() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["AddExerciseNoteButton-0"].tap()
+        let note = app.textFields["ExerciseNotesField-0"]
+        XCTAssertTrue(note.waitForExistence(timeout: 3))
+        let noteFocus = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: note
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [noteFocus], timeout: 3), .completed)
+        note.typeText("Pause reps")
+        app.buttons["NextWorkoutFieldButton"].tap()
+        let target = app.textFields["SetWeightField-1-0"]
+        let focus = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: target
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [focus], timeout: 3), .completed)
+        let headerBottom = app.buttons["FinishWorkoutButton"].frame.maxY
+        let toolbarTop = app.buttons["DismissKeyboardButton"].frame.minY
+        XCTAssertGreaterThan(target.frame.minY, headerBottom)
+        // Require room below the destination, not just visibility.
+        XCTAssertLessThan(target.frame.maxY, toolbarTop - 40)
+        XCTAssertEqual(note.value as? String, "Pause reps")
     }
 
     @MainActor
@@ -1789,6 +1851,72 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testHistoryOverviewListsUseContiguousRowsAndPastWorkoutPickerKeepsCards() {
+        let app = makeApp(extraArguments: ["--uitest-seed-workout-history-layout"])
+        app.launch()
+        app.buttons["HistoryTab"].tap()
+
+        let firstWorkout = app.buttons["WorkoutHistoryButton-0"]
+        let secondWorkout = app.buttons["WorkoutHistoryButton-1"]
+        XCTAssertTrue(firstWorkout.waitForExistence(timeout: 3))
+        XCTAssertTrue(secondWorkout.exists)
+        XCTAssertTrue(firstWorkout.label.contains("45:23"))
+        XCTAssertTrue(firstWorkout.label.contains("9 exercises"))
+        XCTAssertTrue(firstWorkout.label.contains("22 sets"))
+        XCTAssertLessThanOrEqual(
+            secondWorkout.frame.minY - firstWorkout.frame.maxY,
+            2,
+            "Workout History should present contiguous rows in one shared surface"
+        )
+
+        firstWorkout.tap()
+        XCTAssertTrue(app.navigationBars["Workout"].waitForExistence(timeout: 3))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+        let firstExercise = app.buttons["ExerciseHistoryButton-0"]
+        let secondExercise = app.buttons["ExerciseHistoryButton-1"]
+        XCTAssertTrue(firstExercise.waitForExistence(timeout: 3))
+        XCTAssertTrue(secondExercise.exists)
+        XCTAssertTrue(firstExercise.label.contains("Exercise 1"))
+        XCTAssertTrue(firstExercise.label.contains("workouts"))
+        XCTAssertLessThanOrEqual(
+            secondExercise.frame.minY - firstExercise.frame.maxY,
+            2,
+            "Exercise History should retain contiguous rows in one shared surface"
+        )
+
+        let lastExercise = app.buttons["ExerciseHistoryButton-8"]
+        for _ in 0..<3 where !lastExercise.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(lastExercise.isHittable)
+        for _ in 0..<3 where !firstExercise.isHittable {
+            app.swipeDown()
+        }
+        XCTAssertTrue(firstExercise.isHittable)
+
+        firstExercise.tap()
+        let exerciseHeading = app.descendants(matching: .any)["ExerciseHistoryHeading"]
+        XCTAssertTrue(exerciseHeading.waitForExistence(timeout: 3))
+        XCTAssertTrue(exerciseHeading.label.contains("Exercise 1"))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        app.buttons["HomeTab"].tap()
+        app.buttons["StartWorkoutButton"].tap()
+        app.buttons["UsePastWorkoutButton"].tap()
+        let firstPastWorkout = app.buttons["PastWorkoutButton-0"]
+        let secondPastWorkout = app.buttons["PastWorkoutButton-1"]
+        XCTAssertTrue(firstPastWorkout.waitForExistence(timeout: 3))
+        XCTAssertTrue(secondPastWorkout.exists)
+        XCTAssertGreaterThanOrEqual(
+            secondPastWorkout.frame.minY - firstPastWorkout.frame.maxY,
+            8,
+            "The Home past-workout picker should retain separate workout cards"
+        )
+    }
+
+    @MainActor
     func testHistorySearchRemainsResponsiveWithLargeLocalHistory() {
         let largeHistoryApp = makeApp(extraArguments: ["--uitest-seed-exercise-history-performance"])
         largeHistoryApp.launch()
@@ -2197,6 +2325,150 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Dumbbell Variant"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.staticTexts["Barbell Variant"].exists)
+    }
+
+    @MainActor
+    func testPreviousOverridesSuggestionsInLaterRowsOfLargeWorkout() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store",
+            "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience",
+            "--uitest-seed-large-active-workout",
+        ]
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        let sourceWeight = app.textFields["SetWeightField-9-0"]
+        for _ in 0..<30 {
+            if sourceWeight.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(sourceWeight.isHittable)
+        replaceText(in: sourceWeight, with: "120")
+        dismissKeyboardIfNeeded(in: app)
+        let weight = app.textFields["SetWeightField-9-1"]
+        let reps = app.textFields["SetRepsField-9-1"]
+        replaceText(in: weight, with: "")
+        dismissKeyboardIfNeeded(in: app)
+        replaceText(in: reps, with: "")
+        dismissKeyboardIfNeeded(in: app)
+        XCTAssertEqual(weight.value as? String, "Suggested 120")
+        XCTAssertEqual(reps.value as? String, "Suggested 5")
+
+        let previous = app.buttons["SetPreviousValue-9-1"]
+        XCTAssertEqual(previous.label, "Previous: 109 × 5")
+        previous.tap()
+        XCTAssertEqual(weight.value as? String, "109")
+        XCTAssertEqual(reps.value as? String, "5")
+        XCTAssertEqual(app.buttons["SetCompletionButton-9-1"].label, "Mark set complete")
+
+        // An explicit tap replaces a draft even while its field is focused.
+        replaceText(in: reps, with: "")
+        dismissKeyboardIfNeeded(in: app)
+        replaceText(in: weight, with: "130")
+        XCTAssertTrue(previous.isEnabled)
+        previous.tap()
+        XCTAssertEqual(weight.value as? String, "109")
+        XCTAssertEqual(reps.value as? String, "5")
+        dismissKeyboardIfNeeded(in: app)
+        app.buttons["SetCompletionButton-9-1"].tap()
+        XCTAssertFalse(previous.isEnabled)
+        app.buttons["SetCompletionButton-9-1"].tap()
+        XCTAssertTrue(previous.isEnabled)
+    }
+
+    @MainActor
+    func testSuggestionsRemainAccessibleAtAccessibilityTextSize() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store",
+            "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL",
+        ]
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        addSets(1, in: app)
+        let source = app.textFields["SetWeightField-0-0"]
+        source.tap()
+        source.typeText("90")
+        dismissKeyboardIfNeeded(in: app)
+        let weight = app.textFields["SetWeightField-0-1"]
+        XCTAssertEqual(weight.value as? String, "Suggested 90")
+        XCTAssertEqual(weight.label, "LBS")
+        XCTAssertEqual(weight.placeholderValue, "90")
+        let suggestionsScreenshot = XCTAttachment(screenshot: app.screenshot())
+        suggestionsScreenshot.name = "Suggestions at accessibility text size"
+        suggestionsScreenshot.lifetime = .keepAlways
+        add(suggestionsScreenshot)
+        let row = app.descendants(matching: .any)["SetAccessibilityBottomRow-0-1"]
+        XCTAssertTrue(row.exists)
+        XCTAssertLessThanOrEqual(row.frame.maxX, app.windows.firstMatch.frame.maxX)
+    }
+
+    @MainActor
+    func testEarlierSetSuggestionsStayUnrecordedUntilCheckmarkOrRPE() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store",
+            "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience",
+        ]
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        addSets(2, in: app)
+
+        let firstWeight = app.textFields["SetWeightField-0-0"]
+        let firstReps = app.textFields["SetRepsField-0-0"]
+        let secondWeight = app.textFields["SetWeightField-0-1"]
+        let secondReps = app.textFields["SetRepsField-0-1"]
+        let thirdWeight = app.textFields["SetWeightField-0-2"]
+        let thirdReps = app.textFields["SetRepsField-0-2"]
+        firstWeight.tap()
+        firstWeight.typeText("9")
+        XCTAssertEqual(secondWeight.value as? String, "Suggested 9")
+        XCTAssertEqual(thirdWeight.value as? String, "Suggested 9")
+        XCTAssertTrue(NSPredicate(format: "hasKeyboardFocus == true").evaluate(with: firstWeight))
+        firstWeight.typeText("0")
+        XCTAssertEqual(secondWeight.value as? String, "Suggested 90")
+        firstReps.tap()
+        firstReps.typeText("1")
+        XCTAssertEqual(secondReps.value as? String, "Suggested 1")
+        firstReps.typeText("2")
+        XCTAssertEqual(thirdReps.value as? String, "Suggested 12")
+        XCTAssertTrue(NSPredicate(format: "hasKeyboardFocus == true").evaluate(with: firstReps))
+        dismissKeyboardIfNeeded(in: app)
+        XCTAssertEqual(secondWeight.value as? String, "Suggested 90")
+        XCTAssertEqual(secondReps.value as? String, "Suggested 12")
+        XCTAssertEqual(thirdReps.value as? String, "Suggested 12")
+        let suggestionsScreenshot = XCTAttachment(screenshot: app.screenshot())
+        suggestionsScreenshot.name = "Earlier-set suggestions before acceptance"
+        suggestionsScreenshot.lifetime = .keepAlways
+        add(suggestionsScreenshot)
+        secondWeight.tap()
+        dismissKeyboardIfNeeded(in: app)
+        XCTAssertEqual(secondWeight.value as? String, "Suggested 90")
+
+        app.buttons["SetCompletionButton-0-1"].tap()
+        XCTAssertEqual(secondWeight.value as? String, "90")
+        XCTAssertEqual(secondReps.value as? String, "12")
+        XCTAssertEqual(app.buttons["SetCompletionButton-0-1"].label, "Mark set incomplete")
+
+        // A changed source must reach an already registered RPE callback.
+        replaceText(in: secondReps, with: "10")
+        thirdWeight.tap()
+        XCTAssertEqual(thirdReps.value as? String, "Suggested 10")
+        enterRPEViaChips("8", in: app)
+        XCTAssertEqual(thirdWeight.value as? String, "90")
+        XCTAssertEqual(thirdReps.value as? String, "10")
+        XCTAssertEqual(app.buttons["SetCompletionButton-0-2"].label, "Mark set incomplete")
+        XCTAssertTrue(app.buttons["SetRPEBadge-0-2"].exists)
+
+        dismissKeyboardIfNeeded(in: app)
+        replaceText(in: firstWeight, with: "100")
+        dismissKeyboardIfNeeded(in: app)
+        XCTAssertEqual(secondWeight.value as? String, "90")
+        XCTAssertEqual(thirdWeight.value as? String, "90")
     }
 
     @MainActor

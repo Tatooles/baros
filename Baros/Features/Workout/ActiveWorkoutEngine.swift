@@ -359,27 +359,17 @@ final class ActiveWorkoutEngine {
     func fillSetFromPrevious(
         _ set: LoggedSet,
         previous: PreviousSetPerformance,
+        preparedValues: ActiveWorkoutSetInput.Values? = nil,
         context: ModelContext,
         now: Date = .now
     ) throws {
-        var didChange = false
-
-        if WorkoutNumericInputPolicy.validatedWeight(set.weight) == nil,
-           let weight = WorkoutNumericInputPolicy.validatedWeight(previous.weight) {
-            set.weight = weight
-            didChange = true
-        }
-
-        if WorkoutNumericInputPolicy.validatedReps(set.reps) == nil,
-           let reps = WorkoutNumericInputPolicy.validatedReps(previous.reps) {
-            set.reps = reps
-            didChange = true
-        }
-
-        guard didChange else { return }
-
-        set.touchActiveDraft(now: now)
-        try context.save()
+        guard !set.isCompleted else { return }
+        let current = preparedValues ?? .init(weight: set.weight, reps: set.reps)
+        let values = ActiveWorkoutSetInput.Values(
+            weight: WorkoutNumericInputPolicy.validatedWeight(previous.weight) ?? current.weight,
+            reps: WorkoutNumericInputPolicy.validatedReps(previous.reps) ?? current.reps
+        )
+        try commitActiveSetDraft(set, values: values, context: context, now: now)
     }
 
     func toggleSetCompletion(

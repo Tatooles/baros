@@ -1,5 +1,20 @@
 import Foundation
 
+enum ActiveWorkoutSetSuggestions {
+    /// One exercise's ordered actual values in, display-only suggestions out.
+    static func resolve(
+        for orderedValues: [ActiveWorkoutSetInput.Values]
+    ) -> [ActiveWorkoutSetInput.Values] {
+        var preceding = ActiveWorkoutSetInput.Values(weight: nil, reps: nil)
+        return orderedValues.map { values in
+            let suggestion = preceding
+            preceding.weight = WorkoutNumericInputPolicy.validatedWeight(values.weight) ?? preceding.weight
+            preceding.reps = WorkoutNumericInputPolicy.validatedReps(values.reps) ?? preceding.reps
+            return suggestion
+        }
+    }
+}
+
 struct ActiveWorkoutSetInput {
     enum Field {
         case weight
@@ -42,6 +57,34 @@ struct ActiveWorkoutSetInput {
         }
     }
 
+    func suggestionText(
+        for field: Field,
+        current: Values,
+        suggestions: Values,
+        weightUnit: MeasurementUnit
+    ) -> String? {
+        switch field {
+        case .weight:
+            guard weightInput.draftText == nil, !rejectedWeight,
+                  WorkoutNumericInputPolicy.validatedWeight(current.weight) == nil
+            else { return nil }
+            let weight = WorkoutNumericInputPolicy.validatedWeight(suggestions.weight)
+            return weightUnit.displayWeight(fromCanonicalPounds: weight).map(WorkoutFormatters.number)
+        case .reps:
+            guard repsInput.draftText == nil, !rejectedReps,
+                  WorkoutNumericInputPolicy.validatedReps(current.reps) == nil
+            else { return nil }
+            return WorkoutNumericInputPolicy.validatedReps(suggestions.reps).map(String.init)
+        }
+    }
+
+    /// Resolve a copy so previews share commit parsing without consuming the editor's drafts.
+    func previewValues(current: Values, weightUnit: MeasurementUnit) -> Values? {
+        guard weightInput.draftText != nil || repsInput.draftText != nil else { return nil }
+        var preview = self
+        return preview.commit(current: current, weightUnit: weightUnit).values
+    }
+
     mutating func commit(current: Values, weightUnit: MeasurementUnit) -> Commit {
         let storedValues = Values(
             weight: WorkoutNumericInputPolicy.validatedWeight(current.weight),
@@ -82,14 +125,21 @@ struct ActiveWorkoutSetInput {
         weightUnit: MeasurementUnit,
         completesSet: Bool,
         isCompleted: Bool,
-        previous: PreviousSetPerformance?
+        previous: PreviousSetPerformance?,
+        suggestions: Values = .init(weight: nil, reps: nil)
     ) -> Values {
         let committedValues = commit(current: current, weightUnit: weightUnit).values
+        let fallback = PreviousSetPerformance(
+            weight: WorkoutNumericInputPolicy.validatedWeight(suggestions.weight)
+                ?? WorkoutNumericInputPolicy.validatedWeight(previous?.weight),
+            reps: WorkoutNumericInputPolicy.validatedReps(suggestions.reps)
+                ?? WorkoutNumericInputPolicy.validatedReps(previous?.reps)
+        )
         guard completesSet,
               let previousFill = previousFillBeforeCompletion(
                 isCompleted: isCompleted,
                 values: committedValues,
-                previous: previous
+                previous: fallback
               )
         else { return committedValues }
 
@@ -134,12 +184,13 @@ struct ActiveWorkoutSetInput {
 @MainActor
 final class ActiveSetInputRegistry {
     private struct Registration {
-        let id: UUID
-        let commit: () -> Void
-        let prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)?
+        var fields: Set<WorkoutField>
+        var commit: () -> Void
+        var prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)?
     }
 
-    private var registrations: [WorkoutField: Registration] = [:]
+    private var registrations: [UUID: Registration] = [:]
+    private var registrationIDs: [WorkoutField: UUID] = [:]
 
     @discardableResult
     func register(
@@ -148,28 +199,35 @@ final class ActiveSetInputRegistry {
         prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)? = nil
     ) -> UUID {
         let id = UUID()
-        let registration = Registration(
-            id: id,
+        guard !fields.isEmpty else { return id }
+        for field in fields {
+            if let previousID = registrationIDs[field] {
+                registrations[previousID]?.fields.remove(field)
+                if registrations[previousID]?.fields.isEmpty == true {
+                    registrations.removeValue(forKey: previousID)
+                }
+            }
+            registrationIDs[field] = id
+        }
+        registrations[id] = Registration(
+            fields: Set(fields),
             commit: commit,
             prepareForRPESelection: prepareForRPESelection
         )
-        for field in fields {
-            registrations[field] = registration
-        }
         return id
     }
 
     func commit(_ field: WorkoutField?) {
-        guard let field else { return }
-        registrations[field]?.commit()
+        guard let field, let id = registrationIDs[field] else { return }
+        registrations[id]?.commit()
     }
 
     func prepareSetValues(
         for field: WorkoutField?,
         completesSet: Bool
     ) -> ActiveWorkoutSetInput.Values? {
-        guard let field else { return nil }
-        return registrations[field]?.prepareForRPESelection?(completesSet)
+        guard let field, let id = registrationIDs[field] else { return nil }
+        return registrations[id]?.prepareForRPESelection?(completesSet)
     }
 
     func updateRegistration(
@@ -177,22 +235,18 @@ final class ActiveSetInputRegistry {
         commit: @escaping () -> Void,
         prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)?
     ) {
-        let fields = registrations.compactMap { field, registration in
-            registration.id == id ? field : nil
-        }
-        guard !fields.isEmpty else { return }
-
-        let registration = Registration(
-            id: id,
-            commit: commit,
-            prepareForRPESelection: prepareForRPESelection
-        )
-        for field in fields {
-            registrations[field] = registration
-        }
+        // Live suggestions refresh this on every changed row. Lookup by ID
+        // keeps that work independent of the number of fields in the workout.
+        guard var registration = registrations[id] else { return }
+        registration.commit = commit
+        registration.prepareForRPESelection = prepareForRPESelection
+        registrations[id] = registration
     }
 
     func unregister(_ id: UUID) {
-        registrations = registrations.filter { $0.value.id != id }
+        guard let registration = registrations.removeValue(forKey: id) else { return }
+        for field in registration.fields {
+            registrationIDs.removeValue(forKey: field)
+        }
     }
 }

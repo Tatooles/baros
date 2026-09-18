@@ -79,13 +79,14 @@ final class AppNavigationState {
     private(set) var fullyPresentedActiveWorkoutID: UUID?
     private var hasReconciledActiveWorkout: Bool
     private var suppressesActiveWorkoutAccessory: Bool
+    private var isActiveWorkoutAccessoryReady: Bool
     private var requestsNextActiveWorkoutPresentation: Bool
 
-    /// The accessory stays mounted while the Active Workout is presented, covered by the
-    /// presentation rather than removed, so the tab bar keeps a stable width across present and
-    /// minimize. Use `showsActiveWorkoutReturnAction` for "the workout is minimized" instead.
+    /// Mount the accessory only after the first presentation covers the tab bar (or the workout
+    /// is minimized early). Then keep it mounted across reopen/minimize to preserve tab bar width.
+    /// Use `showsActiveWorkoutReturnAction` for "the workout is minimized" instead.
     var mountsActiveWorkoutAccessory: Bool {
-        activeWorkoutID != nil && !suppressesActiveWorkoutAccessory
+        activeWorkoutID != nil && !suppressesActiveWorkoutAccessory && isActiveWorkoutAccessoryReady
     }
 
     var showsActiveWorkoutReturnAction: Bool {
@@ -107,6 +108,7 @@ final class AppNavigationState {
         fullyPresentedActiveWorkoutID = nil
         hasReconciledActiveWorkout = false
         suppressesActiveWorkoutAccessory = false
+        isActiveWorkoutAccessoryReady = false
         requestsNextActiveWorkoutPresentation = false
     }
 
@@ -125,6 +127,7 @@ final class AppNavigationState {
 
         activeWorkoutID = sessionID
         fullyPresentedActiveWorkoutID = nil
+        isActiveWorkoutAccessoryReady = false
 
         switch (previousSessionID, sessionID) {
         case (nil, .some):
@@ -162,10 +165,12 @@ final class AppNavigationState {
     func activeWorkoutPresentationDidFinish() {
         guard isActiveWorkoutPresented, let activeWorkoutID else { return }
         fullyPresentedActiveWorkoutID = activeWorkoutID
+        isActiveWorkoutAccessoryReady = true
     }
 
     func minimizeActiveWorkout() {
         guard activeWorkoutID != nil else { return }
+        isActiveWorkoutAccessoryReady = true
         isActiveWorkoutPresented = false
     }
 
@@ -186,6 +191,7 @@ final class AppNavigationState {
 
     func returnHomeFromUnopenableWorkoutLiveActivityLink() {
         selectedTab = .home
+        isActiveWorkoutAccessoryReady = activeWorkoutID != nil
         isActiveWorkoutPresented = false
         fullyPresentedActiveWorkoutID = nil
     }

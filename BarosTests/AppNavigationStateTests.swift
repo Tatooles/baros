@@ -20,7 +20,7 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertFalse(navigationState.mountsActiveWorkoutAccessory)
     }
 
-    func testLaunchWithActiveWorkoutPresentsItOverHomeAndKeepsAccessoryMounted() {
+    func testLaunchWithActiveWorkoutDefersAccessoryUntilPresentationFinishes() {
         let navigationState = AppNavigationState(selectedTab: .profile)
         let sessionID = UUID()
 
@@ -29,8 +29,12 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertEqual(navigationState.activeWorkoutID, sessionID)
         XCTAssertEqual(navigationState.selectedTab, .home)
         XCTAssertTrue(navigationState.isActiveWorkoutPresented)
-        XCTAssertTrue(navigationState.mountsActiveWorkoutAccessory)
+        XCTAssertFalse(navigationState.mountsActiveWorkoutAccessory)
         XCTAssertFalse(navigationState.showsActiveWorkoutReturnAction)
+
+        navigationState.activeWorkoutPresentationDidFinish()
+
+        XCTAssertTrue(navigationState.mountsActiveWorkoutAccessory)
     }
 
     func testStartingBlankOrPastWorkoutPresentsItOverHome() {
@@ -43,6 +47,13 @@ final class AppNavigationStateTests: XCTestCase {
             XCTAssertEqual(navigationState.activeWorkoutID, sessionID)
             XCTAssertEqual(navigationState.selectedTab, .home)
             XCTAssertTrue(navigationState.isActiveWorkoutPresented)
+            XCTAssertFalse(navigationState.mountsActiveWorkoutAccessory)
+
+            // The start sheet also explicitly requests presentation after creating the session.
+            navigationState.presentActiveWorkout()
+            XCTAssertFalse(navigationState.mountsActiveWorkoutAccessory)
+
+            navigationState.activeWorkoutPresentationDidFinish()
             XCTAssertTrue(navigationState.mountsActiveWorkoutAccessory)
         }
     }
@@ -186,6 +197,28 @@ final class AppNavigationStateTests: XCTestCase {
 
         XCTAssertEqual(navigationState.activeWorkoutID, replacementSessionID)
         XCTAssertTrue(navigationState.isActiveWorkoutPresented)
+        XCTAssertFalse(navigationState.mountsActiveWorkoutAccessory)
+
+        navigationState.activeWorkoutPresentationDidFinish()
+
+        XCTAssertTrue(navigationState.mountsActiveWorkoutAccessory)
+    }
+
+    func testNextWorkoutDoesNotInheritPreviousWorkoutAccessoryReadiness() {
+        let navigationState = AppNavigationState()
+        navigationState.reconcileActiveWorkout(sessionID: UUID())
+        navigationState.activeWorkoutPresentationDidFinish()
+        XCTAssertTrue(navigationState.mountsActiveWorkoutAccessory)
+
+        navigationState.reconcileActiveWorkout(sessionID: nil)
+        navigationState.presentActiveWorkout()
+        navigationState.reconcileActiveWorkout(sessionID: UUID())
+
+        XCTAssertTrue(navigationState.isActiveWorkoutPresented)
+        XCTAssertFalse(navigationState.mountsActiveWorkoutAccessory)
+
+        navigationState.activeWorkoutPresentationDidFinish()
+
         XCTAssertTrue(navigationState.mountsActiveWorkoutAccessory)
     }
 
@@ -263,6 +296,7 @@ final class AppNavigationStateTests: XCTestCase {
 
         XCTAssertEqual(navigationState.selectedTab, .home)
         XCTAssertFalse(navigationState.isActiveWorkoutPresented)
+        XCTAssertTrue(navigationState.mountsActiveWorkoutAccessory)
     }
 
     func testOpenExerciseHistorySelectsHistoryExercisesAndStoresRoute() {
