@@ -2575,7 +2575,7 @@ final class BarosUITests: XCTestCase {
             extraArguments: [
                 "--uitest-seed-history-exercise-note",
                 "-UIPreferredContentSizeCategoryName",
-                "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+                "UICTContentSizeCategoryAccessibilityXL",
             ],
             completedBenchWorkoutTitles: ["Past Push"]
         )
@@ -2601,6 +2601,10 @@ final class BarosUITests: XCTestCase {
             .firstMatch
         XCTAssertTrue(historyHeading.waitForExistence(timeout: 3))
         guard historyHeading.exists else { return }
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "quick-history-compact-heading-accessibility3"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
         XCTAssertFalse(keyboard.exists)
         XCTAssertTrue(historyHeading.label.contains("· 1 workout · 1 set"))
         XCTAssertTrue(app.buttons["Done"].exists)

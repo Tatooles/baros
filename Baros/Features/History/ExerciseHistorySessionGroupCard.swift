@@ -34,6 +34,7 @@ struct ExerciseHistoryHeading: View {
                         Text(metadata)
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(AppTheme.textSecondary)
+                            .lineLimit(isCompact ? 1 : nil)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

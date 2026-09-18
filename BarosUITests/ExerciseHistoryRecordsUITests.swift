@@ -14,8 +14,8 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         XCTAssertTrue(estimate.exists)
         XCTAssertFalse(app.buttons["ExerciseRecord-heaviestRep"].exists)
         XCTAssertFalse(app.buttons["ExerciseRecord-estimated1RM"].exists)
-        XCTAssertTrue(heaviest.label.contains("225"))
-        XCTAssertTrue(estimate.label.contains("245"))
+        XCTAssertTrue(heaviest.label.contains("Heaviest Rep, 225 lbs, from 225 lbs for 1 rep, Set 3,"))
+        XCTAssertTrue(estimate.label.contains("Estimated 1RM, 245 lbs, from 210 lbs for 5 reps, Set 2,"))
         attachScreenshot(named: "Strength records summary", app: app)
 
         let info = app.buttons["AboutStrengthRecordsButton"]

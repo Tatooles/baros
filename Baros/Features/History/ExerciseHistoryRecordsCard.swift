@@ -68,6 +68,7 @@ struct ExerciseHistoryRecordsCard: View {
         let value = WorkoutFormatters.number(kind == .estimated1RM ? displayValue.rounded() : displayValue)
         let unit = weightUnit.fieldLabel.lowercased()
         let weight = WorkoutFormatters.number(weightUnit.displayWeight(fromCanonicalPounds: record.weight) ?? 0)
+        let reps = record.reps == 1 ? "1 rep" : "\(record.reps) reps"
         let date = record.workoutDate.formatted(.dateTime.month(.abbreviated).day())
         let number = Text("\(kind == .estimated1RM ? "≈ " : "")\(value)")
             .font(.title.bold().monospacedDigit())
@@ -86,7 +87,7 @@ struct ExerciseHistoryRecordsCard: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(kind.title), \(value) \(unit), from \(weight) \(unit) for \(record.reps) reps, "
+            "\(kind.title), \(value) \(unit), from \(weight) \(unit) for \(reps), "
                 + "Set \(record.displaySetNumber), \(record.workoutTitle), \(WorkoutFormatters.compactDate(record.workoutDate))"
         )
         .accessibilityIdentifier("ExerciseRecord-\(kind.rawValue)")
