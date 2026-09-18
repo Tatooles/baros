@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The same set ledger is used by both History detail screens.
+/// The shared set ledger for History details and Quick History.
 struct HistorySetTable: View {
     struct Row: Identifiable {
         let set: LoggedSet
@@ -20,15 +20,15 @@ struct HistorySetTable: View {
     var body: some View {
         Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 0) {
             if dynamicTypeSize.isAccessibilitySize {
-                Text("Weight (\(weightUnit.fieldLabel.lowercased())) × Reps")
+                Text("\(weightUnit.fieldLabel) × REPS")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityHidden(true)
             } else {
                 GridRow {
-                    Text("Set").gridColumnAlignment(.leading)
-                    Text("Weight (\(weightUnit.fieldLabel.lowercased())) × Reps")
+                    Text("SET").gridColumnAlignment(.leading)
+                    Text("\(weightUnit.fieldLabel) × REPS")
                 }
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
@@ -36,7 +36,7 @@ struct HistorySetTable: View {
                 .accessibilityHidden(true)
             }
 
-            ForEach(rows) { row in
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Set \(row.number)")
@@ -65,9 +65,11 @@ struct HistorySetTable: View {
                     }
                     .padding(.vertical, 8)
                 }
-                Divider()
-                    .gridCellUnsizedAxes(.horizontal)
-                    .accessibilityHidden(true)
+                if index < rows.count - 1 {
+                    Divider()
+                        .gridCellUnsizedAxes(.horizontal)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .font(.body.monospacedDigit())

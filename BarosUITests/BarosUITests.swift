@@ -750,6 +750,35 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutHistoryWithOnlySecondExerciseNotedEndsSectionsCleanly() {
+        let app = makeApp(
+            extraArguments: [
+                "--uitest-seed-history-mixed-notes",
+                "--uitest-seed-history-uncompleted-set",
+                "-Baros.AppAppearance.preference", "dark",
+            ],
+            completedBenchWorkoutTitles: ["Push Day"]
+        )
+        app.launch()
+        tapTab(identifier: "HistoryTab", label: "History", in: app)
+        let workout = app.buttons["WorkoutHistoryButton-0"]
+        XCTAssertTrue(workout.waitForExistence(timeout: 5))
+        workout.tap()
+        let lastBenchSet = app.descendants(matching: .any)["WorkoutHistorySetSummary-0-1"]
+        let secondExerciseSet = app.descendants(matching: .any)["WorkoutHistorySetSummary-1-0"]
+        XCTAssertTrue(secondExerciseSet.waitForExistence(timeout: 5))
+        XCTAssertTrue(lastBenchSet.isHittable)
+        XCTAssertTrue(secondExerciseSet.isHittable)
+        let notes = app.staticTexts.matching(identifier: "ExerciseHistoryNoteText")
+        XCTAssertEqual(notes.count, 1)
+        XCTAssertEqual(notes.firstMatch.value as? String, "Keep elbows close")
+        XCTAssertGreaterThan(notes.firstMatch.frame.minY, secondExerciseSet.frame.maxY)
+        // Decorative dividers are hidden from accessibility. Keep visual evidence of
+        // the unnoted first exercise ending with only the next section's boundary.
+        attachHistoryScreenshot("workout-mixed-notes-dark", app: app)
+    }
+
+    @MainActor
     func testHistoryDetailLayoutsInBothAppearancesAndAccessibilitySize() {
         for (appearance, accessible) in [("dark", false), ("light", false), ("dark", true)] {
             var arguments = [
@@ -1643,8 +1672,7 @@ final class BarosUITests: XCTestCase {
     func testExercisePerformanceHeaderSupportsAccessibilityDynamicType() {
         let app = makeApp(
             extraArguments: [
-                "-UIPreferredContentSizeCategoryName",
-                "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+                "--uitest-accessibility-dynamic-type",
             ],
             completedBenchWorkoutTitles: ["Accessible Push"]
         )
@@ -2268,7 +2296,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testQuickExerciseHistoryShowsPerformanceSummaryAndFlattenedExerciseNotes() {
+    func testQuickExerciseHistoryShowsJournalSetsAndAttachedExerciseNotes() {
         let app = makeApp(
             extraArguments: [
                 "--uitest-seed-history-exercise-note",
@@ -2324,10 +2352,56 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["ExerciseHistoryNoteLabel"].exists)
         XCTAssertEqual(noteText.label, "Exercise note")
         XCTAssertEqual(noteText.value as? String, "Pause at the bottom\nKeep wrists stacked")
-        XCTAssertEqual(noteText.frame.minX, setLabel.frame.minX, accuracy: 1)
-        XCTAssertGreaterThan(noteText.frame.height, setLabel.frame.height)
+        XCTAssertEqual(setLabel.label, "Set 1, 185 pounds, 5 reps, RPE 8")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "ExerciseHistorySessionDate-"
+        )).firstMatch.exists)
+        for _ in 0..<8 where !noteText.isHittable { app.swipeUp() }
+        XCTAssertTrue(noteText.isHittable)
+        XCTAssertGreaterThanOrEqual(noteText.frame.minX, historyHeading.frame.minX)
+        XCTAssertGreaterThan(noteText.frame.minY, setLabel.frame.maxY)
         app.buttons["Done"].tap()
         XCTAssertFalse(keyboard.waitForExistence(timeout: 1))
+    }
+
+    @MainActor
+    func testQuickHistoryMediumDetentShowsHeadingDateAndFirstJournalSet() {
+        let app = makeApp(
+            extraArguments: [
+                "--uitest-seed-history-exercise-note",
+                "-Baros.AppAppearance.preference", "dark",
+            ],
+            completedBenchWorkoutTitles: ["Past Push"]
+        )
+        app.launch()
+        openFirstPastWorkout(in: app)
+        confirmStartFromPastWorkout(in: app)
+        let menu = app.buttons["ExerciseMenuButton-0"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        menu.tap()
+        app.buttons["ExerciseHistoryButton-0"].tap()
+        let heading = app.descendants(matching: .any)["QuickExerciseHistoryHeading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        let date = app.staticTexts.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "ExerciseHistorySessionDate-"
+        )).firstMatch
+        let set = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"
+        )).firstMatch
+        XCTAssertTrue(date.isHittable)
+        XCTAssertTrue(set.isHittable)
+        XCTAssertTrue(heading.isHittable)
+        XCTAssertGreaterThan(heading.frame.minY, app.frame.height * 0.45,
+                             "Capture the initial medium detent without expanding the sheet")
+        XCTAssertLessThan(heading.frame.maxY, date.frame.minY)
+        XCTAssertLessThan(date.frame.maxY, set.frame.minY)
+        XCTAssertLessThan(set.frame.maxY, app.frame.maxY - 34)
+        XCTAssertEqual(set.label, "Set 1, 185 pounds, 5 reps, RPE 8")
+        XCTAssertFalse(app.buttons["AboutStrengthRecordsButton"].exists)
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "quick-history-medium-dark"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     @MainActor
@@ -2359,6 +2433,7 @@ final class BarosUITests: XCTestCase {
 
         let viewAllButton = app.buttons["QuickHistoryViewAllButton"]
         XCTAssertTrue(viewAllButton.exists)
+        for _ in 0..<5 where !viewAllButton.isHittable { app.swipeUp() }
         viewAllButton.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["ExerciseHistoryHeading"].waitForExistence(timeout: 3)

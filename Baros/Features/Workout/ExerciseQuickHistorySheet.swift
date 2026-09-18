@@ -46,7 +46,8 @@ struct ExerciseQuickHistorySheet: View {
                     ExerciseHistoryHeading(
                         name: loggedExercise.exerciseSnapshotName,
                         metadata: loggedExercise.metadataDisplayText,
-                        performanceSummary: summary?.historyDetailSummaryLabel
+                        performanceSummary: summary?.historyDetailSummaryLabel,
+                        isCompact: true
                     )
                     .accessibilityIdentifier("QuickExerciseHistoryHeading")
 

@@ -98,6 +98,46 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         }
     }
 
+    func testQuickHistoryUsesJournalRowsWithoutComputingRecords() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-reset-persistent-store", "--uitest-in-memory-store",
+            "--uitest-force-signed-out-auth", "--uitest-reset-app-appearance",
+            "--uitest-skip-first-run-experience", "--uitest-seed-strength-records",
+        ]
+        app.launch()
+        let start = app.buttons["StartWorkoutButton"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        start.tap()
+        app.buttons["UsePastWorkoutButton"].tap()
+        let pastWorkout = app.buttons["PastWorkoutButton-0"]
+        XCTAssertTrue(pastWorkout.waitForExistence(timeout: 3))
+        pastWorkout.tap()
+        app.buttons["StartFromPastWorkoutConfirmButton"].tap()
+        let menu = app.buttons["ExerciseMenuButton-0"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        menu.tap()
+        app.buttons["ExerciseHistoryButton-0"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["QuickExerciseHistoryHeading"].waitForExistence(timeout: 5))
+
+        let dates = app.staticTexts.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "ExerciseHistorySessionDate-"
+        ))
+        XCTAssertEqual(dates.count, 2)
+        let values = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"
+        ))
+        XCTAssertEqual(values.count, 6)
+        let heaviest = values.matching(NSPredicate(format: "label CONTAINS %@", "225 pounds")).firstMatch
+        XCTAssertEqual(heaviest.label, "Set 3, 225 pounds, 1 rep")
+        XCTAssertFalse(app.buttons["AboutStrengthRecordsButton"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["ExerciseRecord-heaviestRep"].exists)
+        XCTAssertEqual(values.matching(NSPredicate(format: "label CONTAINS %@", "Estimated 1RM")).count, 0)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-"
+        )).count, 0)
+    }
+
     private func openRecords(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [

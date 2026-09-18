@@ -32,15 +32,14 @@ struct ExerciseHistoryDetailView: View {
                     name: summary.name,
                     metadata: summary.metadataDisplayText,
                     performanceSummary: summary.historyDetailSummaryLabel,
-                    presentation: .openJournal
+                    isCompact: false
                 )
                 .accessibilityIdentifier("ExerciseHistoryHeading")
 
                 if let records {
                     ExerciseHistoryRecordsCard(
                         records: records,
-                        weightUnit: weightUnit,
-                        presentation: .openJournal
+                        weightUnit: weightUnit
                     )
                 }
 
@@ -55,8 +54,7 @@ struct ExerciseHistoryDetailView: View {
                         records: records,
                         openWorkout: {
                             workoutSelection = WorkoutHistorySelection(id: group.session.id)
-                        },
-                        presentation: .openJournal
+                        }
                     )
                 }
             }

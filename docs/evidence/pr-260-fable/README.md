@@ -1,26 +1,52 @@
-# History detail hierarchy
+# History detail polish
 
-Screenshots from the Baros scheme in an iPhone 17e simulator on iOS 26.5.
-The deterministic Push Day fixture includes a completed and an uncompleted set,
-a workout narrative, an exercise note, RPE, and one set holding both records.
-Workout History displays both sets identically; Exercise History retains its
-existing completed-set selection and record eligibility.
+Captured from `Baros.xcodeproj`, scheme `Baros`, on an iPhone 17e simulator
+running iOS 26.4. All eight existing images were refreshed for the shared
+set-table changes; two new images cover the follow-up acceptance checks.
 
 - `workout-dark.png`, `exercise-dark.png`: standard Dynamic Type, dark appearance.
 - `workout-light.png`, `exercise-light.png`: standard Dynamic Type, light appearance.
 - `workout-accessibility3.png`, `exercise-accessibility3.png`: accessibility3 headers.
 - `workout-accessibility3-table.png`, `exercise-accessibility3-table.png`: scrolled accessibility3 tables.
+- `workout-mixed-notes-dark.png`: two exercises; only the second has a note.
+  The first table has a hairline between its two rows, no trailing hairline,
+  and exactly one boundary hairline before the second exercise. The second
+  exercise's single set ends without a hairline, followed by its attached note.
+- `quick-history-medium-dark.png`: initial medium detent, without scrolling or
+  expanding. The unchanged compact heading, first group's date and first set
+  are fully visible with comfortable spacing; the note also fits. Detents and
+  sheet spacing did not need adjustment. No record glyph is displayed.
 
-Captured by `testHistoryDetailLayoutsInBothAppearancesAndAccessibilitySize`.
-The test checks set visibility and horizontal bounds, rounded estimated 1RM,
-complete set announcements, and both record labels on the shared source set.
+The original Push Day fixture includes a completed and an uncompleted set,
+a workout narrative, an exercise note, RPE, and one set holding both records.
+Workout History still displays both sets; Exercise History retains its existing
+completed-set selection and record eligibility. The mixed-notes fixture adds a
+second exercise through a DEBUG-only UI-test option.
 
-Validation for this follow-up: 12 distinct focused History UI tests passed across
-focused runs. Coverage includes layout/appearance, accessibility, sparse records,
-record source identity, source-workout navigation, both deletion routes, note
-editing, kilogram conversion, and Quick History isolation. The final table layout
-was recaptured and its nonduplicated accessibility announcements rechecked.
+The eight detail images come from
+`testHistoryDetailLayoutsInBothAppearancesAndAccessibilitySize`.
+The new acceptance images come from
+`testWorkoutHistoryWithOnlySecondExerciseNotedEndsSectionsCleanly` and
+`testQuickHistoryMediumDetentShowsHeadingDateAndFirstJournalSet`.
+Decorative dividers remain accessibility-hidden, so the mixed-notes test checks
+fixture content and attaches a screenshot for visual verification of hairlines.
 
-No physical-device validation was performed. The full unit suite was not rerun
-locally for this presentation-only follow-up. Runtime layout warnings occurred in
-the existing Quick History and completed-note editor flows; those tests passed.
+Quick History tests now check dated journal groups, complete shared-table set
+announcements, attached notes at accessibility3, the unchanged truncation footer
+and Full History route, and the absence of record computation/source navigation.
+The obsolete card presentation enum and card-only rendering have been removed;
+a compact-heading option preserves Quick History's existing heading.
+
+Validation: 12 distinct targeted History UI tests passed in four sequential
+batches (1, 3, 3, and 5), with parallel testing disabled. No full-suite run or
+physical-device validation was performed. Two Quick History tests emitted an
+`Invalid frame dimension (negative or non-finite)` runtime warning while passing;
+the previous evidence also documented layout warnings in these flows.
+
+Result bundles are under
+`~/Library/Developer/XcodeBuildMCP/workspaces/codex-ios-app-62beddaa6b92/result-bundles/`:
+
+- `test_sim_2026-09-18T03-15-25-198Z_pid13024_81579ddc.xcresult`: journal structure and set announcements.
+- `test_sim_2026-09-18T03-17-14-721Z_pid13024_8f4d9413.xcresult`: all ten screenshots, mixed notes, medium detent.
+- `test_sim_2026-09-18T03-19-25-748Z_pid13024_84fb4ce9.xcresult`: Quick History notes, footer, and records exclusion.
+- `test_sim_2026-09-18T03-21-46-623Z_pid13024_a9209435.xcresult`: kilograms, Workout History announcements, records, accessibility, and sparse cases.

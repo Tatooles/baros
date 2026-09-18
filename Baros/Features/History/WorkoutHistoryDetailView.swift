@@ -260,7 +260,7 @@ struct WorkoutHistoryDetailView: View {
                 )
             }, weightUnit: weightUnit)
 
-            ExerciseHistoryNoteBlock(note: loggedExercise.notes, presentation: .openJournal)
+            ExerciseHistoryNoteBlock(note: loggedExercise.notes)
         }
         .padding(.top, 32)
     }

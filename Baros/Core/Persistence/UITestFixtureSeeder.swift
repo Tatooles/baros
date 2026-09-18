@@ -25,6 +25,7 @@ enum UITestFixtureSeeder {
                     ? "Pause at the bottom\nKeep wrists stacked"
                     : "",
                 includesUncompletedSet: arguments.contains(historyUncompletedSetArgument),
+                includesSecondExerciseWithNote: arguments.contains("--uitest-seed-history-mixed-notes"),
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context
             )
@@ -143,6 +144,7 @@ enum UITestFixtureSeeder {
         title: String,
         exerciseNotes: String = "",
         includesUncompletedSet: Bool = false,
+        includesSecondExerciseWithNote: Bool = false,
         startedAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
         ownerTokenIdentifier: String? = nil,
         context: ModelContext
@@ -200,6 +202,16 @@ enum UITestFixtureSeeder {
             updatedAt: endedAt,
             sets: sets
         )
+        var loggedExercises = [loggedExercise]
+        if includesSecondExerciseWithNote {
+            loggedExercises.append(LoggedExercise(
+                orderIndex: 1,
+                exerciseSnapshotName: "Triceps Pushdown",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.cable.rawValue,
+                notes: "Keep elbows close",
+                sets: [LoggedSet(orderIndex: 0, weight: 50, reps: 12, isCompleted: true)]
+            ))
+        }
         let session = WorkoutSession(
             title: fixtureTitle,
             startedAt: startedAt,
@@ -211,7 +223,7 @@ enum UITestFixtureSeeder {
             createdAt: startedAt,
             updatedAt: endedAt,
             syncOwnerTokenIdentifier: ownerTokenIdentifier,
-            loggedExercises: [loggedExercise]
+            loggedExercises: loggedExercises
         )
 
         context.insert(session)
