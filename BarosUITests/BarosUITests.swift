@@ -1870,7 +1870,9 @@ final class BarosUITests: XCTestCase {
         )
 
         firstWorkout.tap()
-        XCTAssertTrue(app.navigationBars["Workout"].waitForExistence(timeout: 3))
+        let workoutHeading = app.descendants(matching: .any)["WorkoutHistoryHeading"]
+        XCTAssertTrue(workoutHeading.waitForExistence(timeout: 3))
+        XCTAssertTrue(workoutHeading.label.contains("Workout"))
         app.navigationBars.buttons.element(boundBy: 0).tap()
 
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
