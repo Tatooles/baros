@@ -43,19 +43,21 @@ struct ExerciseHistoryDetailView: View {
                     )
                 }
 
-                ForEach(groups) { group in
-                    ExerciseHistorySessionGroupCard(
-                        group: group,
-                        headingIdentity: ExerciseHistoryDisplayIdentity(
-                            name: summary.name,
-                            metadataDisplayText: summary.metadataDisplayText
-                        ),
-                        weightUnit: weightUnit,
-                        records: records,
-                        openWorkout: {
-                            workoutSelection = WorkoutHistorySelection(id: group.session.id)
-                        }
-                    )
+                VStack(spacing: 12) {
+                    ForEach(groups) { group in
+                        ExerciseHistorySessionGroupCard(
+                            group: group,
+                            headingIdentity: ExerciseHistoryDisplayIdentity(
+                                name: summary.name,
+                                metadataDisplayText: summary.metadataDisplayText
+                            ),
+                            weightUnit: weightUnit,
+                            records: records,
+                            openWorkout: {
+                                workoutSelection = WorkoutHistorySelection(id: group.session.id)
+                            }
+                        )
+                    }
                 }
             }
             .padding(AppTheme.shellPadding)

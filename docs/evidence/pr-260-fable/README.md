@@ -1,71 +1,56 @@
-# History detail polish
+# History detail blocks and accent pills
 
-Captured from `Baros.xcodeproj`, scheme `Baros`, on an iPhone 17e simulator
-running iOS 26.4. All eight existing images were refreshed for the shared
-set-table changes; two new images cover the follow-up acceptance checks.
+Captured September 18, 2026 from `Baros.xcodeproj`, scheme `Baros`, on the
+**iPhone 17e / iOS 26.4** simulator. All 16 images are unmodified screenshots
+from targeted UI tests and were visually inspected.
 
-- `workout-dark.png`, `exercise-dark.png`: standard Dynamic Type, dark appearance.
-- `workout-light.png`, `exercise-light.png`: standard Dynamic Type, light appearance.
-- `workout-accessibility3.png`, `exercise-accessibility3.png`: accessibility3 headers.
-- `workout-accessibility3-table.png`, `exercise-accessibility3-table.png`: scrolled accessibility3 tables.
-- `workout-mixed-notes-dark.png`: two exercises; only the second has a note.
-  The first table has a hairline between its two rows, no trailing hairline,
-  and exactly one boundary hairline before the second exercise. The second
-  exercise's single set ends without a hairline, followed by its attached note.
-- `quick-history-medium-dark.png`: initial medium detent, without scrolling or
-  expanding. The unchanged compact heading, first group's date and first set
-  are fully visible with comfortable spacing; the note also fits. Detents and
-  sheet spacing did not need adjustment. No record glyph is displayed.
+Exercise sections and session groups use flat `AppTheme.groupedSurface` blocks,
+20pt continuous corners, 16pt inner padding, and 12pt spacing between blocks.
+Only set rows have subtle hairlines. Each block has an accent set-count pill;
+exercise names and dates remain primary text. The workout hero, stats and
+italic workout note remain unboxed. The pill is informational in Workout
+History and joins the chevron as the source-workout button in Exercise History
+and Quick History.
 
-The original Push Day fixture includes a completed and an uncompleted set,
-a workout narrative, an exercise note, RPE, and one set holding both records.
-Workout History still displays both sets; Exercise History retains its existing
-completed-set selection and record eligibility. The mixed-notes fixture adds a
-second exercise through a DEBUG-only UI-test option.
+## Fixtures and screenshots
 
-The eight detail images come from
-`testHistoryDetailLayoutsInBothAppearancesAndAccessibilitySize`.
-The new acceptance images come from
-`testWorkoutHistoryWithOnlySecondExerciseNotedEndsSectionsCleanly` and
-`testQuickHistoryMediumDetentShowsHeadingDateAndFirstJournalSet`.
-Decorative dividers remain accessibility-hidden, so the mixed-notes test checks
-fixture content and attaches a screenshot for visual verification of hairlines.
+`--uitest-seed-history-blocks` is a DEBUG-only fixture: a six-exercise Full Body
+workout with 17 displayed sets, three exercise notes and three unnoted exercises,
+plus two older Bench Press workouts. Bench Press includes one completed and one
+uncompleted set to keep the presentation/eligibility distinction covered.
 
-Quick History tests now check dated journal groups, complete shared-table set
-announcements, attached notes at accessibility3, the unchanged truncation footer
-and Full History route, and the absence of record computation/source navigation.
-The obsolete card presentation enum and card-only rendering have been removed;
-a compact-heading option preserves Quick History's existing heading.
+| Files | Evidence |
+| --- | --- |
+| `workout-dark.png`, `workout-light.png` | Six-exercise fixture, unboxed hero and first blocks |
+| `workout-six-exercises-block-3-dark.png`, `workout-six-exercises-block-6-dark.png` | Further down the six-exercise workout, with and without notes |
+| `exercise-dark.png`, `exercise-light.png` | Three-session fixture, hero, existing record tiles and first blocks |
+| `exercise-three-sessions-dark.png`, `exercise-three-sessions-light.png` | All three session blocks visible together |
+| `workout-accessibility3.png`, `exercise-accessibility3.png` | Large-text headers |
+| `workout-accessibility3-table.png`, `exercise-accessibility3-table.png` | Scrolled large-text blocks and set announcements |
+| `workout-mixed-notes-dark.png` | Two-exercise fixture with only the second exercise noted; no boundary hairline |
+| `quick-history-medium-dark.png`, `quick-history-medium-light.png` | Initial medium detent, without scrolling or expanding: heading, first block header and first set row fully visible |
+| `quick-history-compact-heading-accessibility3.png` | Large-text Quick History heading and first block header |
 
-Validation: 12 distinct targeted History UI tests passed in four sequential
-batches (1, 3, 3, and 5), with parallel testing disabled. No full-suite run or
-physical-device validation was performed. Two Quick History tests emitted an
-`Invalid frame dimension (negative or non-finite)` runtime warning while passing;
-the previous evidence also documented layout warnings in these flows.
+## Validation
+
+12 targeted History UI tests passed in three sequential batches (2, 4 and 6),
+with parallel testing disabled. `git diff --check` passed.
+
+The screenshot tests also check complete set announcements, an informational
+Workout History pill, three Exercise History source buttons, and source-workout
+navigation and return from Quick History in both appearances. The six-exercise
+scroll test checks all six count pills and the three attached notes. The Quick
+History accessibility test uses `UICTContentSizeCategoryAccessibilityXL` so text
+size reaches the presented sheet, then scrolls to verify the note.
+
+No full-suite run or physical-device validation was performed. Two existing
+Quick History keyboard flows still report `Invalid frame dimension (negative
+or non-finite)` while passing. No production model, sync, completion-state or
+record-eligibility code changed.
 
 Result bundles are under
 `~/Library/Developer/XcodeBuildMCP/workspaces/codex-ios-app-62beddaa6b92/result-bundles/`:
 
-- `test_sim_2026-09-18T03-15-25-198Z_pid13024_81579ddc.xcresult`: journal structure and set announcements.
-- `test_sim_2026-09-18T03-17-14-721Z_pid13024_8f4d9413.xcresult`: all ten screenshots, mixed notes, medium detent.
-- `test_sim_2026-09-18T03-19-25-748Z_pid13024_84fb4ce9.xcresult`: Quick History notes, footer, and records exclusion.
-- `test_sim_2026-09-18T03-21-46-623Z_pid13024_a9209435.xcresult`: kilograms, Workout History announcements, records, accessibility, and sparse cases.
-
-PR review follow-up (2026-09-18): record source announcements now use `1 rep`
-and plural `reps` appropriately; the records UI test checks both complete source
-phrases. Compact Quick History heading metadata retains its single-line limit,
-while full detail and journal entry metadata can wrap.
-
-`quick-history-compact-heading-accessibility3.png` shows the Quick History
-heading at accessibility3. This test now uses the valid UIKit launch value
-`UICTContentSizeCategoryAccessibilityXL` so the size reaches the presented sheet;
-the shell-only accessibility flag did not do that. The test also scrolls to and
-checks the attached note. All three focused review checks passed (record sources,
-Quick History notes, and the standard-size medium detent); the corrected large-text
-test also passed its separate rerun. The previously documented frame warning
-still appears in the Quick History keyboard flow.
-
-Review result bundles in the directory above:
-
-- `test_sim_2026-09-18T23-15-35-064Z_pid39553_7c916001.xcresult`: three focused checks.
-- `test_sim_2026-09-18T23-18-18-726Z_pid39553_e9b78536.xcresult`: corrected accessibility3 sheet check and screenshot.
+- `test_sim_2026-09-19T00-18-07-173Z_pid95875_28a085b4.xcresult`: 2 passed; dark/light/accessibility detail layouts and medium-detent Quick History with source navigation.
+- `test_sim_2026-09-19T00-21-33-389Z_pid95875_371b01f3.xcresult`: 4 passed; six-block scroll, mixed notes, large-text Quick History, truncation footer and Full History route.
+- `test_sim_2026-09-19T00-23-44-223Z_pid95875_98598701.xcresult`: 6 passed; set announcements, record sources, Quick History record exclusion, exact source-workout navigation and matching-title/date identity.

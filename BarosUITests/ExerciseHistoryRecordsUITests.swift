@@ -135,7 +135,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         XCTAssertEqual(values.matching(NSPredicate(format: "label CONTAINS %@", "Estimated 1RM")).count, 0)
         XCTAssertEqual(app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-"
-        )).count, 0)
+        )).count, 2)
     }
 
     private func openRecords(extraArguments: [String] = []) -> XCUIApplication {

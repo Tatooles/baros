@@ -66,35 +66,11 @@ struct ExerciseHistorySessionGroupCard: View {
             header
             loggedExerciseEntries
         }
-        .padding(.leading, 16)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(AppTheme.subtleBorder)
-                .frame(width: 1)
-                .accessibilityHidden(true)
-        }
+        .padding(16)
+        .background(AppTheme.groupedSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
-    @ViewBuilder
     private var header: some View {
-        if let openWorkout {
-            Button(action: openWorkout) {
-                headerContent(showsDisclosureIndicator: true)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(
-                "\(group.title), \(WorkoutFormatters.compactDate(group.startedAt)), "
-                    + setCountLabel(for: group.completedSetCount)
-            )
-            .accessibilityHint("Opens completed workout.")
-            .accessibilityIdentifier("ExercisePerformanceWorkoutButton-\(group.id.uuidString)")
-        } else {
-            headerContent(showsDisclosureIndicator: false)
-        }
-    }
-
-    private func headerContent(showsDisclosureIndicator: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(WorkoutFormatters.compactDate(group.startedAt))
@@ -109,15 +85,26 @@ struct ExerciseHistorySessionGroupCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(setCountLabel(for: group.completedSetCount))
-                .font(.caption.weight(.medium))
-                .foregroundStyle(AppTheme.textSecondary)
-
-            if showsDisclosureIndicator {
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(AppTheme.brandAccentForeground)
-                    .accessibilityHidden(true)
+            if let openWorkout {
+                Button(action: openWorkout) {
+                    HStack(spacing: 8) {
+                        HistorySetCountPill(count: group.completedSetCount)
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(AppTheme.brandAccentForeground)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    "\(group.title), \(WorkoutFormatters.compactDate(group.startedAt)), "
+                        + setCountLabel(for: group.completedSetCount)
+                )
+                .accessibilityHint("Opens completed workout.")
+                .accessibilityIdentifier("ExercisePerformanceWorkoutButton-\(group.id.uuidString)")
+            } else {
+                HistorySetCountPill(count: group.completedSetCount)
             }
         }
     }

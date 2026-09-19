@@ -92,9 +92,12 @@ struct WorkoutHistoryDetailView: View {
                         .accessibilityIdentifier("WorkoutHistoryNoteText")
                 }
 
-                ForEach(Array(session.sortedLoggedExercises.enumerated()), id: \.element.id) { _, loggedExercise in
-                    workoutExerciseSection(loggedExercise)
+                VStack(spacing: 12) {
+                    ForEach(session.sortedLoggedExercises) { loggedExercise in
+                        workoutExerciseSection(loggedExercise)
+                    }
                 }
+                .padding(.top, 24)
             }
             .padding(AppTheme.shellPadding)
         }
@@ -238,18 +241,19 @@ struct WorkoutHistoryDetailView: View {
 
     private func workoutExerciseSection(_ loggedExercise: LoggedExercise) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Divider().accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(loggedExercise.exerciseSnapshotName)
                     .font(.title3.bold())
                     .foregroundStyle(AppTheme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
-                if let metadata = loggedExercise.metadataDisplayText {
-                    Text(metadata)
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.textSecondary)
-                }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HistorySetCountPill(count: loggedExercise.sortedSets.count)
+                    .accessibilityIdentifier("WorkoutHistorySetCount-\(loggedExercise.orderIndex)")
+            }
+            if let metadata = loggedExercise.metadataDisplayText {
+                Text(metadata)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
             }
 
             HistorySetTable(rows: loggedExercise.sortedSets.map { set in
@@ -262,7 +266,8 @@ struct WorkoutHistoryDetailView: View {
 
             ExerciseHistoryNoteBlock(note: loggedExercise.notes)
         }
-        .padding(.top, 32)
+        .padding(16)
+        .background(AppTheme.groupedSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 

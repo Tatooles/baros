@@ -66,7 +66,9 @@ struct HistorySetTable: View {
                     .padding(.vertical, 8)
                 }
                 if index < rows.count - 1 {
-                    Divider()
+                    Rectangle()
+                        .fill(AppTheme.subtleBorder)
+                        .frame(height: 0.5)
                         .gridCellUnsizedAxes(.horizontal)
                         .accessibilityHidden(true)
                 }
@@ -123,5 +125,20 @@ struct HistorySetTable: View {
             .map { ", RPE \(WorkoutFormatters.number($0))" } ?? ""
         return (["Set \(row.number), \(weight), \(reps)\(rpe)"] + row.recordKinds.map(\.title))
             .joined(separator: ", ")
+    }
+}
+
+/// A shared informational count; the containing view owns any navigation action.
+struct HistorySetCountPill: View {
+    let count: Int
+
+    var body: some View {
+        Text(count == 1 ? "1 set" : "\(count) sets")
+            .font(.caption.weight(.medium))
+            .foregroundStyle(AppTheme.brandAccentForeground)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(AppTheme.brandAccentMuted, in: Capsule())
+            .fixedSize()
     }
 }

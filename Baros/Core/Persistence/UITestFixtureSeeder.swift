@@ -31,6 +31,10 @@ enum UITestFixtureSeeder {
             )
         }
 
+        if arguments.contains("--uitest-seed-history-blocks") {
+            try seedHistoryBlocks(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
         if arguments.contains("--uitest-seed-workout-history-layout") {
             try seedWorkoutHistoryLayoutFixture(context: context)
         }
@@ -72,6 +76,42 @@ enum UITestFixtureSeeder {
                 context: context
             )
         }
+    }
+
+    /// Six exercise blocks with mixed notes, plus two older Bench Press sessions.
+    private static func seedHistoryBlocks(ownerTokenIdentifier: String?, context: ModelContext) throws {
+        let date = Date(timeIntervalSince1970: 1_788_544_800)
+        for (index, title) in ["Full Body", "Upper Body", "Push Day"].enumerated() {
+            try seedCompletedBenchWorkout(
+                title: title,
+                exerciseNotes: index == 0 ? "Pause at the bottom\nKeep wrists stacked" : "",
+                includesUncompletedSet: index == 0,
+                startedAt: date.addingTimeInterval(Double(-index) * 86_400 * 3),
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        guard let workout = sessions.first(where: {
+            $0.title == "Full Body" && $0.syncOwnerTokenIdentifier == ownerTokenIdentifier
+        }), workout.loggedExercises.count == 1 else { return }
+        let accessories: [(String, ExerciseEquipment, String)] = [
+            ("Cable Row", .cable, ""),
+            ("Goblet Squat", .dumbbell, "Controlled tempo"),
+            ("Romanian Deadlift", .barbell, ""),
+            ("Lateral Raise", .dumbbell, "Keep shoulders relaxed"),
+            ("Triceps Pushdown", .cable, ""),
+        ]
+        for (index, accessory) in accessories.enumerated() {
+            workout.loggedExercises.append(LoggedExercise(
+                orderIndex: index + 1,
+                exerciseSnapshotName: accessory.0,
+                exerciseSnapshotEquipmentRaw: accessory.1.rawValue,
+                notes: accessory.2,
+                sets: (0..<3).map { LoggedSet(orderIndex: $0, weight: 40, reps: 10, isCompleted: true) }
+            ))
+        }
+        try context.save()
     }
 
     private static func seedStrengthRecords(scenario: String?, ownerTokenIdentifier: String?, context: ModelContext) throws {

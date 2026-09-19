@@ -4,6 +4,7 @@ import SwiftUI
 struct ExerciseQuickHistorySheet: View {
     let loggedExercise: LoggedExercise
     let openFullHistory: (ExerciseHistoryRoute) -> Void
+    @State private var selectedWorkoutID: UUID?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(SyncScheduler.self) private var syncScheduler
@@ -57,14 +58,17 @@ struct ExerciseQuickHistorySheet: View {
                             message: "Completed workouts for this exercise will appear here."
                         )
                     } else {
-                        ForEach(recentGroups) { group in
-                            ExerciseHistorySessionGroupCard(
-                                group: group,
-                                headingIdentity: ExerciseHistoryDisplayIdentity(
-                                    loggedExercise: loggedExercise
-                                ),
-                                weightUnit: weightUnit
-                            )
+                        VStack(spacing: 12) {
+                            ForEach(recentGroups) { group in
+                                ExerciseHistorySessionGroupCard(
+                                    group: group,
+                                    headingIdentity: ExerciseHistoryDisplayIdentity(
+                                        loggedExercise: loggedExercise
+                                    ),
+                                    weightUnit: weightUnit,
+                                    openWorkout: { selectedWorkoutID = group.session.id }
+                                )
+                            }
                         }
 
                         if let summary, summary.performanceCount > recentGroups.count {
@@ -92,6 +96,9 @@ struct ExerciseQuickHistorySheet: View {
                 .padding(.vertical, 16)
             }
             .background(AppTheme.canvasBackground.ignoresSafeArea())
+            .navigationDestination(item: $selectedWorkoutID) { sessionID in
+                WorkoutHistoryDestinationView(sessionID: sessionID)
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
