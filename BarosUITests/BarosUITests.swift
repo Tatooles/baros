@@ -906,7 +906,7 @@ final class BarosUITests: XCTestCase {
             exercise.tap()
             let estimate = app.descendants(matching: .any)["ExerciseRecord-estimated1RM"]
             XCTAssertTrue(estimate.waitForExistence(timeout: 5))
-            XCTAssertTrue(estimate.label.contains("216 lbs"))
+            XCTAssertTrue(estimate.label.contains("215.83 lbs"))
             let sources = app.buttons.matching(NSPredicate(
                 format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-"
             ))

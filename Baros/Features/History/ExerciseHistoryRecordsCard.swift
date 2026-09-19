@@ -65,7 +65,7 @@ struct ExerciseHistoryRecordsCard: View {
 
     private func journalRecord(_ record: ExerciseHistoryRecord, kind: ExerciseHistoryRecordKind) -> some View {
         let displayValue = weightUnit.displayWeight(fromCanonicalPounds: record.value) ?? 0
-        let value = WorkoutFormatters.number(kind == .estimated1RM ? displayValue.rounded() : displayValue)
+        let value = WorkoutFormatters.number(displayValue)
         let unit = weightUnit.fieldLabel.lowercased()
         let weight = WorkoutFormatters.number(weightUnit.displayWeight(fromCanonicalPounds: record.weight) ?? 0)
         let reps = record.reps == 1 ? "1 rep" : "\(record.reps) reps"
