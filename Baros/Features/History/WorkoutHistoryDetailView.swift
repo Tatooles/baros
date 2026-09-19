@@ -42,6 +42,7 @@ struct WorkoutHistoryDetailView: View {
     @State private var showsDeleteConfirmation = false
     @State private var editPresentation: CompletedWorkoutEditPresentation?
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var metrics: WorkoutMetrics {
         WorkoutMetrics(session: session)
@@ -60,95 +61,65 @@ struct WorkoutHistoryDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 if !allowsHistoryMutation {
                     readOnlyNoticeBanner
+                        .padding(.bottom, 24)
                 }
 
-                Text(WorkoutFormatters.compactDate(session.startedAt))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppTheme.textSecondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(session.title)
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 10) {
-                    metricCard(title: "Duration", value: AppTheme.formatDuration(metrics.durationSeconds))
-                    metricCard(title: "Exercises", value: "\(session.sortedLoggedExercises.count)")
-                    metricCard(title: "Sets", value: "\(metrics.completedSetCount)")
+                    Text(WorkoutFormatters.compactDate(session.startedAt))
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("WorkoutHistoryHeading")
+
+                summaryStats
+                    .padding(.top, 24)
 
                 if !session.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    SurfaceCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Notes")
-                                .font(.system(size: 16, weight: .bold))
-                            Text(session.notes)
-                                .font(.system(size: 14))
-                                .foregroundStyle(AppTheme.textSecondary)
-                        }
-                    }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("WorkoutHistoryNotesCard")
+                    Text(session.notes)
+                        .font(.body.italic())
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 24)
+                        .accessibilityIdentifier("WorkoutHistoryNoteText")
                 }
 
-                ForEach(session.sortedLoggedExercises) { loggedExercise in
-                    SurfaceCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(loggedExercise.exerciseSnapshotName)
-                                    .font(.system(size: 18, weight: .bold))
-                                if let metadataDisplayText = loggedExercise.metadataDisplayText {
-                                    Text(metadataDisplayText)
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(AppTheme.textSecondary)
-                                        .lineLimit(1)
-                                }
-                            }
-
-                            ForEach(loggedExercise.sortedSets) { set in
-                                HStack {
-                                    Text("Set \(set.orderIndex + 1)")
-                                    Spacer()
-                                    Text(setSummary(for: set))
-                                        .foregroundStyle(set.isCompleted ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
-                                }
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(AppTheme.textSecondary)
-                                .accessibilityIdentifier("WorkoutHistorySetSummary-\(loggedExercise.orderIndex)-\(set.orderIndex)")
-                            }
-
-                            ExerciseHistoryNoteBlock(note: loggedExercise.notes)
-                        }
+                VStack(spacing: 12) {
+                    ForEach(session.sortedLoggedExercises) { loggedExercise in
+                        workoutExerciseSection(loggedExercise)
                     }
                 }
-
-                if allowsHistoryMutation {
-                    Button(role: .destructive) {
-                        showsDeleteConfirmation = true
-                    } label: {
-                        Text("Delete Workout")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(AppTheme.destructiveForeground)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(AppTheme.destructiveForeground)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
+                .padding(.top, 24)
             }
             .padding(AppTheme.shellPadding)
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
-        .navigationTitle(session.title)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if allowsHistoryMutation {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     Button("Edit") {
                         editPresentation = CompletedWorkoutEditPresentation(session: session)
                     }
                     .accessibilityIdentifier("EditWorkoutButton")
+
+                    Menu {
+                        Button("Delete Workout", systemImage: "trash", role: .destructive) {
+                            showsDeleteConfirmation = true
+                        }
+                    } label: {
+                        Label("Workout actions", systemImage: "ellipsis")
+                    }
+                    .accessibilityIdentifier("WorkoutHistoryActionsMenu")
                 }
             }
         }
@@ -204,7 +175,7 @@ struct WorkoutHistoryDetailView: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "lock.fill")
                 .font(.title3.weight(.semibold))
-                .foregroundStyle(AppTheme.brandAccentForeground)
+                .foregroundStyle(AppTheme.textSecondary)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -222,40 +193,81 @@ struct WorkoutHistoryDetailView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(AppTheme.brandAccentForeground.opacity(0.4))
+                .strokeBorder(AppTheme.subtleBorder)
         )
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("WorkoutHistoryReadOnlyNotice")
     }
 
-    private func metricCard(title: String, value: String) -> some View {
-        SurfaceCard {
-            VStack(spacing: 4) {
-                Text(value)
-                    .font(.system(size: 20, weight: .bold))
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
+    private var summaryStats: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 16))
+        return layout {
+            stat("Duration", value: AppTheme.formatDuration(metrics.durationSeconds))
+            stat("Exercises", value: "\(session.sortedLoggedExercises.count)")
+            stat("Sets", value: "\(metrics.totalSetCount)")
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(summaryAccessibilityLabel)
+        .accessibilityIdentifier("WorkoutHistorySummary")
+    }
+
+    private func stat(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+            Text(value)
+                .font(.title3.bold().monospacedDigit())
+                .foregroundStyle(AppTheme.textPrimary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var summaryAccessibilityLabel: String {
+        "\(AppTheme.formatDuration(metrics.durationSeconds)), "
+            + "\(session.sortedLoggedExercises.count) \(exerciseCountLabel), "
+            + "\(metrics.totalSetCount) \(setCountLabel)"
+    }
+
+    private var exerciseCountLabel: String {
+        session.sortedLoggedExercises.count == 1 ? "exercise" : "exercises"
+    }
+
+    private var setCountLabel: String {
+        metrics.totalSetCount == 1 ? "set" : "sets"
+    }
+
+    private func workoutExerciseSection(_ loggedExercise: LoggedExercise) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(loggedExercise.exerciseSnapshotName)
+                    .font(.title3.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HistorySetCountPill(count: loggedExercise.sortedSets.count)
+                    .accessibilityIdentifier("WorkoutHistorySetCount-\(loggedExercise.orderIndex)")
+            }
+            if let metadata = loggedExercise.metadataDisplayText {
+                Text(metadata)
+                    .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
             }
-            .frame(maxWidth: .infinity)
+
+            HistorySetTable(rows: loggedExercise.sortedSets.map { set in
+                HistorySetTable.Row(
+                    set: set,
+                    number: set.orderIndex + 1,
+                    accessibilityIdentifier: "WorkoutHistorySetSummary-\(loggedExercise.orderIndex)-\(set.orderIndex)"
+                )
+            }, weightUnit: weightUnit)
+
+            ExerciseHistoryNoteBlock(note: loggedExercise.notes)
         }
-    }
-
-    private func setSummary(for set: LoggedSet) -> String {
-        let weight = weightText(for: set)
-        let reps = WorkoutNumericInputPolicy.validatedReps(set.reps).map(String.init) ?? "-"
-        let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe).map { " @ \(WorkoutFormatters.number($0))" } ?? ""
-        let status = set.isCompleted ? "Done" : "Open"
-        return "\(weight) x \(reps)\(rpe) · \(status)"
-    }
-
-    private func weightText(for set: LoggedSet) -> String {
-        let validWeight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
-        guard let displayWeight = weightUnit.displayWeight(fromCanonicalPounds: validWeight) else {
-            return "-"
-        }
-
-        return WorkoutFormatters.number(displayWeight)
+        .padding(16)
+        .background(AppTheme.groupedSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 
