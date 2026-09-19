@@ -51,25 +51,30 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
     }
 
     func testExerciseHistoryDetailPresentsJournalSectionsAndCompleteSetAnnouncements() {
-        let app = openRecords()
+        for appearance in ["dark", "light"] {
+            let app = openRecords(extraArguments: ["-Baros.AppAppearance.preference", appearance])
 
-        XCTAssertTrue(app.staticTexts["Records"].exists)
-        XCTAssertTrue(app.buttons["AboutStrengthRecordsButton"].exists)
+            XCTAssertTrue(app.staticTexts["Records"].exists)
+            XCTAssertTrue(app.buttons["AboutStrengthRecordsButton"].exists)
 
-        let sourceWorkout = app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-")
-        ).firstMatch
-        XCTAssertTrue(sourceWorkout.waitForExistence(timeout: 3))
-        XCTAssertTrue(sourceWorkout.label.contains("Upper Body"))
-        XCTAssertTrue(sourceWorkout.label.contains("3 sets"))
+            let sourceWorkout = app.buttons.matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-")
+            ).firstMatch
+            XCTAssertTrue(sourceWorkout.waitForExistence(timeout: 3))
+            XCTAssertTrue(sourceWorkout.label.contains("Upper Body"))
+            XCTAssertTrue(sourceWorkout.label.contains("3 sets"))
+            XCTAssertGreaterThanOrEqual(sourceWorkout.frame.height, 44)
 
-        let values = app.descendants(matching: .any).matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-")
-        )
-        XCTAssertEqual(values.count, 6)
-        let heaviest = values.matching(NSPredicate(format: "label CONTAINS %@", "Heaviest Rep")).firstMatch
-        XCTAssertEqual(heaviest.label, "Set 3, 225 pounds, 1 rep, Heaviest Rep")
-        XCTAssertTrue(app.staticTexts["3 sets"].exists)
+            let values = app.descendants(matching: .any).matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-")
+            )
+            XCTAssertEqual(values.count, 6)
+            let heaviest = values.matching(NSPredicate(format: "label CONTAINS %@", "Heaviest Rep")).firstMatch
+            XCTAssertEqual(heaviest.label, "Set 3, 225 pounds, 1 rep, Heaviest Rep")
+            XCTAssertTrue(app.staticTexts["3 sets"].exists)
+            attachScreenshot(named: "exercise-no-rpe-\(appearance)", app: app)
+            app.terminate()
+        }
     }
 
     func testSparseHistoryAndDoubleBadgesWithLongWorkoutTitle() {

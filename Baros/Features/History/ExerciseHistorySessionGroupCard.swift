@@ -93,7 +93,7 @@ struct ExerciseHistorySessionGroupCard: View {
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(AppTheme.brandAccentForeground)
                     }
-                    .frame(minHeight: 44)
+                    .frame(minHeight: 44, alignment: .top)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

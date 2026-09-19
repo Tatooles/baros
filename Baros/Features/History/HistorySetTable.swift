@@ -16,6 +16,7 @@ struct HistorySetTable: View {
 
     @ScaledMetric(relativeTo: .body) private var weightWidth = 64.0
     @ScaledMetric(relativeTo: .body) private var repsWidth = 28.0
+    @ScaledMetric(relativeTo: .body) private var separatorWidth = 12.0
 
     var body: some View {
         Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 0) {
@@ -28,7 +29,10 @@ struct HistorySetTable: View {
             } else {
                 GridRow {
                     Text("SET").gridColumnAlignment(.leading)
-                    Text("\(weightUnit.fieldLabel) × REPS")
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        valueColumns(weight: weightUnit.fieldLabel, reps: "REPS", showsRecord: false)
+                        if hasRPE { rpePlaceholder }
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
@@ -82,28 +86,49 @@ struct HistorySetTable: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
         return layout {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(weightText(row.set))
-                    .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : weightWidth, alignment: .trailing)
-                Text("×").foregroundStyle(AppTheme.textSecondary).fixedSize()
-                Text(repsText(row.set))
-                    .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : repsWidth, alignment: .trailing)
-                Image(systemName: "trophy.fill")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.brandAccentForeground)
-                    .opacity(row.recordKinds.isEmpty ? 0 : 1)
-                    .accessibilityHidden(true)
-            }
+            valueColumns(
+                weight: weightText(row.set),
+                reps: repsText(row.set),
+                showsRecord: !row.recordKinds.isEmpty
+            )
             .foregroundStyle(AppTheme.textPrimary)
             if let rpe = WorkoutNumericInputPolicy.validatedRPE(row.set.rpe) {
                 Text("@ \(WorkoutFormatters.number(rpe))")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(AppTheme.textTertiary)
                     .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 40, alignment: .trailing)
-            } else if !dynamicTypeSize.isAccessibilitySize && rows.contains(where: { WorkoutNumericInputPolicy.validatedRPE($0.set.rpe) != nil }) {
-                Color.clear.frame(width: 40, height: 1).accessibilityHidden(true)
+            } else if !dynamicTypeSize.isAccessibilitySize && hasRPE {
+                rpePlaceholder
             }
         }
+    }
+
+    // Header and data use the same columns, including space reserved for record/RPE annotations.
+    private func valueColumns(weight: String, reps: String, showsRecord: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(weight)
+                .fixedSize()
+                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : weightWidth, alignment: .trailing)
+            Text("×")
+                .foregroundStyle(AppTheme.textSecondary)
+                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : separatorWidth)
+            Text(reps)
+                .fixedSize()
+                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : repsWidth, alignment: .trailing)
+            Image(systemName: "trophy.fill")
+                .font(.caption)
+                .foregroundStyle(AppTheme.brandAccentForeground)
+                .opacity(showsRecord ? 1 : 0)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var hasRPE: Bool {
+        rows.contains { WorkoutNumericInputPolicy.validatedRPE($0.set.rpe) != nil }
+    }
+
+    private var rpePlaceholder: some View {
+        Color.clear.frame(width: 40, height: 1).accessibilityHidden(true)
     }
 
     private func weightText(_ set: LoggedSet) -> String {
