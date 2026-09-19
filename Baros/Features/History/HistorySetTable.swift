@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The shared set ledger for History details and Quick History.
 struct HistorySetTable: View {
@@ -17,10 +18,22 @@ struct HistorySetTable: View {
     @ScaledMetric(relativeTo: .body) private var weightWidth = 64.0
     @ScaledMetric(relativeTo: .body) private var repsWidth = 28.0
     @ScaledMetric(relativeTo: .body) private var separatorWidth = 12.0
+    @ScaledMetric(relativeTo: .body) private var valuePointSize = 17.0
 
     var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            table(stacked: true)
+        } else {
+            ViewThatFits(in: .horizontal) {
+                table(stacked: false)
+                table(stacked: true)
+            }
+        }
+    }
+
+    private func table(stacked: Bool) -> some View {
         Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 0) {
-            if dynamicTypeSize.isAccessibilitySize {
+            if stacked {
                 Text("\(weightUnit.fieldLabel) × REPS")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
@@ -30,7 +43,7 @@ struct HistorySetTable: View {
                 GridRow {
                     Text("SET").gridColumnAlignment(.leading)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        valueColumns(weight: weightUnit.fieldLabel, reps: "REPS", showsRecord: false)
+                        valueColumns(weight: weightUnit.fieldLabel, reps: "REPS", showsRecord: false, stacked: false)
                         if hasRPE { rpePlaceholder }
                     }
                 }
@@ -41,12 +54,12 @@ struct HistorySetTable: View {
             }
 
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                if dynamicTypeSize.isAccessibilitySize {
+                if stacked {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Set \(row.number)")
                             .font(.caption)
                             .foregroundStyle(AppTheme.textSecondary)
-                        result(row)
+                        result(row, stacked: stacked)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 16)
@@ -61,7 +74,7 @@ struct HistorySetTable: View {
                             .accessibilityHidden(true)
                         // GridRow forwards accessibility modifiers to every cell.
                         // Give the result cell the single complete set announcement.
-                        result(row)
+                        result(row, stacked: stacked)
                             .fixedSize(horizontal: true, vertical: true)
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel(accessibilityLabel(row))
@@ -81,40 +94,41 @@ struct HistorySetTable: View {
         .font(.body.monospacedDigit())
     }
 
-    private func result(_ row: Row) -> some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
+    private func result(_ row: Row, stacked: Bool) -> some View {
+        let layout = stacked
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
         return layout {
             valueColumns(
                 weight: weightText(row.set),
                 reps: repsText(row.set),
-                showsRecord: !row.recordKinds.isEmpty
+                showsRecord: !row.recordKinds.isEmpty,
+                stacked: stacked
             )
             .foregroundStyle(AppTheme.textPrimary)
             if let rpe = WorkoutNumericInputPolicy.validatedRPE(row.set.rpe) {
                 Text("@ \(WorkoutFormatters.number(rpe))")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(AppTheme.textTertiary)
-                    .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 40, alignment: .trailing)
-            } else if !dynamicTypeSize.isAccessibilitySize && hasRPE {
+                    .frame(width: stacked ? nil : 40, alignment: .trailing)
+            } else if !stacked && hasRPE {
                 rpePlaceholder
             }
         }
     }
 
     // Header and data use the same columns, including space reserved for record/RPE annotations.
-    private func valueColumns(weight: String, reps: String, showsRecord: Bool) -> some View {
+    private func valueColumns(weight: String, reps: String, showsRecord: Bool, stacked: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(weight)
                 .fixedSize()
-                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : weightWidth, alignment: .trailing)
+                .frame(width: stacked ? nil : fittedWeightWidth, alignment: .trailing)
             Text("×")
                 .foregroundStyle(AppTheme.textSecondary)
-                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : separatorWidth)
+                .frame(width: stacked ? nil : separatorWidth)
             Text(reps)
                 .fixedSize()
-                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : repsWidth, alignment: .trailing)
+                .frame(width: stacked ? nil : fittedRepsWidth, alignment: .trailing)
             Image(systemName: "trophy.fill")
                 .font(.caption)
                 .foregroundStyle(AppTheme.brandAccentForeground)
@@ -122,6 +136,16 @@ struct HistorySetTable: View {
                 .accessibilityHidden(true)
         }
     }
+
+    // Measure the displayed strings in the same scaled, monospaced-digit font
+    // used by the rows. Headers and rows share these widths after unit conversion.
+    private func fittedWidth(_ values: [String], minimum: Double) -> Double {
+        let font = UIFont.monospacedDigitSystemFont(ofSize: valuePointSize, weight: .regular)
+        return max(minimum, values.map { ceil(($0 as NSString).size(withAttributes: [.font: font]).width) }.max() ?? 0)
+    }
+
+    private var fittedWeightWidth: Double { fittedWidth(rows.map { weightText($0.set) }, minimum: weightWidth) }
+    private var fittedRepsWidth: Double { fittedWidth(rows.map { repsText($0.set) }, minimum: repsWidth) }
 
     private var hasRPE: Bool {
         rows.contains { WorkoutNumericInputPolicy.validatedRPE($0.set.rpe) != nil }

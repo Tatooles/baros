@@ -69,7 +69,7 @@ struct ExerciseHistoryRecordsCard: View {
         let unit = weightUnit.fieldLabel.lowercased()
         let weight = WorkoutFormatters.number(weightUnit.displayWeight(fromCanonicalPounds: record.weight) ?? 0)
         let reps = record.reps == 1 ? "1 rep" : "\(record.reps) reps"
-        let date = record.workoutDate.formatted(.dateTime.month(.abbreviated).day())
+        let date = WorkoutFormatters.compactDate(record.workoutDate)
         let number = Text("\(kind == .estimated1RM ? "≈ " : "")\(value)")
             .font(.title.bold().monospacedDigit())
             .foregroundColor(AppTheme.textPrimary)
@@ -80,7 +80,7 @@ struct ExerciseHistoryRecordsCard: View {
                 .foregroundStyle(AppTheme.textSecondary)
             Text("\(number) \(unitLabel)")
                 .fixedSize(horizontal: false, vertical: true)
-            Text("\(weight) × \(record.reps) · \(record.workoutTitle) · \(date)")
+            Text("\(weight) × \(record.reps) · Set \(record.displaySetNumber) · \(record.workoutTitle) · \(date)")
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -138,7 +138,7 @@ private struct StrengthRecordsInformationView: View {
                         Text("Records use matching equipment. Bodyweight and resistance-band exercises are not included. Weight means the load you recorded.")
                     }
                     section("Find the set in your history") {
-                        Text("Badges mark the sets behind your current records. One set can hold both. For equal records, the most recent workout is shown. Records and badges update when your saved workouts change.")
+                        Text("A trophy marks a set behind one or both of your current records. Match the set number and workout date to the record above. For equal records, the most recent workout is shown. Records and trophy markers update when your saved workouts change.")
                     }
                 }
                 .padding(AppTheme.shellPadding)

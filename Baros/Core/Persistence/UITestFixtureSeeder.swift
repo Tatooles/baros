@@ -126,12 +126,14 @@ enum UITestFixtureSeeder {
         case "same-set": performances = [(performances[0].0, [(185, 5), (205, 3), (225, 5)])]
         case "no-estimate": performances = [(performances[0].0, [(185, 12), (205, 12), (225, 12)])]
         case "empty": performances = [(performances[0].0, [(nil, 5)])]
+        case "review-layout": performances = [(Date(timeIntervalSince1970: 1_735_819_200), [(185, 5), (9999.99, 1000), (225, 1)])]
         default: break
         }
         for (date, values) in performances {
             let sets = values.enumerated().map { index, value in
                 LoggedSet(orderIndex: index, weight: value.0, reps: value.1, isCompleted: true)
             }
+            if scenario == "review-layout" { sets[0].isCompleted = false }
             let occurrence = LoggedExercise(
                 orderIndex: 0,
                 exercise: benchPress,
@@ -140,6 +142,19 @@ enum UITestFixtureSeeder {
                 exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
                 sets: sets
             )
+            var occurrences = [occurrence]
+            if scenario == "review-layout" {
+                occurrence.notes = "First occurrence note"
+                occurrences.append(LoggedExercise(
+                    orderIndex: 1,
+                    exercise: benchPress,
+                    exerciseSnapshotName: "Bench Press",
+                    exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                    exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
+                    notes: "Second occurrence note",
+                    sets: [LoggedSet(orderIndex: 0, weight: 225, reps: 1, isCompleted: true)]
+                ))
+            }
             context.insert(WorkoutSession(
                 title: scenario == "same-set" ? "Upper Body — Bench Press, Paused Reps and Accessories" : "Upper Body",
                 startedAt: date,
@@ -148,7 +163,7 @@ enum UITestFixtureSeeder {
                 status: .completed,
                 source: .blank,
                 syncOwnerTokenIdentifier: ownerTokenIdentifier,
-                loggedExercises: [occurrence]
+                loggedExercises: occurrences
             ))
         }
         try context.save()

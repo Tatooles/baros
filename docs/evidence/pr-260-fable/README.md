@@ -16,8 +16,8 @@ The table header and values share weight, multiplication-sign, reps and
 annotation columns so the labels align with the numbers both with and without
 RPE. Session-header controls retain a 44pt touch target aligned at the top;
 centering that target no longer adds space above the date. The records-to-first-
-session gap is 12pt, matching the spacing between session blocks. Record tiles
-are unchanged.
+session gap is 12pt, matching the spacing between session blocks. Record tile styling is retained; source summaries show the original set number
+and full workout date, including the year.
 
 Screenshots are hosted as [PR #260 attachments](https://github.com/Tatooles/baros/pull/260),
 not stored in the repository. The links below open the original images.
@@ -33,11 +33,11 @@ uncompleted set to keep the presentation/eligibility distinction covered.
 | --- | --- |
 | [workout-dark.png](https://github.com/user-attachments/assets/2a8a6b22-e091-4bbb-801e-3a9a1acd3212), [workout-light.png](https://github.com/user-attachments/assets/a1a5efc8-ef12-4903-90e5-647a9f4706d6) | Six-exercise fixture, unboxed hero and first blocks |
 | [workout-six-exercises-block-3-dark.png](https://github.com/user-attachments/assets/aede2341-eb82-4d62-a33e-f3fddcf72c4d), [workout-six-exercises-block-6-dark.png](https://github.com/user-attachments/assets/15542134-12a1-480a-aa1a-5af75b71ebf1) | Further down the six-exercise workout, with and without notes |
-| [exercise-dark.png](https://github.com/user-attachments/assets/b3ece9f7-230c-4f97-87b1-8cac061173ea), [exercise-light.png](https://github.com/user-attachments/assets/bf08dcc5-ad75-4863-9037-805005f03d4f) | Three-session fixture, hero, existing record tiles and first blocks |
-| [exercise-no-rpe-dark.png](https://github.com/user-attachments/assets/fa90d6d8-c626-4256-99c3-dcf787837fc9), [exercise-no-rpe-light.png](https://github.com/user-attachments/assets/ed4b5960-9035-4417-81c1-4afb9c1e8ef5) | Column alignment without RPE, including a record glyph and a 44pt source-workout target |
-| [exercise-three-sessions-dark.png](https://github.com/user-attachments/assets/f73e1bf2-61f6-4c10-a400-1983bc38b779), [exercise-three-sessions-light.png](https://github.com/user-attachments/assets/2f858340-d134-42b1-b946-f38ce2f46eda) | All three session blocks visible together |
-| [workout-accessibility3.png](https://github.com/user-attachments/assets/080afdd5-5461-4c07-b305-b0ad4c53c6a7), [exercise-accessibility3.png](https://github.com/user-attachments/assets/2609d569-48df-4bba-921b-029c25dc2db9) | Large-text headers |
-| [workout-accessibility3-table.png](https://github.com/user-attachments/assets/2aaf64f3-82f4-457a-b185-63eecdb160bd), [exercise-accessibility3-table.png](https://github.com/user-attachments/assets/abf25049-3722-451b-aadd-6947314b2298) | Scrolled large-text blocks and set announcements |
+| [exercise-dark.png](https://github.com/user-attachments/assets/ba443b1a-7bea-41f3-a528-e1dc23f40b32), [exercise-light.png](https://github.com/user-attachments/assets/c6a42060-eebc-4b9c-9668-21737726e7c2) | Three-session fixture, hero, existing record tiles and first blocks |
+| [exercise-no-rpe-dark.png](https://github.com/user-attachments/assets/46f38af0-095f-449f-9e6b-444aad5e9a9f), [exercise-no-rpe-light.png](https://github.com/user-attachments/assets/dea5ae7a-2133-4d64-883c-40cf929c5973) | Column alignment without RPE, including a record glyph and a 44pt source-workout target |
+| [exercise-three-sessions-dark.png](https://github.com/user-attachments/assets/5dc34b1c-6952-4470-a429-54be38891bb4), [exercise-three-sessions-light.png](https://github.com/user-attachments/assets/b9e84e66-f3e0-41b9-aa60-15746e77f025) | All three session blocks visible together |
+| [workout-accessibility3.png](https://github.com/user-attachments/assets/080afdd5-5461-4c07-b305-b0ad4c53c6a7), [exercise-accessibility3.png](https://github.com/user-attachments/assets/b711911c-68bd-48db-900d-1a60e9d8fbbd) | Large-text headers |
+| [workout-accessibility3-table.png](https://github.com/user-attachments/assets/2aaf64f3-82f4-457a-b185-63eecdb160bd), [exercise-accessibility3-table.png](https://github.com/user-attachments/assets/7616e68e-e7e7-4d93-97e7-942023887d46) | Scrolled large-text blocks and set announcements |
 | [workout-mixed-notes-dark.png](https://github.com/user-attachments/assets/8e02efda-42c6-4bf3-9966-ca6041cf76ac) | Two-exercise fixture with only the second exercise noted; no boundary hairline |
 | [quick-history-medium-dark.png](https://github.com/user-attachments/assets/56c8f88d-bf49-4ccc-9ec1-564c5887c5b6), [quick-history-medium-light.png](https://github.com/user-attachments/assets/b8ac0db1-e41e-44bb-b617-b20cadda8375) | Initial medium detent, without scrolling or expanding: heading, first block header and first set row fully visible |
 | [quick-history-compact-heading-accessibility3.png](https://github.com/user-attachments/assets/ef200001-887c-4af8-9cd1-745c3fcc58fe) | Large-text Quick History heading and first block header |
@@ -79,3 +79,31 @@ Alignment/spacing follow-up:
 
 Device build/install/launch log:
 `~/Library/Developer/XcodeBuildMCP/workspaces/codex-ios-app-62beddaa6b92/logs/build_run_device_2026-09-19T17-18-33-100Z_pid41251_7a60922d.log`.
+
+## Review follow-up (September 19, 2026)
+
+All five open review findings are addressed: record source dates include the year,
+source set numbers remain visible, help describes the trophy marker, duplicate
+exercise occurrences are separated by space, and set columns expand for the
+formatted values. Tables use the stacked layout when horizontal space is insufficient.
+
+Six targeted UI tests passed in three sequential batches (2, 3, 1) on
+iPhone 17e / iOS 26.4, scheme `Baros`. These cover prior-year records, original
+numbering with an incomplete-set gap, duplicate occurrences and notes, 1,000 reps,
+fractional pounds and converted kilograms at larger text, trophy help, dark/light
+and accessibility layouts, and Quick History medium-detent fit and navigation.
+No full-suite run or new physical-device install was performed for this follow-up.
+Eight Exercise History images above were refreshed as GitHub attachments.
+
+Additional review evidence:
+
+- [review-long-values-pounds.png](https://github.com/user-attachments/assets/d3705035-87c9-4399-9fed-0db2b360d5d1)
+- [review-long-values-kilograms.png](https://github.com/user-attachments/assets/e2750b67-124b-417c-9c16-e786a7d31ba5)
+- [review-record-sources.png](https://github.com/user-attachments/assets/29f8c1b5-b9ce-4403-b63c-11051299f369)
+- [review-trophy-help.png](https://github.com/user-attachments/assets/04194ac6-082b-4531-8d48-478048c0c1e6)
+
+Result bundles (under the workspace result-bundles directory above):
+
+- `test_sim_2026-09-19T19-29-31-419Z_pid26339_48a9f648.xcresult`: 2 passed.
+- `test_sim_2026-09-19T19-31-25-144Z_pid26339_f3df4cc0.xcresult`: 3 passed.
+- `test_sim_2026-09-19T19-34-58-445Z_pid26339_d6dd27b0.xcresult`: 1 passed.

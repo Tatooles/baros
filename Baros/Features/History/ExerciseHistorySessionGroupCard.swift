@@ -111,7 +111,7 @@ struct ExerciseHistorySessionGroupCard: View {
 
     private var loggedExerciseEntries: some View {
         VStack(spacing: 16) {
-            ForEach(Array(group.loggedExerciseEntries.enumerated()), id: \.element.id) { index, entry in
+            ForEach(group.loggedExerciseEntries) { entry in
                 VStack(alignment: .leading, spacing: 8) {
                     if entry.showsIdentity(comparedTo: headingIdentity) {
                         entryIdentity(entry.displayIdentity)
@@ -129,11 +129,6 @@ struct ExerciseHistorySessionGroupCard: View {
                     if showsExerciseNotes {
                         ExerciseHistoryNoteBlock(note: entry.exerciseNotes)
                     }
-                }
-
-                if index < group.loggedExerciseEntries.count - 1 {
-                    Divider()
-                        .overlay(AppTheme.subtleBorder)
                 }
             }
         }

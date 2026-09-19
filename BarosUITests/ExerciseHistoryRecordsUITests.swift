@@ -22,6 +22,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         info.tap()
         XCTAssertTrue(app.navigationBars["About strength records"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["The estimate does not account for effort."].exists)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "A trophy marks a set")).firstMatch.exists)
         attachScreenshot(named: "Strength records explanation", app: app)
         app.buttons["Done"].tap()
 
@@ -143,7 +144,40 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         )).count, 2)
     }
 
-    private func openRecords(extraArguments: [String] = []) -> XCUIApplication {
+    func testLongValuesAndDuplicateOccurrencesPreserveRecordSourceContext() {
+        for (unit, size) in [("pounds", "UICTContentSizeCategoryL"), ("kilograms", "UICTContentSizeCategoryXXXL")] {
+            let app = openRecords(extraArguments: [
+                "--uitest-strength-records-scenario", "review-layout",
+                "-UIPreferredContentSizeCategoryName", size,
+            ], kilograms: unit == "kilograms")
+            let record = app.descendants(matching: .any)["ExerciseRecord-heaviestRep"]
+            XCTAssertTrue(record.waitForExistence(timeout: 5))
+            XCTAssertTrue(record.label.contains("Set 2,"))
+            XCTAssertTrue(record.label.contains("2025"))
+            attachScreenshot(named: "review-record-source-\(unit)", app: app)
+
+            let values = app.descendants(matching: .any).matching(NSPredicate(
+                format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"
+            ))
+            let longValue = values.matching(NSPredicate(format: "label CONTAINS %@", "1000 reps")).firstMatch
+            for _ in 0..<8 where !longValue.isHittable { app.swipeUp() }
+            XCTAssertTrue(longValue.isHittable)
+            XCTAssertTrue(longValue.label.hasPrefix("Set 2,"))
+            XCTAssertTrue(longValue.label.contains(unit))
+            XCTAssertGreaterThanOrEqual(longValue.frame.minX, 32)
+            XCTAssertLessThanOrEqual(longValue.frame.maxX, app.frame.maxX - 32)
+            attachScreenshot(named: "review-long-values-\(unit)", app: app)
+
+            let secondNote = app.staticTexts["Second occurrence note"]
+            for _ in 0..<8 where !secondNote.isHittable { app.swipeUp() }
+            XCTAssertTrue(secondNote.isHittable)
+            XCTAssertEqual(values.count, 3)
+            attachScreenshot(named: "review-duplicate-occurrences-\(unit)", app: app)
+            app.terminate()
+        }
+    }
+
+    private func openRecords(extraArguments: [String] = [], kilograms: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "--uitest-reset-persistent-store", "--uitest-in-memory-store",
@@ -151,6 +185,13 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             "--uitest-skip-first-run-experience", "--uitest-seed-strength-records",
         ] + extraArguments
         app.launch()
+        if kilograms {
+            app.buttons["ProfileTab"].tap()
+            app.buttons["ProfileSettingsLink"].tap()
+            let units = app.segmentedControls["WeightUnitPicker"]
+            XCTAssertTrue(units.waitForExistence(timeout: 3))
+            units.buttons["Kilograms"].tap()
+        }
         let history = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "HistoryTab", "History")).firstMatch
         XCTAssertTrue(history.waitForExistence(timeout: 5))
         history.tap()
