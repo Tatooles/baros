@@ -33,7 +33,13 @@ struct HistorySetTable: View {
     }
 
     private func table(stacked: Bool) -> some View {
-        Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 0) {
+        // Measure once for the whole compact table, then reuse the same widths
+        // for its header and every row. The stacked layout does not need them.
+        let widths = (
+            weight: stacked ? weightWidth : fittedWidth(rows.map { weightText($0.set) }, minimum: weightWidth),
+            reps: stacked ? repsWidth : fittedWidth(rows.map { repsText($0.set) }, minimum: repsWidth)
+        )
+        return Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 0) {
             if stacked {
                 Text("\(weightUnit.fieldLabel) × REPS")
                     .font(.caption)
@@ -44,7 +50,7 @@ struct HistorySetTable: View {
                 GridRow {
                     Text("SET").gridColumnAlignment(.leading)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        valueColumns(weight: weightUnit.fieldLabel, reps: "REPS", showsRecord: false, stacked: false)
+                        valueColumns(weight: weightUnit.fieldLabel, reps: "REPS", showsRecord: false, stacked: false, widths: widths)
                         if hasRPE { rpePlaceholder }
                     }
                 }
@@ -60,7 +66,7 @@ struct HistorySetTable: View {
                         Text("Set \(row.number)")
                             .font(.caption)
                             .foregroundStyle(AppTheme.textSecondary)
-                        result(row, stacked: stacked)
+                        result(row, stacked: stacked, widths: widths)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 16)
@@ -75,7 +81,7 @@ struct HistorySetTable: View {
                             .accessibilityHidden(true)
                         // GridRow forwards accessibility modifiers to every cell.
                         // Give the result cell the single complete set announcement.
-                        result(row, stacked: stacked)
+                        result(row, stacked: stacked, widths: widths)
                             .fixedSize(horizontal: true, vertical: true)
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel(accessibilityLabel(row))
@@ -95,7 +101,7 @@ struct HistorySetTable: View {
         .font(.body.monospacedDigit())
     }
 
-    private func result(_ row: Row, stacked: Bool) -> some View {
+    private func result(_ row: Row, stacked: Bool, widths: (weight: Double, reps: Double)) -> some View {
         let layout = stacked
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
@@ -104,7 +110,8 @@ struct HistorySetTable: View {
                 weight: weightText(row.set),
                 reps: repsText(row.set),
                 showsRecord: !row.recordKinds.isEmpty,
-                stacked: stacked
+                stacked: stacked,
+                widths: widths
             )
             .foregroundStyle(AppTheme.textPrimary)
             if let rpe = WorkoutNumericInputPolicy.validatedRPE(row.set.rpe) {
@@ -121,7 +128,7 @@ struct HistorySetTable: View {
 
     // Header and data use the same columns, including space reserved for record/RPE annotations.
     @ViewBuilder
-    private func valueColumns(weight: String, reps: String, showsRecord: Bool, stacked: Bool) -> some View {
+    private func valueColumns(weight: String, reps: String, showsRecord: Bool, stacked: Bool, widths: (weight: Double, reps: Double)) -> some View {
         if stacked {
             let separator = Text(" × ").foregroundColor(AppTheme.textSecondary)
             let trophy = showsRecord
@@ -135,21 +142,21 @@ struct HistorySetTable: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            compactValueColumns(weight: weight, reps: reps, showsRecord: showsRecord)
+            compactValueColumns(weight: weight, reps: reps, showsRecord: showsRecord, widths: widths)
         }
     }
 
-    private func compactValueColumns(weight: String, reps: String, showsRecord: Bool) -> some View {
+    private func compactValueColumns(weight: String, reps: String, showsRecord: Bool, widths: (weight: Double, reps: Double)) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(weight)
                 .fixedSize()
-                .frame(width: fittedWeightWidth, alignment: .trailing)
+                .frame(width: widths.weight, alignment: .trailing)
             Text("×")
                 .foregroundStyle(AppTheme.textSecondary)
                 .frame(width: separatorWidth)
             Text(reps)
                 .fixedSize()
-                .frame(width: fittedRepsWidth, alignment: .trailing)
+                .frame(width: widths.reps, alignment: .trailing)
             Image(systemName: "trophy.fill")
                 .font(.caption)
                 .foregroundStyle(AppTheme.brandAccentForeground)
@@ -164,9 +171,6 @@ struct HistorySetTable: View {
         let font = UIFont.monospacedDigitSystemFont(ofSize: valuePointSize, weight: .regular)
         return max(minimum, values.map { ceil(($0 as NSString).size(withAttributes: [.font: font]).width) }.max() ?? 0)
     }
-
-    private var fittedWeightWidth: Double { fittedWidth(rows.map { weightText($0.set) }, minimum: weightWidth) }
-    private var fittedRepsWidth: Double { fittedWidth(rows.map { repsText($0.set) }, minimum: repsWidth) }
 
     private var hasRPE: Bool {
         rows.contains { WorkoutNumericInputPolicy.validatedRPE($0.set.rpe) != nil }

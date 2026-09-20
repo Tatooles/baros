@@ -171,3 +171,16 @@ long-value tests. Both targeted tests passed, including accessibility sizes and
 converted kilograms; six Exercise History attachments were refreshed.
 
 - `test_sim_2026-09-20T04-11-33-567Z_pid83503_767276f2.xcresult`: 2 passed.
+
+## Shared column measurement cleanup (September 20, 2026)
+
+Compact set tables now measure weight and rep column widths once per table
+construction and share those values with the header and rows. The measurement
+formula, formatting and layout are unchanged; stacked tables skip measurement.
+
+Four targeted UI tests passed in two sequential batches on iPhone 17e:
+dark/light/accessibility detail layouts, long values in pounds/kilograms,
+maximum values at the largest accessibility size, and medium-detent Quick History.
+
+- `test_sim_2026-09-20T05-57-28-955Z_pid51585_a4bbf61f.xcresult`: 2 passed.
+- `test_sim_2026-09-20T06-00-43-713Z_pid51585_df736246.xcresult`: 2 passed.
