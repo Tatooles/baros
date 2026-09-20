@@ -39,15 +39,15 @@ struct ExerciseHistoryRecordsCard: View {
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
                     : AnyLayout(HStackLayout(alignment: .top, spacing: 8))
                 layout {
-                    recordTile { journalRecord(heaviest, kind: .heaviestRep) }
-                    recordTile {
-                        if let estimated = records.estimated1RM {
-                            journalRecord(estimated, kind: .estimated1RM)
-                        } else {
-                            estimatedRecord
-                        }
+                    journalRecord(heaviest, kind: .heaviestRep)
+                    if let estimated = records.estimated1RM {
+                        journalRecord(estimated, kind: .estimated1RM)
+                    } else {
+                        recordTile { estimatedRecord }
                     }
                 }
+                // Size the row to its tallest tile, then let both backgrounds fill it.
+                .fixedSize(horizontal: false, vertical: true)
             } else {
                 recordTile {
                     emptyState(title: "No records yet", message: "Requires a completed set with weight and reps in a finished workout.")
@@ -58,7 +58,7 @@ struct ExerciseHistoryRecordsCard: View {
 
     private func recordTile<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: dynamicTypeSize.isAccessibilitySize ? nil : .infinity, alignment: .topLeading)
             .padding(16)
             .background(AppTheme.groupedSurface, in: RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
     }
@@ -74,16 +74,18 @@ struct ExerciseHistoryRecordsCard: View {
             .font(.title.bold().monospacedDigit())
             .foregroundColor(AppTheme.textPrimary)
         let unitLabel = Text(unit).font(.caption).foregroundColor(AppTheme.textSecondary)
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(kind.title)
-                .font(.caption)
-                .foregroundStyle(AppTheme.textSecondary)
-            Text("\(number) \(unitLabel)")
-                .fixedSize(horizontal: false, vertical: true)
-            Text("\(weight) × \(record.reps) · Set \(record.displaySetNumber) · \(record.workoutTitle) · \(date)")
-                .font(.caption)
-                .foregroundStyle(AppTheme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+        return recordTile {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(kind.title)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                Text("\(number) \(unitLabel)")
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("\(weight) × \(record.reps) · Set \(record.displaySetNumber) · \(record.workoutTitle) · \(date)")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(

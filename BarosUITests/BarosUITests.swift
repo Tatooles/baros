@@ -907,6 +907,12 @@ final class BarosUITests: XCTestCase {
             let estimate = app.descendants(matching: .any)["ExerciseRecord-estimated1RM"]
             XCTAssertTrue(estimate.waitForExistence(timeout: 5))
             XCTAssertTrue(estimate.label.contains("215.83 lbs"))
+            if !accessible {
+                let heaviest = app.descendants(matching: .any)["ExerciseRecord-heaviestRep"]
+                XCTAssertEqual(heaviest.frame.width, estimate.frame.width, accuracy: 1)
+                XCTAssertEqual(heaviest.frame.height, estimate.frame.height, accuracy: 1)
+                XCTAssertEqual(heaviest.frame.minY, estimate.frame.minY, accuracy: 1)
+            }
             let sources = app.buttons.matching(NSPredicate(
                 format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-"
             ))

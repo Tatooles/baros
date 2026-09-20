@@ -33,9 +33,9 @@ uncompleted set to keep the presentation/eligibility distinction covered.
 | --- | --- |
 | [workout-dark.png](https://github.com/user-attachments/assets/2a8a6b22-e091-4bbb-801e-3a9a1acd3212), [workout-light.png](https://github.com/user-attachments/assets/a1a5efc8-ef12-4903-90e5-647a9f4706d6) | Six-exercise fixture, unboxed hero and first blocks |
 | [workout-six-exercises-block-3-dark.png](https://github.com/user-attachments/assets/aede2341-eb82-4d62-a33e-f3fddcf72c4d), [workout-six-exercises-block-6-dark.png](https://github.com/user-attachments/assets/15542134-12a1-480a-aa1a-5af75b71ebf1) | Further down the six-exercise workout, with and without notes |
-| [exercise-dark.png](https://github.com/user-attachments/assets/0d48a384-1ed6-4dcd-8d06-96a438c23e7a), [exercise-light.png](https://github.com/user-attachments/assets/933b8a0d-3683-49af-b38f-d62dcd2aaecc) | Three-session fixture, hero, existing record tiles and first blocks |
+| [exercise-dark.png](https://github.com/user-attachments/assets/182b10a2-0a18-443e-a3f5-8789882c8dae), [exercise-light.png](https://github.com/user-attachments/assets/6b1d8a43-2cbe-4946-940f-c9e61789fd96) | Three-session fixture, hero, existing record tiles and first blocks |
 | [exercise-no-rpe-dark.png](https://github.com/user-attachments/assets/46f38af0-095f-449f-9e6b-444aad5e9a9f), [exercise-no-rpe-light.png](https://github.com/user-attachments/assets/dea5ae7a-2133-4d64-883c-40cf929c5973) | Column alignment without RPE, including a record glyph and a 44pt source-workout target |
-| [exercise-three-sessions-dark.png](https://github.com/user-attachments/assets/ac4937f2-77d2-431b-9551-92aee8650d57), [exercise-three-sessions-light.png](https://github.com/user-attachments/assets/c06a77eb-525c-4e96-8d33-c4058e1f7a37) | All three session blocks visible together |
+| [exercise-three-sessions-dark.png](https://github.com/user-attachments/assets/05597c9e-3bdc-4900-8e83-a2f678cc4b77), [exercise-three-sessions-light.png](https://github.com/user-attachments/assets/ca771fee-4602-4826-93b3-1267b76ed015) | All three session blocks visible together |
 | [workout-accessibility3.png](https://github.com/user-attachments/assets/080afdd5-5461-4c07-b305-b0ad4c53c6a7), [exercise-accessibility3.png](https://github.com/user-attachments/assets/795b3db1-dfb6-414e-b0de-6a8ece79f632) | Large-text headers |
 | [workout-accessibility3-table.png](https://github.com/user-attachments/assets/2aaf64f3-82f4-457a-b185-63eecdb160bd), [exercise-accessibility3-table.png](https://github.com/user-attachments/assets/92cd39e8-b23e-44b8-b47f-fa9a1f1c5a3d) | Scrolled large-text blocks and set announcements |
 | [workout-mixed-notes-dark.png](https://github.com/user-attachments/assets/8e02efda-42c6-4bf3-9966-ca6041cf76ac) | Two-exercise fixture with only the second exercise noted; no boundary hairline |
@@ -114,3 +114,29 @@ six affected Exercise History attachments were refreshed. Longer estimates can
 move their unit to another line in the existing record tile.
 
 - `test_sim_2026-09-19T19-48-50-506Z_pid26339_5f548efd.xcresult`: 1 passed.
+
+
+## Equal record tiles and scaled RPE (September 19, 2026)
+
+Side-by-side record tiles now share the height of the taller tile, with equal
+widths and top-aligned content. Fractional estimates and longer source summaries
+can wrap without leaving mismatched containers. Accessibility sizes retain the
+full-width vertical arrangement. RPE annotations and their reserved column width
+now scale together with caption text; `@ 10` and `@ 9.5` remain on one line at XXXL.
+
+Five targeted UI tests passed across sequential batches on iPhone 17e / iOS 26.4.1:
+dark/light/accessibility detail layouts, medium-detent Quick History, largest
+standard-text RPE, sparse/no-estimate states, and long values in pounds/kilograms.
+The detail and long-value tests assert equal tile widths, heights and top edges.
+The long-value test initially encountered empty History before opening a detail;
+an isolated rerun passed both units without changing production or fixture code.
+
+- `test_sim_2026-09-20T00-36-39-090Z_pid38864_ca80633d.xcresult`: 2 passed.
+- `test_sim_2026-09-20T00-39-13-285Z_pid38864_829be628.xcresult`: RPE and sparse states passed; long-value fixture navigation failed.
+- `test_sim_2026-09-20T00-41-48-355Z_pid38864_76d6b788.xcresult`: isolated long-value test passed.
+
+Four affected Exercise History screenshots above were refreshed as GitHub
+attachments. [Largest standard-text RPE screenshot](https://github.com/user-attachments/assets/2d980f26-3b83-4edc-aacb-6a9f4579bac7).
+Screenshots remain outside the repository. The same build installed and launched
+on Kevin's iPhone 17 / iOS 27.0. Device log:
+`build_run_device_2026-09-20T00-42-49-731Z_pid38864_9a3e1fff.log`.

@@ -19,6 +19,7 @@ struct HistorySetTable: View {
     @ScaledMetric(relativeTo: .body) private var repsWidth = 28.0
     @ScaledMetric(relativeTo: .body) private var separatorWidth = 12.0
     @ScaledMetric(relativeTo: .body) private var valuePointSize = 17.0
+    @ScaledMetric(relativeTo: .caption) private var rpeWidth = 40.0
 
     var body: some View {
         if dynamicTypeSize.isAccessibilitySize {
@@ -110,7 +111,8 @@ struct HistorySetTable: View {
                 Text("@ \(WorkoutFormatters.number(rpe))")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(AppTheme.textTertiary)
-                    .frame(width: stacked ? nil : 40, alignment: .trailing)
+                    .fixedSize()
+                    .frame(width: stacked ? nil : rpeWidth, alignment: .trailing)
             } else if !stacked && hasRPE {
                 rpePlaceholder
             }
@@ -152,7 +154,7 @@ struct HistorySetTable: View {
     }
 
     private var rpePlaceholder: some View {
-        Color.clear.frame(width: 40, height: 1).accessibilityHidden(true)
+        Color.clear.frame(width: rpeWidth, height: 1).accessibilityHidden(true)
     }
 
     private func weightText(_ set: LoggedSet) -> String {

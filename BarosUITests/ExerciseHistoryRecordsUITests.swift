@@ -154,6 +154,10 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             XCTAssertTrue(record.waitForExistence(timeout: 5))
             XCTAssertTrue(record.label.contains("Set 2,"))
             XCTAssertTrue(record.label.contains("2025"))
+            let estimate = app.descendants(matching: .any)["ExerciseRecord-estimated1RM"]
+            XCTAssertEqual(record.frame.width, estimate.frame.width, accuracy: 1)
+            XCTAssertEqual(record.frame.height, estimate.frame.height, accuracy: 1)
+            XCTAssertEqual(record.frame.minY, estimate.frame.minY, accuracy: 1)
             attachScreenshot(named: "review-record-source-\(unit)", app: app)
 
             let values = app.descendants(matching: .any).matching(NSPredicate(
@@ -175,6 +179,25 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             attachScreenshot(named: "review-duplicate-occurrences-\(unit)", app: app)
             app.terminate()
         }
+    }
+
+    func testRPEFitsAtLargestStandardTextSize() {
+        let app = openRecords(extraArguments: [
+            "--uitest-strength-records-scenario", "rpe-layout",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXXL",
+        ])
+        let values = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"
+        ))
+        for rpe in ["RPE 10", "RPE 9.5"] {
+            let row = values.matching(NSPredicate(format: "label CONTAINS %@", rpe)).firstMatch
+            for _ in 0..<8 where !row.isHittable { app.swipeUp() }
+            XCTAssertTrue(row.isHittable)
+            XCTAssertGreaterThanOrEqual(row.frame.minX, 32)
+            XCTAssertLessThanOrEqual(row.frame.maxX, app.frame.maxX - 32)
+            XCTAssertLessThan(row.frame.height, 40, "This fixture should keep the value and RPE on one line at XXXL.")
+        }
+        attachScreenshot(named: "history-rpe-largest-standard-text", app: app)
     }
 
     private func openRecords(extraArguments: [String] = [], kilograms: Bool = false) -> XCUIApplication {
