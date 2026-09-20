@@ -8,6 +8,76 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testFailedSetCompletionCanRetryWithoutLosingTypedWeight() {
+        let app = makeApp(extraArguments: ["--uitest-fail-active-set-save-once"])
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        let weight = app.textFields["SetWeightField-0-0"]
+        weight.tap()
+        weight.typeText("120")
+        app.buttons["SetCompletionButton-0-0"].tap()
+        let alert = app.alerts["Couldn't save this edit"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        let failure = XCTAttachment(screenshot: app.screenshot())
+        failure.name = "Set save failed - Retry or Discard"
+        failure.lifetime = .keepAlways
+        add(failure)
+        alert.buttons["Retry"].tap()
+        XCTAssertTrue(waitForAbsence(alert, timeout: 3))
+        XCTAssertEqual(weight.value as? String, "120")
+        XCTAssertEqual(app.buttons["SetCompletionButton-0-0"].label, "Mark set incomplete")
+        let recovered = XCTAttachment(screenshot: app.screenshot())
+        recovered.name = "Retry saved the intended set"
+        recovered.lifetime = .keepAlways
+        add(recovered)
+    }
+
+    @MainActor
+    func testRepeatedSetSaveFailureCanDiscardAndLeaveAfterBackgrounding() {
+        let app = makeApp(extraArguments: ["--uitest-fail-active-set-save-always"])
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        let weight = app.textFields["SetWeightField-0-0"]
+        weight.tap()
+        weight.typeText("120")
+        app.buttons["FinishWorkoutButton"].tap()
+        let alert = app.alerts["Couldn't save this edit"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        alert.buttons["Retry"].tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        alert.buttons["Discard Edit"].tap()
+        XCTAssertTrue(waitForAbsence(alert, timeout: 3))
+        XCTAssertNotEqual(weight.value as? String, "120")
+        XCTAssertFalse(app.buttons["KeepGoingButton"].exists)
+        minimizeActiveWorkout(in: app)
+        app.buttons["ActiveWorkoutAccessory"].tap()
+        XCTAssertTrue(weight.waitForExistence(timeout: 3))
+        XCTAssertNotEqual(weight.value as? String, "120")
+        XCTAssertFalse(alert.exists)
+    }
+
+    @MainActor
+    func testNativeMinimizeSaveFailureRestoresRecoverySurface() {
+        let app = makeApp(extraArguments: ["--uitest-fail-active-set-save-always"])
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        let weight = app.textFields["SetWeightField-0-0"]
+        weight.tap()
+        weight.typeText("120")
+        // Do not dismiss the keyboard first: the grabber initiates the failed blur.
+        let grabber = app.buttons["Sheet Grabber"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        grabber.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92)))
+        let alert = app.alerts["Couldn't save this edit"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Discard Edit"].tap()
+        XCTAssertTrue(waitForAbsence(alert, timeout: 3))
+        minimizeActiveWorkout(in: app)
+    }
+
+    @MainActor
     func testWorkoutHistoryMetricsStayOnSingleLinesAtAccessibilitySize() {
         let app = makeApp(
             extraArguments: [

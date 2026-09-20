@@ -17,6 +17,7 @@ struct WorkoutSessionView: View {
     @Bindable var engine: ActiveWorkoutEngine
     @Bindable var navigationState: AppNavigationState
     let onMinimizePreparationChanged: ((() -> Void)?) -> Void
+    @State private var showsSetSaveFailure = false
     @State private var isFinishSheetPresented = false
     @State private var isReorderExercisesPresented = false
     @State private var isAddExercisePresented = false
@@ -122,14 +123,15 @@ struct WorkoutSessionView: View {
                             previousSets: cachedPreviousSets[loggedExercise.id] ?? [],
                             canReorder: canReorderExercises,
                             viewHistory: {
-                                resignFocus()
+                                guard prepareForPresentation() else { return }
                                 selectedHistoryExercise = loggedExercise
                             },
                             onSwapExercise: {
-                                resignFocus()
+                                guard prepareForPresentation() else { return }
                                 swappingLoggedExercise = loggedExercise
                             },
                             onReorderExercises: {
+                                guard prepareForPresentation() else { return }
                                 isReorderExercisesPresented = true
                             },
                             onEditRPE: { set in
@@ -142,6 +144,7 @@ struct WorkoutSessionView: View {
                     }
 
                     Button {
+                        guard prepareForPresentation() else { return }
                         isAddExercisePresented = true
                     } label: {
                         Label("Add Exercise", systemImage: "plus")
@@ -163,7 +166,7 @@ struct WorkoutSessionView: View {
                 ActiveWorkoutMetricsHeader(session: session) {
                     // Flush any in-progress field edit through the commit path
                     // before the finish sheet reads the model.
-                    resignFocus()
+                    guard prepareForPresentation() else { return }
                     isFinishSheetPresented = true
                 }
                 .equatable()
@@ -180,6 +183,7 @@ struct WorkoutSessionView: View {
                 if newPhase != .active, focusedField != nil {
                     resignFocus()
                 }
+                showsSetSaveFailure = newPhase == .active && engine.hasPendingSetSave
             }
             .onChange(of: isAddExercisePresented) { _, isPresented in
                 if isPresented {
@@ -199,6 +203,12 @@ struct WorkoutSessionView: View {
                     reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
                 )
 
+                if engine.hasPendingSetSave {
+                    focusTransitionCoordinator.cancelPendingReveal()
+                    focusTransitionCoordinator.synchronizeFocus(nil)
+                    focusedField = nil
+                    scrollAnimator.cancel()
+                }
                 if RPEEditingFocusPolicy.shouldReset(editingSetID: rpeEditingSetID, newFocusedField: newField) {
                     rpeEditingSetID = nil
                     rpeEditingSourceField = nil
@@ -226,23 +236,32 @@ struct WorkoutSessionView: View {
                                         in: cachedFocusOrder,
                                         offset: 1
                                     )
+                                    guard !engine.hasPendingSetSave else { return }
                                     if let set = editingSet {
                                         let preparedValues = setInputRegistry.prepareSetValues(
                                             for: sourceField,
                                             completesSet: value != nil
                                         ) ?? .init(weight: set.weight, reps: set.reps)
                                         withAnimation(.easeInOut(duration: 0.2)) {
-                                            try? RPEChipSelectionAction.apply(
-                                                value: value,
-                                                preparedValues: preparedValues,
-                                                to: set,
-                                                engine: engine,
-                                                context: modelContext
-                                            )
+                                            do {
+                                                try RPEChipSelectionAction.apply(
+                                                    value: value,
+                                                    preparedValues: preparedValues,
+                                                    to: set,
+                                                    engine: engine,
+                                                    context: modelContext
+                                                )
+                                            } catch {
+                                                // The engine retains the action and the alert offers recovery.
+                                            }
                                         }
                                     }
                                     rpeEditingSetID = nil
                                     rpeEditingSourceField = nil
+                                    guard !engine.hasPendingSetSave else {
+                                        resignFocus()
+                                        return
+                                    }
                                     transitionFocus(to: nextField, scrollProxy: scrollProxy)
                                 }
                             )
@@ -309,6 +328,26 @@ struct WorkoutSessionView: View {
                 }
                 .frame(width: 0, height: 0)
             }
+        }
+        .disabled(engine.hasPendingSetSave)
+        .alert("Couldn't save this edit", isPresented: $showsSetSaveFailure) {
+            Button("Retry") {
+                do {
+                    try engine.retrySetSave(in: session, context: modelContext)
+                } catch {
+                    // A new failure ID presents the same choices after this alert dismisses.
+                }
+            }
+            .disabled(!engine.canRetrySetSave(in: session))
+            Button("Discard Edit", role: .destructive) {
+                engine.discardSetSave()
+            }
+        } message: {
+            Text("Retry saving, or discard this edit to continue. Your previously saved sets will remain.")
+        }
+        .onChange(of: engine.pendingSetSaveID, initial: true) { _, failureID in
+            if failureID != nil { resignFocus() }
+            showsSetSaveFailure = failureID != nil && scenePhase == .active
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
@@ -452,9 +491,7 @@ struct WorkoutSessionView: View {
             get: { collapsedExerciseIDs.contains(loggedExercise.id) },
             set: { isCollapsed in
                 if isCollapsed {
-                    if focusedField == .exerciseNotes(loggedExercise.id) {
-                        resignFocus()
-                    }
+                    guard prepareForPresentation() else { return }
                     revealedExerciseNoteIDs.remove(loggedExercise.id)
                     collapsedExerciseIDs.insert(loggedExercise.id)
                 } else {
@@ -484,6 +521,7 @@ struct WorkoutSessionView: View {
             offset: offset,
             commit: setInputRegistry.commit,
             assign: { target in
+                guard !engine.hasPendingSetSave else { resignFocus(); return }
                 if !scrollAnimator.reveal(target, anchor: Self.focusRevealAnchor) {
                     withAnimation(.easeInOut(duration: 0.25)) {
                         scrollProxy.scrollTo(target, anchor: Self.focusRevealAnchor)
@@ -499,9 +537,14 @@ struct WorkoutSessionView: View {
         focusTransitionCoordinator.transition(
             to: target,
             commit: setInputRegistry.commit,
-            assign: { focusedField = $0 },
+            assign: { focusedField = engine.hasPendingSetSave ? nil : $0 },
             reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
         )
+    }
+
+    private func prepareForPresentation() -> Bool {
+        resignFocus()
+        return !engine.hasPendingSetSave
     }
 
     private func resignFocus() {
@@ -515,6 +558,7 @@ struct WorkoutSessionView: View {
     }
 
     private func revealFocusedField(_ field: WorkoutField, scrollProxy: ScrollViewProxy) {
+        guard !engine.hasPendingSetSave else { return }
         withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
             scrollProxy.scrollTo(field, anchor: Self.focusRevealAnchor)
         }

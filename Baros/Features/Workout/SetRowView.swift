@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct SetRowView: View, @MainActor Equatable {
+    @Environment(SyncScheduler.self) private var syncScheduler
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let set: LoggedSet
@@ -45,6 +46,8 @@ struct SetRowView: View, @MainActor Equatable {
             deleteAccessibilityLabel: "Remove set",
             deleteAccessibilityIdentifier: "DeleteSetButton-\(exerciseIndex)-\(index)"
         ) {
+            setInputRegistry.commit(focusedField.wrappedValue)
+            guard !engine.hasPendingSetSave else { return }
             try? engine.removeSet(set, context: modelContext)
         } content: {
             rowContent
@@ -197,21 +200,28 @@ struct SetRowView: View, @MainActor Equatable {
         .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
     }
 
-    /// Typing stages values in view-local drafts. Focus leave and row
-    /// disappearance persist here; set actions consume drafts before saving
-    /// their prepared values and completion/RPE together, never per keystroke.
-    @discardableResult
-    private func commitDraftsIfNeeded() -> ActiveWorkoutSetInput.Commit {
-        defer { onPreviewChange(nil) }
-        let commit = input.commit(current: inputValues, weightUnit: weightUnit)
-        guard commit.shouldPersist else { return commit }
+    /// Preparation stays local until the engine either saves or retains the
+    /// failed action. Only then release the row's draft, so Discard cannot
+    /// accidentally replay it through a later blur/disappearance callback.
+    private func commitDraftsIfNeeded() {
+        guard !engine.hasPendingSetSave, canEditSet else { return }
+        var preparedInput = input
+        let commit = preparedInput.commit(current: inputValues, weightUnit: weightUnit)
+        if commit.shouldPersist {
+            do {
+                try engine.commitActiveSetDraft(set, values: commit.values, context: modelContext)
+            } catch {
+                // The engine restored the model and owns the attempted values for Retry.
+            }
+        }
+        input = preparedInput
+        onPreviewChange(nil)
+    }
 
-        _ = try? engine.commitActiveSetDraft(
-            set,
-            values: commit.values,
-            context: modelContext
-        )
-        return commit
+    private var canEditSet: Bool {
+        guard !set.isDeleted, let session = set.loggedExercise?.session else { return false }
+        return !WorkoutSession.visibleActiveSessions(from: [session],
+            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier).isEmpty
     }
 
     private func previousColumn(accessibilityLabelIncludesContext: Bool = true) -> some View {
@@ -380,16 +390,20 @@ struct SetRowView: View, @MainActor Equatable {
     }
 
     private func completeButtonTapped() {
+        guard !engine.hasPendingSetSave, canEditSet else { return }
         let preparedValues = prepareValuesForSetAction(completesSet: !set.isCompleted)
-        // Preparation consumes the drafts before the later focus-change commit.
-        clearFocusedFieldForThisSet()
         withAnimation(.easeInOut(duration: 0.2)) {
-            try? engine.toggleSetCompletion(
-                set,
-                preparedValues: preparedValues,
-                context: modelContext
-            )
+            do {
+                try engine.toggleSetCompletion(
+                    set,
+                    preparedValues: preparedValues,
+                    context: modelContext
+                )
+            } catch {
+                // The pending action is presented by WorkoutSessionView.
+            }
         }
+        clearFocusedFieldForThisSet()
     }
 
     private func prepareValuesForSetAction(
