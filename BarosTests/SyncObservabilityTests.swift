@@ -4,6 +4,18 @@ import XCTest
 
 @MainActor
 final class SyncObservabilityTests: XCTestCase {
+    func testSetSaveReportingSuppressesDiskBackedAndInMemoryUIFixtures() {
+        for arguments in [
+            ["Baros", "--uitest-in-memory-store"],
+            ["Baros", "--uitest-force-signed-out-auth"],
+            ["Baros", "--uitest-force-signed-in-auth", "--uitest-reset-app-appearance"],
+        ] {
+            XCTAssertTrue(SentrySetSaveFailureReporter.isTestProcess(arguments: arguments, hasXCTest: false))
+        }
+        XCTAssertTrue(SentrySetSaveFailureReporter.isTestProcess(arguments: ["Baros"], hasXCTest: true))
+        XCTAssertFalse(SentrySetSaveFailureReporter.isTestProcess(arguments: ["Baros"], hasXCTest: false))
+    }
+
     func testInjectedUnitTestFailuresCannotSendEvenWithProductionSentryEnabled() {
         let info: [String: Any] = ["SentryDSN": "https://public@example.com/1",
                                    "SentryEnabled": "YES", "BarosEnvironment": "Production"]

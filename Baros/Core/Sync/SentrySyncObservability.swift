@@ -460,10 +460,14 @@ enum SentrySetSaveFailureReporter {
         send: (Event) -> Void = { SentrySDK.capture(event: $0) }
     ) {
         guard SentryRuntimeConfiguration(info: info).isEnabled,
-              NSClassFromString("XCTestCase") == nil,
-              !ProcessInfo.processInfo.arguments.contains("--uitest-in-memory-store") else { return }
+              !isTestProcess(arguments: ProcessInfo.processInfo.arguments,
+                             hasXCTest: NSClassFromString("XCTestCase") != nil) else { return }
         // SDK capture queues delivery; recovery never waits for a network request or flush.
         send(makeEvent(failure))
+    }
+
+    static func isTestProcess(arguments: [String], hasXCTest: Bool) -> Bool {
+        hasXCTest || arguments.contains { $0.hasPrefix("--uitest-") }
     }
 
     static func makeEvent(_ failure: ActiveWorkoutSetSaveFailure) -> Event {
