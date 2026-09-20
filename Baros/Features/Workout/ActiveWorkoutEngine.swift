@@ -21,9 +21,21 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
 
 @Observable
 final class ActiveWorkoutEngine {
+    @ObservationIgnored private let reportSetSaveFailure: (ActiveWorkoutSetSaveFailure) -> Void
+
+    init(reportSetSaveFailure: @escaping (ActiveWorkoutSetSaveFailure) -> Void = { SentrySetSaveFailureReporter.capture($0) }) {
+        self.reportSetSaveFailure = reportSetSaveFailure
+    }
+
     var activeSessionID: UUID?
     var isStartingWorkout = false
     var lastErrorMessage: String?
+    private var pendingSetSave: PendingSetSave?
+    #if DEBUG
+    @ObservationIgnored private var injectedSetSaveFailureCount = 0
+    #endif
+    var hasPendingSetSave: Bool { pendingSetSave != nil }
+    var pendingSetSaveID: UUID? { pendingSetSave?.id }
 
     func loadActiveSession(ownerTokenIdentifier: String? = nil, context: ModelContext) {
         do {
@@ -303,25 +315,16 @@ final class ActiveWorkoutEngine {
         _ set: LoggedSet,
         values: ActiveWorkoutSetInput.Values,
         context: ModelContext,
-        now: Date = .now
+        now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws -> Bool {
+        guard !hasPendingSetSave else { return false }
         let weight = WorkoutNumericInputPolicy.validatedWeight(values.weight)
         let reps = WorkoutNumericInputPolicy.validatedReps(values.reps)
-        var didChange = false
-
-        if WorkoutNumericInputPolicy.validatedWeight(set.weight) != weight {
-            set.weight = weight
-            didChange = true
-        }
-        if WorkoutNumericInputPolicy.validatedReps(set.reps) != reps {
-            set.reps = reps
-            didChange = true
-        }
-
-        guard didChange else { return false }
-
-        set.touchActiveDraft(now: now)
-        try context.save()
+        guard weight != WorkoutNumericInputPolicy.validatedWeight(set.weight)
+            || reps != WorkoutNumericInputPolicy.validatedReps(set.reps) else { return false }
+        try saveSetAction(.draft(.init(weight: weight, reps: reps)), for: set,
+                          context: context, now: now, save: save)
         return true
     }
 
@@ -333,27 +336,8 @@ final class ActiveWorkoutEngine {
         now: Date = .now,
         save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws {
-        let rpe = WorkoutNumericInputPolicy.validatedRPE(rpe)
-        let weight = WorkoutNumericInputPolicy.validatedWeight(preparedValues.weight)
-        let reps = WorkoutNumericInputPolicy.validatedReps(preparedValues.reps)
-        let completesSet = rpe != nil && !set.isCompleted
-        let valuesChanged = WorkoutNumericInputPolicy.validatedWeight(set.weight) != weight
-            || WorkoutNumericInputPolicy.validatedReps(set.reps) != reps
-            || WorkoutNumericInputPolicy.validatedRPE(set.rpe) != rpe
-
-        guard valuesChanged || completesSet else { return }
-
-        set.weight = weight
-        set.reps = reps
-        set.rpe = rpe
-        if completesSet {
-            set.isCompleted = true
-            set.completedAt = now
-            set.touch(now: now)
-        } else {
-            set.touchActiveDraft(now: now)
-        }
-        try save(context)
+        guard !hasPendingSetSave else { return }
+        try saveSetAction(.rpe(preparedValues, rpe), for: set, context: context, now: now, save: save)
     }
 
     func fillSetFromPrevious(
@@ -379,14 +363,171 @@ final class ActiveWorkoutEngine {
         now: Date = .now,
         save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws {
-        if let preparedValues {
-            set.weight = WorkoutNumericInputPolicy.validatedWeight(preparedValues.weight)
-            set.reps = WorkoutNumericInputPolicy.validatedReps(preparedValues.reps)
+        guard !hasPendingSetSave else { return }
+        try saveSetAction(
+            .completion(preparedValues ?? .init(weight: set.weight, reps: set.reps), !set.isCompleted),
+            for: set, context: context, now: now, save: save
+        )
+    }
+
+    func canRetrySetSave(in session: WorkoutSession?) -> Bool {
+        guard let pendingSetSave, pendingSetSave.belongs(to: session) else { return false }
+        let set = pendingSetSave.set
+        return !set.isDeleted && set.modelContext != nil
+            && set.loggedExercise?.isDeleted == false
+            && set.loggedExercise?.session?.id == session?.id
+    }
+
+    func clearSetSaveIfInaccessible(in session: WorkoutSession?) {
+        guard let pendingSetSave, !pendingSetSave.belongs(to: session) else { return }
+        discardSetSave()
+    }
+
+    func retrySetSave(
+        in session: WorkoutSession?,
+        context: ModelContext,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        clearSetSaveIfInaccessible(in: session)
+        guard canRetrySetSave(in: session), let pendingSetSave else { return }
+        try saveSetAction(pendingSetSave.action, for: pendingSetSave.set, context: context,
+                          now: pendingSetSave.date, save: save)
+    }
+
+    func discardSetSave() {
+        // The failed attempt was already restored. Leaving must never need a save.
+        guard hasPendingSetSave else { return }
+        pendingSetSave = nil
+    }
+
+    private enum SetSaveAction {
+        case draft(ActiveWorkoutSetInput.Values)
+        case completion(ActiveWorkoutSetInput.Values, Bool)
+        case rpe(ActiveWorkoutSetInput.Values, Double?)
+
+        var operation: ActiveWorkoutSetSaveFailure.Operation {
+            switch self {
+            case .draft: .fieldEdit
+            case .completion: .completion
+            case .rpe: .rpe
+            }
         }
-        set.isCompleted.toggle()
-        set.completedAt = set.isCompleted ? now : nil
-        set.touch(now: now)
-        try save(context)
+    }
+
+    private struct PendingSetSave {
+        let id = UUID()
+        let set: LoggedSet
+        let action: SetSaveAction
+        let date: Date
+        let sessionID: UUID?
+        let owner: String?
+
+        func belongs(to session: WorkoutSession?) -> Bool {
+            guard let session else { return false }
+            return session.id == sessionID && session.syncOwnerTokenIdentifier == owner
+                && session.status == .active && !session.isDeleted
+        }
+    }
+
+    private func saveSetAction(
+        _ action: SetSaveAction,
+        for set: LoggedSet,
+        context: ModelContext,
+        now: Date,
+        save: (ModelContext) throws -> Void
+    ) throws {
+        let isRetry = pendingSetSave != nil
+        let before = SetSaveSnapshot(set)
+        switch action {
+        case let .draft(values):
+            set.weight = values.weight
+            set.reps = values.reps
+            set.touchActiveDraft(now: now)
+        case let .rpe(values, selection):
+            let rpe = WorkoutNumericInputPolicy.validatedRPE(selection)
+            let weight = WorkoutNumericInputPolicy.validatedWeight(values.weight)
+            let reps = WorkoutNumericInputPolicy.validatedReps(values.reps)
+            let completesSet = rpe != nil && !set.isCompleted
+            guard completesSet
+                || weight != WorkoutNumericInputPolicy.validatedWeight(set.weight)
+                || reps != WorkoutNumericInputPolicy.validatedReps(set.reps)
+                || rpe != WorkoutNumericInputPolicy.validatedRPE(set.rpe) else {
+                discardSetSave()
+                return
+            }
+            set.weight = weight
+            set.reps = reps
+            set.rpe = rpe
+            if completesSet {
+                set.isCompleted = true
+                set.completedAt = now
+                set.touch(now: now)
+            } else {
+                set.touchActiveDraft(now: now)
+            }
+        case let .completion(values, isCompleted):
+            set.weight = WorkoutNumericInputPolicy.validatedWeight(values.weight)
+            set.reps = WorkoutNumericInputPolicy.validatedReps(values.reps)
+            set.isCompleted = isCompleted
+            set.completedAt = isCompleted ? now : nil
+            set.touch(now: now)
+        }
+        do {
+            #if DEBUG
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--uitest-in-memory-store"),
+               arguments.contains("--uitest-fail-active-set-save-always")
+                || (arguments.contains("--uitest-fail-active-set-save-once") && injectedSetSaveFailureCount == 0) {
+                injectedSetSaveFailureCount += 1
+                throw CocoaError(.fileWriteUnknown)
+            }
+            #endif
+            try save(context)
+            discardSetSave()
+        } catch {
+            before.restore(set)
+            pendingSetSave = PendingSetSave(set: set, action: action, date: now,
+                sessionID: set.loggedExercise?.session?.id,
+                owner: set.loggedExercise?.session?.syncOwnerTokenIdentifier)
+            if !isRetry {
+                reportSetSaveFailure(ActiveWorkoutSetSaveFailure(operation: action.operation, error: error))
+            }
+            throw error
+        }
+    }
+
+    /// Only the fields changed by a set edit, never the whole model context.
+    private struct SetSaveSnapshot {
+        let weight: Double?
+        let reps: Int?
+        let rpe: Double?
+        let isCompleted: Bool
+        let completedAt: Date?
+        let updatedAt: Date
+        let exerciseUpdatedAt: Date?
+        let sessionUpdatedAt: Date?
+
+        init(_ set: LoggedSet) {
+            weight = set.weight
+            reps = set.reps
+            rpe = set.rpe
+            isCompleted = set.isCompleted
+            completedAt = set.completedAt
+            updatedAt = set.updatedAt
+            exerciseUpdatedAt = set.loggedExercise?.updatedAt
+            sessionUpdatedAt = set.loggedExercise?.session?.updatedAt
+        }
+
+        func restore(_ set: LoggedSet) {
+            set.weight = weight
+            set.reps = reps
+            set.rpe = rpe
+            set.isCompleted = isCompleted
+            set.completedAt = completedAt
+            set.updatedAt = updatedAt
+            if let exerciseUpdatedAt { set.loggedExercise?.updatedAt = exerciseUpdatedAt }
+            if let sessionUpdatedAt { set.loggedExercise?.session?.updatedAt = sessionUpdatedAt }
+        }
     }
 
     func finalizeWorkoutTitle(_ session: WorkoutSession, context: ModelContext) throws {

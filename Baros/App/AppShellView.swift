@@ -106,7 +106,14 @@ struct AppShellView: View {
                     .padding(.bottom, 8)
                 }
             }
-            .sheet(isPresented: activeWorkoutPresentationBinding) {
+            .sheet(isPresented: activeWorkoutPresentationBinding, onDismiss: {
+                activeWorkoutEngine.clearSetSaveIfInaccessible(in: activeSession)
+                // The native grabber can finish dismissing before a blur save fails.
+                // Reuse this sheet rather than losing its retained recovery action.
+                if activeWorkoutEngine.hasPendingSetSave {
+                    navigationState.presentActiveWorkout()
+                }
+            }) {
                 if let activeSession {
                     NavigationStack {
                         ZStack(alignment: .topTrailing) {
@@ -143,6 +150,7 @@ struct AppShellView: View {
                         .background(AppTheme.canvasBackground.ignoresSafeArea())
                     }
                     .tint(AppTheme.brandAccentForeground)
+                    .interactiveDismissDisabled(activeWorkoutEngine.hasPendingSetSave)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
                     .accessibilityIdentifier("ActiveWorkoutSheet")
@@ -183,6 +191,14 @@ struct AppShellView: View {
                 coordinator: workoutLiveActivityCoordinator,
                 willHandleWorkoutLiveActivityLink: { launchPresentation = nil }
             )
+            .onChange(of: activeSession?.id) { _, _ in
+                activeWorkoutEngine.clearSetSaveIfInaccessible(in: activeSession)
+            }
+            .onChange(of: syncScheduler.currentOwnerTokenIdentifier) { _, _ in
+                // Even an ownerless session may remain visible after sign-in;
+                // its old pending action must not cross that identity boundary.
+                activeWorkoutEngine.discardSetSave()
+            }
             .task {
                 activeWorkoutEngine.loadActiveSession(
                     ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
@@ -268,6 +284,7 @@ struct AppShellView: View {
                 if isPresented {
                     navigationState.presentActiveWorkout()
                 } else {
+                    guard !activeWorkoutEngine.hasPendingSetSave else { return }
                     prepareActiveWorkoutForMinimization?()
                     navigationState.minimizeActiveWorkout()
                 }

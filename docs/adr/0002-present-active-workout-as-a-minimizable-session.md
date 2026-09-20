@@ -1,3 +1,6 @@
 # Present Active Workout as a minimizable session
 
 Baros keeps three permanent tabs—History, Home, and Profile—with Home selected by default. An Active Workout appears as a native full-height sheet; the system grabber minimizes it without ending the workout, and a native expanded bottom accessory provides status and re-entry while preserving the selected tab underneath. This keeps navigation stable and truthful; finish, discard, and loss of the currently visible Active Workout return Home, iOS 26.0 remains supported through one localized compatibility boundary, and inline accessory adaptation and a workout utility bar remain out of scope.
+
+
+A failed local set save temporarily keeps Active Workout presented with a native Retry / Discard Edit alert. Retry repeats the intended edit; Discard abandons only that edit and never requires a save. Finish, minimization, and row-removing actions wait until recovery is resolved, then require a fresh user action. A failure discovered during native dismissal restores the same sheet. Backgrounding is allowed and the pending edit survives only while the process lives; confirmed Current Owner loss/change immediately clears recovery and preserves the existing privacy dismissal. Normal successful minimization is unchanged. See #243.

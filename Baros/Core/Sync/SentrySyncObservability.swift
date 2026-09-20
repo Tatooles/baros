@@ -39,6 +39,9 @@ enum SentryRuntime {
 
 enum SentryEventScrubber {
     static func scrub(_ event: Event) -> Event? {
+        if event.tags?["component"] == "local_persistence" {
+            return SentrySetSaveFailureReporter.scrub(event)
+        }
         if event.tags?["component"] == "sync" {
             // Sync events retain their original strict allowlist. UI scope data
             // is useful for automatic hangs, but is intentionally excluded
@@ -425,5 +428,75 @@ private enum SentryDistributionChannelTagger {
         SentrySDK.configureScope { scope in
             scope.setTag(value: channel, key: "distribution_channel")
         }
+    }
+}
+
+/// Only diagnostic codes cross this boundary; NSError userInfo can contain model data.
+struct ActiveWorkoutSetSaveFailure {
+    enum Operation: String {
+        case fieldEdit = "field_edit"
+        case completion
+        case rpe
+    }
+
+    static let knownDomains: Set<String> = [NSCocoaErrorDomain, NSPOSIXErrorDomain, "NSSQLiteErrorDomain"]
+    let operation: Operation
+    let domain: String
+    let code: String
+
+    init(operation: Operation, error: Error) {
+        let error = error as NSError
+        self.operation = operation
+        let known = Self.knownDomains.contains(error.domain)
+        domain = known ? error.domain : "other"
+        code = known ? String(error.code) : "unknown"
+    }
+}
+
+enum SentrySetSaveFailureReporter {
+    static func capture(
+        _ failure: ActiveWorkoutSetSaveFailure,
+        info: [String: Any] = Bundle.main.infoDictionary ?? [:],
+        send: (Event) -> Void = { SentrySDK.capture(event: $0) }
+    ) {
+        guard SentryRuntimeConfiguration(info: info).isEnabled,
+              !isTestProcess(arguments: ProcessInfo.processInfo.arguments,
+                             hasXCTest: NSClassFromString("XCTestCase") != nil) else { return }
+        // SDK capture queues delivery; recovery never waits for a network request or flush.
+        send(makeEvent(failure))
+    }
+
+    static func isTestProcess(arguments: [String], hasXCTest: Bool) -> Bool {
+        hasXCTest || arguments.contains { $0.hasPrefix("--uitest-") }
+    }
+
+    static func makeEvent(_ failure: ActiveWorkoutSetSaveFailure) -> Event {
+        let event = Event(level: .error)
+        event.tags = ["component": "local_persistence", "operation": failure.operation.rawValue,
+                      "error_domain": failure.domain, "error_code": failure.code]
+        return scrub(event)!
+    }
+
+    static func scrub(_ event: Event) -> Event? {
+        guard let tags = event.tags,
+              ActiveWorkoutSetSaveFailure.Operation(rawValue: tags["operation"] ?? "") != nil,
+              let domain = tags["error_domain"], let code = tags["error_code"],
+              (ActiveWorkoutSetSaveFailure.knownDomains.contains(domain) && Int(code) != nil)
+                || (domain == "other" && code == "unknown") else { return nil }
+        event.level = .error
+        event.message = SentryMessage(formatted: "Active Workout set save failed")
+        event.logger = "baros.local_persistence"
+        event.fingerprint = ["baros-set-save-v1", tags["operation"]!, domain, code]
+        event.tags = tags.filter { ["component", "operation", "error_domain", "error_code", "distribution_channel"].contains($0.key) }
+        event.context = event.context?.filter { ["app", "device", "os", "runtime"].contains($0.key) }
+        event.user = nil
+        event.breadcrumbs = nil
+        event.request = nil
+        event.extra = nil
+        event.exceptions = nil
+        event.threads = nil
+        event.debugMeta = nil
+        event.serverName = nil
+        return event
     }
 }

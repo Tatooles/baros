@@ -98,6 +98,8 @@ struct ExerciseCardView: View {
                         }
 
                         Button(role: .destructive) {
+                            setInputRegistry.commit(focusedField.wrappedValue)
+                            guard !engine.hasPendingSetSave else { return }
                             showsRemoveConfirmation = true
                         } label: {
                             Label("Remove Exercise", systemImage: "trash")
@@ -127,6 +129,7 @@ struct ExerciseCardView: View {
                     titleVisibility: .visible
                 ) {
                     Button("Remove Exercise", role: .destructive) {
+                        guard !engine.hasPendingSetSave else { return }
                         try? engine.removeLoggedExercise(loggedExercise, context: modelContext)
                     }
                     Button("Cancel", role: .cancel) {}

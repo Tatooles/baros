@@ -4,6 +4,220 @@ import XCTest
 
 @MainActor
 final class ActiveWorkoutEngineTests: XCTestCase {
+    func testSetSaveReportsOncePerFailedEditAndResetsAfterRecovery() throws {
+        var failures: [ActiveWorkoutSetSaveFailure] = []
+        let engine = ActiveWorkoutEngine(reportSetSaveFailure: { failures.append($0) })
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Private exercise", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let fail: (ModelContext) throws -> Void = { _ in
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError,
+                          userInfo: [NSLocalizedDescriptionKey: "Private workout content"])
+        }
+        try engine.toggleSetCompletion(set, preparedValues: .init(weight: 100, reps: 5), context: context)
+        XCTAssertTrue(failures.isEmpty)
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, preparedValues: .init(weight: 120, reps: 5), context: context, save: fail))
+        XCTAssertEqual(failures.map(\.operation), [.completion])
+        XCTAssertEqual(failures.first?.domain, NSCocoaErrorDomain)
+        XCTAssertEqual(failures.first?.code, "640")
+        for _ in 0..<2 {
+            XCTAssertThrowsError(try engine.retrySetSave(in: session, context: context, save: fail))
+        }
+        XCTAssertEqual(failures.count, 1)
+        engine.discardSetSave()
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertEqual(failures.count, 1)
+
+        XCTAssertThrowsError(try engine.applyActiveSetRPESelection(set, rpe: 8,
+            preparedValues: .init(weight: 120, reps: 5), context: context, save: fail))
+        XCTAssertEqual(failures.map(\.operation), [.completion, .rpe])
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertEqual(failures.count, 2)
+        XCTAssertThrowsError(try engine.commitActiveSetDraft(set, values: .init(weight: 130, reps: 6), context: context, save: fail))
+        XCTAssertEqual(failures.map(\.operation), [.completion, .rpe, .fieldEdit])
+    }
+
+    func testFailedCompletionRestoresOnlyAttemptedFieldsAndTimestamps() throws {
+        enum SaveFailure: Error { case expected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let baseline = Date(timeIntervalSince1970: 100)
+        set.weight = 100
+        set.reps = 5
+        set.rpe = 7
+        set.updatedAt = baseline
+        logged.updatedAt = baseline
+        session.updatedAt = baseline
+        try context.save()
+        session.notes = "Unrelated unsaved note"
+        let outbox = SyncOutboxEntry(entityKind: .workoutSession, entityID: session.id,
+                                    operation: .update, ownerTokenIdentifier: "owner-a")
+        context.insert(outbox)
+        outbox.attemptCount = 3
+
+        XCTAssertThrowsError(try engine.toggleSetCompletion(
+            set, preparedValues: .init(weight: 120, reps: 8), context: context,
+            now: Date(timeIntervalSince1970: 200), save: { _ in throw SaveFailure.expected }
+        ))
+
+        XCTAssertEqual(set.weight, 100)
+        XCTAssertEqual(set.reps, 5)
+        XCTAssertEqual(set.rpe, 7)
+        XCTAssertFalse(set.isCompleted)
+        XCTAssertNil(set.completedAt)
+        XCTAssertEqual(set.updatedAt, baseline)
+        XCTAssertEqual(logged.updatedAt, baseline)
+        XCTAssertEqual(session.updatedAt, baseline)
+        XCTAssertEqual(session.notes, "Unrelated unsaved note")
+        XCTAssertEqual(outbox.attemptCount, 3)
+        XCTAssertEqual(outbox.ownerTokenIdentifier, "owner-a")
+        XCTAssertNotNil(outbox.modelContext)
+        XCTAssertTrue(context.hasChanges)
+    }
+
+    func testRetryKeepsOriginalCompletionAndDiscardNeverSaves() throws {
+        enum SaveFailure: Error { case expected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let intendedDate = Date(timeIntervalSince1970: 200)
+        let fail: (ModelContext) throws -> Void = { _ in throw SaveFailure.expected }
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, preparedValues: .init(weight: 120, reps: 8),
+            context: context, now: intendedDate, save: fail))
+        XCTAssertTrue(engine.hasPendingSetSave)
+        XCTAssertTrue(engine.canRetrySetSave(in: session))
+        XCTAssertThrowsError(try engine.retrySetSave(in: session, context: context, save: fail))
+        XCTAssertFalse(set.isCompleted)
+        XCTAssertTrue(engine.hasPendingSetSave)
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertTrue(set.isCompleted)
+        XCTAssertEqual(set.completedAt, intendedDate)
+        XCTAssertEqual(set.weight, 120)
+        XCTAssertEqual(set.reps, 8)
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertFalse(context.hasChanges)
+
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        XCTAssertTrue(set.isCompleted)
+        engine.discardSetSave()
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertTrue(set.isCompleted)
+        XCTAssertEqual(set.completedAt, intendedDate)
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        XCTAssertThrowsError(try engine.retrySetSave(in: session, context: context, save: fail))
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertFalse(set.isCompleted)
+        XCTAssertNil(set.completedAt)
+        XCTAssertEqual(set.weight, 120)
+        XCTAssertEqual(set.reps, 8)
+    }
+
+    func testFailedRPEAndClearRestoreValuesAndRetryOriginalIntent() throws {
+        enum SaveFailure: Error { case expected }
+        for selection: Double? in [8, nil] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let engine = ActiveWorkoutEngine()
+            let session = try engine.startBlankWorkout(context: context)
+            let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+            context.insert(exercise)
+            let logged = try engine.addExercise(exercise, to: session, context: context)
+            let set = try XCTUnwrap(logged.sortedSets.first)
+            set.rpe = 6
+            try context.save()
+            let date = Date(timeIntervalSince1970: 200)
+            XCTAssertThrowsError(try engine.applyActiveSetRPESelection(set, rpe: selection,
+                preparedValues: .init(weight: 120, reps: 8), context: context, now: date,
+                save: { _ in throw SaveFailure.expected }))
+            XCTAssertNil(set.weight)
+            XCTAssertNil(set.reps)
+            XCTAssertEqual(set.rpe, 6)
+            XCTAssertFalse(set.isCompleted)
+            XCTAssertTrue(engine.hasPendingSetSave)
+            try engine.retrySetSave(in: session, context: context)
+            XCTAssertEqual(set.weight, 120)
+            XCTAssertEqual(set.reps, 8)
+            XCTAssertEqual(set.rpe, selection)
+            XCTAssertEqual(set.isCompleted, selection != nil)
+            XCTAssertEqual(set.completedAt, selection == nil ? nil : date)
+            XCTAssertFalse(engine.hasPendingSetSave)
+        }
+    }
+
+    func testFailedDraftRetainsInputAndBlocksReplacementUntilRetry() throws {
+        enum SaveFailure: Error { case expected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let baseline = set.updatedAt
+        let parentDate = session.updatedAt
+        XCTAssertThrowsError(try engine.commitActiveSetDraft(set, values: .init(weight: 95, reps: 6),
+            context: context, save: { _ in throw SaveFailure.expected }))
+        XCTAssertNil(set.weight)
+        XCTAssertEqual(set.updatedAt, baseline)
+        XCTAssertEqual(session.updatedAt, parentDate)
+        XCTAssertTrue(engine.hasPendingSetSave)
+        try engine.toggleSetCompletion(set, preparedValues: .init(weight: 999, reps: 1), context: context,
+            save: { _ in XCTFail("Another callback must not save while recovery is unresolved") })
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertEqual(set.weight, 95)
+        XCTAssertEqual(set.reps, 6)
+        XCTAssertFalse(set.isCompleted)
+        XCTAssertEqual(session.updatedAt, parentDate)
+        XCTAssertFalse(engine.hasPendingSetSave)
+    }
+
+    func testPendingSaveCannotReplayIntoChangedOwnerOrMissingSet() throws {
+        enum SaveFailure: Error { case expected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(ownerTokenIdentifier: "owner-a", context: context)
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let fail: (ModelContext) throws -> Void = { _ in throw SaveFailure.expected }
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        set.markDeleted()
+        XCTAssertFalse(engine.canRetrySetSave(in: session))
+        try engine.retrySetSave(in: session, context: context, save: { _ in XCTFail("Deleted set cannot save") })
+        XCTAssertTrue(engine.hasPendingSetSave)
+        engine.discardSetSave()
+        XCTAssertFalse(engine.hasPendingSetSave)
+        set.restoreFromDeletion()
+
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        session.syncOwnerTokenIdentifier = "owner-b"
+        try engine.retrySetSave(in: session, context: context, save: { _ in XCTFail("Owner change cannot save") })
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertFalse(set.isCompleted)
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        engine.clearSetSaveIfInaccessible(in: nil)
+        XCTAssertFalse(engine.hasPendingSetSave)
+    }
+
     func testSuggestionsFollowActualSetEditsAndStructureWithoutPersistingIntoEmptySets() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

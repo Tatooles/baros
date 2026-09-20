@@ -112,7 +112,12 @@ struct SwipeToDeleteRow<Content: View>: View {
     private func close() { setOpen(false) }
 
     private func performDelete() {
-        withAnimation(slideAnimation) { onDelete() }
+        withAnimation(slideAnimation) {
+            onDelete()
+            // A failed prerequisite save can cancel deletion and keep this row.
+            offsetX = 0
+            isOpen = false
+        }
     }
 
     private let slideAnimation = Animation.spring(response: 0.3, dampingFraction: 0.85)
