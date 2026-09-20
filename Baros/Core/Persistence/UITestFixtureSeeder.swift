@@ -6,6 +6,7 @@ enum UITestFixtureSeeder {
     static let completedBenchWorkoutArgument = "--uitest-seed-completed-bench-workout"
     static let futureCompletedBenchWorkoutArgument = "--uitest-seed-future-completed-bench-workout"
     static let historyExerciseNoteArgument = "--uitest-seed-history-exercise-note"
+    static let historyUncompletedSetArgument = "--uitest-seed-history-uncompleted-set"
     static let exerciseHistoryPerformanceArgument = "--uitest-seed-exercise-history-performance"
     static let matchingExercisePerformanceWorkoutsArgument =
         "--uitest-seed-matching-exercise-performance-workouts"
@@ -23,9 +24,15 @@ enum UITestFixtureSeeder {
                 exerciseNotes: arguments.contains(historyExerciseNoteArgument)
                     ? "Pause at the bottom\nKeep wrists stacked"
                     : "",
+                includesUncompletedSet: arguments.contains(historyUncompletedSetArgument),
+                includesSecondExerciseWithNote: arguments.contains("--uitest-seed-history-mixed-notes"),
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context
             )
+        }
+
+        if arguments.contains("--uitest-seed-history-blocks") {
+            try seedHistoryBlocks(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         }
 
         if arguments.contains("--uitest-seed-workout-history-layout") {
@@ -71,6 +78,42 @@ enum UITestFixtureSeeder {
         }
     }
 
+    /// Six exercise blocks with mixed notes, plus two older Bench Press sessions.
+    private static func seedHistoryBlocks(ownerTokenIdentifier: String?, context: ModelContext) throws {
+        let date = Date(timeIntervalSince1970: 1_788_544_800)
+        for (index, title) in ["Full Body", "Upper Body", "Push Day"].enumerated() {
+            try seedCompletedBenchWorkout(
+                title: title,
+                exerciseNotes: index == 0 ? "Pause at the bottom\nKeep wrists stacked" : "",
+                includesUncompletedSet: index == 0,
+                startedAt: date.addingTimeInterval(Double(-index) * 86_400 * 3),
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        guard let workout = sessions.first(where: {
+            $0.title == "Full Body" && $0.syncOwnerTokenIdentifier == ownerTokenIdentifier
+        }), workout.loggedExercises.count == 1 else { return }
+        let accessories: [(String, ExerciseEquipment, String)] = [
+            ("Cable Row", .cable, ""),
+            ("Goblet Squat", .dumbbell, "Controlled tempo"),
+            ("Romanian Deadlift", .barbell, ""),
+            ("Lateral Raise", .dumbbell, "Keep shoulders relaxed"),
+            ("Triceps Pushdown", .cable, ""),
+        ]
+        for (index, accessory) in accessories.enumerated() {
+            workout.loggedExercises.append(LoggedExercise(
+                orderIndex: index + 1,
+                exerciseSnapshotName: accessory.0,
+                exerciseSnapshotEquipmentRaw: accessory.1.rawValue,
+                notes: accessory.2,
+                sets: (0..<3).map { LoggedSet(orderIndex: $0, weight: 40, reps: 10, isCompleted: true) }
+            ))
+        }
+        try context.save()
+    }
+
     private static func seedStrengthRecords(scenario: String?, ownerTokenIdentifier: String?, context: ModelContext) throws {
         let exercises = try context.fetch(FetchDescriptor<Exercise>())
         let benchPress = Exercise.visibleActiveExercises(from: exercises, ownerTokenIdentifier: ownerTokenIdentifier)
@@ -83,11 +126,18 @@ enum UITestFixtureSeeder {
         case "same-set": performances = [(performances[0].0, [(185, 5), (205, 3), (225, 5)])]
         case "no-estimate": performances = [(performances[0].0, [(185, 12), (205, 12), (225, 12)])]
         case "empty": performances = [(performances[0].0, [(nil, 5)])]
+        case "review-layout": performances = [(Date(timeIntervalSince1970: 1_735_819_200), [(185, 5), (9999.99, 1000), (225, 1)])]
+        case "accessibility-limits": performances = [(performances[0].0, [(10000, 1000), (9999.99, 1000), (225, 1)])]
         default: break
         }
         for (date, values) in performances {
             let sets = values.enumerated().map { index, value in
                 LoggedSet(orderIndex: index, weight: value.0, reps: value.1, isCompleted: true)
+            }
+            if scenario == "review-layout" { sets[0].isCompleted = false }
+            if scenario == "rpe-layout" {
+                sets[0].rpe = 10
+                sets[1].rpe = 9.5
             }
             let occurrence = LoggedExercise(
                 orderIndex: 0,
@@ -97,6 +147,19 @@ enum UITestFixtureSeeder {
                 exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
                 sets: sets
             )
+            var occurrences = [occurrence]
+            if scenario == "review-layout" {
+                occurrence.notes = "First occurrence note"
+                occurrences.append(LoggedExercise(
+                    orderIndex: 1,
+                    exercise: benchPress,
+                    exerciseSnapshotName: "Bench Press",
+                    exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                    exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
+                    notes: "Second occurrence note",
+                    sets: [LoggedSet(orderIndex: 0, weight: 225, reps: 1, isCompleted: true)]
+                ))
+            }
             context.insert(WorkoutSession(
                 title: scenario == "same-set" ? "Upper Body — Bench Press, Paused Reps and Accessories" : "Upper Body",
                 startedAt: date,
@@ -105,7 +168,7 @@ enum UITestFixtureSeeder {
                 status: .completed,
                 source: .blank,
                 syncOwnerTokenIdentifier: ownerTokenIdentifier,
-                loggedExercises: [occurrence]
+                loggedExercises: occurrences
             ))
         }
         try context.save()
@@ -140,6 +203,8 @@ enum UITestFixtureSeeder {
     static func seedCompletedBenchWorkout(
         title: String,
         exerciseNotes: String = "",
+        includesUncompletedSet: Bool = false,
+        includesSecondExerciseWithNote: Bool = false,
         startedAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
         ownerTokenIdentifier: String? = nil,
         context: ModelContext
@@ -172,6 +237,20 @@ enum UITestFixtureSeeder {
             createdAt: startedAt,
             updatedAt: endedAt
         )
+        var sets = [set]
+        if includesUncompletedSet {
+            sets.append(
+                LoggedSet(
+                    orderIndex: 1,
+                    weight: 155,
+                    reps: 8,
+                    rpe: 7.5,
+                    isCompleted: false,
+                    createdAt: startedAt,
+                    updatedAt: endedAt
+                )
+            )
+        }
         let loggedExercise = LoggedExercise(
             orderIndex: 0,
             exercise: benchPress,
@@ -181,8 +260,18 @@ enum UITestFixtureSeeder {
             notes: exerciseNotes,
             createdAt: startedAt,
             updatedAt: endedAt,
-            sets: [set]
+            sets: sets
         )
+        var loggedExercises = [loggedExercise]
+        if includesSecondExerciseWithNote {
+            loggedExercises.append(LoggedExercise(
+                orderIndex: 1,
+                exerciseSnapshotName: "Triceps Pushdown",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.cable.rawValue,
+                notes: "Keep elbows close",
+                sets: [LoggedSet(orderIndex: 0, weight: 50, reps: 12, isCompleted: true)]
+            ))
+        }
         let session = WorkoutSession(
             title: fixtureTitle,
             startedAt: startedAt,
@@ -194,7 +283,7 @@ enum UITestFixtureSeeder {
             createdAt: startedAt,
             updatedAt: endedAt,
             syncOwnerTokenIdentifier: ownerTokenIdentifier,
-            loggedExercises: [loggedExercise]
+            loggedExercises: loggedExercises
         )
 
         context.insert(session)

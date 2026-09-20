@@ -27,31 +27,38 @@ struct ExerciseHistoryDetailView: View {
         let groups = sessionGroups
         let records = ExerciseHistoryRecords.make(from: groups, equipmentRaw: summary.equipmentRaw)
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
                 ExerciseHistoryHeading(
                     name: summary.name,
                     metadata: summary.metadataDisplayText,
-                    performanceSummary: summary.historyDetailSummaryLabel
+                    performanceSummary: summary.historyDetailSummaryLabel,
+                    isCompact: false
                 )
                 .accessibilityIdentifier("ExerciseHistoryHeading")
+                .padding(.bottom, 12)
 
                 if let records {
-                    ExerciseHistoryRecordsCard(records: records, weightUnit: weightUnit)
+                    ExerciseHistoryRecordsCard(
+                        records: records,
+                        weightUnit: weightUnit
+                    )
                 }
 
-                ForEach(groups) { group in
-                    ExerciseHistorySessionGroupCard(
-                        group: group,
-                        headingIdentity: ExerciseHistoryDisplayIdentity(
-                            name: summary.name,
-                            metadataDisplayText: summary.metadataDisplayText
-                        ),
-                        weightUnit: weightUnit,
-                        records: records,
-                        openWorkout: {
-                            workoutSelection = WorkoutHistorySelection(id: group.session.id)
-                        }
-                    )
+                VStack(spacing: 12) {
+                    ForEach(groups) { group in
+                        ExerciseHistorySessionGroupCard(
+                            group: group,
+                            headingIdentity: ExerciseHistoryDisplayIdentity(
+                                name: summary.name,
+                                metadataDisplayText: summary.metadataDisplayText
+                            ),
+                            weightUnit: weightUnit,
+                            records: records,
+                            openWorkout: {
+                                workoutSelection = WorkoutHistorySelection(id: group.session.id)
+                            }
+                        )
+                    }
                 }
             }
             .padding(AppTheme.shellPadding)

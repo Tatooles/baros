@@ -5,21 +5,15 @@ struct ExerciseHistoryNoteBlock: View {
 
     var body: some View {
         if let displayNote = Self.displayNote(from: note) {
-            VStack(alignment: .leading, spacing: 8) {
-                Divider()
-                    .overlay(AppTheme.subtleBorder)
-                    .accessibilityHidden(true)
-
-                Text(displayNote)
-                    .font(.subheadline)
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityLabel("Exercise note")
-                    .accessibilityValue(displayNote)
-                    .accessibilityIdentifier("ExerciseHistoryNoteText")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .contain)
+            Label(displayNote, systemImage: "note.text")
+                .font(.footnote)
+                .foregroundStyle(AppTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Exercise note")
+                .accessibilityValue(displayNote)
+                .accessibilityIdentifier("ExerciseHistoryNoteText")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 12)
         }
     }
 
