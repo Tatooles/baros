@@ -127,6 +127,7 @@ enum UITestFixtureSeeder {
         case "no-estimate": performances = [(performances[0].0, [(185, 12), (205, 12), (225, 12)])]
         case "empty": performances = [(performances[0].0, [(nil, 5)])]
         case "review-layout": performances = [(Date(timeIntervalSince1970: 1_735_819_200), [(185, 5), (9999.99, 1000), (225, 1)])]
+        case "accessibility-limits": performances = [(performances[0].0, [(10000, 1000), (9999.99, 1000), (225, 1)])]
         default: break
         }
         for (date, values) in performances {

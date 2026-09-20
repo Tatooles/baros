@@ -120,17 +120,36 @@ struct HistorySetTable: View {
     }
 
     // Header and data use the same columns, including space reserved for record/RPE annotations.
+    @ViewBuilder
     private func valueColumns(weight: String, reps: String, showsRecord: Bool, stacked: Bool) -> some View {
+        if stacked {
+            let separator = Text(" × ").foregroundColor(AppTheme.textSecondary)
+            let trophy = showsRecord
+                ? Text(" \(Image(systemName: "trophy.fill"))")
+                    .font(.caption)
+                    .foregroundColor(AppTheme.brandAccentForeground)
+                : Text("")
+            // A single text run can wrap between values instead of forcing the
+            // entire weight × reps expression beyond the block's available width.
+            Text("\(weight)\(separator)\(reps)\(trophy)")
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            compactValueColumns(weight: weight, reps: reps, showsRecord: showsRecord)
+        }
+    }
+
+    private func compactValueColumns(weight: String, reps: String, showsRecord: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(weight)
                 .fixedSize()
-                .frame(width: stacked ? nil : fittedWeightWidth, alignment: .trailing)
+                .frame(width: fittedWeightWidth, alignment: .trailing)
             Text("×")
                 .foregroundStyle(AppTheme.textSecondary)
-                .frame(width: stacked ? nil : separatorWidth)
+                .frame(width: separatorWidth)
             Text(reps)
                 .fixedSize()
-                .frame(width: stacked ? nil : fittedRepsWidth, alignment: .trailing)
+                .frame(width: fittedRepsWidth, alignment: .trailing)
             Image(systemName: "trophy.fill")
                 .font(.caption)
                 .foregroundStyle(AppTheme.brandAccentForeground)

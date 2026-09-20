@@ -140,3 +140,25 @@ attachments. [Largest standard-text RPE screenshot](https://github.com/user-atta
 Screenshots remain outside the repository. The same build installed and launched
 on Kevin's iPhone 17 / iOS 27.0. Device log:
 `build_run_device_2026-09-20T00-42-49-731Z_pid38864_9a3e1fff.log`.
+
+
+## Accessibility value wrapping (September 19, 2026)
+
+Stacked set results use a wrapping text run for weight, multiplication sign,
+reps and the optional trophy. Values that exceed one line now remain inside
+the tinted block, including 10,000 pounds and 1,000 reps at Accessibility XXXL.
+Compact column widths and normal-size presentation are unchanged.
+
+Three targeted UI tests passed on iPhone 17e / iOS 26.4.1: maximum and fractional
+values across Workout History, Exercise History and Quick History at the largest
+accessibility size; long values in pounds/kilograms; and normal Quick History
+medium-detent fit. No full-suite run. The new test's initial fractional-value
+selector was corrected to include the formatter's thousands separator.
+
+- `test_sim_2026-09-20T04-00-19-834Z_pid83503_04d75aff.xcresult`: existing pounds/kilograms test passed.
+- `test_sim_2026-09-20T04-03-27-305Z_pid83503_640b638d.xcresult`: maximum-value and medium-detent tests passed.
+
+Visually inspected GitHub attachments (no image files in the repository):
+[Workout History](https://github.com/user-attachments/assets/0be14b11-cd65-4a0d-a5c1-9e56b7c9acd8),
+[Exercise History](https://github.com/user-attachments/assets/916729ea-a4bc-428d-95d3-ab776b8fba75),
+[Quick History](https://github.com/user-attachments/assets/8f0906f8-5cda-4451-b419-c14a30c51f68).

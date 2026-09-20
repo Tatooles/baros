@@ -200,6 +200,54 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         attachScreenshot(named: "history-rpe-largest-standard-text", app: app)
     }
 
+    func testMaximumValuesWrapAcrossHistoryAtLargestAccessibilitySize() {
+        let app = openRecords(extraArguments: [
+            "--uitest-strength-records-scenario", "accessibility-limits",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+        ])
+        assertMaximumValuesFit(in: app, identifierPrefix: "ExerciseHistorySetValue-", screen: "exercise")
+
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.segmentedControls["HistoryModePicker"].buttons["Workouts"].tap()
+        let workout = app.buttons["WorkoutHistoryButton-0"]
+        XCTAssertTrue(workout.waitForExistence(timeout: 3))
+        workout.tap()
+        assertMaximumValuesFit(in: app, identifierPrefix: "WorkoutHistorySetSummary-", screen: "workout")
+
+        app.buttons["HomeTab"].tap()
+        let start = app.buttons["StartWorkoutButton"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        start.tap()
+        app.buttons["UsePastWorkoutButton"].tap()
+        let pastWorkout = app.buttons["PastWorkoutButton-0"]
+        XCTAssertTrue(pastWorkout.waitForExistence(timeout: 3))
+        pastWorkout.tap()
+        let confirm = app.buttons["StartFromPastWorkoutConfirmButton"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
+        for _ in 0..<5 where !confirm.isHittable { app.swipeUp() }
+        confirm.tap()
+        let menu = app.buttons["ExerciseMenuButton-0"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        menu.tap()
+        app.buttons["ExerciseHistoryButton-0"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["QuickExerciseHistoryHeading"].waitForExistence(timeout: 5))
+        assertMaximumValuesFit(in: app, identifierPrefix: "ExerciseHistorySetValue-", screen: "quick-history")
+    }
+
+    private func assertMaximumValuesFit(in app: XCUIApplication, identifierPrefix: String, screen: String) {
+        let rows = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", identifierPrefix
+        ))
+        for weight in ["10000 pounds", "9,999.99 pounds"] {
+            let row = rows.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", weight, "1000 reps")).firstMatch
+            for _ in 0..<12 where !row.isHittable { app.swipeUp() }
+            XCTAssertTrue(row.isHittable)
+            XCTAssertGreaterThanOrEqual(row.frame.minX, 32)
+            XCTAssertLessThanOrEqual(row.frame.maxX, app.frame.maxX - 32)
+            attachScreenshot(named: "\(screen)-maximum-values-\(weight)-accessibility5", app: app)
+        }
+    }
+
     private func openRecords(extraArguments: [String] = [], kilograms: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
