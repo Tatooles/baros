@@ -4,6 +4,44 @@ import XCTest
 
 @MainActor
 final class ActiveWorkoutEngineTests: XCTestCase {
+    func testSetSaveReportsOncePerFailedEditAndResetsAfterRecovery() throws {
+        var failures: [ActiveWorkoutSetSaveFailure] = []
+        let engine = ActiveWorkoutEngine(reportSetSaveFailure: { failures.append($0) })
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Private exercise", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let fail: (ModelContext) throws -> Void = { _ in
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError,
+                          userInfo: [NSLocalizedDescriptionKey: "Private workout content"])
+        }
+        try engine.toggleSetCompletion(set, preparedValues: .init(weight: 100, reps: 5), context: context)
+        XCTAssertTrue(failures.isEmpty)
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, preparedValues: .init(weight: 120, reps: 5), context: context, save: fail))
+        XCTAssertEqual(failures.map(\.operation), [.completion])
+        XCTAssertEqual(failures.first?.domain, NSCocoaErrorDomain)
+        XCTAssertEqual(failures.first?.code, "640")
+        for _ in 0..<2 {
+            XCTAssertThrowsError(try engine.retrySetSave(in: session, context: context, save: fail))
+        }
+        XCTAssertEqual(failures.count, 1)
+        engine.discardSetSave()
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertEqual(failures.count, 1)
+
+        XCTAssertThrowsError(try engine.applyActiveSetRPESelection(set, rpe: 8,
+            preparedValues: .init(weight: 120, reps: 5), context: context, save: fail))
+        XCTAssertEqual(failures.map(\.operation), [.completion, .rpe])
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertEqual(failures.count, 2)
+        XCTAssertThrowsError(try engine.commitActiveSetDraft(set, values: .init(weight: 130, reps: 6), context: context, save: fail))
+        XCTAssertEqual(failures.map(\.operation), [.completion, .rpe, .fieldEdit])
+    }
+
     func testFailedCompletionRestoresOnlyAttemptedFieldsAndTimestamps() throws {
         enum SaveFailure: Error { case expected }
         let container = try SwiftDataTestSupport.makeInMemoryContainer()

@@ -21,6 +21,12 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
 
 @Observable
 final class ActiveWorkoutEngine {
+    @ObservationIgnored private let reportSetSaveFailure: (ActiveWorkoutSetSaveFailure) -> Void
+
+    init(reportSetSaveFailure: @escaping (ActiveWorkoutSetSaveFailure) -> Void = { SentrySetSaveFailureReporter.capture($0) }) {
+        self.reportSetSaveFailure = reportSetSaveFailure
+    }
+
     var activeSessionID: UUID?
     var isStartingWorkout = false
     var lastErrorMessage: String?
@@ -398,6 +404,14 @@ final class ActiveWorkoutEngine {
         case draft(ActiveWorkoutSetInput.Values)
         case completion(ActiveWorkoutSetInput.Values, Bool)
         case rpe(ActiveWorkoutSetInput.Values, Double?)
+
+        var operation: ActiveWorkoutSetSaveFailure.Operation {
+            switch self {
+            case .draft: .fieldEdit
+            case .completion: .completion
+            case .rpe: .rpe
+            }
+        }
     }
 
     private struct PendingSetSave {
@@ -422,6 +436,7 @@ final class ActiveWorkoutEngine {
         now: Date,
         save: (ModelContext) throws -> Void
     ) throws {
+        let isRetry = pendingSetSave != nil
         let before = SetSaveSnapshot(set)
         switch action {
         case let .draft(values):
@@ -474,6 +489,9 @@ final class ActiveWorkoutEngine {
             pendingSetSave = PendingSetSave(set: set, action: action, date: now,
                 sessionID: set.loggedExercise?.session?.id,
                 owner: set.loggedExercise?.session?.syncOwnerTokenIdentifier)
+            if !isRetry {
+                reportSetSaveFailure(ActiveWorkoutSetSaveFailure(operation: action.operation, error: error))
+            }
             throw error
         }
     }
