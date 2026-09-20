@@ -432,7 +432,10 @@ final class ActiveWorkoutEngine {
             let weight = WorkoutNumericInputPolicy.validatedWeight(values.weight)
             let reps = WorkoutNumericInputPolicy.validatedReps(values.reps)
             let completesSet = rpe != nil && !set.isCompleted
-            guard completesSet || weight != set.weight || reps != set.reps || rpe != set.rpe else {
+            guard completesSet
+                || weight != WorkoutNumericInputPolicy.validatedWeight(set.weight)
+                || reps != WorkoutNumericInputPolicy.validatedReps(set.reps)
+                || rpe != WorkoutNumericInputPolicy.validatedRPE(set.rpe) else {
                 pendingSetSave = nil
                 return
             }
