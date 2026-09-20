@@ -18,6 +18,8 @@ final class BarosUITests: XCTestCase {
         app.buttons["SetCompletionButton-0-0"].tap()
         let alert = app.alerts["Couldn't save this edit"]
         XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        XCTAssertFalse(alert.buttons["Cancel"].exists)
+        XCTAssertEqual(alert.buttons.count, 2)
         let failure = XCTAttachment(screenshot: app.screenshot())
         failure.name = "Set save failed - Retry or Discard"
         failure.lifetime = .keepAlways
@@ -75,6 +77,33 @@ final class BarosUITests: XCTestCase {
         alert.buttons["Discard Edit"].tap()
         XCTAssertTrue(waitForAbsence(alert, timeout: 3))
         minimizeActiveWorkout(in: app)
+    }
+
+    @MainActor
+    func testFailedDraftCancelsCollapseAndFullSwipeRemoval() {
+        let app = makeApp(extraArguments: ["--uitest-fail-active-set-save-always"])
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        let weight = app.textFields["SetWeightField-0-0"]
+        weight.tap()
+        weight.typeText("120")
+        app.buttons["ExerciseHeader-0"].tap()
+        let alert = app.alerts["Couldn't save this edit"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        alert.buttons["Discard Edit"].tap()
+        XCTAssertTrue(waitForAbsence(alert, timeout: 3))
+        XCTAssertTrue(weight.isHittable)
+        weight.tap()
+        weight.typeText("130")
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let start = origin.withOffset(CGVector(dx: app.frame.width * 0.90, dy: weight.frame.midY))
+        let end = origin.withOffset(CGVector(dx: app.frame.width * 0.06, dy: weight.frame.midY))
+        start.press(forDuration: 0.1, thenDragTo: end)
+        XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        alert.buttons["Discard Edit"].tap()
+        XCTAssertTrue(waitForAbsence(alert, timeout: 3))
+        XCTAssertTrue(waitForHittable(weight, timeout: 3))
+        XCTAssertNotEqual(weight.value as? String, "130")
     }
 
     @MainActor

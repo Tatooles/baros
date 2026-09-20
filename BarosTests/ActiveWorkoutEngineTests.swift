@@ -24,7 +24,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         try context.save()
         session.notes = "Unrelated unsaved note"
         let outbox = SyncOutboxEntry(entityKind: .workoutSession, entityID: session.id,
-                                    operation: .upsert, ownerTokenIdentifier: "owner-a")
+                                    operation: .update, ownerTokenIdentifier: "owner-a")
         context.insert(outbox)
         outbox.attemptCount = 3
 

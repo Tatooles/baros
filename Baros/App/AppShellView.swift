@@ -195,7 +195,9 @@ struct AppShellView: View {
                 activeWorkoutEngine.clearSetSaveIfInaccessible(in: activeSession)
             }
             .onChange(of: syncScheduler.currentOwnerTokenIdentifier) { _, _ in
-                activeWorkoutEngine.clearSetSaveIfInaccessible(in: activeSession)
+                // Even an ownerless session may remain visible after sign-in;
+                // its old pending action must not cross that identity boundary.
+                activeWorkoutEngine.discardSetSave()
             }
             .task {
                 activeWorkoutEngine.loadActiveSession(

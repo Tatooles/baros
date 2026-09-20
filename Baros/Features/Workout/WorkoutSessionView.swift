@@ -339,7 +339,7 @@ struct WorkoutSessionView: View {
                 }
             }
             .disabled(!engine.canRetrySetSave(in: session))
-            Button("Discard Edit", role: .destructive) {
+            Button("Discard Edit", role: .cancel) {
                 engine.discardSetSave()
             }
         } message: {
