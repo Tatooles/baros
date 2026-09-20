@@ -45,11 +45,13 @@ final class BarosUITests: XCTestCase {
         app.buttons["FinishWorkoutButton"].tap()
         let alert = app.alerts["Couldn't save this edit"]
         XCTAssertTrue(alert.waitForExistence(timeout: 3))
-        alert.buttons["Retry"].tap()
-        XCTAssertTrue(alert.waitForExistence(timeout: 3))
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        // Actually interact with each replacement alert. An immediate exists
+        // check alone can accidentally observe the outgoing presentation.
+        alert.buttons["Retry"].tap()
+        alert.buttons["Retry"].tap()
         alert.buttons["Discard Edit"].tap()
         XCTAssertTrue(waitForAbsence(alert, timeout: 3))
         XCTAssertNotEqual(weight.value as? String, "120")

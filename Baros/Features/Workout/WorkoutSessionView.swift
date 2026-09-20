@@ -335,7 +335,7 @@ struct WorkoutSessionView: View {
                 do {
                     try engine.retrySetSave(in: session, context: modelContext)
                 } catch {
-                    // A new failure ID presents the same choices after this alert dismisses.
+                    // Keep the failed edit pending; dismissal restores the recovery choices.
                 }
             }
             .disabled(!engine.canRetrySetSave(in: session))
@@ -348,6 +348,16 @@ struct WorkoutSessionView: View {
         .onChange(of: engine.pendingSetSaveID, initial: true) { _, failureID in
             if failureID != nil { resignFocus() }
             showsSetSaveFailure = failureID != nil && scenePhase == .active
+        }
+        .onChange(of: showsSetSaveFailure) { _, isPresented in
+            guard !isPresented else { return }
+            // Alert actions dismiss after running. Reconcile that dismissal with
+            // the pending edit so another failed Retry cannot hide recovery.
+            Task { @MainActor in
+                await Task.yield()
+                guard scenePhase == .active, engine.hasPendingSetSave else { return }
+                showsSetSaveFailure = true
+            }
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
