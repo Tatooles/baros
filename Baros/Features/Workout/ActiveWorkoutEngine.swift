@@ -390,6 +390,7 @@ final class ActiveWorkoutEngine {
 
     func discardSetSave() {
         // The failed attempt was already restored. Leaving must never need a save.
+        guard hasPendingSetSave else { return }
         pendingSetSave = nil
     }
 
@@ -436,7 +437,7 @@ final class ActiveWorkoutEngine {
                 || weight != WorkoutNumericInputPolicy.validatedWeight(set.weight)
                 || reps != WorkoutNumericInputPolicy.validatedReps(set.reps)
                 || rpe != WorkoutNumericInputPolicy.validatedRPE(set.rpe) else {
-                pendingSetSave = nil
+                discardSetSave()
                 return
             }
             set.weight = weight
@@ -467,7 +468,7 @@ final class ActiveWorkoutEngine {
             }
             #endif
             try save(context)
-            pendingSetSave = nil
+            discardSetSave()
         } catch {
             before.restore(set)
             pendingSetSave = PendingSetSave(set: set, action: action, date: now,
