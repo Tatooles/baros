@@ -81,7 +81,7 @@ struct ExerciseHistoryRecordsCard: View {
                     .foregroundStyle(AppTheme.textSecondary)
                 Text("\(number) \(unitLabel)")
                     .fixedSize(horizontal: false, vertical: true)
-                Text("\(weight) × \(record.reps) · Set \(record.displaySetNumber) · \(record.workoutTitle) · \(date)")
+                Text("\(weight) \(unit) × \(reps) · Set \(record.displaySetNumber) · \(record.workoutTitle) · \(date)")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

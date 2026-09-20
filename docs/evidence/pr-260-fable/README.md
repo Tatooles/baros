@@ -33,11 +33,11 @@ uncompleted set to keep the presentation/eligibility distinction covered.
 | --- | --- |
 | [workout-dark.png](https://github.com/user-attachments/assets/2a8a6b22-e091-4bbb-801e-3a9a1acd3212), [workout-light.png](https://github.com/user-attachments/assets/a1a5efc8-ef12-4903-90e5-647a9f4706d6) | Six-exercise fixture, unboxed hero and first blocks |
 | [workout-six-exercises-block-3-dark.png](https://github.com/user-attachments/assets/aede2341-eb82-4d62-a33e-f3fddcf72c4d), [workout-six-exercises-block-6-dark.png](https://github.com/user-attachments/assets/15542134-12a1-480a-aa1a-5af75b71ebf1) | Further down the six-exercise workout, with and without notes |
-| [exercise-dark.png](https://github.com/user-attachments/assets/182b10a2-0a18-443e-a3f5-8789882c8dae), [exercise-light.png](https://github.com/user-attachments/assets/6b1d8a43-2cbe-4946-940f-c9e61789fd96) | Three-session fixture, hero, existing record tiles and first blocks |
+| [exercise-dark.png](https://github.com/user-attachments/assets/13f0b54f-5d1c-4214-b979-9e020d10a1d2), [exercise-light.png](https://github.com/user-attachments/assets/cf5f5416-bae5-4fac-ab7c-503530e03247) | Three-session fixture, hero, existing record tiles and first blocks |
 | [exercise-no-rpe-dark.png](https://github.com/user-attachments/assets/46f38af0-095f-449f-9e6b-444aad5e9a9f), [exercise-no-rpe-light.png](https://github.com/user-attachments/assets/dea5ae7a-2133-4d64-883c-40cf929c5973) | Column alignment without RPE, including a record glyph and a 44pt source-workout target |
-| [exercise-three-sessions-dark.png](https://github.com/user-attachments/assets/05597c9e-3bdc-4900-8e83-a2f678cc4b77), [exercise-three-sessions-light.png](https://github.com/user-attachments/assets/ca771fee-4602-4826-93b3-1267b76ed015) | All three session blocks visible together |
-| [workout-accessibility3.png](https://github.com/user-attachments/assets/080afdd5-5461-4c07-b305-b0ad4c53c6a7), [exercise-accessibility3.png](https://github.com/user-attachments/assets/795b3db1-dfb6-414e-b0de-6a8ece79f632) | Large-text headers |
-| [workout-accessibility3-table.png](https://github.com/user-attachments/assets/2aaf64f3-82f4-457a-b185-63eecdb160bd), [exercise-accessibility3-table.png](https://github.com/user-attachments/assets/92cd39e8-b23e-44b8-b47f-fa9a1f1c5a3d) | Scrolled large-text blocks and set announcements |
+| [exercise-three-sessions-dark.png](https://github.com/user-attachments/assets/f67ae2a6-dd40-4bd3-ba64-8bf392c9b14b), [exercise-three-sessions-light.png](https://github.com/user-attachments/assets/b5c7b126-fab6-4ba5-9de7-5d41426b4bde) | All three session blocks visible together |
+| [workout-accessibility3.png](https://github.com/user-attachments/assets/080afdd5-5461-4c07-b305-b0ad4c53c6a7), [exercise-accessibility3.png](https://github.com/user-attachments/assets/be615ff9-dc85-4106-bf9b-ba630547a4bf) | Large-text headers |
+| [workout-accessibility3-table.png](https://github.com/user-attachments/assets/2aaf64f3-82f4-457a-b185-63eecdb160bd), [exercise-accessibility3-table.png](https://github.com/user-attachments/assets/0474193a-999f-4ad1-975e-fe2228e001c3) | Scrolled large-text blocks and set announcements |
 | [workout-mixed-notes-dark.png](https://github.com/user-attachments/assets/8e02efda-42c6-4bf3-9966-ca6041cf76ac) | Two-exercise fixture with only the second exercise noted; no boundary hairline |
 | [quick-history-medium-dark.png](https://github.com/user-attachments/assets/56c8f88d-bf49-4ccc-9ec1-564c5887c5b6), [quick-history-medium-light.png](https://github.com/user-attachments/assets/b8ac0db1-e41e-44bb-b617-b20cadda8375) | Initial medium detent, without scrolling or expanding: heading, first block header and first set row fully visible |
 | [quick-history-compact-heading-accessibility3.png](https://github.com/user-attachments/assets/ef200001-887c-4af8-9cd1-745c3fcc58fe) | Large-text Quick History heading and first block header |
@@ -162,3 +162,12 @@ Visually inspected GitHub attachments (no image files in the repository):
 [Workout History](https://github.com/user-attachments/assets/0be14b11-cd65-4a0d-a5c1-9e56b7c9acd8),
 [Exercise History](https://github.com/user-attachments/assets/916729ea-a4bc-428d-95d3-ab776b8fba75),
 [Quick History](https://github.com/user-attachments/assets/8f0906f8-5cda-4451-b419-c14a30c51f68).
+
+
+The subsequent record-source copy review is also addressed: visible sources now
+include the selected weight unit and singular/plural rep labels (for example,
+`225 lbs × 1 rep`). Equal tile dimensions remain covered by the dark/light and
+long-value tests. Both targeted tests passed, including accessibility sizes and
+converted kilograms; six Exercise History attachments were refreshed.
+
+- `test_sim_2026-09-20T04-11-33-567Z_pid83503_767276f2.xcresult`: 2 passed.
