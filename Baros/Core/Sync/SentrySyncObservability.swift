@@ -73,13 +73,13 @@ enum SentryMetricKitEventScrubber {
         delivery["dist"] = event.dist
         delivery["ui_surface"] = event.tags?["ui_surface"]
         delivery["ui"] = event.context?["ui"]
-        for key in ["app", "device", "os"] {
+        for key in ["app", "device", "os", "culture", "runtime"] {
             delivery[key] = event.context?[key]
         }
         delivery["distribution_channel"] = event.tags?["distribution_channel"]
         var context = event.context ?? [:]
         context["diagnostic_delivery"] = delivery
-        for key in ["ui", "app", "device", "os", "trace"] {
+        for key in ["ui", "app", "device", "os", "culture", "runtime", "trace"] {
             context.removeValue(forKey: key)
         }
         event.context = context

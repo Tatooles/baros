@@ -16,6 +16,8 @@ final class UIHangContextObservabilityTests: XCTestCase {
         event.context = ["ui": ["schema_version": 1,
                                 "exercise_count_bucket": "2_5", "set_count_bucket": "6_10"],
                          "app": ["app_version": "1.3", "app_build": "90"],
+                         "culture": ["locale": "en_US"],
+                         "runtime": ["name": "Swift", "version": "6.3"],
                          "trace": ["trace_id": "delivery-session-trace"]]
         event.user = User(userId: "delivery-session-user")
         event.breadcrumbs = [SentryUIHangContextSink.makeBreadcrumb(.addExercisePresented)]
@@ -29,6 +31,8 @@ final class UIHangContextObservabilityTests: XCTestCase {
         XCTAssertNil(scrubbed.dist)
         XCTAssertNil(scrubbed.user)
         XCTAssertNil(scrubbed.context?["app"])
+        XCTAssertNil(scrubbed.context?["culture"])
+        XCTAssertNil(scrubbed.context?["runtime"])
         XCTAssertNil(scrubbed.context?["trace"])
         XCTAssertNil(scrubbed.tags?["ui_surface"])
         XCTAssertNil(scrubbed.context?["ui"])
@@ -37,6 +41,8 @@ final class UIHangContextObservabilityTests: XCTestCase {
         XCTAssertEqual(delivery["release"] as? String, "com.example.Baros@1.3+90")
         XCTAssertEqual(delivery["dist"] as? String, "90")
         XCTAssertEqual(delivery["ui_surface"] as? String, "active_workout")
+        XCTAssertEqual((delivery["culture"] as? [String: String])?["locale"], "en_US")
+        XCTAssertEqual((delivery["runtime"] as? [String: String])?["version"], "6.3")
         XCTAssertEqual(scrubbed.tags?["diagnostic_timestamp_basis"], "payload_interval_start")
     }
 
@@ -75,7 +81,9 @@ final class UIHangContextObservabilityTests: XCTestCase {
         event.dist = "90"
         event.user = User(userId: "incident-user")
         event.tags = ["ui_surface": "whats_new"]
-        event.context = ["ui": ["schema_version": 1, "base_screen": "home", "scene_phase": "active"]]
+        event.context = ["ui": ["schema_version": 1, "base_screen": "home", "scene_phase": "active"],
+                         "culture": ["locale": "en_US"],
+                         "runtime": ["name": "Swift", "version": "6.3"]]
         event.breadcrumbs = [SentryUIHangContextSink.makeBreadcrumb(.whatsNewPresented)]
 
         let scrubbed = try XCTUnwrap(SentryEventScrubber.scrub(event))
@@ -85,6 +93,8 @@ final class UIHangContextObservabilityTests: XCTestCase {
         XCTAssertEqual(scrubbed.user?.userId, "incident-user")
         XCTAssertEqual(scrubbed.tags?["ui_surface"], "whats_new")
         XCTAssertEqual(scrubbed.context?["ui"]?["base_screen"] as? String, "home")
+        XCTAssertEqual(scrubbed.context?["culture"]?["locale"] as? String, "en_US")
+        XCTAssertEqual(scrubbed.context?["runtime"]?["version"] as? String, "6.3")
         XCTAssertEqual(scrubbed.breadcrumbs?.count, 1)
         XCTAssertNil(scrubbed.context?["diagnostic_delivery"])
     }
