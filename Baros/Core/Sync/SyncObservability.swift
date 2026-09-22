@@ -369,13 +369,20 @@ struct SentryRuntimeConfiguration: Equatable {
             false
         }
         let isProduction = environmentValue.caseInsensitiveCompare("Production") == .orderedSame
+        #if DEBUG
+        // Device diagnostics can opt in through build settings without using
+        // production auth/backend configuration or mislabeling test events.
+        let isDevelopment = environmentValue.caseInsensitiveCompare("Development") == .orderedSame
+        #else
+        let isDevelopment = false
+        #endif
         let bundleIdentifier = info["CFBundleIdentifier"] as? String
         let marketingVersion = info["CFBundleShortVersionString"] as? String
         let buildNumber = info["CFBundleVersion"] as? String
 
-        self.isEnabled = explicitFlag && isProduction && !dsn.isEmpty
+        self.isEnabled = explicitFlag && (isProduction || isDevelopment) && !dsn.isEmpty
         self.dsn = dsn
-        self.environment = "production"
+        self.environment = isProduction ? "production" : "development"
         self.dist = buildNumber
         if let bundleIdentifier, let marketingVersion, let buildNumber,
            !bundleIdentifier.isEmpty, !marketingVersion.isEmpty, !buildNumber.isEmpty {

@@ -224,6 +224,31 @@ final class SyncObservabilityTests: XCTestCase {
         XCTAssertFalse(debug.isEnabled)
     }
 
+    func testDevelopmentDiagnosticsRequireDebugBuildExplicitFlagAndDSN() {
+        let info: [String: Any] = [
+            "SentryEnabled": "YES",
+            "SentryDSN": "https://public@example.invalid/1",
+            "BarosEnvironment": "Development",
+        ]
+        let optedIn = SentryRuntimeConfiguration(info: info)
+        #if DEBUG
+        XCTAssertTrue(optedIn.isEnabled)
+        #else
+        XCTAssertFalse(optedIn.isEnabled)
+        #endif
+        XCTAssertEqual(optedIn.environment, "development")
+
+        var disabled = info
+        disabled["SentryEnabled"] = "NO"
+        XCTAssertFalse(SentryRuntimeConfiguration(info: disabled).isEnabled)
+        disabled = info
+        disabled["SentryDSN"] = "  "
+        XCTAssertFalse(SentryRuntimeConfiguration(info: disabled).isEnabled)
+        disabled = info
+        disabled["BarosEnvironment"] = "Unknown"
+        XCTAssertFalse(SentryRuntimeConfiguration(info: disabled).isEnabled)
+    }
+
     func testSentryMappingAndScrubberRemoveNonAllowlistedData() throws {
         let ownerID = "owner_v1_0123456789abcdef0123456789abcdef"
         let observation = SanitizedSyncObservation(
