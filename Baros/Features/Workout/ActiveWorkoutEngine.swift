@@ -151,16 +151,24 @@ final class ActiveWorkoutEngine {
     }
 
     @discardableResult
-    func addExercise(_ exercise: Exercise, to session: WorkoutSession, context: ModelContext) throws -> LoggedExercise {
+    func addExercise(
+        _ exercise: Exercise,
+        to session: WorkoutSession,
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext
+    ) throws -> LoggedExercise {
+        let history = try context.fetch(FetchDescriptor<WorkoutSession>())
         let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
         let loggedExercise = LoggedExercise(orderIndex: nextIndex, exercise: exercise)
         loggedExercise.session = session
         context.insert(loggedExercise)
 
-        let firstSet = LoggedSet(orderIndex: 0)
-        firstSet.loggedExercise = loggedExercise
-        context.insert(firstSet)
-        loggedExercise.sets.append(firstSet)
+        insertInitialSets(
+            into: loggedExercise,
+            history: history,
+            ownerTokenIdentifier: session.syncOwnerTokenIdentifier ?? ownerTokenIdentifier,
+            context: context
+        )
         session.loggedExercises.append(loggedExercise)
         session.touch()
         try context.save()
@@ -184,6 +192,7 @@ final class ActiveWorkoutEngine {
     func swapLoggedExercise(
         _ loggedExercise: LoggedExercise,
         with exercise: Exercise,
+        ownerTokenIdentifier: String? = nil,
         context: ModelContext,
         now: Date = .now,
         save: (ModelContext) throws -> Void = { try $0.save() }
@@ -195,6 +204,7 @@ final class ActiveWorkoutEngine {
             throw ActiveWorkoutEngineError.invalidExerciseSwap
         }
 
+        let history = try context.fetch(FetchDescriptor<WorkoutSession>())
         let originalSessionUpdatedAt = session.updatedAt
         let originalLoggedExerciseUpdatedAt = loggedExercise.updatedAt
         let originalLoggedExerciseDeletedAt = loggedExercise.deletedAt
@@ -210,10 +220,13 @@ final class ActiveWorkoutEngine {
         replacement.session = session
         context.insert(replacement)
 
-        let firstSet = LoggedSet(orderIndex: 0, createdAt: now, updatedAt: now)
-        firstSet.loggedExercise = replacement
-        context.insert(firstSet)
-        replacement.sets.append(firstSet)
+        insertInitialSets(
+            into: replacement,
+            history: history,
+            ownerTokenIdentifier: session.syncOwnerTokenIdentifier ?? ownerTokenIdentifier,
+            context: context,
+            now: now
+        )
         session.loggedExercises.append(replacement)
 
         loggedExercise.markDeleted(now: now)
@@ -227,7 +240,9 @@ final class ActiveWorkoutEngine {
             return replacement
         } catch {
             session.loggedExercises.removeAll { $0.id == replacement.id }
-            context.delete(firstSet)
+            for set in replacement.sets {
+                context.delete(set)
+            }
             context.delete(replacement)
             loggedExercise.updatedAt = originalLoggedExerciseUpdatedAt
             loggedExercise.deletedAt = originalLoggedExerciseDeletedAt
@@ -623,6 +638,28 @@ final class ActiveWorkoutEngine {
         }
         if activeSessionID == session.id {
             activeSessionID = nil
+        }
+    }
+
+    private func insertInitialSets(
+        into loggedExercise: LoggedExercise,
+        history: [WorkoutSession],
+        ownerTokenIdentifier: String?,
+        context: ModelContext,
+        now: Date = .now
+    ) {
+        // New exercise occurrences use the latest performance, including when
+        // added to a workout started from history. Match the Previous column.
+        let previousSets = PreviousSetPerformance.lastCompletedSets(
+            for: loggedExercise,
+            in: history,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
+        for index in 0..<max(1, previousSets.count) {
+            let set = LoggedSet(orderIndex: index, createdAt: now, updatedAt: now)
+            set.loggedExercise = loggedExercise
+            context.insert(set)
+            loggedExercise.sets.append(set)
         }
     }
 

@@ -490,6 +490,123 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(added.sets.count, 1)
     }
 
+    func testAddingAndSwappingUseLatestCompletedSetCountAndLeaveValuesBlank() throws {
+        for swapsExercise in [false, true] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let engine = ActiveWorkoutEngine()
+            let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+            let other = Exercise(name: "Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+            context.insert(exercise)
+            context.insert(other)
+            let older = insertSetCountHistory(exercise: exercise, count: 2, at: 100, context: context)
+            let latest = insertSetCountHistory(exercise: exercise, count: 3, at: 200, context: context)
+            let latestExercise = try XCTUnwrap(latest.sortedLoggedExercises.first)
+            let incomplete = LoggedSet(orderIndex: 3, weight: 200, reps: 5)
+            let deleted = LoggedSet(orderIndex: 4, isCompleted: true, deletedAt: .now)
+            latestExercise.sets.append(contentsOf: [incomplete, deleted])
+            context.insert(incomplete)
+            context.insert(deleted)
+            incomplete.loggedExercise = latestExercise
+            deleted.loggedExercise = latestExercise
+            let noCompletedSets = insertSetCountHistory(exercise: exercise, count: 1, at: 300, context: context)
+            noCompletedSets.sortedLoggedExercises.first?.sets.first?.isCompleted = false
+            let deletedHistory = insertSetCountHistory(exercise: exercise, count: 4, at: 400, context: context)
+            deletedHistory.markDeleted()
+            let discarded = insertSetCountHistory(exercise: exercise, count: 5, at: 500, context: context)
+            discarded.status = .discarded
+            try context.save()
+
+            // Cloned rows still follow the chosen workout; newly added/swapped
+            // occurrences should use the latest performance instead.
+            let session = try engine.startWorkout(fromPast: older, context: context)
+            XCTAssertEqual(session.sortedLoggedExercises.first?.sortedSets.count, 2)
+            let added: LoggedExercise
+            if swapsExercise {
+                let original = try engine.addExercise(other, to: session, context: context)
+                added = try engine.swapLoggedExercise(original, with: exercise, context: context)
+            } else {
+                added = try engine.addExercise(exercise, to: session, context: context)
+            }
+
+            XCTAssertEqual(added.sortedSets.count, 3)
+            XCTAssertEqual(added.sortedSets.map(\.orderIndex), [0, 1, 2])
+            XCTAssertEqual(Set(added.sortedSets.map(\.id)).count, 3)
+            XCTAssertNil(added.sourceLoggedExerciseID)
+            for set in added.sortedSets {
+                XCTAssertNil(set.weight)
+                XCTAssertNil(set.reps)
+                XCTAssertNil(set.rpe)
+                XCTAssertNil(set.completedAt)
+                XCTAssertNil(set.sourceLoggedSetID)
+                XCTAssertFalse(set.isCompleted)
+                XCTAssertEqual(set.kind, .working)
+                XCTAssertEqual(set.loggedExercise?.id, added.id)
+            }
+            let previous = PreviousSetPerformance.lastCompletedSets(
+                for: added,
+                in: try context.fetch(FetchDescriptor<WorkoutSession>()),
+                ownerTokenIdentifier: nil,
+                sourceSessionID: session.sourceSessionID
+            )
+            XCTAssertEqual(previous.count, added.sortedSets.count)
+        }
+    }
+
+    func testAddingAndSwappingRespectCurrentOwnerHistory() throws {
+        let owners: [String?] = [nil, "owner-a"]
+        for swapsExercise in [false, true] {
+            for owner in owners {
+                let container = try SwiftDataTestSupport.makeInMemoryContainer()
+                let context = container.mainContext
+                let engine = ActiveWorkoutEngine()
+                let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+                let other = Exercise(name: "Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+                context.insert(exercise)
+                context.insert(other)
+                insertSetCountHistory(exercise: exercise, count: 2, at: 100, context: context)
+                insertSetCountHistory(exercise: exercise, count: 3, at: 200, owner: "owner-a", context: context)
+                insertSetCountHistory(exercise: exercise, count: 4, at: 300, owner: "owner-b", context: context)
+                // An unclaimed local Active Workout may be visible to a signed-in owner.
+                let session = try engine.startBlankWorkout(context: context)
+                let added: LoggedExercise
+                if swapsExercise {
+                    let original = try engine.addExercise(other, to: session, context: context)
+                    added = try engine.swapLoggedExercise(original, with: exercise, ownerTokenIdentifier: owner, context: context)
+                } else {
+                    added = try engine.addExercise(exercise, to: session, ownerTokenIdentifier: owner, context: context)
+                }
+                XCTAssertEqual(added.sortedSets.count, owner == nil ? 2 : 3)
+            }
+        }
+    }
+
+    func testAddingAndSwappingFallBackToOneSetWithoutCompletedHistory() throws {
+        for swapsExercise in [false, true] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let engine = ActiveWorkoutEngine()
+            let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+            let other = Exercise(name: "Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+            context.insert(exercise)
+            context.insert(other)
+            let history = insertSetCountHistory(exercise: exercise, count: 3, at: 100, context: context)
+            for set in history.sortedLoggedExercises.flatMap(\.sortedSets) {
+                set.isCompleted = false
+            }
+            let session = try engine.startBlankWorkout(context: context)
+            let added: LoggedExercise
+            if swapsExercise {
+                let original = try engine.addExercise(other, to: session, context: context)
+                added = try engine.swapLoggedExercise(original, with: exercise, context: context)
+            } else {
+                added = try engine.addExercise(exercise, to: session, context: context)
+            }
+            XCTAssertEqual(added.sortedSets.count, 1)
+            XCTAssertEqual(added.sortedSets.first?.orderIndex, 0)
+        }
+    }
+
     func testAddingSetCopiesKindOnlyAndStartsIncompleteWithBlankValues() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -830,6 +947,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         originalSet.reps = 5
         originalSecondSet.weight = 175
         originalSecondSet.reps = 8
+        insertSetCountHistory(exercise: row, count: 3, at: 50, context: context)
         try context.save()
         let sessionUpdatedAt = session.updatedAt
 
@@ -839,7 +957,10 @@ final class ActiveWorkoutEngineTests: XCTestCase {
                 with: row,
                 context: context,
                 now: Date(timeIntervalSince1970: 500),
-                save: { _ in throw SaveFailure.expected }
+                save: { _ in
+                    XCTAssertEqual(session.sortedLoggedExercises.first?.sortedSets.count, 3)
+                    throw SaveFailure.expected
+                }
             )
         ) { error in
             XCTAssertTrue(error is SaveFailure)
@@ -855,8 +976,8 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(originalSecondSet.reps, 8)
         XCTAssertNil(originalSecondSet.deletedAt)
         XCTAssertEqual(session.updatedAt, sessionUpdatedAt)
-        XCTAssertEqual(try allLoggedExercises(in: context).count, 1)
-        XCTAssertEqual(try allLoggedSets(in: context).count, 2)
+        XCTAssertEqual(try allLoggedExercises(in: context).count, 2)
+        XCTAssertEqual(try allLoggedSets(in: context).count, 5)
         XCTAssertFalse(context.hasChanges)
     }
 
@@ -1879,6 +2000,44 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(set.updatedAt, graphDate)
         XCTAssertEqual(loggedExercise.updatedAt, graphDate)
         XCTAssertEqual(session.updatedAt, graphDate)
+    }
+
+    @discardableResult
+    private func insertSetCountHistory(
+        exercise: Exercise,
+        count: Int,
+        at timestamp: TimeInterval,
+        owner: String? = nil,
+        context: ModelContext
+    ) -> WorkoutSession {
+        let date = Date(timeIntervalSince1970: timestamp)
+        let history = WorkoutSession(
+            title: "History",
+            startedAt: date,
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(history)
+        let logged = LoggedExercise(orderIndex: 0, exercise: exercise)
+        logged.session = history
+        context.insert(logged)
+        history.loggedExercises.append(logged)
+        for index in 0..<count {
+            let set = LoggedSet(
+                orderIndex: index,
+                weight: 185,
+                reps: 5,
+                rpe: 8,
+                kind: .warmup,
+                isCompleted: true,
+                completedAt: date
+            )
+            set.loggedExercise = logged
+            context.insert(set)
+            logged.sets.append(set)
+        }
+        return history
     }
 
     private func activeSessions(in context: ModelContext) throws -> [WorkoutSession] {
