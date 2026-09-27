@@ -151,16 +151,28 @@ final class ActiveWorkoutEngine {
     }
 
     @discardableResult
-    func addExercise(_ exercise: Exercise, to session: WorkoutSession, context: ModelContext) throws -> LoggedExercise {
+    func addExercise(
+        _ exercise: Exercise,
+        to session: WorkoutSession,
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext
+    ) throws -> LoggedExercise {
+        let setKinds = try initialSetKinds(
+            for: exercise,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        )
         let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
         let loggedExercise = LoggedExercise(orderIndex: nextIndex, exercise: exercise)
         loggedExercise.session = session
         context.insert(loggedExercise)
 
-        let firstSet = LoggedSet(orderIndex: 0)
-        firstSet.loggedExercise = loggedExercise
-        context.insert(firstSet)
-        loggedExercise.sets.append(firstSet)
+        for (index, kind) in setKinds.enumerated() {
+            let set = LoggedSet(orderIndex: index, kind: kind)
+            set.loggedExercise = loggedExercise
+            context.insert(set)
+            loggedExercise.sets.append(set)
+        }
         session.loggedExercises.append(loggedExercise)
         session.touch()
         try context.save()
@@ -184,6 +196,7 @@ final class ActiveWorkoutEngine {
     func swapLoggedExercise(
         _ loggedExercise: LoggedExercise,
         with exercise: Exercise,
+        ownerTokenIdentifier: String? = nil,
         context: ModelContext,
         now: Date = .now,
         save: (ModelContext) throws -> Void = { try $0.save() }
@@ -195,6 +208,11 @@ final class ActiveWorkoutEngine {
             throw ActiveWorkoutEngineError.invalidExerciseSwap
         }
 
+        let setKinds = try initialSetKinds(
+            for: exercise,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context
+        )
         let originalSessionUpdatedAt = session.updatedAt
         let originalLoggedExerciseUpdatedAt = loggedExercise.updatedAt
         let originalLoggedExerciseDeletedAt = loggedExercise.deletedAt
@@ -210,10 +228,14 @@ final class ActiveWorkoutEngine {
         replacement.session = session
         context.insert(replacement)
 
-        let firstSet = LoggedSet(orderIndex: 0, createdAt: now, updatedAt: now)
-        firstSet.loggedExercise = replacement
-        context.insert(firstSet)
-        replacement.sets.append(firstSet)
+        let replacementSets = setKinds.enumerated().map { index, kind in
+            LoggedSet(orderIndex: index, kind: kind, createdAt: now, updatedAt: now)
+        }
+        for set in replacementSets {
+            set.loggedExercise = replacement
+            context.insert(set)
+            replacement.sets.append(set)
+        }
         session.loggedExercises.append(replacement)
 
         loggedExercise.markDeleted(now: now)
@@ -227,7 +249,9 @@ final class ActiveWorkoutEngine {
             return replacement
         } catch {
             session.loggedExercises.removeAll { $0.id == replacement.id }
-            context.delete(firstSet)
+            for set in replacementSets {
+                context.delete(set)
+            }
             context.delete(replacement)
             loggedExercise.updatedAt = originalLoggedExerciseUpdatedAt
             loggedExercise.deletedAt = originalLoggedExerciseDeletedAt
@@ -653,6 +677,27 @@ final class ActiveWorkoutEngine {
             ownerTokenIdentifier: ownerTokenIdentifier
         )
         .contains { $0.id == session.id }
+    }
+
+    /// One blank row per completed set from the exercise's last performance,
+    /// keeping each row's set kind, or a single working set when there is none.
+    private func initialSetKinds(
+        for exercise: Exercise,
+        ownerTokenIdentifier: String?,
+        context: ModelContext
+    ) throws -> [SetKind] {
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let route = ExerciseHistoryRoute(
+            exerciseID: exercise.id,
+            name: exercise.name,
+            equipmentRaw: exercise.equipmentRaw
+        )
+        let kinds = PreviousSetPerformance.lastCompletedSetKinds(
+            for: route,
+            in: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
+        return kinds.isEmpty ? [.working] : kinds
     }
 
     private func reindexLoggedExercises(for session: WorkoutSession, now: Date) {

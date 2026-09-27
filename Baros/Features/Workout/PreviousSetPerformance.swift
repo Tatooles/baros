@@ -80,9 +80,24 @@ struct PreviousSetPerformance: Equatable {
 
         return Dictionary(
             uniqueKeysWithValues: routeIDByLoggedExerciseID.map { loggedExerciseID, routeID in
-                (loggedExerciseID, previousSetsByRouteID[routeID] ?? [])
+                (loggedExerciseID, previousSetsByRouteID[routeID]?.map { makePerformance(from: $0) } ?? [])
             }
         )
+    }
+
+    /// The completed set kinds from the most recent completed session that logged
+    /// the exercise, in set order. Uses the same history lookup as the Previous
+    /// column, so a newly added exercise gets one row per previous value.
+    static func lastCompletedSetKinds(
+        for route: ExerciseHistoryRoute,
+        in sessions: [WorkoutSession],
+        ownerTokenIdentifier: String?
+    ) -> [SetKind] {
+        lastCompletedSetsByRouteID(
+            matching: [route.id],
+            in: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )[route.id]?.map(\.kind) ?? []
     }
 
     private static func lastCompletedSetsByExerciseIDFromSourceSession(
@@ -128,7 +143,7 @@ struct PreviousSetPerformance: Equatable {
         matching routeIDs: Set<String>,
         in sessions: [WorkoutSession],
         ownerTokenIdentifier: String?
-    ) -> [String: [PreviousSetPerformance]] {
+    ) -> [String: [LoggedSet]] {
         let sortedCompletedSessions = WorkoutSession.visibleCompletedSessions(
             from: sessions,
             ownerTokenIdentifier: ownerTokenIdentifier
@@ -140,7 +155,7 @@ struct PreviousSetPerformance: Equatable {
             return lhs.startedAt > rhs.startedAt
         }
 
-        var result: [String: [PreviousSetPerformance]] = [:]
+        var result: [String: [LoggedSet]] = [:]
 
         for session in sortedCompletedSessions {
             for loggedExercise in session.sortedLoggedExercises {
@@ -150,7 +165,7 @@ struct PreviousSetPerformance: Equatable {
                 let completedSets = loggedExercise.sortedSets.filter(\.isCompleted)
                 guard !completedSets.isEmpty else { continue }
 
-                result[routeID] = completedSets.map { makePerformance(from: $0) }
+                result[routeID] = completedSets
             }
 
             if result.count == routeIDs.count {
