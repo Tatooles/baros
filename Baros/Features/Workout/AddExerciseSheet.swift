@@ -24,6 +24,7 @@ struct SwapExerciseConfirmationContent {
 struct AddExerciseSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(SyncScheduler.self) private var syncScheduler
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
     var onAddExercise: (LoggedExercise) -> Void = { _ in }
@@ -32,7 +33,12 @@ struct AddExerciseSheet: View {
         NavigationStack {
             ExercisePickerView { exercise in
                 do {
-                    let loggedExercise = try engine.addExercise(exercise, to: session, context: modelContext)
+                    let loggedExercise = try engine.addExercise(
+                        exercise,
+                        to: session,
+                        ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                        context: modelContext
+                    )
                     onAddExercise(loggedExercise)
                     dismiss()
                 } catch {
@@ -47,6 +53,7 @@ struct AddExerciseSheet: View {
 struct SwapExerciseSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(SyncScheduler.self) private var syncScheduler
     let loggedExercise: LoggedExercise
     @Bindable var engine: ActiveWorkoutEngine
     @State private var pendingReplacement: Exercise?
@@ -123,6 +130,7 @@ struct SwapExerciseSheet: View {
             try engine.swapLoggedExercise(
                 loggedExercise,
                 with: exercise,
+                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
                 context: modelContext
             )
             dismiss()
