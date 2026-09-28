@@ -1,6 +1,6 @@
 # Issue tracker: GitHub
 
-Issues and PRDs for this repo live as GitHub issues in `Tatooles/lifting-log-ios`. Use the `gh` CLI for all operations.
+Issues and PRDs for this repo live as GitHub issues in `Tatooles/baros`. Use the `gh` CLI for all operations.
 
 ## Conventions
 
@@ -12,6 +12,14 @@ Issues and PRDs for this repo live as GitHub issues in `Tatooles/lifting-log-ios
 - **Close**: `gh issue close <number> --comment "..."`
 
 Infer the repo from `git remote -v` -- `gh` does this automatically when run inside a clone.
+
+## Milestones
+
+A milestone lists each change exactly once: as its issue or as its PR, never both.
+
+- **Change has an issue**: put the milestone on the issue only. The PR body says `Closes #<n>`, so merging closes the issue.
+- **Change has no issue** (small, unplanned work): put the milestone on the PR itself. Opening an issue only to close it adds a duplicate entry.
+- **PR finishes part of an issue**: the PR body says `Refs #<n>`. Before closing the issue, move the remaining work to a follow-up issue on its own milestone, so a merged PR leaves no stale open issue on the milestone.
 
 ## Pull requests as a triage surface
 

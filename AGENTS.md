@@ -21,7 +21,7 @@ Convex agent skills for common tasks can be installed by running
 
 ### Issue tracker
 
-Issues live in GitHub Issues for `Tatooles/lifting-log-ios`; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues for `Tatooles/baros`; external PRs are not a triage surface. For issues, milestones, and linking PRs to issues, see `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
