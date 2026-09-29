@@ -11,9 +11,7 @@ struct WhatsNewVersion1_3View: View {
             LaunchExperiencePage(
                 systemImage: "figure.strengthtraining.traditional",
                 title: "What's new in Baros 1.3",
-                summary: "Smarter logging while you lift, and a History that shows how far you've come.",
-                titleIdentifier: "LaunchExperienceTitle",
-                summaryIdentifier: "LaunchExperienceSummary"
+                titleIdentifier: "LaunchExperienceTitle"
             ) {
                 VStack(alignment: .leading, spacing: 20) {
                     LaunchExperienceFeatureRow(

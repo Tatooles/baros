@@ -1,15 +1,15 @@
 import SwiftUI
 
 /// Shared layout for onboarding and What's New pages: hero symbol, title,
-/// summary, optional content, and actions. Actions pin to the bottom edge,
+/// optional summary, optional content, and actions. Actions pin to the bottom edge,
 /// except at accessibility text sizes, where they scroll with the content so
 /// large labels never crowd the page out.
 struct LaunchExperiencePage<Content: View, Actions: View>: View {
     let systemImage: String
     let title: String
-    let summary: String
+    var summary: String? = nil
     let titleIdentifier: String
-    let summaryIdentifier: String
+    var summaryIdentifier: String? = nil
     var focusesTitleOnAppear = false
     @ViewBuilder let content: Content
     @ViewBuilder let actions: Actions
@@ -34,12 +34,14 @@ struct LaunchExperiencePage<Content: View, Actions: View>: View {
                         .accessibilityFocused($isTitleFocused)
                         .accessibilityIdentifier(titleIdentifier)
 
-                    Text(summary)
-                        .font(.body)
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier(summaryIdentifier)
+                    if let summary {
+                        Text(summary)
+                            .font(.body)
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier(summaryIdentifier ?? "")
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
