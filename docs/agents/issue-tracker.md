@@ -19,7 +19,8 @@ A milestone lists each change exactly once: as its issue or as its PR, never bot
 
 - **Change has an issue**: put the milestone on the issue only. The PR body says `Closes #<n>`, so merging closes the issue.
 - **Change has no issue** (small, unplanned work): put the milestone on the PR itself. Opening an issue only to close it adds a duplicate entry.
-- **PR finishes part of an issue**: the PR body says `Refs #<n>`. Before closing the issue, move the remaining work to a follow-up issue on its own milestone, so a merged PR leaves no stale open issue on the milestone.
+- **PR finishes part of an issue, more PRs coming**: the PR body says `Refs #<n>`, and the issue stays open because it still holds work.
+- **Last PR for an issue, rest deferred**: open a follow-up issue for the remaining work on its own milestone first. The PR body then says `Closes #<n>` and links the follow-up, so merging closes the original.
 
 ## Pull requests as a triage surface
 
