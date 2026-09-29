@@ -514,6 +514,9 @@ final class BarosUITests: XCTestCase {
         let title = relaunchedApp.textFields["WorkoutTitle"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         XCTAssertEqual(title.value as? String, "Owner Launch Priority")
+        // A signed-in owner also skips onboarding on its own, so this absence
+        // no longer isolates active-workout priority; the coordinator unit
+        // tests cover that ordering directly.
         XCTAssertFalse(relaunchedApp.staticTexts["LaunchExperienceTitle"].exists)
     }
 
@@ -1046,26 +1049,143 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testFirstRunWelcomeAppearsOnce() {
+    func testFirstRunOnboardingContinuesLocallyAndAppearsOnce() {
         let firstLaunch = makeDiskBackedResetApp(extraArguments: ["--uitest-reset-first-run-experience"])
         firstLaunch.launch()
 
         XCTAssertTrue(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
         XCTAssertTrue(firstLaunch.staticTexts["Welcome to Baros"].exists)
-        XCTAssertTrue(firstLaunch.staticTexts["Fast workout logging"].exists)
-        XCTAssertTrue(firstLaunch.staticTexts["Your history stays put"].exists)
-        XCTAssertTrue(firstLaunch.staticTexts["Optional cloud sync"].exists)
-        XCTAssertTrue(firstLaunch.staticTexts["Control your data"].exists)
+        XCTAssertTrue(firstLaunch.staticTexts["Log sets in seconds"].exists)
+        XCTAssertTrue(firstLaunch.staticTexts["See your progress as you lift"].exists)
+        XCTAssertTrue(firstLaunch.staticTexts["No account needed"].exists)
 
         firstLaunch.buttons["LaunchExperiencePrimaryButton"].tap()
-        XCTAssertFalse(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 1))
+        XCTAssertTrue(firstLaunch.staticTexts["OnboardingSignInTitle"].waitForExistence(timeout: 3))
+
+        firstLaunch.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
+        firstLaunch.buttons["LaunchExperiencePrimaryButton"].tap()
+
+        XCTAssertTrue(firstLaunch.staticTexts["OnboardingSignInTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(firstLaunch.staticTexts["Back up your workouts"].exists)
+        XCTAssertTrue(firstLaunch.buttons["Sign in or create account"].exists)
+        XCTAssertTrue(firstLaunch.buttons["Continue without an account"].exists)
+        XCTAssertTrue(firstLaunch.staticTexts["You can sign in anytime from Profile."].exists)
+
+        firstLaunch.buttons["OnboardingContinueWithoutAccountButton"].tap()
+        XCTAssertTrue(firstLaunch.staticTexts["OnboardingSignInTitle"].waitForNonExistence(timeout: 3))
+        XCTAssertTrue(firstLaunch.staticTexts["HomeTitle"].exists)
         firstLaunch.terminate()
 
         let secondLaunch = makeDiskBackedApp(skipsFirstRunExperience: false)
         secondLaunch.launch()
 
-        XCTAssertFalse(secondLaunch.staticTexts["Welcome to Baros"].waitForExistence(timeout: 1))
         XCTAssertTrue(secondLaunch.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(secondLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 1))
+    }
+
+    @MainActor
+    func testOnboardingSignInCancelReturnsToInvitationAndRelaunchRestartsOnboarding() {
+        let firstLaunch = makeDiskBackedResetApp(extraArguments: ["--uitest-reset-first-run-experience"])
+        firstLaunch.launch()
+
+        XCTAssertTrue(firstLaunch.buttons["LaunchExperiencePrimaryButton"].waitForExistence(timeout: 3))
+        firstLaunch.buttons["LaunchExperiencePrimaryButton"].tap()
+        let signInButton = firstLaunch.buttons["OnboardingSignInButton"]
+        XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
+        signInButton.tap()
+
+        XCTAssertTrue(firstLaunch.descendants(matching: .any)["OnboardingAuthView"].waitForExistence(timeout: 5))
+        firstLaunch.swipeDown()
+
+        XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(firstLaunch.buttons["OnboardingContinueWithoutAccountButton"].exists)
+        firstLaunch.terminate()
+
+        // Leaving before choosing an exit does not complete onboarding.
+        let relaunchedApp = makeDiskBackedApp(skipsFirstRunExperience: false)
+        relaunchedApp.launch()
+
+        XCTAssertTrue(relaunchedApp.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(relaunchedApp.buttons["LaunchExperiencePrimaryButton"].exists)
+    }
+
+    @MainActor
+    func testOnboardingSignInSuccessCompletesOnboarding() {
+        let firstLaunch = makeDiskBackedResetApp(extraArguments: [
+            "--uitest-reset-first-run-experience",
+            "--uitest-simulate-onboarding-auth-success",
+        ])
+        firstLaunch.launch()
+
+        XCTAssertTrue(firstLaunch.buttons["LaunchExperiencePrimaryButton"].waitForExistence(timeout: 3))
+        firstLaunch.buttons["LaunchExperiencePrimaryButton"].tap()
+        let signInButton = firstLaunch.buttons["OnboardingSignInButton"]
+        XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
+        signInButton.tap()
+
+        let simulateAuthenticationButton = firstLaunch.buttons["UITestSimulateOnboardingAuthenticationButton"]
+        XCTAssertTrue(simulateAuthenticationButton.waitForExistence(timeout: 5))
+        simulateAuthenticationButton.tap()
+
+        XCTAssertTrue(firstLaunch.staticTexts["OnboardingSignInTitle"].waitForNonExistence(timeout: 3))
+        XCTAssertTrue(firstLaunch.staticTexts["HomeTitle"].exists)
+        firstLaunch.terminate()
+
+        let relaunchedApp = makeDiskBackedApp(skipsFirstRunExperience: false)
+        relaunchedApp.launch()
+
+        XCTAssertTrue(relaunchedApp.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(relaunchedApp.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 1))
+    }
+
+    @MainActor
+    func testSignedInFirstLaunchSkipsOnboarding() {
+        let owner = "issuer|ui_owner"
+        let firstLaunch = makeDiskBackedResetApp(extraArguments: [
+            "--uitest-sync-owner", owner,
+            "--uitest-reset-first-run-experience",
+        ])
+        firstLaunch.launch()
+
+        XCTAssertTrue(firstLaunch.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 1))
+        firstLaunch.terminate()
+
+        // Onboarding was marked completed, not merely hidden.
+        let signedOutRelaunch = makeDiskBackedApp(skipsFirstRunExperience: false)
+        signedOutRelaunch.launch()
+
+        XCTAssertTrue(signedOutRelaunch.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(signedOutRelaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 1))
+    }
+
+    @MainActor
+    func testOnboardingActionsStayReachableAtAccessibilityTextSizes() {
+        let app = makeDiskBackedResetApp(extraArguments: [
+            "--uitest-reset-first-run-experience",
+            "--uitest-accessibility-dynamic-type",
+        ])
+        app.launch()
+
+        let continueButton = app.buttons["LaunchExperiencePrimaryButton"]
+        XCTAssertTrue(continueButton.waitForExistence(timeout: 3))
+        for _ in 0..<6 where !continueButton.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(continueButton.isHittable)
+        continueButton.tap()
+
+        XCTAssertTrue(app.staticTexts["OnboardingSignInTitle"].waitForExistence(timeout: 3))
+        let continueWithoutAccountButton = app.buttons["OnboardingContinueWithoutAccountButton"]
+        for _ in 0..<6 where !continueWithoutAccountButton.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(app.buttons["OnboardingSignInButton"].isHittable)
+        XCTAssertTrue(continueWithoutAccountButton.isHittable)
+        continueWithoutAccountButton.tap()
+
+        XCTAssertTrue(app.staticTexts["OnboardingSignInTitle"].waitForNonExistence(timeout: 3))
     }
 
     @MainActor

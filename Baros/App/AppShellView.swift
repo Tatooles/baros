@@ -196,6 +196,7 @@ struct AppShellView: View {
                 .onDisappear {
                     markWhatsNewSeenIfNeeded(presentation)
                 }
+                .accessibilityDynamicTypeForUITesting()
             }
             .onChange(of: activeSession?.id, initial: true) { _, sessionID in
                 if sessionID != nil {
@@ -340,6 +341,12 @@ struct AppShellView: View {
 
         let currentAppVersion = AppBuildInfo.current.version
         let currentRelease = AppReleaseCatalog.definition(for: currentAppVersion)
+        if LaunchExperienceCoordinator.shouldCompleteOnboardingSilently(
+            state: firstRunStore.state,
+            currentOwnerState: currentOwnerCoordinator.state
+        ) {
+            firstRunStore.markOnboardingCompleted(currentRelease: currentRelease)
+        }
         let state = firstRunStore.state
         launchPresentation = LaunchExperienceCoordinator.nextPresentation(
             state: state,

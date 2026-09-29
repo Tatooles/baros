@@ -59,6 +59,33 @@ final class FirstRunExperienceStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testSilentOnboardingCompletionForSignedInLaunchShowsNothing() throws {
+        let store = FirstRunExperienceStore(defaults: defaults)
+        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.2"))
+
+        XCTAssertTrue(
+            LaunchExperienceCoordinator.shouldCompleteOnboardingSilently(
+                state: store.state,
+                currentOwnerState: .active(ownerTokenIdentifier: "issuer|owner")
+            )
+        )
+        store.markOnboardingCompleted(currentRelease: release)
+
+        XCTAssertNil(
+            LaunchExperienceCoordinator.nextPresentation(
+                state: store.state,
+                currentRelease: release
+            )
+        )
+        XCTAssertFalse(
+            LaunchExperienceCoordinator.shouldCompleteOnboardingSilently(
+                state: store.state,
+                currentOwnerState: .active(ownerTokenIdentifier: "issuer|owner")
+            )
+        )
+    }
+
+    @MainActor
     func testExistingUserSeesNewReleaseHighlightsOnce() throws {
         let store = FirstRunExperienceStore(defaults: defaults)
         store.markOnboardingCompleted(

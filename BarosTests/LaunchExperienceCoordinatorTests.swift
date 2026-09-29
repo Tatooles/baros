@@ -134,4 +134,54 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
 
         XCTAssertNil(presentation)
     }
+
+    func testSignedInLaunchWithoutCompletedOnboardingCompletesSilently() {
+        let incomplete = LaunchExperienceState(
+            hasCompletedOnboarding: false,
+            lastProcessedAppVersion: nil,
+            lastSeenWhatsNewVersion: nil
+        )
+
+        for currentOwnerState in [
+            CurrentOwnerCoordinator.State.active(ownerTokenIdentifier: "issuer|owner"),
+            .resolving(ownerTokenIdentifier: "issuer|owner"),
+        ] {
+            XCTAssertTrue(
+                LaunchExperienceCoordinator.shouldCompleteOnboardingSilently(
+                    state: incomplete,
+                    currentOwnerState: currentOwnerState
+                )
+            )
+        }
+    }
+
+    func testSignedOutLaunchStillPresentsOnboarding() {
+        let incomplete = LaunchExperienceState(
+            hasCompletedOnboarding: false,
+            lastProcessedAppVersion: nil,
+            lastSeenWhatsNewVersion: nil
+        )
+
+        XCTAssertFalse(
+            LaunchExperienceCoordinator.shouldCompleteOnboardingSilently(
+                state: incomplete,
+                currentOwnerState: .localOnly
+            )
+        )
+    }
+
+    func testCompletedOnboardingIsNotCompletedAgainForSignedInLaunch() {
+        let completed = LaunchExperienceState(
+            hasCompletedOnboarding: true,
+            lastProcessedAppVersion: "1.2",
+            lastSeenWhatsNewVersion: "1.2"
+        )
+
+        XCTAssertFalse(
+            LaunchExperienceCoordinator.shouldCompleteOnboardingSilently(
+                state: completed,
+                currentOwnerState: .active(ownerTokenIdentifier: "issuer|owner")
+            )
+        )
+    }
 }
