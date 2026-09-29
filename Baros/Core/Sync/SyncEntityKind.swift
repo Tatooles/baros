@@ -16,12 +16,6 @@ enum SyncEntityKind: String, CaseIterable, Equatable, Codable, Hashable {
         .loggedSet,
     ]
 
-    static let v1Excluded: [SyncEntityKind] = [
-        .workoutTemplate,
-        .healthDataLink,
-        .seedMetadata,
-    ]
-
     var isV1Synced: Bool {
         Self.v1Synced.contains(self)
     }

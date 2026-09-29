@@ -324,14 +324,6 @@ final class ActiveWorkoutEngine {
         try context.save()
     }
 
-    func updateSet(_ set: LoggedSet, weight: Double?, reps: Int?, rpe: Double?, context: ModelContext) throws {
-        set.weight = WorkoutNumericInputPolicy.validatedWeight(weight)
-        set.reps = WorkoutNumericInputPolicy.validatedReps(reps)
-        set.rpe = WorkoutNumericInputPolicy.validatedRPE(rpe)
-        set.touch()
-        try context.save()
-    }
-
     /// Persists a focus-boundary weight/reps draft without turning a local
     /// Active Workout checkpoint into a graph-level timestamp mutation.
     @discardableResult

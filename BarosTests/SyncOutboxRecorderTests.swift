@@ -412,7 +412,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
         XCTAssertEqual(entries.map(\.operation), [.create, .update])
     }
 
-    func testBootstrapCreatesEntriesForExistingV1Records() throws {
+    func testEnqueueOwnedRecordsCreatesEntriesForOnlyThatOwnersV1Records() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let recorder = SyncOutboxRecorder()
@@ -479,14 +479,35 @@ final class SyncOutboxRecorderTests: XCTestCase {
             updatedAt: Date(timeIntervalSince1970: 200)
         )
 
+        let otherOwnerExercise = Exercise(
+            name: "Other Owner Row",
+            category: .strength,
+            equipment: .barbell,
+            primaryMuscle: "Back"
+        )
+        let ownerlessExercise = Exercise(
+            name: "Ownerless Curl",
+            category: .strength,
+            equipment: .dumbbell,
+            primaryMuscle: "Biceps"
+        )
+        settings.syncOwnerTokenIdentifier = "issuer|owner_a"
+        exercise.syncOwnerTokenIdentifier = "issuer|owner_a"
+        archivedExercise.syncOwnerTokenIdentifier = "issuer|owner_a"
+        session.syncOwnerTokenIdentifier = "issuer|owner_a"
+        discardedSession.syncOwnerTokenIdentifier = "issuer|owner_a"
+        otherOwnerExercise.syncOwnerTokenIdentifier = "issuer|owner_b"
+
         context.insert(settings)
         context.insert(exercise)
         context.insert(archivedExercise)
+        context.insert(otherOwnerExercise)
+        context.insert(ownerlessExercise)
         context.insert(session)
         context.insert(discardedSession)
         try context.save()
 
-        try recorder.bootstrapV1SyncableRecords(ownerTokenIdentifier: "issuer|owner_a", context: context, now: now)
+        try recorder.enqueueOwnedV1SyncableRecords(ownerTokenIdentifier: "issuer|owner_a", context: context, now: now)
         try context.save()
 
         let entries = try fetchEntries(context)
@@ -500,7 +521,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
         try assertBootstrapEntry(entries, entityKind: .loggedSet, entityID: loggedSet.id, operation: .create, ownerTokenIdentifier: "issuer|owner_a", updatedAt: now)
     }
 
-    func testBootstrapUsesDeleteForTombstonedRecords() throws {
+    func testEnqueueOwnedRecordsUsesDeleteForTombstonedRecords() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let recorder = SyncOutboxRecorder()
@@ -516,19 +537,20 @@ final class SyncOutboxRecorderTests: XCTestCase {
             updatedAt: deletedAt,
             deletedAt: deletedAt
         )
+        exercise.syncOwnerTokenIdentifier = "issuer|owner_a"
 
         context.insert(exercise)
         try context.save()
 
-        try recorder.bootstrapV1SyncableRecords(ownerTokenIdentifier: nil, context: context, now: now)
+        try recorder.enqueueOwnedV1SyncableRecords(ownerTokenIdentifier: "issuer|owner_a", context: context, now: now)
         try context.save()
 
         let entries = try fetchEntries(context)
         XCTAssertEqual(entries.count, 1)
-        try assertBootstrapEntry(entries, entityKind: .exercise, entityID: exercise.id, operation: .delete, ownerTokenIdentifier: nil, updatedAt: now)
+        try assertBootstrapEntry(entries, entityKind: .exercise, entityID: exercise.id, operation: .delete, ownerTokenIdentifier: "issuer|owner_a", updatedAt: now)
     }
 
-    func testBootstrapSkipsActiveWorkoutGraph() throws {
+    func testEnqueueOwnedRecordsSkipsActiveWorkoutGraph() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let recorder = SyncOutboxRecorder()
@@ -552,19 +574,20 @@ final class SyncOutboxRecorderTests: XCTestCase {
             startedAt: Date(timeIntervalSince1970: 100),
             status: .active,
             source: .blank,
+            syncOwnerTokenIdentifier: "issuer|owner_a",
             loggedExercises: [loggedExercise]
         )
 
         context.insert(session)
         try context.save()
 
-        try recorder.bootstrapV1SyncableRecords(ownerTokenIdentifier: nil, context: context, now: now)
+        try recorder.enqueueOwnedV1SyncableRecords(ownerTokenIdentifier: "issuer|owner_a", context: context, now: now)
         try context.save()
 
         XCTAssertTrue(try fetchEntries(context).isEmpty)
     }
 
-    func testBootstrapDoesNotDuplicateExistingEntries() throws {
+    func testEnqueueOwnedRecordsDoesNotDuplicateExistingEntries() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let recorder = SyncOutboxRecorder()
@@ -575,6 +598,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
             equipment: .barbell,
             primaryMuscle: "Quads"
         )
+        exercise.syncOwnerTokenIdentifier = "issuer|owner_a"
         let existingCreatedAt = Date(timeIntervalSince1970: 100)
         let existingUpdatedAt = Date(timeIntervalSince1970: 200)
 
@@ -591,7 +615,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
         )
         try context.save()
 
-        try recorder.bootstrapV1SyncableRecords(ownerTokenIdentifier: "issuer|owner_a", context: context, now: Date(timeIntervalSince1970: 1_300))
+        try recorder.enqueueOwnedV1SyncableRecords(ownerTokenIdentifier: "issuer|owner_a", context: context, now: Date(timeIntervalSince1970: 1_300))
         try context.save()
 
         let entry = try XCTUnwrap(fetchEntries(context).first)
@@ -605,7 +629,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
         XCTAssertEqual(entry.updatedAt, existingUpdatedAt)
     }
 
-    func testBootstrapRespectsOwnerScopeWhenFindingExistingEntries() throws {
+    func testEnqueueOwnedRecordsRespectsOwnerScopeWhenFindingExistingEntries() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let recorder = SyncOutboxRecorder()
@@ -617,6 +641,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
             equipment: .barbell,
             primaryMuscle: "Shoulders"
         )
+        exercise.syncOwnerTokenIdentifier = "issuer|owner_b"
 
         context.insert(exercise)
         context.insert(
@@ -631,7 +656,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
         )
         try context.save()
 
-        try recorder.bootstrapV1SyncableRecords(ownerTokenIdentifier: "issuer|owner_b", context: context, now: now)
+        try recorder.enqueueOwnedV1SyncableRecords(ownerTokenIdentifier: "issuer|owner_b", context: context, now: now)
         try context.save()
 
         let entries = try fetchEntries(context)

@@ -7,15 +7,6 @@ final class SyncConflictResolverTests: XCTestCase {
             SyncEntityKind.v1Synced,
             [.userSettings, .exercise, .workoutSession, .loggedExercise, .loggedSet]
         )
-        XCTAssertEqual(
-            SyncEntityKind.v1Excluded,
-            [.workoutTemplate, .healthDataLink, .seedMetadata]
-        )
-    }
-
-    func testWorkoutTemplateRemainsExcludedFromV1SyncScope() {
-        XCTAssertFalse(SyncEntityKind.v1Synced.contains(.workoutTemplate))
-        XCTAssertTrue(SyncEntityKind.v1Excluded.contains(.workoutTemplate))
     }
 
     func testLatestIncomingUpdateAppliesWhenNewerThanLocal() {

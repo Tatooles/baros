@@ -120,27 +120,11 @@ struct PrivacyDataSection: View {
         }
     }
 
-    @ViewBuilder
-    private func linkRow(title: String, systemImage: String, url: URL?) -> some View {
-        if let url {
-            Button {
-                openURL(url)
-            } label: {
-                Label(title, systemImage: systemImage)
-            }
-        } else {
-            Label {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                    Text(links.unavailableDetailText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } icon: {
-                Image(systemName: systemImage)
-                    .foregroundStyle(.secondary)
-            }
-            .foregroundStyle(.secondary)
+    private func linkRow(title: String, systemImage: String, url: URL) -> some View {
+        Button {
+            openURL(url)
+        } label: {
+            Label(title, systemImage: systemImage)
         }
     }
 }

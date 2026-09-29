@@ -498,7 +498,10 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
-        try engine.updateSet(loggedExercise.sets[0], weight: 185, reps: 5, rpe: 8, context: context)
+        loggedExercise.sets[0].weight = 185
+        loggedExercise.sets[0].reps = 5
+        loggedExercise.sets[0].rpe = 8
+        try context.save()
         loggedExercise.sets[0].kind = .drop
 
         let newSet = try engine.addSet(to: loggedExercise, context: context)
@@ -1322,7 +1325,10 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = loggedExercise.sets[0]
-        try engine.updateSet(set, weight: 200, reps: 5, rpe: 8, context: context)
+        set.weight = 200
+        set.reps = 5
+        set.rpe = 8
+        try context.save()
 
         try engine.toggleSetCompletion(set, context: context, now: Date(timeIntervalSince1970: 200))
 
@@ -1359,7 +1365,10 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = loggedExercise.sets[0]
-        try engine.updateSet(set, weight: 195, reps: 4, rpe: 8.5, context: context)
+        set.weight = 195
+        set.reps = 4
+        set.rpe = 8.5
+        try context.save()
 
         try engine.toggleSetCompletion(set, context: context, now: Date(timeIntervalSince1970: 300))
 
@@ -1368,20 +1377,6 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(set.reps, 4)
         XCTAssertEqual(set.rpe, 8.5)
         XCTAssertEqual(set.completedAt, Date(timeIntervalSince1970: 300))
-    }
-
-    func testUpdatingActiveSetRejectsOutOfPolicyNumericValues() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let engine = ActiveWorkoutEngine()
-        let set = LoggedSet(orderIndex: 0)
-        context.insert(set)
-
-        try engine.updateSet(set, weight: 10_001, reps: 1_001, rpe: 10.1, context: context)
-
-        XCTAssertNil(set.weight)
-        XCTAssertNil(set.reps)
-        XCTAssertNil(set.rpe)
     }
 
     func testFillingFromPreviousRejectsOutOfPolicyNumericValues() throws {
@@ -1431,7 +1426,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = loggedExercise.sets[0]
-        try engine.updateSet(set, weight: 185, reps: 5, rpe: nil, context: context)
+        set.weight = 185
+        set.reps = 5
+        try context.save()
         let baseline = Date(timeIntervalSince1970: 100)
         let commitDate = Date(timeIntervalSince1970: 200)
         session.updatedAt = baseline
@@ -1590,7 +1587,10 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = loggedExercise.sets[0]
-        try engine.updateSet(set, weight: 185, reps: 5, rpe: 8, context: context)
+        set.weight = 185
+        set.reps = 5
+        set.rpe = 8
+        try context.save()
         try engine.toggleSetCompletion(set, context: context, now: completionDate)
         var saveCount = 0
 
@@ -1627,7 +1627,10 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = loggedExercise.sets[0]
-        try engine.updateSet(set, weight: 195, reps: 4, rpe: 8, context: context)
+        set.weight = 195
+        set.reps = 4
+        set.rpe = 8
+        try context.save()
         try engine.toggleSetCompletion(set, context: context, now: Date(timeIntervalSince1970: 300))
         var input = ActiveWorkoutSetInput()
         input.update("", for: .weight, isFocused: true)

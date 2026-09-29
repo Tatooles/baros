@@ -141,7 +141,10 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = try XCTUnwrap(loggedExercise.sets.first)
-        try engine.updateSet(set, weight: 225, reps: 5, rpe: 8, context: context)
+        set.weight = 225
+        set.reps = 5
+        set.rpe = 8
+        try context.save()
 
         try SettingsMutationService().updateWeightUnit(
             .kilograms,
@@ -849,7 +852,10 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         let set = try XCTUnwrap(loggedExercise.sets.first)
-        try engine.updateSet(set, weight: 185, reps: 5, rpe: 8, context: context)
+        set.weight = 185
+        set.reps = 5
+        set.rpe = 8
+        try context.save()
         try engine.finishWorkout(session, context: context, now: Date(timeIntervalSince1970: 200))
 
         XCTAssertEqual(try fetchEntries(context).count, 3)
@@ -1184,11 +1190,18 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         let loggedExercise = try XCTUnwrap(session.sortedLoggedExercises.first)
         try context.save()
 
-        try SyncOutboxRecorder().bootstrapV1SyncableRecords(
-            ownerTokenIdentifier: nil,
-            context: context,
-            now: Date(timeIntervalSince1970: 1_500)
-        )
+        let recorder = SyncOutboxRecorder()
+        let pendingGraph: [(SyncEntityKind, UUID)] = [(.workoutSession, session.id), (.loggedExercise, loggedExercise.id)]
+            + loggedExercise.sets.map { (.loggedSet, $0.id) }
+        for (entityKind, entityID) in pendingGraph {
+            try recorder.recordCreate(
+                entityKind: entityKind,
+                entityID: entityID,
+                ownerTokenIdentifier: nil,
+                context: context,
+                now: Date(timeIntervalSince1970: 1_500)
+            )
+        }
         XCTAssertEqual(try fetchEntries(context).count, 4)
 
         var draft = CompletedWorkoutEditDraft(session: session)
