@@ -1113,7 +1113,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testAddingExerciseAndSetMovesFocusAndKeyboardCanBeDismissed() {
+    func testAddingExerciseFocusesFirstSetButAddingSetLeavesFocusAlone() {
         let app = makeApp()
         app.launch()
 
@@ -1140,12 +1140,17 @@ final class BarosUITests: XCTestCase {
         firstWeightField.typeText("185")
         app.buttons["AddSetButton-0"].tap()
 
+        // Adding a set keeps editing the current field; the new blank row
+        // suggests the in-progress value instead of taking focus.
         let secondWeightField = app.textFields["SetWeightField-0-1"]
         XCTAssertTrue(secondWeightField.waitForExistence(timeout: 3))
-        // Adding a set creates a blank row and moves focus to its weight field,
-        // so it shows the unit placeholder rather than carrying the prior value.
-        XCTAssertEqual(secondWeightField.value as? String, "LBS")
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        XCTAssertEqual(secondWeightField.value as? String, "Suggested 185")
+        XCTAssertTrue(waitForKeyboardFocus(on: firstWeightField))
+
+        dismissKeyboardIfNeeded(in: app)
+        app.buttons["AddSetButton-0"].tap()
+        XCTAssertTrue(app.textFields["SetWeightField-0-2"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
     }
 
     @MainActor
@@ -3027,8 +3032,9 @@ final class BarosUITests: XCTestCase {
         app.buttons["AddSetButton-0"].tap()
         let secondWeightField = app.textFields["SetWeightField-0-1"]
         XCTAssertTrue(secondWeightField.waitForExistence(timeout: 3))
-        // A newly added set is blank, so it shows the kilogram placeholder.
-        XCTAssertEqual(secondWeightField.value as? String, "KG")
+        // A newly added set is blank and suggests the prior set's weight.
+        XCTAssertEqual(secondWeightField.value as? String, "Suggested 100")
+        XCTAssertEqual(secondWeightField.label, "KG")
         secondWeightField.tap()
         secondWeightField.typeText("100")
         dismissKeyboardIfNeeded(in: app)
@@ -3347,7 +3353,6 @@ final class BarosUITests: XCTestCase {
         dismissKeyboardIfNeeded(in: app)
 
         app.buttons["AddSetButton-0"].tap()
-        dismissKeyboardIfNeeded(in: app)
         let secondWeightField = app.textFields["SetWeightField-0-1"]
         XCTAssertTrue(secondWeightField.waitForExistence(timeout: 3))
 
@@ -3914,7 +3919,6 @@ final class BarosUITests: XCTestCase {
     private func addSets(_ count: Int, in app: XCUIApplication) {
         for _ in 0..<count {
             app.buttons["AddSetButton-0"].tap()
-            dismissKeyboardIfNeeded(in: app)
         }
     }
 
