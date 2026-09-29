@@ -79,6 +79,21 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
         XCTAssertEqual(presentation, .whatsNew(try XCTUnwrap(release.whatsNew)))
     }
 
+    func testExistingOneTwoUserReceivesUnseenOneThreeReleaseHighlights() throws {
+        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.3"))
+
+        let presentation = LaunchExperienceCoordinator.nextPresentation(
+            state: LaunchExperienceState(
+                hasCompletedOnboarding: true,
+                lastProcessedAppVersion: "1.2",
+                lastSeenWhatsNewVersion: "1.2"
+            ),
+            currentRelease: release
+        )
+
+        XCTAssertEqual(presentation, .whatsNew(try XCTUnwrap(release.whatsNew)))
+    }
+
     func testExistingUserDoesNotReceiveSeenReleaseHighlights() throws {
         let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.0"))
 

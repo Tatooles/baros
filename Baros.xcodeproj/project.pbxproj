@@ -42,6 +42,7 @@
 		26C145E0783A5A79750AB1D7 /* ExerciseMutationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 965FD60BA45993C269FF0A49 /* ExerciseMutationService.swift */; };
 		26F2B45E6A0B75C32575BC7B /* SyncStatusDisplayStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71CE928AEA84940F0B7E7AD5 /* SyncStatusDisplayStateTests.swift */; };
 		2786D08BE698998D8DACAE88 /* WhatsNewVersion1_2View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8746E9D6BAEBDF7062B16003 /* WhatsNewVersion1_2View.swift */; };
+		A1C3E5070000000000000004 /* WhatsNewVersion1_3View.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C3E5070000000000000003 /* WhatsNewVersion1_3View.swift */; };
 		29B5A9964E5182409F3969FE /* AppAppearancePreferenceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E98A1FADF01A5D331676FFC /* AppAppearancePreferenceStoreTests.swift */; };
 		2A7B70976DE4621BB2C53644 /* AppReleaseCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1618E93838C0B4F83088CAA9 /* AppReleaseCatalogTests.swift */; };
 		2B70C69B718D87766A92C5FC /* AccountDeletionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94B8B5C17E2C5AAC211AD023 /* AccountDeletionCoordinatorTests.swift */; };
@@ -360,6 +361,7 @@
 		8552E82D3C1C75E25C71DFE9 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		857EFC239F41F1B8BFF58873 /* HistorySetTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySetTable.swift; sourceTree = "<group>"; };
 		8746E9D6BAEBDF7062B16003 /* WhatsNewVersion1_2View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewVersion1_2View.swift; sourceTree = "<group>"; };
+		A1C3E5070000000000000003 /* WhatsNewVersion1_3View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewVersion1_3View.swift; sourceTree = "<group>"; };
 		87B573FDF309E99E1D02F1C9 /* AccountDeletionFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionFactory.swift; sourceTree = "<group>"; };
 		891A7966461F2C13DC209A71 /* BarosLiveActivity.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = BarosLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		899D04423C1918B8B8546277 /* WorkoutEditingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutEditingComponents.swift; sourceTree = "<group>"; };
@@ -895,6 +897,7 @@
 				63D053CC597AD0865A0C84D5 /* WhatsNewSheet.swift */,
 				C290FBB2CA7EF425B4E16FCA /* WhatsNewVersion1_0View.swift */,
 				8746E9D6BAEBDF7062B16003 /* WhatsNewVersion1_2View.swift */,
+				A1C3E5070000000000000003 /* WhatsNewVersion1_3View.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -1262,6 +1265,7 @@
 				60B195E54051085E1C59AA35 /* WhatsNewSheet.swift in Sources */,
 				F863D4E692F744FD07AE8518 /* WhatsNewVersion1_0View.swift in Sources */,
 				2786D08BE698998D8DACAE88 /* WhatsNewVersion1_2View.swift in Sources */,
+				A1C3E5070000000000000004 /* WhatsNewVersion1_3View.swift in Sources */,
 				DEB122DEC322E206DCFCAB54 /* WorkoutDataExportService.swift in Sources */,
 				FF2C2372AAE61B0B690AD23E /* WorkoutEditingComponents.swift in Sources */,
 				DA76808E4A6A5D33AE60CF53 /* WorkoutExportFileWriter.swift in Sources */,
