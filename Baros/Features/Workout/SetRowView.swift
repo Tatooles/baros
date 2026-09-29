@@ -453,7 +453,7 @@ struct SetRowView: View, @MainActor Equatable {
 
     private func clearFocusedFieldForThisSet() {
         if isWeightFocused || isRepsFocused {
-            focusedField.wrappedValue = nil
+            withAnimation(.workoutFocusDismissal) { focusedField.wrappedValue = nil }
         }
     }
 }

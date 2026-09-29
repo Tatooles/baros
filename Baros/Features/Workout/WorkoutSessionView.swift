@@ -9,6 +9,13 @@ enum WorkoutField: Hashable {
     case setReps(UUID)
 }
 
+extension Animation {
+    /// Clearing workout focus with this animation collapses the keyboard bar's
+    /// inset alongside the keyboard, rather than snapping the scroll offset
+    /// once the keyboard is gone.
+    static let workoutFocusDismissal = Animation.smooth(duration: 0.25)
+}
+
 struct WorkoutSessionView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
@@ -456,10 +463,8 @@ struct WorkoutSessionView: View {
         focusTransitionCoordinator.transition(
             to: nil,
             commit: setInputRegistry.commit,
-            // Animate so the accessory's inset collapses alongside the keyboard
-            // rather than snapping the scroll offset once the keyboard is gone.
             assign: { field in
-                withAnimation(.smooth(duration: 0.25)) { focusedField = field }
+                withAnimation(.workoutFocusDismissal) { focusedField = field }
             }
         )
     }
