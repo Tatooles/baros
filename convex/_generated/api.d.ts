@@ -9,6 +9,7 @@
  */
 
 import type * as authSmoke from "../authSmoke.js";
+import type * as crons from "../crons.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as sync from "../sync.js";
 import type * as sync_validators from "../sync/validators.js";
@@ -21,6 +22,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   authSmoke: typeof authSmoke;
+  crons: typeof crons;
   "lib/auth": typeof lib_auth;
   sync: typeof sync;
   "sync/validators": typeof sync_validators;
