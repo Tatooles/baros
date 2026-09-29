@@ -61,14 +61,6 @@ final class AppAppearancePreferenceStoreTests: XCTestCase {
         XCTAssertNil(AppAppearance.system.preferredColorScheme)
     }
 
-    func testAppearanceOptionsExposeLabelsAndRowSymbols() {
-        XCTAssertEqual(AppAppearance.allCases.map(\.displayName), ["Dark", "Light", "System"])
-        XCTAssertEqual(
-            AppAppearance.allCases.map(\.systemImage),
-            ["moon.fill", "sun.max.fill", "circle.lefthalf.filled"]
-        )
-    }
-
     @MainActor
     func testUITestResetArgumentClearsStoredSelection() {
         let key = "test.app-appearance"

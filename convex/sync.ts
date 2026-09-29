@@ -197,12 +197,6 @@ function withServerFields<TRecord extends { clientId: string }>(
   };
 }
 
-export function accountDeletionPassLimitReached(
-  passIndex: number,
-): boolean {
-  return passIndex >= maxAccountDeletionPassesPerAction;
-}
-
 export async function deleteAccountDataWithBatches(
   runBatch: (
     tableName: AccountDeletionTable,
@@ -1715,59 +1709,4 @@ export const fetchChangesOnce = mutation({
     limit: v.optional(v.number()),
   },
   handler: fetchChangesForOwner,
-});
-
-export const fetchSettingsExerciseChanges = query({
-  args: {
-    cursors: syncCursorValidator,
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    assertFiniteCursors(args.cursors);
-    const ownerTokenIdentifier = await requireOwnerTokenIdentifier(ctx);
-    const limit = normalizeFetchLimit(args.limit);
-
-    const userSettingsPage = await fetchUserSettingsChanges(
-      ctx,
-      ownerTokenIdentifier,
-      args.cursors.userSettings,
-      limit,
-    );
-    const exercisePage = await fetchExerciseChanges(
-      ctx,
-      ownerTokenIdentifier,
-      args.cursors.exercises,
-      limit,
-    );
-    const userSettings = userSettingsPage.records;
-    const exercises = exercisePage.records.map(normalizeExerciseRecord);
-
-    // This endpoint intentionally narrows the Phase 5 settings/exercises sync.
-    // Full workout sync can move the iOS client back to fetchChanges when those
-    // tables have a local coordinator that consumes and persists their cursors.
-    return {
-      userSettings,
-      exercises,
-      workoutSessions: [],
-      loggedExercises: [],
-      loggedSets: [],
-      cursors: {
-        userSettings: nextCursorFromRecords(
-          userSettings,
-          args.cursors.userSettings,
-        ),
-        exercises: nextCursorFromRecords(exercises, args.cursors.exercises),
-        workoutSessions: args.cursors.workoutSessions,
-        loggedExercises: args.cursors.loggedExercises,
-        loggedSets: args.cursors.loggedSets,
-      },
-      hasMore: {
-        userSettings: userSettingsPage.hasMore,
-        exercises: exercisePage.hasMore,
-        workoutSessions: false,
-        loggedExercises: false,
-        loggedSets: false,
-      },
-    };
-  },
 });

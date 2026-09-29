@@ -2,7 +2,6 @@ import { convexTest } from "convex-test";
 import { describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import {
-  accountDeletionPassLimitReached,
   deleteAccountDataForOwner,
   deleteAccountDataWithBatches,
 } from "./sync";
@@ -1323,11 +1322,6 @@ describe("account data deletion", () => {
     await expect(accountDeletionMarkersForOwner(t, userA)).resolves.toEqual([]);
   });
 
-  test("account deletion pass limit helper respects the configured cap", async () => {
-    expect(accountDeletionPassLimitReached(99)).toBe(false);
-    expect(accountDeletionPassLimitReached(100)).toBe(true);
-  });
-
   test("deleteAccountDataWithBatches throws after the pass cap", async () => {
     const seenTables: string[] = [];
 
@@ -2038,41 +2032,6 @@ describe("sync change cursors", () => {
       completedAt: 2,
       notes: "Clean reps",
     });
-  });
-
-  test("settings exercise changes do not return workout history pages", async () => {
-    const t = testDb().withIdentity(userA);
-
-    await t.mutation(api.sync.upsertUserSettings, {
-      record: userSettingsRecord({ updatedAt: 2 }),
-    });
-    await t.mutation(api.sync.upsertExercise, {
-      record: exerciseRecord({ updatedAt: 3 }),
-    });
-    await t.mutation(api.sync.upsertWorkoutSession, {
-      record: workoutSessionRecord({ updatedAt: 4 }),
-    });
-    await t.mutation(api.sync.upsertLoggedExercise, {
-      record: loggedExerciseRecord({ updatedAt: 5 }),
-    });
-
-    const changes = await t.query(api.sync.fetchSettingsExerciseChanges, {
-      cursors: zeroCursors,
-    });
-
-    expect(changes.userSettings).toHaveLength(1);
-    expect(changes.exercises).toHaveLength(1);
-    expect(changes.workoutSessions).toHaveLength(0);
-    expect(changes.loggedExercises).toHaveLength(0);
-    expect(changes.loggedSets).toHaveLength(0);
-    expect(changes.cursors.userSettings).toBeGreaterThan(0);
-    expect(changes.cursors.exercises).toBeGreaterThan(0);
-    expect(changes.cursors.workoutSessions).toBe(0);
-    expect(changes.cursors.loggedExercises).toBe(0);
-    expect(changes.cursors.loggedSets).toBe(0);
-    expect(changes.hasMore.workoutSessions).toBe(false);
-    expect(changes.hasMore.loggedExercises).toBe(false);
-    expect(changes.hasMore.loggedSets).toBe(false);
   });
 
   test("per-table cursors do not skip remaining rows when another table has a higher cursor", async () => {
