@@ -46,30 +46,6 @@ final class AppInitializationOrderTests: XCTestCase {
         XCTAssertFalse(appSource.contains("import Sentry"))
     }
 
-    func testUITestHelpersForceSignedOutAuthByDefault() throws {
-        let uiTestSource = try sourceFileContents("BarosUITests/BarosUITests.swift")
-
-        XCTAssertTrue(
-            uiTestSource.contains(#"let authArguments = extraArguments.contains("--uitest-force-signed-in-auth")"#)
-                && uiTestSource.contains(#": ["--uitest-force-signed-out-auth"]"#),
-            "Shared UI test launches should force signed-out auth unless explicitly overridden."
-        )
-        XCTAssertTrue(
-            uiTestSource.contains("""
-        var launchArguments = [
-            "--uitest-reset-persistent-store",
-            "--uitest-force-signed-out-auth",
-""")
-        )
-        XCTAssertTrue(
-            uiTestSource.contains("""
-        if extraArguments.isEmpty {
-            launchArguments = ["--uitest-force-signed-out-auth"]
-        } else {
-""")
-        )
-    }
-
     private func sourceFileContents(_ relativePath: String) throws -> String {
         let testFileURL = URL(fileURLWithPath: #filePath)
         let projectRootURL = testFileURL

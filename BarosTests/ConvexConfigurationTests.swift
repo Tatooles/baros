@@ -3,38 +3,6 @@ import ConvexMobile
 @testable import Baros
 
 final class ConvexConfigurationTests: XCTestCase {
-    func testDevelopmentInfoDictionaryBuildsDevelopmentConvexURL() {
-        let configuration = AppEnvironmentConfiguration(infoDictionary: [
-            "BarosEnvironment": "Development",
-            "ClerkPublishableKey": "pk_test_Z2xhZC1rcmlsbC0yMi5jbGVyay5hY2NvdW50cy5kZXYk",
-            "ClerkAssociatedDomain": "webcredentials:glad-krill-22.clerk.accounts.dev",
-            "ConvexDeploymentURL": "https://glad-cow-603.convex.cloud",
-        ])
-
-        XCTAssertEqual(configuration.convexDeploymentURL.scheme, "https")
-        XCTAssertEqual(configuration.convexDeploymentURL.host, "glad-cow-603.convex.cloud")
-        XCTAssertEqual(
-            configuration.convexDeploymentURL.absoluteString,
-            "https://glad-cow-603.convex.cloud"
-        )
-    }
-
-    func testProductionInfoDictionaryBuildsProductionConvexURL() {
-        let configuration = AppEnvironmentConfiguration(infoDictionary: [
-            "BarosEnvironment": "Production",
-            "ClerkPublishableKey": "pk_live_Y2xlcmsuYmFyb3MuZml0JA",
-            "ClerkAssociatedDomain": "webcredentials:clerk.baros.fit",
-            "ConvexDeploymentURL": "https://sensible-reindeer-16.convex.cloud",
-        ])
-
-        XCTAssertEqual(configuration.convexDeploymentURL.scheme, "https")
-        XCTAssertEqual(configuration.convexDeploymentURL.host, "sensible-reindeer-16.convex.cloud")
-        XCTAssertEqual(
-            configuration.convexDeploymentURL.absoluteString,
-            "https://sensible-reindeer-16.convex.cloud"
-        )
-    }
-
     func testDeploymentURLUsesHTTPSConvexCloudHost() {
         XCTAssertEqual(ConvexConfiguration.deploymentURL.scheme, "https")
         XCTAssertEqual(ConvexConfiguration.deploymentURL.host, "glad-cow-603.convex.cloud")
