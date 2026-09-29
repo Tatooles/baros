@@ -34,7 +34,7 @@ struct WhatsNewVersion1_3View: View {
                     LaunchExperienceFeatureRow(
                         systemImage: "arrow.triangle.2.circlepath",
                         title: "Swap exercises mid-workout",
-                        detail: "Equipment taken? Swap an exercise without losing your place, or create a new one right from search."
+                        detail: "Equipment taken? Swap an exercise without losing your place."
                     )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

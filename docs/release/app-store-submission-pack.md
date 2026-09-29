@@ -37,9 +37,10 @@ Baros 1.3 brings smarter logging while you lift and a History that shows how far
 • Records worth chasing: see your actual and estimated strength records in Exercise History, with the set behind each one.
 • Find any workout: search your history and jump from an exercise straight to the workout where you did it.
 • Smarter set logging: Baros suggests weight and reps from your earlier sets, and choosing an RPE completes the set.
-• Swap exercises mid-workout: swap an exercise without losing your place, or create a new one right from search.
+• Swap exercises mid-workout: equipment taken? Swap an exercise without losing your place.
 
 Also in this update:
+• Create a new exercise right from search when adding or swapping
 • Change the date of a completed workout and edit its exercise notes
 • Choose light, dark, or system appearance
 • Refreshed History screens
