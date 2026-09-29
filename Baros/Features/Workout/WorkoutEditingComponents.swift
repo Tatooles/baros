@@ -360,43 +360,22 @@ struct LabeledWorkoutTitleField<Focus: Hashable>: View {
     }
 }
 
-enum WorkoutNumericFieldPresentation {
-    case well
-    case grid
-}
-
 /// Keeps shared-focus comparison and animation in the smallest practical
 /// leaf so a focus move does not rebuild each numeric field's content.
 private struct WorkoutNumericFocusChrome<Focus: Hashable>: View {
-    let presentation: WorkoutNumericFieldPresentation
     let focusTarget: Focus
     var focusedField: FocusState<Focus?>.Binding
 
     var body: some View {
         let isFocused = focusedField.wrappedValue == focusTarget
 
-        Group {
-            switch presentation {
-            case .well:
+        RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+            .fill(AppTheme.fieldSurface)
+            .overlay {
                 RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                    .fill(AppTheme.fieldSurface)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
-                            .strokeBorder(isFocused ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
-                    }
-            case .grid:
-                Rectangle()
-                    .fill(isFocused ? AppTheme.brandAccentMuted : .clear)
-                    .overlay(alignment: .bottom) {
-                        if isFocused {
-                            Rectangle()
-                                .fill(AppTheme.brandFocus)
-                                .frame(height: 2)
-                        }
-                    }
+                    .strokeBorder(isFocused ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
             }
-        }
-        .animation(.easeOut(duration: 0.15), value: isFocused)
+            .animation(.easeOut(duration: 0.15), value: isFocused)
     }
 }
 
@@ -407,8 +386,6 @@ struct WorkoutNumericTextField<Focus: Hashable>: View {
     let focusTarget: Focus
     var focusedField: FocusState<Focus?>.Binding
     let accessibilityIdentifier: String
-    var verticalPadding: CGFloat = 12
-    var presentation: WorkoutNumericFieldPresentation = .well
 
     var body: some View {
         TextField(placeholder, text: $text)
@@ -418,13 +395,11 @@ struct WorkoutNumericTextField<Focus: Hashable>: View {
             .fontDesign(.rounded)
             .foregroundStyle(AppTheme.textPrimary)
             .focused(focusedField, equals: focusTarget)
-            .padding(.horizontal, presentation == .grid ? 4 : 0)
-            .padding(.vertical, verticalPadding)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, minHeight: 44)
             .workoutInputTapTarget(focusedField, equals: focusTarget)
             .background {
                 WorkoutNumericFocusChrome(
-                    presentation: presentation,
                     focusTarget: focusTarget,
                     focusedField: focusedField
                 )
