@@ -17,7 +17,7 @@ struct RPEChipRow: View {
                         .accessibilityIdentifier("RPEChip-\(WorkoutFormatters.number(value))")
                 }
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 2)
         }
     }
 

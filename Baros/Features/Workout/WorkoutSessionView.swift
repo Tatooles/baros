@@ -30,13 +30,10 @@ struct WorkoutSessionView: View {
     @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var isWorkoutNoteRevealed = false
     @State private var cachedSortedLoggedExercises: [LoggedExercise]?
-    @State private var cachedFocusOrder: [WorkoutField] = []
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
-    @State private var rpeEditingSourceField: WorkoutField?
     @State private var setInputRegistry = ActiveSetInputRegistry()
     @State private var focusTransitionCoordinator = WorkoutFocusTransitionCoordinator()
-    @State private var scrollAnimator = WorkoutScrollAnimator()
     @FocusState private var focusedField: WorkoutField?
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
@@ -136,7 +133,6 @@ struct WorkoutSessionView: View {
                             },
                             onEditRPE: { set in
                                 focusedField = .setReps(set.id)
-                                rpeEditingSourceField = .setReps(set.id)
                                 rpeEditingSetID = set.id
                             }
                         )
@@ -160,7 +156,6 @@ struct WorkoutSessionView: View {
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
                 .padding(.bottom, contentBottomPadding)
-                .environment(\.workoutScrollAnimator, scrollAnimator)
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 ActiveWorkoutMetricsHeader(session: session) {
@@ -170,12 +165,6 @@ struct WorkoutSessionView: View {
                     isFinishSheetPresented = true
                 }
                 .equatable()
-            }
-            .onDisappear { scrollAnimator.cancel() }
-            .onScrollPhaseChange { _, phase in
-                if phase == .tracking || phase == .interacting {
-                    scrollAnimator.cancel()
-                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 // Resigning focus routes pending drafts through the normal
@@ -194,24 +183,20 @@ struct WorkoutSessionView: View {
                 completeExerciseSelection(scrollProxy: scrollProxy)
             }
             .onChange(of: focusedField) { previousField, newField in
-                scrollAnimator.focusDidChange(to: newField)
                 UIHangContextObservability.shared.focusChanged(to: newField)
                 focusTransitionCoordinator.observeFocusChange(
                     from: previousField,
                     to: newField,
-                    commit: setInputRegistry.commit,
-                    reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
+                    commit: setInputRegistry.commit
                 )
 
                 if engine.hasPendingSetSave {
                     focusTransitionCoordinator.cancelPendingReveal()
                     focusTransitionCoordinator.synchronizeFocus(nil)
                     focusedField = nil
-                    scrollAnimator.cancel()
                 }
                 if RPEEditingFocusPolicy.shouldReset(editingSetID: rpeEditingSetID, newFocusedField: newField) {
                     rpeEditingSetID = nil
-                    rpeEditingSourceField = nil
                 }
 
                 let shouldRetainNewExerciseReveal = recentlyAddedExerciseID != nil && Self.isSetField(newField)
@@ -222,109 +207,17 @@ struct WorkoutSessionView: View {
                     recentlyAddedExerciseID = nil
                 }
             }
-            .toolbar {
-                if !isChildPresentationActive {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        if rpeEditingSetID != nil {
-                            RPEChipRow(
-                                selected: editingSet?.rpe,
-                                onSelect: { value in
-                                    let sourceField = rpeEditingSourceField
-                                        ?? focusTransitionCoordinator.currentField
-                                    let nextField = WorkoutFocusNavigator.adjacentField(
-                                        from: sourceField,
-                                        in: cachedFocusOrder,
-                                        offset: 1
-                                    )
-                                    guard !engine.hasPendingSetSave else { return }
-                                    if let set = editingSet {
-                                        let preparedValues = setInputRegistry.prepareSetValues(
-                                            for: sourceField,
-                                            completesSet: value != nil
-                                        ) ?? .init(weight: set.weight, reps: set.reps)
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            do {
-                                                try RPEChipSelectionAction.apply(
-                                                    value: value,
-                                                    preparedValues: preparedValues,
-                                                    to: set,
-                                                    engine: engine,
-                                                    context: modelContext
-                                                )
-                                            } catch {
-                                                // The engine retains the action and the alert offers recovery.
-                                            }
-                                        }
-                                    }
-                                    rpeEditingSetID = nil
-                                    rpeEditingSourceField = nil
-                                    guard !engine.hasPendingSetSave else {
-                                        resignFocus()
-                                        return
-                                    }
-                                    transitionFocus(to: nextField, scrollProxy: scrollProxy)
-                                }
-                            )
-                        } else {
-                            Button {
-                                moveFocus(offset: -1, scrollProxy: scrollProxy)
-                            } label: {
-                                Image(systemName: "chevron.up")
-                                    .font(.system(size: 16, weight: .semibold))
-                            }
-                            .disabled(previousFocusedField == nil)
-                            .accessibilityLabel("Previous field")
-                            .accessibilityIdentifier("PreviousWorkoutFieldButton")
-
-                            Button {
-                                moveFocus(offset: 1, scrollProxy: scrollProxy)
-                            } label: {
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 16, weight: .semibold))
-                            }
-                            .disabled(nextFocusedField == nil)
-                            .accessibilityLabel("Next field")
-                            .accessibilityIdentifier("NextWorkoutFieldButton")
-
-                            if let focusedSetID {
-                                Button("RPE") {
-                                    rpeEditingSourceField = focusTransitionCoordinator.currentField
-                                    rpeEditingSetID = focusedSetID
-                                }
-                                .font(.system(size: 16, weight: .semibold))
-                                .accessibilityIdentifier("RPEToolbarButton")
-                            }
-
-                            Spacer()
-
-                            Button("Done") {
-                                resignFocus()
-                            }
-                            .font(.system(size: 16, weight: .semibold))
-                            .accessibilityIdentifier("DismissKeyboardButton")
-                        }
-                    }
+            // Replaces a `.keyboard` toolbar, whose full-width strip swallows taps
+            // between its buttons. As a safe-area inset, the system's keyboard
+            // reveal clears the bar, and only the buttons themselves take touches.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if focusedField != nil, !isChildPresentationActive {
+                    keyboardAccessory
                 }
             }
             .background {
-                ZStack {
-                    WorkoutFocusOrderLoader(
-                        session: session,
-                        inputs: WorkoutFocusNavigator.StructureInputs(
-                            collapsedExerciseIDs: collapsedExerciseIDs,
-                            revealedExerciseNoteIDs: revealedExerciseNoteIDs,
-                            isWorkoutNoteRevealed: isWorkoutNoteRevealed
-                        )
-                    ) { order in
-                        cachedFocusOrder = order
-                        focusTransitionCoordinator.updateFocusOrder(order)
-                        focusTransitionCoordinator.synchronizeFocus(focusedField)
-                    }
-                    .equatable()
-
-                    PreviousSetsCacheLoader(session: session) {
-                        cachedPreviousSets = $0
-                    }
+                PreviousSetsCacheLoader(session: session) {
+                    cachedPreviousSets = $0
                 }
                 .frame(width: 0, height: 0)
             }
@@ -403,6 +296,70 @@ struct WorkoutSessionView: View {
         }
     }
 
+    private var keyboardAccessory: some View {
+        HStack(spacing: 8) {
+            if rpeEditingSetID != nil {
+                // A thin, even inset keeps the chip capsule the same height as the
+                // RPE/Done buttons it replaces, so the bar doesn't grow.
+                RPEChipRow(selected: editingSet?.rpe, onSelect: selectRPE)
+                    .padding(.vertical, 2)
+                    .clipShape(Capsule())
+                    .glassEffect(.regular, in: Capsule())
+            } else {
+                if let focusedSetID {
+                    Button("RPE") {
+                        rpeEditingSetID = focusedSetID
+                    }
+                    .accessibilityIdentifier("RPEToolbarButton")
+                }
+
+                Spacer()
+
+                Button("Done") {
+                    resignFocus()
+                }
+                .accessibilityIdentifier("DismissKeyboardButton")
+            }
+        }
+        .font(.system(size: 16, weight: .semibold))
+        .buttonStyle(.glass)
+        .padding(.horizontal, AppTheme.shellPadding)
+        // The keyboard reveal clears the text field, not its taller rounded
+        // container. Transparent top room keeps the whole field off the buttons.
+        .padding(.top, 20)
+        .padding(.bottom, 8)
+    }
+
+    private func selectRPE(_ value: Double?) {
+        guard !engine.hasPendingSetSave else { return }
+        if let set = editingSet {
+            // Both of a set's fields share one input registration.
+            let preparedValues = setInputRegistry.prepareSetValues(
+                for: .setReps(set.id),
+                completesSet: value != nil
+            ) ?? .init(weight: set.weight, reps: set.reps)
+            withAnimation(.easeInOut(duration: 0.2)) {
+                do {
+                    try RPEChipSelectionAction.apply(
+                        value: value,
+                        preparedValues: preparedValues,
+                        to: set,
+                        engine: engine,
+                        context: modelContext
+                    )
+                } catch {
+                    // The engine retains the action and the alert offers recovery.
+                }
+            }
+        }
+        rpeEditingSetID = nil
+        // Choosing an RPE finishes the set, so the keyboard's job is done.
+        // Clear keeps editing the same field.
+        if value != nil || engine.hasPendingSetSave {
+            resignFocus()
+        }
+    }
+
     private var isChildPresentationActive: Bool {
         isFinishSheetPresented
             || isReorderExercisesPresented
@@ -420,33 +377,15 @@ struct WorkoutSessionView: View {
 
         focusTransitionCoordinator.transition(
             to: focusedField,
-            delay: .milliseconds(350),
             commit: setInputRegistry.commit,
-            assign: { self.focusedField = $0 },
-            reveal: { _ in
-                if let scrollTarget {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-                        scrollProxy.scrollTo(scrollTarget, anchor: .top)
-                    }
-                }
+            assign: { self.focusedField = $0 }
+        )
+        guard let scrollTarget else { return }
+        focusTransitionCoordinator.scheduleReveal(after: .milliseconds(350)) {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
+                scrollProxy.scrollTo(scrollTarget, anchor: .top)
             }
-        )
-    }
-
-    private var previousFocusedField: WorkoutField? {
-        WorkoutFocusNavigator.adjacentField(
-            from: focusedField,
-            in: cachedFocusOrder,
-            offset: -1
-        )
-    }
-
-    private var nextFocusedField: WorkoutField? {
-        WorkoutFocusNavigator.adjacentField(
-            from: focusedField,
-            in: cachedFocusOrder,
-            offset: 1
-        )
+        }
     }
 
     private var focusedSetID: UUID? {
@@ -517,54 +456,21 @@ struct WorkoutSessionView: View {
         )
     }
 
-    private func moveFocus(offset: Int, scrollProxy: ScrollViewProxy) {
-        // Start the native scroll before assigning focus so the focus-loss
-        // commit cannot stall it. Fall back to SwiftUI when the target has no marker.
-        focusTransitionCoordinator.move(
-            offset: offset,
-            commit: setInputRegistry.commit,
-            assign: { target in
-                guard !engine.hasPendingSetSave else { resignFocus(); return }
-                if !scrollAnimator.reveal(target, anchor: Self.focusRevealAnchor) {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        scrollProxy.scrollTo(target, anchor: Self.focusRevealAnchor)
-                    }
-                }
-                focusedField = target
-            },
-            reveal: { _ in }
-        )
-    }
-
-    private func transitionFocus(to target: WorkoutField?, scrollProxy: ScrollViewProxy) {
-        focusTransitionCoordinator.transition(
-            to: target,
-            commit: setInputRegistry.commit,
-            assign: { focusedField = engine.hasPendingSetSave ? nil : $0 },
-            reveal: { revealFocusedField($0, scrollProxy: scrollProxy) }
-        )
-    }
-
     private func prepareForPresentation() -> Bool {
         resignFocus()
         return !engine.hasPendingSetSave
     }
 
     private func resignFocus() {
-        scrollAnimator.cancel()
         focusTransitionCoordinator.transition(
             to: nil,
             commit: setInputRegistry.commit,
-            assign: { focusedField = $0 },
-            reveal: { _ in }
+            // Animate so the accessory's inset collapses alongside the keyboard
+            // rather than snapping the scroll offset once the keyboard is gone.
+            assign: { field in
+                withAnimation(.smooth(duration: 0.25)) { focusedField = field }
+            }
         )
-    }
-
-    private func revealFocusedField(_ field: WorkoutField, scrollProxy: ScrollViewProxy) {
-        guard !engine.hasPendingSetSave else { return }
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-            scrollProxy.scrollTo(field, anchor: Self.focusRevealAnchor)
-        }
     }
 
     private static func isSetField(_ field: WorkoutField?) -> Bool {
@@ -575,8 +481,6 @@ struct WorkoutSessionView: View {
             return false
         }
     }
-
-    private static let focusRevealAnchor = UnitPoint(x: 0.5, y: 0.72)
 }
 
 private struct LoggedExerciseStructureValue: Hashable {
@@ -595,38 +499,6 @@ private struct LoggedExerciseStructureValue: Hashable {
                 set.deletedAt == nil ? set.id : nil
             }
         )
-    }
-}
-
-/// Rebuilds the keyboard route only when structure, collapse, or note
-/// disclosure changes. Focus-only parent updates do not reconstruct it.
-private struct WorkoutFocusOrderLoader: View, @MainActor Equatable {
-    let session: WorkoutSession
-    let inputs: WorkoutFocusNavigator.StructureInputs
-    let onUpdate: ([WorkoutField]) -> Void
-    @State private var cache = WorkoutFocusOrderCache()
-
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.session.id == rhs.session.id
-            && lhs.inputs == rhs.inputs
-    }
-
-    var body: some View {
-        let structureKey = WorkoutFocusNavigator.StructureKey(
-            session: session,
-            inputs: inputs
-        )
-
-        Color.clear
-            .onChange(of: structureKey, initial: true) { _, _ in
-                onUpdate(
-                    cache.update(
-                        for: session,
-                        inputs: inputs,
-                        structureKey: structureKey
-                    )
-                )
-            }
     }
 }
 

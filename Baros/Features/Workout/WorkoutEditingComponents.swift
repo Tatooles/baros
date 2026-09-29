@@ -57,7 +57,6 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
     @Binding var isRevealed: Bool
     var focusedField: FocusState<Focus?>.Binding
     @State private var draft: String?
-    @State private var editorID = UUID()
 
     init(
         notes: Binding<String>,
@@ -101,7 +100,6 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
                 .font(.body)
                 .foregroundStyle(AppTheme.textPrimary)
                 .lineLimit(1...6)
-                .id(editorID)
                 .focused(focusedField, equals: focusTarget)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 10)
@@ -114,16 +112,12 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
                 .animation(.easeOut(duration: 0.15), value: isFocused)
                 .accessibilityLabel(Text(verbatim: accessibilityLabel))
                 .accessibilityIdentifier(fieldAccessibilityIdentifier)
-                .workoutScrollTarget(focusTarget)
                 .id(focusTarget)
                 .onChange(of: focusedField.wrappedValue) { previousField, newField in
                     if newField == focusTarget {
                         isRevealed = true
                     } else if previousField == focusTarget {
                         commitAndUpdateDisclosure()
-                        // Replace the editor so the departing UITextView stops issuing
-                        // keyboard reveals. The outer focus/scroll identity is unchanged.
-                        editorID = UUID()
                     }
                 }
                 .onDisappear {
@@ -295,7 +289,6 @@ struct WorkoutTitleField<Focus: Hashable>: View {
                     .strokeBorder(isFocused ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
             )
             .animation(.easeOut(duration: 0.15), value: isFocused)
-            .workoutScrollTarget(focusTarget)
             .id(focusTarget)
     }
 
