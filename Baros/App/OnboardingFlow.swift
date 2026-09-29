@@ -14,10 +14,12 @@ struct OnboardingFlow: View {
 
     var body: some View {
         NavigationStack {
+            // Both pages force the same inline navigation bar (see
+            // OnboardingPage) so its geometry does not change mid-push, which
+            // would nudge page 2's content down after it lands.
             OnboardingIntroductionPage {
                 showsSignInInvitation = true
             }
-            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showsSignInInvitation) {
                 OnboardingSignInInvitationPage(onCompleted: onCompleted)
             }
@@ -35,8 +37,7 @@ private struct OnboardingIntroductionPage: View {
             title: "Welcome to Baros",
             summary: "A fast, simple log for your lifts.",
             titleIdentifier: "LaunchExperienceTitle",
-            summaryIdentifier: "LaunchExperienceSummary",
-            topPadding: 48
+            summaryIdentifier: "LaunchExperienceSummary"
         ) {
             VStack(alignment: .leading, spacing: 20) {
                 LaunchExperienceFeatureRow(
@@ -100,7 +101,6 @@ private struct OnboardingSignInInvitationPage: View {
             summary: "Sign in to back up your workouts, exercises, and settings, and get them back on a new iPhone.",
             titleIdentifier: "OnboardingSignInTitle",
             summaryIdentifier: "OnboardingSignInSummary",
-            topPadding: 16,
             focusesTitleOnAppear: true
         ) {
             EmptyView()
@@ -169,7 +169,6 @@ private struct OnboardingPage<Content: View, Actions: View>: View {
     let summary: String
     let titleIdentifier: String
     let summaryIdentifier: String
-    let topPadding: CGFloat
     var focusesTitleOnAppear = false
     @ViewBuilder let content: Content
     @ViewBuilder let actions: Actions
@@ -202,7 +201,7 @@ private struct OnboardingPage<Content: View, Actions: View>: View {
                         .accessibilityIdentifier(summaryIdentifier)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, topPadding)
+                .padding(.top, 8)
 
                 content
 
@@ -214,6 +213,8 @@ private struct OnboardingPage<Content: View, Actions: View>: View {
             .padding(.bottom, AppTheme.shellPadding)
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .safeAreaInset(edge: .bottom) {
             if !dynamicTypeSize.isAccessibilitySize {
                 actionStack
