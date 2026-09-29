@@ -112,7 +112,6 @@ struct WorkoutProgressiveNoteControl<Focus: Hashable>: View {
                 .animation(.easeOut(duration: 0.15), value: isFocused)
                 .accessibilityLabel(Text(verbatim: accessibilityLabel))
                 .accessibilityIdentifier(fieldAccessibilityIdentifier)
-                .id(focusTarget)
                 .onChange(of: focusedField.wrappedValue) { previousField, newField in
                     if newField == focusTarget {
                         isRevealed = true
@@ -289,7 +288,6 @@ struct WorkoutTitleField<Focus: Hashable>: View {
                     .strokeBorder(isFocused ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
             )
             .animation(.easeOut(duration: 0.15), value: isFocused)
-            .id(focusTarget)
     }
 
     private var isFocused: Bool {
@@ -354,7 +352,6 @@ struct LabeledWorkoutTitleField<Focus: Hashable>: View {
                     .strokeBorder(isFocused ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
             )
             .animation(.easeOut(duration: 0.15), value: isFocused)
-            .id(focusTarget)
         }
     }
 
@@ -433,7 +430,6 @@ struct WorkoutNumericTextField<Focus: Hashable>: View {
                 )
             }
             .accessibilityIdentifier(accessibilityIdentifier)
-            .id(focusTarget)
     }
 }
 
@@ -472,7 +468,6 @@ struct WorkoutNotesField<Focus: Hashable>: View {
                     )
                     .animation(.easeOut(duration: 0.15), value: focusedField.wrappedValue == focusTarget)
                     .accessibilityIdentifier(accessibilityIdentifier)
-                    .id(focusTarget)
             }
         }
     }

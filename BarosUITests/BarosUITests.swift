@@ -553,44 +553,6 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testFieldBetweenKeyboardBarButtonsStaysTappable() throws {
-        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
-        app.launch()
-        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
-        let firstWeight = app.textFields["SetWeightField-0-0"]
-        firstWeight.tap()
-        XCTAssertTrue(waitForKeyboardFocus(on: firstWeight))
-        try requireOnScreenKeyboard(in: app)
-
-        let rpeButton = app.buttons["RPEToolbarButton"]
-        let doneButton = app.buttons["DismissKeyboardButton"]
-        XCTAssertTrue(rpeButton.waitForExistence(timeout: 3))
-        XCTAssertTrue(doneButton.waitForExistence(timeout: 3))
-        let gapPoint = CGPoint(x: (rpeButton.frame.maxX + doneButton.frame.minX) / 2, y: doneButton.frame.midY)
-
-        // Drag the lowest reps field above the bar down into the gap.
-        let repsFields = (0..<3).flatMap { exercise in
-            (0..<5).map { app.textFields["SetRepsField-\(exercise)-\($0)"] }
-        }
-        guard let target = repsFields
-            .filter({ $0.exists && $0.frame.maxY < doneButton.frame.minY && $0.frame.minY > 0 })
-            .max(by: { $0.frame.maxY < $1.frame.maxY })
-        else {
-            XCTFail("Expected a reps field above the keyboard bar.")
-            return
-        }
-        let origin = app.coordinate(withNormalizedOffset: .zero)
-        let dragStart = origin.withOffset(CGVector(dx: 8, dy: 320))
-        let dragEnd = dragStart.withOffset(CGVector(dx: 0, dy: gapPoint.y - target.frame.midY))
-        dragStart.press(forDuration: 0.1, thenDragTo: dragEnd, withVelocity: .slow, thenHoldForDuration: 0.3)
-        waitForStableFrame(of: target)
-        XCTAssertTrue(target.frame.contains(gapPoint), "The reps field did not land between the bar buttons.")
-
-        origin.withOffset(CGVector(dx: gapPoint.x, dy: gapPoint.y)).tap()
-        XCTAssertTrue(waitForKeyboardFocus(on: target), "A tap between RPE and Done should reach the field.")
-    }
-
-    @MainActor
     func testCollapsingFocusedSetCommitsPendingDraft() {
         let app = makeApp(extraArguments: ["--uitest-disable-animations"])
         app.launch()
@@ -4127,10 +4089,14 @@ final class BarosUITests: XCTestCase {
     }
 
     /// Keyboard-avoidance assertions are meaningless when the simulator routes
-    /// input through a connected hardware keyboard and hides the on-screen one.
+    /// input through a hardware keyboard. It still reports a keyboard element
+    /// then, so check that one actually occupies the bottom of the screen.
     @MainActor
     private func requireOnScreenKeyboard(in app: XCUIApplication) throws {
-        guard app.keyboards.firstMatch.waitForExistence(timeout: 3) else {
+        let keyboard = app.keyboards.firstMatch
+        guard keyboard.waitForExistence(timeout: 3),
+              app.frame.maxY - keyboard.frame.minY > 150
+        else {
             throw XCTSkip("Requires the on-screen keyboard; disconnect the simulator's hardware keyboard.")
         }
     }

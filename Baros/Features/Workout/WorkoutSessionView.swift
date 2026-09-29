@@ -38,20 +38,11 @@ struct WorkoutSessionView: View {
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
     private var contentBottomPadding: CGFloat {
-        // Any padding that appears while a field is focused collapses on
-        // dismissal and clamps the scroll offset (a visible jump), so each
-        // tier is the minimum the state needs. Full room is only for
-        // positioning a newly added exercise near the top of the viewport.
-        // Title and workout-note editing keep modest keyboard-navigation
-        // room. Mid-list fields always have real content below them, so
-        // keyboard avoidance reveals them with no extra room at all.
-        if recentlyAddedExerciseID != nil { return 120 }
-        switch focusedField {
-        case .workoutTitle, .workoutNotes:
-            return 64
-        case .exerciseNotes, .setWeight, .setReps, nil:
-            return 24
-        }
+        // Extra room only for positioning a newly added exercise near the top
+        // of the viewport. Padding that collapses on dismissal clamps the
+        // scroll offset (a visible jump), so it is otherwise the minimum; the
+        // keyboard bar's safe-area inset already gives focused fields room.
+        recentlyAddedExerciseID != nil ? 120 : 24
     }
 
     private var weightUnit: MeasurementUnit {
