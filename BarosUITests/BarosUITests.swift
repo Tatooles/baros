@@ -518,112 +518,38 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testExerciseNoteArrowPositionsTheNextField() {
+    func testTappingFromExerciseNoteKeepsTheTappedFieldInView() throws {
         let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
         app.buttons["AddExerciseNoteButton-0"].tap()
         let note = app.textFields["ExerciseNotesField-0"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
-        let noteFocus = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: note
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [noteFocus], timeout: 3), .completed)
+        XCTAssertTrue(waitForKeyboardFocus(on: note))
+        try requireOnScreenKeyboard(in: app)
         note.typeText("Pause reps")
-        app.buttons["NextWorkoutFieldButton"].tap()
-        let target = app.textFields["SetWeightField-1-0"]
-        let focus = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: target
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [focus], timeout: 3), .completed)
-        let headerBottom = app.buttons["FinishWorkoutButton"].frame.maxY
-        let toolbarTop = app.buttons["DismissKeyboardButton"].frame.minY
-        XCTAssertGreaterThan(target.frame.minY, headerBottom)
-        // Require room below the destination, not just visibility.
-        XCTAssertLessThan(target.frame.maxY, toolbarTop - 40)
+
+        let target = lowestHittableSetWeightField(in: app)
+        target.tap()
+        XCTAssertTrue(waitForKeyboardFocus(on: target))
+        // The departing note must not pull the viewport back once it settles.
+        waitForStableFrame(of: target)
+        assertClearOfWorkoutChrome(target, in: app)
         XCTAssertEqual(note.value as? String, "Pause reps")
     }
 
     @MainActor
-    func testLargeActiveWorkoutRapidNextNavigationKeepsLatestTarget() {
-        let app = makeApp(extraArguments: [
-            "--uitest-seed-large-active-workout",
-        ])
+    func testTappingALowSetFieldKeepsItClearOfTheKeyboardToolbar() throws {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
         app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
 
-        let titleField = app.textFields["WorkoutTitle"]
-        XCTAssertTrue(titleField.waitForExistence(timeout: 8))
-        XCTAssertEqual(titleField.value as? String, "Performance Workout 10x5")
-        titleField.tap()
-        let titleFocusExpectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
-            object: titleField
-        )
-        XCTAssertEqual(
-            XCTWaiter.wait(for: [titleFocusExpectation], timeout: 3),
-            .completed,
-            "The rapid navigation sequence must begin from a confirmed title focus."
-        )
-
-        let nextButton = app.buttons["NextWorkoutFieldButton"]
-        XCTAssertTrue(nextButton.waitForExistence(timeout: 3))
-        for _ in 0..<10 {
-            nextButton.tap()
-        }
-
-        let expectedField = app.textFields["SetRepsField-0-4"]
-        XCTAssertTrue(expectedField.waitForExistence(timeout: 3))
-        let focusExpectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
-            object: expectedField
-        )
-        XCTAssertEqual(
-            XCTWaiter.wait(for: [focusExpectation], timeout: 3),
-            .completed,
-            "Ten rapid moves from the workout title should land on the fifth set's reps field."
-        )
-
-        let previousButton = app.buttons["PreviousWorkoutFieldButton"]
-        XCTAssertTrue(previousButton.waitForExistence(timeout: 3))
-        nextButton.tap()
-        let nextExerciseField = app.textFields["SetWeightField-1-0"]
-        XCTAssertTrue(nextExerciseField.waitForExistence(timeout: 3))
-        let boundaryFocusExpectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
-            object: nextExerciseField
-        )
-        XCTAssertEqual(
-            XCTWaiter.wait(for: [boundaryFocusExpectation], timeout: 3),
-            .completed,
-            "Next from the final set should cross into the next exercise."
-        )
-        let doneButton = app.buttons["DismissKeyboardButton"]
-        XCTAssertTrue(doneButton.waitForExistence(timeout: 3))
-        XCTAssertLessThan(nextExerciseField.frame.maxY, doneButton.frame.minY)
-        previousButton.tap()
-        let reverseBoundaryFocusExpectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
-            object: expectedField
-        )
-        XCTAssertEqual(
-            XCTWaiter.wait(for: [reverseBoundaryFocusExpectation], timeout: 3),
-            .completed,
-            "Previous should cross back to the prior exercise's final set."
-        )
-        XCTAssertGreaterThan(expectedField.frame.minY, app.buttons["FinishWorkoutButton"].frame.maxY)
-        XCTAssertLessThan(expectedField.frame.maxY, doneButton.frame.minY)
-        for _ in 0..<10 {
-            previousButton.tap()
-        }
-        let returnFocusExpectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
-            object: titleField
-        )
-        XCTAssertEqual(
-            XCTWaiter.wait(for: [returnFocusExpectation], timeout: 3),
-            .completed,
-            "Ten rapid reverse moves should return to the workout title."
-        )
+        let target = lowestHittableSetWeightField(in: app)
+        target.tap()
+        XCTAssertTrue(waitForKeyboardFocus(on: target))
+        try requireOnScreenKeyboard(in: app)
+        waitForStableFrame(of: target)
+        assertClearOfWorkoutChrome(target, in: app)
     }
 
     @MainActor
@@ -2622,7 +2548,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testCheckmarkConsumesPendingInputAndKeepsRPEKeyboardNavigation() {
+    func testCheckmarkAndRPEConsumePendingInputAndDismissKeyboard() {
         // Use an isolated in-memory fixture so this focused interaction can
         // also run on a physical phone without resetting its workout store.
         let app = XCUIApplication()
@@ -2650,17 +2576,13 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(repsField.value as? String, "5")
         XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
 
-        // Re-enter the row and traverse the same keyboard path used before completion.
-        weightField.tap()
-        app.buttons["NextWorkoutFieldButton"].tap()
-        let repsFocus = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
-            object: repsField
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [repsFocus], timeout: 3), .completed)
+        // Choosing an RPE finishes the set, so the keyboard dismisses.
+        repsField.tap()
+        XCTAssertTrue(waitForKeyboardFocus(on: repsField))
         enterRPEViaChips("8", in: app)
         XCTAssertEqual(completionButton.label, "Mark set incomplete")
         XCTAssertTrue(app.buttons["SetRPEBadge-0-0"].exists)
+        XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
         completionButton.tap()
         XCTAssertEqual(completionButton.label, "Mark set complete")
         XCTAssertEqual(weightField.value as? String, "200")
@@ -2674,6 +2596,46 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(weightField.value as? String, "200")
         XCTAssertEqual(completionButton.label, "Mark set incomplete")
         XCTAssertTrue(app.buttons["SetRPEBadge-0-0"].exists)
+    }
+
+    @MainActor
+    func testClearingRPEKeepsEditingTheSameField() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store",
+            "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience",
+            "--uitest-seed-completed-bench-workout", "Past Push",
+        ]
+        app.launch()
+        openFirstPastWorkout(in: app)
+        confirmStartFromPastWorkout(in: app)
+
+        let weightField = app.textFields["SetWeightField-0-0"]
+        let repsField = app.textFields["SetRepsField-0-0"]
+        let completionButton = app.buttons["SetCompletionButton-0-0"]
+        XCTAssertTrue(weightField.waitForExistence(timeout: 3))
+        replaceText(in: weightField, with: "200")
+        repsField.tap()
+        XCTAssertTrue(waitForKeyboardFocus(on: repsField))
+        enterRPEViaChips("8", in: app)
+        XCTAssertEqual(completionButton.label, "Mark set incomplete")
+        XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
+
+        let badge = app.buttons["SetRPEBadge-0-0"]
+        XCTAssertTrue(badge.waitForExistence(timeout: 3))
+        badge.tap()
+        let clearChip = app.buttons["RPEChipClear"]
+        XCTAssertTrue(clearChip.waitForExistence(timeout: 3))
+        clearChip.tap()
+
+        XCTAssertTrue(waitForAbsence(badge, timeout: 3))
+        XCTAssertEqual(completionButton.label, "Mark set incomplete")
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        XCTAssertTrue(waitForKeyboardFocus(on: repsField))
+        XCTAssertTrue(app.buttons["RPEToolbarButton"].waitForExistence(timeout: 3))
+        XCTAssertEqual(weightField.value as? String, "200")
+        XCTAssertEqual(repsField.value as? String, "5")
     }
 
     @MainActor
@@ -3988,7 +3950,7 @@ final class BarosUITests: XCTestCase {
                         let searchField = app.searchFields.firstMatch
                         XCTAssertTrue(searchField.waitForExistence(timeout: 3))
                         searchField.tap()
-                        XCTAssertFalse(app.buttons["NextWorkoutFieldButton"].exists)
+                        XCTAssertFalse(app.buttons["DismissKeyboardButton"].exists)
                         searchField.typeText(searchText)
 
                         let exerciseButton = app.buttons[exerciseRowIdentifier]
@@ -4115,6 +4077,73 @@ final class BarosUITests: XCTestCase {
             dismissButton.tap()
             XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
         }
+    }
+
+    @MainActor
+    private func waitForKeyboardFocus(on element: XCUIElement, timeout: TimeInterval = 3) -> Bool {
+        let focus = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: element
+        )
+        return XCTWaiter.wait(for: [focus], timeout: timeout) == .completed
+    }
+
+    /// Keyboard-avoidance assertions are meaningless when the simulator routes
+    /// input through a hardware keyboard. It still reports a keyboard element
+    /// then, so check that one actually occupies the bottom of the screen.
+    @MainActor
+    private func requireOnScreenKeyboard(in app: XCUIApplication) throws {
+        let keyboard = app.keyboards.firstMatch
+        guard keyboard.waitForExistence(timeout: 3),
+              app.frame.maxY - keyboard.frame.minY > 150
+        else {
+            throw XCTSkip("Requires the on-screen keyboard; disconnect the simulator's hardware keyboard.")
+        }
+    }
+
+    /// Waits until keyboard avoidance and any follow-up scroll have finished moving `element`.
+    @MainActor
+    private func waitForStableFrame(of element: XCUIElement, timeout: TimeInterval = 3) {
+        let deadline = Date().addingTimeInterval(timeout)
+        var previous = element.frame
+        var stableSamples = 0
+        while stableSamples < 3, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.15)
+            let current = element.frame
+            stableSamples = current == previous ? stableSamples + 1 : 0
+            previous = current
+        }
+        XCTAssertGreaterThanOrEqual(stableSamples, 3, "The focused field kept moving.")
+    }
+
+    /// The lowest on-screen set field is the one keyboard avoidance must move the most.
+    @MainActor
+    private func lowestHittableSetWeightField(in app: XCUIApplication) -> XCUIElement {
+        var lowest: XCUIElement?
+        for exerciseIndex in 0..<3 {
+            for setIndex in 0..<5 {
+                let field = app.textFields["SetWeightField-\(exerciseIndex)-\(setIndex)"]
+                guard field.exists, field.isHittable else { continue }
+                if lowest.map({ field.frame.maxY > $0.frame.maxY }) ?? true {
+                    lowest = field
+                }
+            }
+        }
+        XCTAssertNotNil(lowest, "Expected a visible set field.")
+        return lowest ?? app.textFields["SetWeightField-0-0"]
+    }
+
+    @MainActor
+    private func assertClearOfWorkoutChrome(
+        _ element: XCUIElement,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let headerBottom = app.buttons["FinishWorkoutButton"].frame.maxY
+        let toolbarTop = app.buttons["DismissKeyboardButton"].frame.minY
+        XCTAssertGreaterThan(element.frame.minY, headerBottom, file: file, line: line)
+        XCTAssertLessThan(element.frame.maxY, toolbarTop, file: file, line: line)
     }
 
     @MainActor

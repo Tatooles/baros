@@ -337,8 +337,6 @@ struct SetRowView: View, @MainActor Equatable {
                 ?? (text.wrappedValue.isEmpty ? placeholder : text.wrappedValue))
             .accessibilityHint(suggestion == nil ? "" : "Complete the set or select an RPE to use this value.")
             .accessibilityIdentifier(accessibilityIdentifier)
-            .workoutScrollTarget(focusTarget)
-            .id(focusTarget)
     }
 
     private func suggestionText(for field: ActiveWorkoutSetInput.Field) -> String? {
@@ -455,7 +453,7 @@ struct SetRowView: View, @MainActor Equatable {
 
     private func clearFocusedFieldForThisSet() {
         if isWeightFocused || isRepsFocused {
-            focusedField.wrappedValue = nil
+            withAnimation(.workoutFocusDismissal) { focusedField.wrappedValue = nil }
         }
     }
 }
