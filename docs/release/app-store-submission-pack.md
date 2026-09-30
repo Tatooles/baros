@@ -25,6 +25,30 @@ The app focuses on fast workout entry, offline-first local logging, workout hist
 
 workout, lifting, gym, strength, log, tracker, fitness, exercise, sets, reps
 
+## Release Notes
+
+App Store Connect "What's New in This Version" text. The highlights must match that release's in-app What's New sheet (`Baros/App/WhatsNewVersion<version>View.swift`), so update both together.
+
+### 1.3
+
+```text
+Baros 1.3 brings smarter logging while you lift and a History that shows how far you've come.
+
+• Records worth chasing: see your actual and estimated strength records in Exercise History, with the set behind each one.
+• Find any workout: search your history and jump from an exercise straight to the workout where you did it.
+• Smarter set logging: Baros suggests weight and reps from your earlier sets, and choosing an RPE completes the set.
+• Swap exercises mid-workout: equipment taken? Swap an exercise without losing your place.
+
+Also in this update:
+• Create a new exercise right from search when adding or swapping
+• Change the date of a completed workout and edit its exercise notes
+• Choose light, dark, or system appearance
+• Refreshed History screens
+• Clearer sync status while offline
+• The keyboard no longer jumps between fields on its own, so tap where you want to log next
+• Bug fixes and performance improvements
+```
+
 ## Age Rating Notes
 
 Baros does not include user-generated public content, commerce, gambling, medical diagnosis, or regulated medical-device functionality. It is a workout logging utility and does not provide medical advice.

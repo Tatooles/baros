@@ -1165,10 +1165,14 @@ final class BarosUITests: XCTestCase {
         whatsNewButton.tap()
 
         XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["What's new in Baros 1.2"].exists)
-        XCTAssertTrue(app.staticTexts["Keep your workout close"].exists)
-        XCTAssertTrue(app.staticTexts["Progress at a glance"].exists)
-        XCTAssertTrue(app.staticTexts["Build from a past workout"].exists)
+        XCTAssertTrue(app.staticTexts["What's new in Baros 1.3"].exists)
+        XCTAssertTrue(app.staticTexts["Records worth chasing"].exists)
+        XCTAssertTrue(app.staticTexts["Find any workout"].exists)
+        XCTAssertTrue(app.staticTexts["Smarter set logging"].exists)
+        XCTAssertTrue(app.staticTexts["Swap exercises mid-workout"].exists)
+
+        app.buttons["LaunchExperiencePrimaryButton"].tap()
+        XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitForNonExistence(timeout: 3))
     }
 
     @MainActor

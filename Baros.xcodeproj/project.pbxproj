@@ -42,6 +42,7 @@
 		26C145E0783A5A79750AB1D7 /* ExerciseMutationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 965FD60BA45993C269FF0A49 /* ExerciseMutationService.swift */; };
 		26F2B45E6A0B75C32575BC7B /* SyncStatusDisplayStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71CE928AEA84940F0B7E7AD5 /* SyncStatusDisplayStateTests.swift */; };
 		2786D08BE698998D8DACAE88 /* WhatsNewVersion1_2View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8746E9D6BAEBDF7062B16003 /* WhatsNewVersion1_2View.swift */; };
+		A1C3E5070000000000000004 /* WhatsNewVersion1_3View.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C3E5070000000000000003 /* WhatsNewVersion1_3View.swift */; };
 		29B5A9964E5182409F3969FE /* AppAppearancePreferenceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E98A1FADF01A5D331676FFC /* AppAppearancePreferenceStoreTests.swift */; };
 		2A7B70976DE4621BB2C53644 /* AppReleaseCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1618E93838C0B4F83088CAA9 /* AppReleaseCatalogTests.swift */; };
 		2B70C69B718D87766A92C5FC /* AccountDeletionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94B8B5C17E2C5AAC211AD023 /* AccountDeletionCoordinatorTests.swift */; };
@@ -208,6 +209,7 @@
 		F863D4E692F744FD07AE8518 /* WhatsNewVersion1_0View.swift in Sources */ = {isa = PBXBuildFile; fileRef = C290FBB2CA7EF425B4E16FCA /* WhatsNewVersion1_0View.swift */; };
 		F8C8080E9BEA0951BFB2737E /* LoggedExercise.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD05014A54498ADD53C9C84C /* LoggedExercise.swift */; };
 		F8E05939EC019F68ACE7C848 /* LaunchExperienceFeatureRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6509A17AE88CDDB51A9EC9 /* LaunchExperienceFeatureRow.swift */; };
+		A1C3E5070000000000000002 /* LaunchExperiencePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C3E5070000000000000001 /* LaunchExperiencePage.swift */; };
 		FA4E500DC7E56E0F46E006CA /* StateViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE4314AD2B27E0C681BD5D7 /* StateViews.swift */; };
 		FB58BA468030F9847559D07B /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = E49F56257C19C0BBCE62F977 /* Sentry */; };
 		FC3D10AD637B2B69291993E9 /* SyncConflictResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C1BE6DD7730BBE9292B992F /* SyncConflictResolverTests.swift */; };
@@ -359,6 +361,7 @@
 		8552E82D3C1C75E25C71DFE9 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		857EFC239F41F1B8BFF58873 /* HistorySetTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySetTable.swift; sourceTree = "<group>"; };
 		8746E9D6BAEBDF7062B16003 /* WhatsNewVersion1_2View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewVersion1_2View.swift; sourceTree = "<group>"; };
+		A1C3E5070000000000000003 /* WhatsNewVersion1_3View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewVersion1_3View.swift; sourceTree = "<group>"; };
 		87B573FDF309E99E1D02F1C9 /* AccountDeletionFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionFactory.swift; sourceTree = "<group>"; };
 		891A7966461F2C13DC209A71 /* BarosLiveActivity.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = BarosLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		899D04423C1918B8B8546277 /* WorkoutEditingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutEditingComponents.swift; sourceTree = "<group>"; };
@@ -390,6 +393,7 @@
 		A8D3DF0D84D449AEEBB18FD5 /* PreviousSetPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviousSetPerformanceTests.swift; sourceTree = "<group>"; };
 		AD05014A54498ADD53C9C84C /* LoggedExercise.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggedExercise.swift; sourceTree = "<group>"; };
 		AE6509A17AE88CDDB51A9EC9 /* LaunchExperienceFeatureRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchExperienceFeatureRow.swift; sourceTree = "<group>"; };
+		A1C3E5070000000000000001 /* LaunchExperiencePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchExperiencePage.swift; sourceTree = "<group>"; };
 		B2587D5EEC35D1F502DC01B4 /* ExerciseQuickHistorySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseQuickHistorySheet.swift; sourceTree = "<group>"; };
 		B6795620478217A9EB5FD5B3 /* AddExerciseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddExerciseSheet.swift; sourceTree = "<group>"; };
 		B6D18D448068760DC1B3E047 /* Exercise.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Exercise.swift; sourceTree = "<group>"; };
@@ -887,11 +891,13 @@
 				B9193656A64D413E72988A43 /* FirstRunExperienceStore.swift */,
 				1BADC0102C079EC0FAAC287B /* LaunchExperienceCoordinator.swift */,
 				AE6509A17AE88CDDB51A9EC9 /* LaunchExperienceFeatureRow.swift */,
+				A1C3E5070000000000000001 /* LaunchExperiencePage.swift */,
 				4405F3FDFB5966393FCD31C4 /* LaunchExperienceSheet.swift */,
 				DD824F36A386212D32C34A33 /* OnboardingFlow.swift */,
 				63D053CC597AD0865A0C84D5 /* WhatsNewSheet.swift */,
 				C290FBB2CA7EF425B4E16FCA /* WhatsNewVersion1_0View.swift */,
 				8746E9D6BAEBDF7062B16003 /* WhatsNewVersion1_2View.swift */,
+				A1C3E5070000000000000003 /* WhatsNewVersion1_3View.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -1209,6 +1215,7 @@
 				8D915D827482CBB112214669 /* HomeView.swift in Sources */,
 				47B405450E38B4E1CF012367 /* LaunchExperienceCoordinator.swift in Sources */,
 				F8E05939EC019F68ACE7C848 /* LaunchExperienceFeatureRow.swift in Sources */,
+				A1C3E5070000000000000002 /* LaunchExperiencePage.swift in Sources */,
 				F31BDE54D77FC6710C931FE9 /* LaunchExperienceSheet.swift in Sources */,
 				880AEBC45FAD9B690182BC62 /* LocalDataResetService.swift in Sources */,
 				F8C8080E9BEA0951BFB2737E /* LoggedExercise.swift in Sources */,
@@ -1258,6 +1265,7 @@
 				60B195E54051085E1C59AA35 /* WhatsNewSheet.swift in Sources */,
 				F863D4E692F744FD07AE8518 /* WhatsNewVersion1_0View.swift in Sources */,
 				2786D08BE698998D8DACAE88 /* WhatsNewVersion1_2View.swift in Sources */,
+				A1C3E5070000000000000004 /* WhatsNewVersion1_3View.swift in Sources */,
 				DEB122DEC322E206DCFCAB54 /* WorkoutDataExportService.swift in Sources */,
 				FF2C2372AAE61B0B690AD23E /* WorkoutEditingComponents.swift in Sources */,
 				DA76808E4A6A5D33AE60CF53 /* WorkoutExportFileWriter.swift in Sources */,
