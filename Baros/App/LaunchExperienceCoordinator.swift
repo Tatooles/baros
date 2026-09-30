@@ -26,6 +26,25 @@ enum LaunchExperienceCoordinator {
         return .evaluateStore
     }
 
+    /// A signed-in launch without completed onboarding is a returning user on a
+    /// reinstall: Clerk's keychain session outlives the app, but the onboarding
+    /// flag in UserDefaults does not. Those users skip onboarding entirely.
+    static func shouldCompleteOnboardingSilently(
+        state: LaunchExperienceState,
+        currentOwnerState: CurrentOwnerCoordinator.State
+    ) -> Bool {
+        guard !state.hasCompletedOnboarding else {
+            return false
+        }
+
+        switch currentOwnerState {
+        case .active, .resolving(ownerTokenIdentifier: .some):
+            return true
+        case .localOnly, .resolving(ownerTokenIdentifier: nil):
+            return false
+        }
+    }
+
     static func nextPresentation(
         state: LaunchExperienceState,
         currentRelease: AppReleaseDefinition
