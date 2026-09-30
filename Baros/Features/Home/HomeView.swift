@@ -334,8 +334,7 @@ private struct HomeLastWorkoutView: View {
 
                                     Spacer(minLength: 8)
 
-                                    let setCount = loggedExercise.sortedSets.lazy.filter(\.isCompleted).count
-                                    Text("\(setCount) \(setCount == 1 ? "set" : "sets")")
+                                    Text(WorkoutFormatters.setCount(loggedExercise.sortedSets.count))
                                         .font(.footnote.weight(.medium))
                                         .foregroundStyle(AppTheme.textSecondary)
                                 }
@@ -363,7 +362,7 @@ private struct HomeLastWorkoutView: View {
     @ViewBuilder
     private var workoutMetadata: some View {
         Label(AppTheme.formatDuration(metrics.durationSeconds), systemImage: "clock")
-        Text("\(session.visibleExerciseCount) exercises")
-        Text("\(metrics.completedSetCount) sets")
+        Text(WorkoutFormatters.exerciseCount(session.visibleExerciseCount))
+        Text(WorkoutFormatters.setCount(metrics.totalSetCount))
     }
 }

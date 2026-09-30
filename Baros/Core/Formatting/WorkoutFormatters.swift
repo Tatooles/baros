@@ -51,6 +51,14 @@ enum WorkoutFormatters {
         return "\(hours) hr \(String(format: "%02d", minutes)) min elapsed"
     }
 
+    static func exerciseCount(_ count: Int) -> String {
+        "\(count) \(count == 1 ? "exercise" : "exercises")"
+    }
+
+    static func setCount(_ count: Int) -> String {
+        "\(count) \(count == 1 ? "set" : "sets")"
+    }
+
     static func date(_ date: Date) -> String {
         date.formatted(.dateTime.weekday(.wide).month(.wide).day())
     }
