@@ -341,12 +341,7 @@ struct AppShellView: View {
 
         let currentAppVersion = AppBuildInfo.current.version
         let currentRelease = AppReleaseCatalog.definition(for: currentAppVersion)
-        if LaunchExperienceCoordinator.shouldCompleteOnboardingSilently(
-            state: firstRunStore.state,
-            currentOwnerState: currentOwnerCoordinator.state
-        ) {
-            firstRunStore.markOnboardingCompleted(currentRelease: currentRelease)
-        }
+        completeOnboardingSilentlyIfSignedIn()
         let state = firstRunStore.state
         launchPresentation = LaunchExperienceCoordinator.nextPresentation(
             state: state,
@@ -369,10 +364,26 @@ struct AppShellView: View {
             return
         case .skipForActiveWorkout:
             hasMadeLaunchExperienceDecision = true
+            // Nothing is presented over the workout, but a signed-in launch
+            // still settles onboarding so a later signed-out launch skips it.
+            completeOnboardingSilentlyIfSignedIn()
         case .evaluateStore:
             hasMadeLaunchExperienceDecision = true
             presentLaunchExperienceIfNeeded()
         }
+    }
+
+    private func completeOnboardingSilentlyIfSignedIn() {
+        guard LaunchExperienceCoordinator.shouldCompleteOnboardingSilently(
+            state: firstRunStore.state,
+            currentOwnerState: currentOwnerCoordinator.state
+        ) else {
+            return
+        }
+
+        firstRunStore.markOnboardingCompleted(
+            currentRelease: AppReleaseCatalog.definition(for: AppBuildInfo.current.version)
+        )
     }
 
     private func completeLaunchPresentation(_ presentation: LaunchExperiencePresentation) {

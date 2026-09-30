@@ -1161,6 +1161,38 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testSignedInLaunchWithActiveWorkoutStillCompletesOnboarding() {
+        let owner = "issuer|ui_owner"
+        let firstLaunch = makeDiskBackedResetApp(extraArguments: ["--uitest-sync-owner", owner])
+        firstLaunch.launch()
+        startBlankWorkout(in: firstLaunch)
+        replaceText(in: firstLaunch.textFields["WorkoutTitle"], with: "Signed In Onboarding")
+        dismissKeyboardIfNeeded(in: firstLaunch)
+        firstLaunch.terminate()
+
+        // Signed in with an active workout and onboarding not yet completed:
+        // nothing is presented, but onboarding must still be settled.
+        let signedInRelaunch = makeDiskBackedApp(
+            extraArguments: [
+                "--uitest-sync-owner", owner,
+                "--uitest-reset-first-run-experience",
+            ],
+            skipsFirstRunExperience: false
+        )
+        signedInRelaunch.launch()
+        XCTAssertTrue(signedInRelaunch.textFields["WorkoutTitle"].waitForExistence(timeout: 5))
+        signedInRelaunch.terminate()
+
+        // Signed out, the owner's workout is hidden, so the launch evaluates
+        // onboarding; it was completed above and must not appear.
+        let signedOutRelaunch = makeDiskBackedApp(skipsFirstRunExperience: false)
+        signedOutRelaunch.launch()
+
+        XCTAssertTrue(signedOutRelaunch.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(signedOutRelaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 1))
+    }
+
+    @MainActor
     func testOnboardingActionsStayReachableAtAccessibilityTextSizes() {
         let app = makeDiskBackedResetApp(extraArguments: [
             "--uitest-reset-first-run-experience",
