@@ -40,6 +40,14 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(WorkoutFormatters.homeElapsedDescription(-1), "0 min elapsed")
     }
 
+    func testCountDescriptionsUseSingularOnlyForOne() {
+        XCTAssertEqual(WorkoutFormatters.setCount(0), "0 sets")
+        XCTAssertEqual(WorkoutFormatters.setCount(1), "1 set")
+        XCTAssertEqual(WorkoutFormatters.setCount(3), "3 sets")
+        XCTAssertEqual(WorkoutFormatters.exerciseCount(1), "1 exercise")
+        XCTAssertEqual(WorkoutFormatters.exerciseCount(2), "2 exercises")
+    }
+
     func testDateFormatterIncludesWeekdayMonthAndDay() {
         let date = Calendar.current.date(from: DateComponents(year: 2026, month: 4, day: 21)) ?? .now
         XCTAssertTrue(AppTheme.formatDate(date).contains("April"))

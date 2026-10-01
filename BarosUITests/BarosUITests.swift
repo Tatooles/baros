@@ -204,7 +204,7 @@ final class BarosUITests: XCTestCase {
     private func assertWorkoutMetricsFit(
         in row: XCUIElement,
         category: UIContentSizeCategory,
-        labels: [String] = ["1:00:00", "1 exercises", "1 sets"],
+        labels: [String] = ["1:00:00", "1 exercise", "1 set"],
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
@@ -804,9 +804,16 @@ final class BarosUITests: XCTestCase {
         )
         app.launch()
 
+        // Summaries count every saved row, matching the detail's "2 sets".
+        let lastWorkout = app.buttons["HomeLastWorkoutButton"]
+        XCTAssertTrue(lastWorkout.waitForExistence(timeout: 3))
+        XCTAssertTrue(lastWorkout.label.contains("1 exercise, 2 sets"))
+        XCTAssertTrue(lastWorkout.label.contains("Bench Press, 2 sets"))
+
         app.buttons["HistoryTab"].tap()
         let workout = app.buttons["WorkoutHistoryButton-0"]
         XCTAssertTrue(workout.waitForExistence(timeout: 3))
+        XCTAssertTrue(workout.label.contains("1 exercise, 2 sets"))
         workout.tap()
 
         let heading = app.descendants(matching: .any)["WorkoutHistoryHeading"]

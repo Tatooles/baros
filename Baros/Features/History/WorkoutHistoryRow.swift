@@ -138,8 +138,8 @@ struct WorkoutHistoryRow: View {
             // Keep long durations intact even at the largest text size.
             durationLabel.labelStyle(.titleOnly)
         }
-        Text("\(session.visibleExerciseCount) exercises")
-        Text("\(metrics.completedSetCount) sets")
+        Text(WorkoutFormatters.exerciseCount(session.visibleExerciseCount))
+        Text(WorkoutFormatters.setCount(metrics.totalSetCount))
     }
 
     private var durationLabel: some View {

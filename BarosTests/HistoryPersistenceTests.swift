@@ -312,6 +312,46 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertTrue(summaries.first?.historyDetailSummaryLabel.hasSuffix("· 1 workout · 1 set") == true)
     }
 
+    func testSavedWorkoutSummaryCountsEveryRowWhileVolumeAndRecordsUseCompletedSets() throws {
+        let scenarios: [(completed: [Bool], totalLabel: String, completedVolume: Double)] = [
+            ([true, false, false], "3 sets", 500),
+            ([true, true, true], "3 sets", 1_500),
+            ([true], "1 set", 500),
+        ]
+        for scenario in scenarios {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let session = WorkoutSession(title: "Push", startedAt: .now, status: .completed, source: .blank)
+            let loggedExercise = LoggedExercise(
+                orderIndex: 0,
+                exerciseSnapshotName: "Bench Press",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue
+            )
+            loggedExercise.sets = scenario.completed.enumerated().map { index, isCompleted in
+                // Unfinished rows are heavier so any leak into volume or records is visible.
+                LoggedSet(orderIndex: index, weight: isCompleted ? 100 : 400, reps: 5, isCompleted: isCompleted)
+            }
+            session.loggedExercises = [loggedExercise]
+            context.insert(session)
+            try context.save()
+
+            let metrics = WorkoutMetrics(session: session)
+            XCTAssertEqual(WorkoutFormatters.setCount(metrics.totalSetCount), scenario.totalLabel)
+            XCTAssertEqual(
+                WorkoutFormatters.setCount(session.sortedLoggedExercises[0].sortedSets.count),
+                scenario.totalLabel
+            )
+            XCTAssertEqual(metrics.completedSetCount, scenario.completed.filter { $0 }.count)
+            XCTAssertEqual(metrics.completedVolume, scenario.completedVolume)
+
+            let summary = try XCTUnwrap(ExerciseHistorySummary.makeSummaries(from: [session]).first)
+            XCTAssertEqual(summary.completedSetCount, scenario.completed.filter { $0 }.count)
+            let groups = ExerciseHistorySessionGroup.makeGroups(from: [session], matching: summary)
+            let records = try XCTUnwrap(ExerciseHistoryRecords.make(from: groups, equipmentRaw: summary.equipmentRaw))
+            XCTAssertEqual(records.heaviestRep?.value, 100)
+        }
+    }
+
     func testExerciseHistoryCountsOnePerformancePerCompletedWorkoutWithDuplicateExerciseRows() throws {
         let exercise = Exercise(
             name: "Bench Press",

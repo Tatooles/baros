@@ -227,16 +227,8 @@ struct WorkoutHistoryDetailView: View {
 
     private var summaryAccessibilityLabel: String {
         "\(AppTheme.formatDuration(metrics.durationSeconds)), "
-            + "\(session.sortedLoggedExercises.count) \(exerciseCountLabel), "
-            + "\(metrics.totalSetCount) \(setCountLabel)"
-    }
-
-    private var exerciseCountLabel: String {
-        session.sortedLoggedExercises.count == 1 ? "exercise" : "exercises"
-    }
-
-    private var setCountLabel: String {
-        metrics.totalSetCount == 1 ? "set" : "sets"
+            + "\(WorkoutFormatters.exerciseCount(session.sortedLoggedExercises.count)), "
+            + WorkoutFormatters.setCount(metrics.totalSetCount)
     }
 
     private func workoutExerciseSection(_ loggedExercise: LoggedExercise) -> some View {
