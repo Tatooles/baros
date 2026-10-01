@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppAppearancePreferenceStore.self) private var appAppearanceStore
     @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
@@ -63,7 +64,7 @@ struct ProfileView: View {
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: 14) {
                         row("Units", value: settings?.weightUnit.displayName ?? "Pounds")
-                        row("Theme", value: "System")
+                        row("Theme", value: appAppearanceStore.appearance.displayName)
                         row("Data Source", value: "SwiftData")
                     }
                 }
