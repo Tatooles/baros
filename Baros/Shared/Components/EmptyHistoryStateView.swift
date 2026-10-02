@@ -2,19 +2,26 @@ import ClerkKitUI
 import SwiftUI
 
 enum EmptyHistoryPresentation: Equatable {
-    case signInRecovery
+    /// Someone signed in on this iPhone before; their workouts are hidden until they sign back in.
+    case signedOutOwner(SignedOutOwnerData)
+    /// Nobody has signed in on this iPhone yet. Offer sign-in for people moving from another device.
+    case firstTimeSignIn
     case syncing
     case ordinaryEmpty
 
     static func make(
         currentOwnerState: CurrentOwnerCoordinator.State,
         isSyncing: Bool,
+        signedOutOwnerData: SignedOutOwnerData? = nil,
         hasVisibleCompletedWorkouts: Bool = false,
         isRecoveringAuthentication: Bool = false
     ) -> Self {
         switch currentOwnerState {
         case .localOnly:
-            return hasVisibleCompletedWorkouts ? .ordinaryEmpty : .signInRecovery
+            if let signedOutOwnerData {
+                return .signedOutOwner(signedOutOwnerData)
+            }
+            return hasVisibleCompletedWorkouts ? .ordinaryEmpty : .firstTimeSignIn
         case .resolving(let ownerTokenIdentifier):
             return isRecoveringAuthentication && ownerTokenIdentifier != nil ? .syncing : .ordinaryEmpty
         case .active:
@@ -24,11 +31,10 @@ enum EmptyHistoryPresentation: Equatable {
 }
 
 struct EmptyHistoryStateView: View {
-    static let recoveryMessage = "Sign in to sync workouts saved to your account and keep future workouts backed up."
+    static let signedOutTitle = "You're signed out"
 
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
-    let recoveryTitle: String
     let emptyTitle: String
     let emptyMessage: String
     var hasVisibleCompletedWorkouts = false
@@ -49,6 +55,7 @@ struct EmptyHistoryStateView: View {
         return EmptyHistoryPresentation.make(
             currentOwnerState: currentOwnerState,
             isSyncing: syncScheduler.isSyncing,
+            signedOutOwnerData: syncScheduler.signedOutOwnerData,
             hasVisibleCompletedWorkouts: hasVisibleCompletedWorkouts,
             isRecoveringAuthentication: {
                 #if DEBUG
@@ -64,16 +71,17 @@ struct EmptyHistoryStateView: View {
     var body: some View {
         Group {
             switch presentation {
-            case .signInRecovery:
+            case .signedOutOwner(let signedOutOwnerData):
                 SurfaceCard {
                     VStack(spacing: 12) {
-                        Text(recoveryTitle)
+                        Text(Self.signedOutTitle)
                             .font(.system(size: 20, weight: .bold))
                             .multilineTextAlignment(.center)
 
-                        Text(Self.recoveryMessage)
+                        Text(signedOutOwnerData.signInMessage)
                             .multilineTextAlignment(.center)
                             .foregroundStyle(AppTheme.textSecondary)
+                            .accessibilityIdentifier("EmptyHistorySignedOutMessage")
 
                         AccountSignInButton {
                             authIsPresented = true
@@ -84,6 +92,36 @@ struct EmptyHistoryStateView: View {
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("EmptyHistorySignInPrompt")
+
+            case .firstTimeSignIn:
+                SurfaceCard {
+                    VStack(spacing: 10) {
+                        Image(systemName: "tray")
+                            .font(.system(size: 28))
+                            .foregroundStyle(AppTheme.textSecondary)
+
+                        Text(emptyTitle)
+                            .font(.system(size: 20, weight: .bold))
+                            .multilineTextAlignment(.center)
+
+                        Text(emptyMessage)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(AppTheme.textSecondary)
+
+                        Text("Already have an account?")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .padding(.top, 4)
+
+                        AccountSignInButton {
+                            authIsPresented = true
+                        }
+                        .accessibilityIdentifier("EmptyHistorySignInButton")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("EmptyHistoryFirstTimePrompt")
 
             case .syncing:
                 LoadingStateView(title: "Syncing your workout history…")

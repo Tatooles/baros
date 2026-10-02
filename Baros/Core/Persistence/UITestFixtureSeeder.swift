@@ -12,6 +12,12 @@ enum UITestFixtureSeeder {
         "--uitest-seed-matching-exercise-performance-workouts"
     static let largeActiveWorkoutArgument = "--uitest-seed-large-active-workout"
     static let largeActiveWorkoutTitle = "Performance Workout 10x5"
+    /// Seeds fixtures for an owner who is no longer signed in, as after an expired session.
+    static let signedOutOwnerArgument = "--uitest-seed-signed-out-owner"
+
+    static func signedOutOwner(in arguments: [String]) -> String? {
+        values(after: signedOutOwnerArgument, in: arguments).first
+    }
 
     static func seedFixtures(
         from arguments: [String],

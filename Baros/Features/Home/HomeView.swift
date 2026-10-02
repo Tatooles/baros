@@ -37,6 +37,8 @@ struct HomeView: View {
                         .padding(.bottom, 18)
                         .accessibilityIdentifier("HomeTitle")
 
+                    SignedOutReminderBanner(bottomSpacing: 18)
+
                     HomePrimaryWorkoutButton(
                         presentation: HomePrimaryWorkoutPresentation(
                             activeSession: activeSession,
