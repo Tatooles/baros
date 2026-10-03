@@ -4,14 +4,14 @@ import SwiftUI
 struct ExerciseHistoryDetailView: View {
     let summary: ExerciseHistorySummary
     @State private var workoutSelection: WorkoutHistorySelection?
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
     private var weightUnit: MeasurementUnit {
         UserSettings.visibleSettingsRecords(
             from: settingsRecords,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).first?.weightUnit ?? .pounds
     }
 
@@ -19,7 +19,7 @@ struct ExerciseHistoryDetailView: View {
         ExerciseHistorySessionGroup.makeGroups(
             from: sessions,
             matching: summary,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         )
     }
 
