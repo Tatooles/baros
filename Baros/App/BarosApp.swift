@@ -158,6 +158,9 @@ struct BarosApp: App {
             .overlay(alignment: .topLeading) {
                 ExerciseHistoryUITestMetricsOverlay()
             }
+            .overlay(alignment: .trailing) {
+                CurrentOwnerSwitchUITestControl(syncScheduler: syncScheduler)
+            }
             #endif
             .task {
                 if delaysCurrentOwnerStartForUITesting {
@@ -191,6 +194,23 @@ struct BarosApp: App {
 }
 
 #if DEBUG
+/// Replaces the Current Owner the way a confirmed Clerk account switch does,
+/// so UI tests can verify visible screens drop the previous owner's data.
+private struct CurrentOwnerSwitchUITestControl: View {
+    let syncScheduler: SyncScheduler
+
+    var body: some View {
+        if ProcessInfo.processInfo.arguments.contains("--uitest-current-owner-switch-control") {
+            Button("Simulate Account Switch") {
+                syncScheduler.pauseCloudSync()
+                _ = syncScheduler.activateValidatedOwnerTokenIdentifier("issuer|uitest_replacement_owner")
+            }
+            .font(.caption2)
+            .accessibilityIdentifier("UITestCurrentOwnerSwitchButton")
+        }
+    }
+}
+
 private struct AppAppearanceUITestProbe: View {
     @Environment(\.colorScheme) private var colorScheme
 

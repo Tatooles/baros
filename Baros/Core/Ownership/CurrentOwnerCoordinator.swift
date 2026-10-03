@@ -59,6 +59,13 @@ final class CurrentOwnerCoordinator {
     private(set) var state: State = .resolving(ownerTokenIdentifier: nil)
     private(set) var isRecoveringAuthentication = false
 
+    /// The owner whose local data screens may display and edit, or nil when
+    /// only Unclaimed Local Data is accessible. This is not authorization to
+    /// synchronize; cloud sync stays gated by the scheduler.
+    var localDataOwnerTokenIdentifier: String? {
+        syncScheduler.currentOwnerTokenIdentifier
+    }
+
     private let authenticationClient: any CurrentOwnerAuthenticationClient
     private let syncScheduler: SyncScheduler
     private let clerkSessionProvider: any CurrentOwnerClerkSessionProviding
