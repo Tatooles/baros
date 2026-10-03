@@ -3531,20 +3531,110 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testHomeStaysUsableWhileSignedOutHistorySurfacesOfferRecovery() {
+    func testFirstTimeSignedOutUserSeesNewUserHistoryWithSignInOffer() {
         let app = makeApp()
         app.launch()
         XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["StartWorkoutButton"].isHittable)
         XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["SignedOutReminderBanner"].exists)
 
         app.buttons["HistoryTab"].tap()
-        XCTAssertTrue(app.staticTexts["Looking for your workouts?"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["No Workouts Yet"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Already have an account?"].exists)
         XCTAssertEqual(app.buttons["EmptyHistorySignInButton"].label, "Sign in")
+        XCTAssertFalse(app.staticTexts["You're signed out"].exists)
 
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
-        XCTAssertTrue(app.staticTexts["Looking for your exercise history?"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["No Exercise History"].waitForExistence(timeout: 3))
         XCTAssertEqual(app.buttons["EmptyHistorySignInButton"].label, "Sign in")
+        XCTAssertFalse(app.staticTexts["You're signed out"].exists)
+    }
+
+    @MainActor
+    func testReturningSignedOutUserSeesSignedOutReminderWithWorkoutCount() {
+        let app = makeApp(
+            extraArguments: ["--uitest-seed-signed-out-owner", "issuer|returning_owner"],
+            completedBenchWorkoutTitles: ["Hidden Push", "Hidden Pull"]
+        )
+        app.launch()
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+
+        let banner = app.descendants(matching: .any)["SignedOutReminderBanner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            app.staticTexts["SignedOutReminderMessage"].label,
+            "Your 2 workouts are safe. Sign in to see them again."
+        )
+        XCTAssertTrue(app.buttons["SignedOutReminderSignInButton"].exists)
+        XCTAssertTrue(app.buttons["StartWorkoutButton"].isHittable)
+        XCTAssertFalse(app.buttons["HomeLastWorkoutButton"].exists)
+
+        tapTab(identifier: "HistoryTab", label: "History", in: app)
+        XCTAssertTrue(app.staticTexts["You're signed out"].waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            app.staticTexts["EmptyHistorySignedOutMessage"].label,
+            "Your 2 workouts are safe. Sign in to see them again."
+        )
+        XCTAssertFalse(app.descendants(matching: .any)["SignedOutReminderBanner"].exists)
+
+        app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
+        XCTAssertTrue(app.staticTexts["You're signed out"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.buttons["EmptyHistorySignInButton"].label, "Sign in")
+    }
+
+    @MainActor
+    func testDismissingSignedOutReminderKeepsItHiddenAfterRelaunch() {
+        let arguments = ["--uitest-seed-signed-out-owner", "issuer|returning_owner"]
+        let app = makeApp(
+            extraArguments: arguments,
+            completedBenchWorkoutTitles: ["Hidden Push"]
+        )
+        app.launch()
+
+        let banner = app.descendants(matching: .any)["SignedOutReminderBanner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            app.staticTexts["SignedOutReminderMessage"].label,
+            "Your workout is safe. Sign in to see it again."
+        )
+        app.buttons["SignedOutReminderDismissButton"].tap()
+        XCTAssertFalse(banner.waitForExistence(timeout: 1))
+
+        // The empty state still explains the sign-out after the reminder is dismissed.
+        tapTab(identifier: "HistoryTab", label: "History", in: app)
+        XCTAssertTrue(app.staticTexts["You're signed out"].waitForExistence(timeout: 3))
+
+        let relaunchedApp = makeApp(
+            extraArguments: arguments,
+            completedBenchWorkoutTitles: ["Hidden Push"],
+            resetsSignedOutReminder: false
+        )
+        relaunchedApp.launch()
+        XCTAssertTrue(relaunchedApp.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(
+            relaunchedApp.descendants(matching: .any)["SignedOutReminderBanner"]
+                .waitForExistence(timeout: 2)
+        )
+    }
+
+    @MainActor
+    func testSignedOutReminderSignInPresentsExistingAuth() {
+        let app = makeApp(
+            extraArguments: ["--uitest-seed-signed-out-owner", "issuer|returning_owner"],
+            completedBenchWorkoutTitles: ["Hidden Push"]
+        )
+        app.launch()
+
+        let signInButton = app.buttons["SignedOutReminderSignInButton"]
+        XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
+        signInButton.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["SignedOutReminderAuthView"].waitForExistence(timeout: 5)
+        )
+        app.swipeDown()
+        XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
     }
 
     @MainActor
@@ -3561,7 +3651,7 @@ final class BarosUITests: XCTestCase {
         app.swipeDown()
 
         XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["Looking for your workouts?"].exists)
+        XCTAssertTrue(app.staticTexts["No Workouts Yet"].exists)
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }
 
@@ -3651,7 +3741,8 @@ final class BarosUITests: XCTestCase {
     @MainActor
     private func makeApp(
         extraArguments: [String] = [],
-        completedBenchWorkoutTitles: [String] = []
+        completedBenchWorkoutTitles: [String] = [],
+        resetsSignedOutReminder: Bool = true
     ) -> XCUIApplication {
         let app = XCUIApplication()
         let fixtureArguments = completedBenchWorkoutTitles.flatMap {
@@ -3666,6 +3757,9 @@ final class BarosUITests: XCTestCase {
             "--uitest-reset-exercise-picker-sort",
             "--uitest-reset-app-appearance",
         ] + fixtureArguments + authArguments
+        if resetsSignedOutReminder {
+            launchArguments.append("--uitest-reset-signed-out-reminder")
+        }
         if !extraArguments.contains("--uitest-reset-first-run-experience") {
             launchArguments.append("--uitest-skip-first-run-experience")
         }

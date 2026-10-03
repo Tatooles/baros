@@ -18,6 +18,10 @@ _Avoid_: Sync Access, authentication state, sync state
 Local data that has never been assigned to an owner. When someone begins in local-only mode and later signs in to a new account, unclaimed local data becomes theirs and uploads to that account. Data associated with a previous owner is not unclaimed and must never move to a different owner.
 _Avoid_: Unowned data, hidden owner data
 
+**Signed-Out Owner Data**:
+Local data that still belongs to an owner while the app is local-only. It stays stored but out of view, and its presence means someone has signed in on this iPhone before, so Baros tells them they are signed out instead of treating them as new. A deliberate sign-out and an expired session are not distinguished. Deleting local data or the account removes it.
+_Avoid_: Hidden owner data, returning-user data
+
 **Active Workout**:
 A workout in progress whose exercises and sets remain editable until the workout is finished or discarded.
 _Avoid_: Workout draft, live session

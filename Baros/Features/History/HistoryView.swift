@@ -87,6 +87,11 @@ private struct HistorySearchContent: View {
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("HistoryModePicker")
 
+                // An empty list already explains the sign-out in its empty state.
+                if !isCurrentModeEmpty {
+                    SignedOutReminderBanner()
+                }
+
                 switch navigationState.historyMode {
                 case .workouts:
                     workoutContent
@@ -114,6 +119,15 @@ private struct HistorySearchContent: View {
         .searchable(text: $searchState.text, prompt: "Search history")
     }
 
+    private var isCurrentModeEmpty: Bool {
+        switch navigationState.historyMode {
+        case .workouts:
+            completedSessions.isEmpty
+        case .exercises:
+            exerciseHistorySnapshot.resolvedHistory.summaries.isEmpty
+        }
+    }
+
     @ViewBuilder
     private var workoutContent: some View {
         let filteredCompletedSessions = workoutSearchIndex.sessions(
@@ -122,7 +136,6 @@ private struct HistorySearchContent: View {
         )
         if completedSessions.isEmpty {
             EmptyHistoryStateView(
-                recoveryTitle: "Looking for your workouts?",
                 emptyTitle: "No Workouts Yet",
                 emptyMessage: "Finished workouts will appear here."
             )
@@ -156,7 +169,6 @@ private struct HistorySearchContent: View {
         let filteredSummaries = HistorySearch.exercises(in: summaries, matching: searchState.text)
         if summaries.isEmpty {
             EmptyHistoryStateView(
-                recoveryTitle: "Looking for your exercise history?",
                 emptyTitle: "No Exercise History",
                 emptyMessage: "Completed sets will build exercise history.",
                 hasVisibleCompletedWorkouts: !completedSessions.isEmpty

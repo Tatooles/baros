@@ -2,13 +2,57 @@ import XCTest
 @testable import Baros
 
 final class EmptyHistoryPresentationTests: XCTestCase {
-    func testLocalOnlyShowsSignInRecoveryPrompt() {
+    func testLocalOnlyWithoutSignedOutOwnerDataOffersFirstTimeSignIn() {
         XCTAssertEqual(
             EmptyHistoryPresentation.make(
                 currentOwnerState: .localOnly,
                 isSyncing: false
             ),
-            .signInRecovery
+            .firstTimeSignIn
+        )
+    }
+
+    func testLocalOnlyWithSignedOutOwnerDataShowsSignedOutPrompt() {
+        let signedOutOwnerData = SignedOutOwnerData(ownerTokenIdentifier: "issuer|owner", completedWorkoutCount: 42)
+
+        XCTAssertEqual(
+            EmptyHistoryPresentation.make(
+                currentOwnerState: .localOnly,
+                isSyncing: false,
+                signedOutOwnerData: signedOutOwnerData
+            ),
+            .signedOutOwner(signedOutOwnerData)
+        )
+        XCTAssertEqual(
+            EmptyHistoryPresentation.make(
+                currentOwnerState: .localOnly,
+                isSyncing: false,
+                signedOutOwnerData: signedOutOwnerData,
+                hasVisibleCompletedWorkouts: true
+            ),
+            .signedOutOwner(signedOutOwnerData)
+        )
+    }
+
+    func testSignedOutOwnerDataDoesNotReplaceResolvingOrActiveStates() {
+        let signedOutOwnerData = SignedOutOwnerData(ownerTokenIdentifier: "issuer|owner", completedWorkoutCount: 3)
+
+        XCTAssertEqual(
+            EmptyHistoryPresentation.make(
+                currentOwnerState: .resolving(ownerTokenIdentifier: "issuer|owner"),
+                isSyncing: false,
+                signedOutOwnerData: signedOutOwnerData,
+                isRecoveringAuthentication: true
+            ),
+            .syncing
+        )
+        XCTAssertEqual(
+            EmptyHistoryPresentation.make(
+                currentOwnerState: .active(ownerTokenIdentifier: "issuer|owner"),
+                isSyncing: false,
+                signedOutOwnerData: signedOutOwnerData
+            ),
+            .ordinaryEmpty
         )
     }
 

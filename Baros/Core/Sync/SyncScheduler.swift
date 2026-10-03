@@ -78,6 +78,9 @@ final class SyncScheduler {
         didSet {
             if let currentOwnerTokenIdentifier {
                 lastKnownOwnerTokenStore.ownerTokenIdentifier = currentOwnerTokenIdentifier
+                signedOutOwnerData = nil
+                isSignedOutReminderDismissed = false
+                signedOutReminderStore.clear()
             }
             guard oldValue != currentOwnerTokenIdentifier else { return }
             observability.setCurrentOwner(currentOwnerTokenIdentifier)
@@ -95,23 +98,29 @@ final class SyncScheduler {
     private(set) var isCloudSyncAuthorized = true
     private(set) var networkAvailability: NetworkAvailability = .unknown
     private(set) var recoveryInvalidationGeneration: UInt = 0
+    private(set) var signedOutOwnerData: SignedOutOwnerData?
+    private(set) var isSignedOutReminderDismissed: Bool
 
     private var coordinator: SyncCoordinator?
     private var modelContext: ModelContext?
     private var syncTask: Task<Void, Never>?
     private var needsSync = false
     private let lastKnownOwnerTokenStore: LastKnownSyncOwnerTokenStore
+    private let signedOutReminderStore: SignedOutReminderStore
     let observability: any SyncObserving
 
     init(
         coordinator: SyncCoordinator? = nil,
         modelContext: ModelContext? = nil,
         lastKnownOwnerTokenStore: LastKnownSyncOwnerTokenStore = .standard,
+        signedOutReminderStore: SignedOutReminderStore = .standard,
         observability: any SyncObserving = DisabledSyncObservability.shared
     ) {
         self.coordinator = coordinator
         self.modelContext = modelContext
         self.lastKnownOwnerTokenStore = lastKnownOwnerTokenStore
+        self.signedOutReminderStore = signedOutReminderStore
+        isSignedOutReminderDismissed = signedOutReminderStore.isDismissed
         self.observability = observability
     }
 
@@ -246,6 +255,8 @@ final class SyncScheduler {
         isDeletionModeEnabled = false
         lastKnownOwnerTokenStore.clear()
         currentOwnerTokenIdentifier = nil
+        signedOutOwnerData = nil
+        signedOutReminderStore.ownerTokenIdentifier = nil
         cancelInFlightSync()
         clearRuntimeStateForOwnerChange()
     }
@@ -293,10 +304,28 @@ final class SyncScheduler {
     }
 
     func enterSignedOutMode() {
+        let signedOutOwnerCandidates = [
+            currentOwnerTokenIdentifier,
+            lastKnownOwnerTokenStore.ownerTokenIdentifier,
+            signedOutReminderStore.ownerTokenIdentifier,
+        ]
         invalidateRecoveryAttempts()
         lastKnownOwnerTokenStore.clear()
         currentOwnerTokenIdentifier = nil
         seedDefaultsForLocalMode()
+        signedOutOwnerData = modelContext.flatMap { modelContext in
+            SignedOutOwnerData.find(
+                in: modelContext,
+                preferredOwnerTokenIdentifiers: signedOutOwnerCandidates,
+                localOwnerTokenIdentifiers: localOwnerTokenIdentifiers
+            )
+        }
+        signedOutReminderStore.ownerTokenIdentifier = signedOutOwnerData?.ownerTokenIdentifier
+    }
+
+    func dismissSignedOutReminder() {
+        isSignedOutReminderDismissed = true
+        signedOutReminderStore.isDismissed = true
     }
 
     func seedDefaultsForCurrentOwner() {

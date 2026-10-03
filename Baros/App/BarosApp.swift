@@ -54,6 +54,7 @@ struct BarosApp: App {
         FirstRunExperienceStore.markSeenForUITestingIfRequested(arguments: arguments)
         ExercisePickerSortPreferenceStore.resetForUITestingIfRequested(arguments: arguments)
         AppAppearancePreferenceStore.resetForUITestingIfRequested(arguments: arguments)
+        SignedOutReminderStore.resetForUITestingIfRequested(arguments: arguments)
         _appAppearanceStore = State(initialValue: AppAppearancePreferenceStore())
 
         do {
@@ -78,7 +79,8 @@ struct BarosApp: App {
             #if DEBUG
             try UITestFixtureSeeder.seedFixtures(
                 from: arguments,
-                ownerTokenIdentifier: uiTestSyncOwner,
+                ownerTokenIdentifier: uiTestSyncOwner
+                    ?? UITestFixtureSeeder.signedOutOwner(in: arguments),
                 context: container.mainContext
             )
             #endif
