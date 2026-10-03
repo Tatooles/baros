@@ -6,6 +6,9 @@ import SwiftData
 /// to sign back in instead of treating them as a new user. Deliberate sign-out
 /// and an expired session look the same here, so the copy stays neutral.
 struct SignedOutOwnerData: Equatable {
+    /// The owner whose workouts reappear after signing back in, or nil when
+    /// several owners left data here and Baros can't tell which one signed out.
+    let ownerTokenIdentifier: String?
     let completedWorkoutCount: Int
 
     var signInMessage: String {
@@ -19,35 +22,66 @@ struct SignedOutOwnerData: Equatable {
         }
     }
 
-    static func find(in context: ModelContext) -> SignedOutOwnerData? {
+    /// Scopes the count to the owner who signed out: the first preferred owner
+    /// with local data, otherwise the only owner on this iPhone. Never adds up
+    /// workouts across owners, because signing in reveals only one of them.
+    static func find(
+        in context: ModelContext,
+        preferredOwnerTokenIdentifiers: [String?],
+        localOwnerTokenIdentifiers: () -> Set<String>
+    ) -> SignedOutOwnerData? {
+        for case let ownerTokenIdentifier? in preferredOwnerTokenIdentifiers
+        where hasRecords(ownedBy: ownerTokenIdentifier, in: context) {
+            return makeScoped(to: ownerTokenIdentifier, in: context)
+        }
+
+        let localOwners = localOwnerTokenIdentifiers()
+        if localOwners.count == 1, let ownerTokenIdentifier = localOwners.first {
+            return makeScoped(to: ownerTokenIdentifier, in: context)
+        }
+        return localOwners.isEmpty
+            ? nil
+            : SignedOutOwnerData(ownerTokenIdentifier: nil, completedWorkoutCount: 0)
+    }
+
+    private static func makeScoped(to ownerTokenIdentifier: String, in context: ModelContext) -> SignedOutOwnerData {
+        let optionalOwnerTokenIdentifier: String? = ownerTokenIdentifier
         let completedWorkoutCount = (try? context.fetchCount(FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { session in
-                session.syncOwnerTokenIdentifier != nil
+                session.syncOwnerTokenIdentifier == optionalOwnerTokenIdentifier
                     && session.statusRaw == "completed"
                     && session.deletedAt == nil
             }
         ))) ?? 0
-        guard completedWorkoutCount > 0 || containsOwnerScopedRecords(in: context) else {
-            return nil
-        }
-        return SignedOutOwnerData(completedWorkoutCount: completedWorkoutCount)
+        return SignedOutOwnerData(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            completedWorkoutCount: completedWorkoutCount
+        )
     }
 
-    private static func containsOwnerScopedRecords(in context: ModelContext) -> Bool {
-        containsAny(FetchDescriptor<SyncCursorState>(), in: context)
+    private static func hasRecords(ownedBy ownerTokenIdentifier: String, in context: ModelContext) -> Bool {
+        let optionalOwnerTokenIdentifier: String? = ownerTokenIdentifier
+        return containsAny(FetchDescriptor<SyncCursorState>(
+            predicate: #Predicate { cursor in
+                cursor.ownerTokenIdentifier == ownerTokenIdentifier
+            }
+        ), in: context)
             || containsAny(FetchDescriptor<WorkoutSession>(
                 predicate: #Predicate { session in
-                    session.syncOwnerTokenIdentifier != nil && session.deletedAt == nil
+                    session.syncOwnerTokenIdentifier == optionalOwnerTokenIdentifier
+                        && session.deletedAt == nil
                 }
             ), in: context)
             || containsAny(FetchDescriptor<Exercise>(
                 predicate: #Predicate { exercise in
-                    exercise.syncOwnerTokenIdentifier != nil && exercise.deletedAt == nil
+                    exercise.syncOwnerTokenIdentifier == optionalOwnerTokenIdentifier
+                        && exercise.deletedAt == nil
                 }
             ), in: context)
             || containsAny(FetchDescriptor<UserSettings>(
                 predicate: #Predicate { settings in
-                    settings.syncOwnerTokenIdentifier != nil && settings.deletedAt == nil
+                    settings.syncOwnerTokenIdentifier == optionalOwnerTokenIdentifier
+                        && settings.deletedAt == nil
                 }
             ), in: context)
     }
@@ -75,40 +109,55 @@ enum SignedOutReminderPresentation {
     }
 }
 
-/// Remembers that the signed-out reminder was dismissed until the next sign-in.
+/// Persists the signed-out reminder until the next sign-in: which owner signed
+/// out (the last-known owner is cleared on sign-out) and whether it was dismissed.
 @MainActor
-final class SignedOutReminderDismissalStore {
-    static let standardKey = "signedOutReminderDismissed"
-    static let standard = SignedOutReminderDismissalStore()
+final class SignedOutReminderStore {
+    static let standardKeyPrefix = "signedOutReminder"
+    static let standard = SignedOutReminderStore()
 
     private let userDefaults: UserDefaults
-    private let key: String
+    private let dismissedKey: String
+    private let ownerKey: String
 
-    init(userDefaults: UserDefaults = .standard, key: String = standardKey) {
+    init(userDefaults: UserDefaults = .standard, keyPrefix: String = standardKeyPrefix) {
         self.userDefaults = userDefaults
-        self.key = key
+        dismissedKey = "\(keyPrefix).dismissed"
+        ownerKey = "\(keyPrefix).ownerTokenIdentifier"
     }
 
     var isDismissed: Bool {
-        get { userDefaults.bool(forKey: key) }
+        get { userDefaults.bool(forKey: dismissedKey) }
         set {
             if newValue {
-                userDefaults.set(true, forKey: key)
+                userDefaults.set(true, forKey: dismissedKey)
             } else {
-                userDefaults.removeObject(forKey: key)
+                userDefaults.removeObject(forKey: dismissedKey)
             }
         }
     }
 
-    static func resetForUITestingIfRequested(
-        arguments: [String],
-        defaults: UserDefaults = .standard,
-        key: String = standardKey
-    ) {
+    var ownerTokenIdentifier: String? {
+        get { userDefaults.string(forKey: ownerKey) }
+        set {
+            guard let newValue, !newValue.isEmpty else {
+                userDefaults.removeObject(forKey: ownerKey)
+                return
+            }
+            userDefaults.set(newValue, forKey: ownerKey)
+        }
+    }
+
+    func clear() {
+        isDismissed = false
+        ownerTokenIdentifier = nil
+    }
+
+    static func resetForUITestingIfRequested(arguments: [String], defaults: UserDefaults = .standard) {
         guard arguments.contains("--uitest-reset-signed-out-reminder") else {
             return
         }
 
-        defaults.removeObject(forKey: key)
+        SignedOutReminderStore(userDefaults: defaults).clear()
     }
 }

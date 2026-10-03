@@ -13,7 +13,7 @@ final class EmptyHistoryPresentationTests: XCTestCase {
     }
 
     func testLocalOnlyWithSignedOutOwnerDataShowsSignedOutPrompt() {
-        let signedOutOwnerData = SignedOutOwnerData(completedWorkoutCount: 42)
+        let signedOutOwnerData = SignedOutOwnerData(ownerTokenIdentifier: "issuer|owner", completedWorkoutCount: 42)
 
         XCTAssertEqual(
             EmptyHistoryPresentation.make(
@@ -35,7 +35,7 @@ final class EmptyHistoryPresentationTests: XCTestCase {
     }
 
     func testSignedOutOwnerDataDoesNotReplaceResolvingOrActiveStates() {
-        let signedOutOwnerData = SignedOutOwnerData(completedWorkoutCount: 3)
+        let signedOutOwnerData = SignedOutOwnerData(ownerTokenIdentifier: "issuer|owner", completedWorkoutCount: 3)
 
         XCTAssertEqual(
             EmptyHistoryPresentation.make(

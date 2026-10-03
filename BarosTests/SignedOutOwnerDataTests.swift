@@ -13,12 +13,13 @@ final class SignedOutOwnerDataTests: XCTestCase {
         context.insert(makeCompletedSession(owner: nil))
         try context.save()
 
-        XCTAssertNil(SignedOutOwnerData.find(in: context))
+        XCTAssertNil(find(in: context, preferredOwners: [nil]))
     }
 
-    func testCountsOnlyOwnerScopedCompletedWorkoutsThatAreNotDeleted() throws {
+    func testCountsOnlyTheSignedOutOwnersCompletedWorkoutsThatAreNotDeleted() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
+        context.insert(makeCompletedSession(owner: owner))
         context.insert(makeCompletedSession(owner: owner))
         context.insert(makeCompletedSession(owner: "issuer|owner_b"))
         context.insert(makeCompletedSession(owner: owner, deletedAt: .now))
@@ -33,8 +34,33 @@ final class SignedOutOwnerDataTests: XCTestCase {
         try context.save()
 
         XCTAssertEqual(
-            SignedOutOwnerData.find(in: context),
-            SignedOutOwnerData(completedWorkoutCount: 2)
+            find(in: context, preferredOwners: [owner]),
+            SignedOutOwnerData(ownerTokenIdentifier: owner, completedWorkoutCount: 2)
+        )
+    }
+
+    func testSkipsPreferredOwnersWithoutLocalDataAndInfersTheOnlyLocalOwner() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(makeCompletedSession(owner: owner))
+        try context.save()
+
+        XCTAssertEqual(
+            find(in: context, preferredOwners: [nil, "issuer|stale_owner"]),
+            SignedOutOwnerData(ownerTokenIdentifier: owner, completedWorkoutCount: 1)
+        )
+    }
+
+    func testUnknownOwnerAmongSeveralLocalOwnersShowsNoCount() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(makeCompletedSession(owner: owner))
+        context.insert(makeCompletedSession(owner: "issuer|owner_b"))
+        try context.save()
+
+        XCTAssertEqual(
+            find(in: context, preferredOwners: [nil]),
+            SignedOutOwnerData(ownerTokenIdentifier: nil, completedWorkoutCount: 0)
         )
     }
 
@@ -44,8 +70,8 @@ final class SignedOutOwnerDataTests: XCTestCase {
         try SeedDataService.seedIfNeeded(context: context, ownerTokenIdentifier: owner)
 
         XCTAssertEqual(
-            SignedOutOwnerData.find(in: context),
-            SignedOutOwnerData(completedWorkoutCount: 0)
+            find(in: context, preferredOwners: [owner]),
+            SignedOutOwnerData(ownerTokenIdentifier: owner, completedWorkoutCount: 0)
         )
     }
 
@@ -58,26 +84,26 @@ final class SignedOutOwnerDataTests: XCTestCase {
 
         try LocalDataResetService().reset(context: context)
 
-        XCTAssertNil(SignedOutOwnerData.find(in: context))
+        XCTAssertNil(find(in: context, preferredOwners: [owner]))
     }
 
     func testSignInMessageReflectsWorkoutCount() {
         XCTAssertEqual(
-            SignedOutOwnerData(completedWorkoutCount: 0).signInMessage,
+            SignedOutOwnerData(ownerTokenIdentifier: owner, completedWorkoutCount: 0).signInMessage,
             "Sign in to see the workouts saved to your account."
         )
         XCTAssertEqual(
-            SignedOutOwnerData(completedWorkoutCount: 1).signInMessage,
+            SignedOutOwnerData(ownerTokenIdentifier: owner, completedWorkoutCount: 1).signInMessage,
             "Your workout is safe. Sign in to see it again."
         )
         XCTAssertEqual(
-            SignedOutOwnerData(completedWorkoutCount: 42).signInMessage,
+            SignedOutOwnerData(ownerTokenIdentifier: owner, completedWorkoutCount: 42).signInMessage,
             "Your 42 workouts are safe. Sign in to see them again."
         )
     }
 
     func testBannerOnlyShowsForUndismissedSignedOutOwnerWhileLocalOnly() {
-        let data = SignedOutOwnerData(completedWorkoutCount: 5)
+        let data = SignedOutOwnerData(ownerTokenIdentifier: owner, completedWorkoutCount: 5)
 
         XCTAssertEqual(
             SignedOutReminderPresentation.bannerData(
@@ -120,7 +146,28 @@ final class SignedOutOwnerDataTests: XCTestCase {
         scheduler.enterSignedOutMode()
 
         XCTAssertNil(scheduler.currentOwnerTokenIdentifier)
-        XCTAssertEqual(scheduler.signedOutOwnerData, SignedOutOwnerData(completedWorkoutCount: 1))
+        XCTAssertEqual(scheduler.signedOutOwnerData, SignedOutOwnerData(ownerTokenIdentifier: owner, completedWorkoutCount: 1))
+    }
+
+    func testSchedulerKeepsCountScopedToSignedOutOwnerAcrossLaterChecks() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.insert(makeCompletedSession(owner: "issuer|owner_a"))
+        context.insert(makeCompletedSession(owner: "issuer|owner_a"))
+        context.insert(makeCompletedSession(owner: "issuer|owner_b"))
+        try context.save()
+        let reminderStore = makeReminderStore()
+        let scheduler = makeScheduler(context: context, reminderStore: reminderStore)
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_b"
+
+        scheduler.enterSignedOutMode()
+        // A foreground check or relaunch runs again after the last-known owner was cleared.
+        let relaunchedScheduler = makeScheduler(context: context, reminderStore: reminderStore)
+        relaunchedScheduler.enterSignedOutMode()
+
+        let expected = SignedOutOwnerData(ownerTokenIdentifier: "issuer|owner_b", completedWorkoutCount: 1)
+        XCTAssertEqual(scheduler.signedOutOwnerData, expected)
+        XCTAssertEqual(relaunchedScheduler.signedOutOwnerData, expected)
     }
 
     func testSignInClearsSignedOutOwnerDataAndDismissal() throws {
@@ -128,27 +175,27 @@ final class SignedOutOwnerDataTests: XCTestCase {
         let context = container.mainContext
         context.insert(makeCompletedSession(owner: owner))
         try context.save()
-        let dismissalStore = makeDismissalStore()
-        let scheduler = makeScheduler(context: context, dismissalStore: dismissalStore)
+        let reminderStore = makeReminderStore()
+        let scheduler = makeScheduler(context: context, reminderStore: reminderStore)
         scheduler.enterSignedOutMode()
         scheduler.dismissSignedOutReminder()
         XCTAssertTrue(scheduler.isSignedOutReminderDismissed)
-        XCTAssertTrue(dismissalStore.isDismissed)
+        XCTAssertTrue(reminderStore.isDismissed)
 
         XCTAssertTrue(scheduler.activateValidatedOwnerTokenIdentifier(owner))
 
         XCTAssertNil(scheduler.signedOutOwnerData)
         XCTAssertFalse(scheduler.isSignedOutReminderDismissed)
-        XCTAssertFalse(dismissalStore.isDismissed)
+        XCTAssertFalse(reminderStore.isDismissed)
     }
 
     func testDismissalPersistsAcrossLaunchesWhileStillSignedOut() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
-        let dismissalStore = makeDismissalStore()
-        makeScheduler(context: context, dismissalStore: dismissalStore).dismissSignedOutReminder()
+        let reminderStore = makeReminderStore()
+        makeScheduler(context: context, reminderStore: reminderStore).dismissSignedOutReminder()
 
-        let relaunchedScheduler = makeScheduler(context: context, dismissalStore: dismissalStore)
+        let relaunchedScheduler = makeScheduler(context: context, reminderStore: reminderStore)
         relaunchedScheduler.enterSignedOutMode()
 
         XCTAssertTrue(relaunchedScheduler.isSignedOutReminderDismissed)
@@ -182,17 +229,32 @@ final class SignedOutOwnerDataTests: XCTestCase {
 
     private func makeScheduler(
         context: ModelContext,
-        dismissalStore: SignedOutReminderDismissalStore? = nil
+        reminderStore: SignedOutReminderStore? = nil
     ) -> SyncScheduler {
         SyncScheduler(
             modelContext: context,
             lastKnownOwnerTokenStore: LastKnownSyncOwnerTokenStore(userDefaults: makeDefaults()),
-            signedOutReminderDismissalStore: dismissalStore ?? makeDismissalStore()
+            signedOutReminderStore: reminderStore ?? makeReminderStore()
         )
     }
 
-    private func makeDismissalStore() -> SignedOutReminderDismissalStore {
-        SignedOutReminderDismissalStore(userDefaults: makeDefaults())
+    private func makeReminderStore() -> SignedOutReminderStore {
+        SignedOutReminderStore(userDefaults: makeDefaults())
+    }
+
+    private func find(in context: ModelContext, preferredOwners: [String?]) -> SignedOutOwnerData? {
+        SignedOutOwnerData.find(
+            in: context,
+            preferredOwnerTokenIdentifiers: preferredOwners,
+            localOwnerTokenIdentifiers: { Self.localOwners(in: context) }
+        )
+    }
+
+    private static func localOwners(in context: ModelContext) -> Set<String> {
+        let sessions = (try? context.fetch(FetchDescriptor<WorkoutSession>())) ?? []
+        let exercises = (try? context.fetch(FetchDescriptor<Exercise>())) ?? []
+        return Set(sessions.compactMap(\.syncOwnerTokenIdentifier))
+            .union(exercises.compactMap(\.syncOwnerTokenIdentifier))
     }
 
     private func makeDefaults() -> UserDefaults {
