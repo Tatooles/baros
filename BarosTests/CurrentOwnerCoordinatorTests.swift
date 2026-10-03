@@ -942,11 +942,13 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.setClerkOwner(ownerB, sessionIdentifier: "session_b")
         harness.authenticationClient.sendAuthenticationState(.loading)
         await fulfillment(of: [ownerSwitch], timeout: 1)
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == ownerB }
 
         let signOut = expectLocalDataOwnerInvalidation(of: harness.coordinator)
         harness.setClerkOwner(nil)
         harness.authenticationClient.sendAuthenticationState(.unauthenticated)
         await fulfillment(of: [signOut], timeout: 1)
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == nil }
 
         harness.setClerkOwner(ownerA)
         harness.sendAuthenticated(as: ownerA)
@@ -957,6 +959,7 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         let dataReset = expectLocalDataOwnerInvalidation(of: harness.coordinator)
         harness.syncScheduler.resetAfterDataDeletion()
         await fulfillment(of: [dataReset], timeout: 1)
+        XCTAssertNil(harness.coordinator.localDataOwnerTokenIdentifier)
         harness.finish()
     }
 
