@@ -242,9 +242,7 @@ struct ExerciseCardView: View {
             accessibilityIdentifier: "AddSetButton-\(exerciseIndex)"
         ) {
             withAnimation(.spring(response: 0.26, dampingFraction: 0.85)) {
-                if let set = try? engine.addSet(to: loggedExercise, context: modelContext) {
-                    focusedField.wrappedValue = set.weight == nil ? .setWeight(set.id) : nil
-                }
+                _ = try? engine.addSet(to: loggedExercise, context: modelContext)
             }
         }
     }
