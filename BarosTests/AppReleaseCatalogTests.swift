@@ -42,6 +42,14 @@ final class AppReleaseCatalogTests: XCTestCase {
         XCTAssertEqual(AppReleaseCatalog.latestWhatsNew(upTo: "1.3"), release)
     }
 
+    func testVersionOneFourIsCatalogedWithoutReleaseHighlights() throws {
+        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.4"))
+
+        XCTAssertEqual(release.version, "1.4")
+        XCTAssertNil(release.whatsNew)
+        XCTAssertEqual(AppReleaseCatalog.latestWhatsNew(upTo: "1.4")?.version, "1.3")
+    }
+
     func testUncatalogedFutureVersionCanOpenLatestReleaseHighlightsFromSettings() throws {
         let release = try XCTUnwrap(AppReleaseCatalog.latestWhatsNew(upTo: "999.0"))
 
