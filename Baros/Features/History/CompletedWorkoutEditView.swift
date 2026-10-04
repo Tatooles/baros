@@ -4,6 +4,7 @@ import SwiftUI
 struct CompletedWorkoutEditView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
 
     let session: WorkoutSession
@@ -534,7 +535,7 @@ struct CompletedWorkoutEditView: View {
             try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
                 draft,
                 for: session,
-                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                 context: modelContext
             )
             syncScheduler.requestSync()

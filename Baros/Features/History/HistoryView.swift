@@ -3,6 +3,7 @@ import SwiftData
 import SwiftUI
 
 struct HistoryView: View {
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
     @State private var exerciseHistoryState = ExerciseHistoryViewState()
@@ -19,12 +20,12 @@ struct HistoryView: View {
     private var completedSessions: [WorkoutSession] {
         WorkoutSession.visibleCompletedSessions(
             from: sessions,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         )
     }
 
     var body: some View {
-        let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
+        let ownerTokenIdentifier = currentOwnerCoordinator.localDataOwnerTokenIdentifier
         // Remote child records do not always touch their parent session. Reading
         // the sync completion date makes the state boundary re-check its semantic
         // key after a pull without treating every no-op sync as a history change.

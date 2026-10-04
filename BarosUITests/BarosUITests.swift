@@ -643,6 +643,36 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testAccountSwitchHidesThePreviousOwnersOpenWorkoutHistory() {
+        let app = makeApp(
+            extraArguments: [
+                "--uitest-sync-owner", "issuer|ui_owner",
+                "--uitest-current-owner-switch-control",
+            ],
+            completedBenchWorkoutTitles: ["Previous Owner Bench"]
+        )
+        app.launch()
+
+        tapTab(identifier: "HistoryTab", label: "History", in: app)
+        let historyRow = app.buttons["WorkoutHistoryButton-0"]
+        XCTAssertTrue(historyRow.waitForExistence(timeout: 3))
+        historyRow.tap()
+        let heading = app.descendants(matching: .any)["WorkoutHistoryHeading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 3))
+        XCTAssertTrue(heading.label.contains("Previous Owner Bench"))
+        XCTAssertTrue(app.buttons["EditWorkoutButton"].exists)
+
+        app.buttons["UITestCurrentOwnerSwitchButton"].tap()
+
+        XCTAssertTrue(app.staticTexts["Workout Unavailable"].waitForExistence(timeout: 3))
+        XCTAssertFalse(heading.exists)
+        XCTAssertFalse(app.buttons["EditWorkoutButton"].exists)
+
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(historyRow.waitForNonExistence(timeout: 3))
+    }
+
+    @MainActor
     func testWorkoutTitleFieldsShowEditAffordance() {
         let app = makeApp(completedBenchWorkoutTitles: ["Existing Editable"])
         app.launch()

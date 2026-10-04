@@ -4,7 +4,7 @@ import SwiftUI
 struct WorkoutHistoryDestinationView: View {
     let sessionID: UUID
 
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Query(
         filter: #Predicate<WorkoutSession> { session in
             session.statusRaw == "completed"
@@ -16,7 +16,7 @@ struct WorkoutHistoryDestinationView: View {
     private var session: WorkoutSession? {
         WorkoutSession.visibleCompletedSessions(
             from: sessions,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).first { $0.id == sessionID }
     }
 
@@ -36,6 +36,7 @@ struct WorkoutHistoryDestinationView: View {
 struct WorkoutHistoryDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
     let session: WorkoutSession
     @State private var deleteErrorMessage: String?
@@ -51,12 +52,12 @@ struct WorkoutHistoryDetailView: View {
     private var weightUnit: MeasurementUnit {
         UserSettings.visibleSettingsRecords(
             from: settingsRecords,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).first?.weightUnit ?? .pounds
     }
 
     private var allowsHistoryMutation: Bool {
-        session.allowsHistoryMutation(ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier)
+        session.allowsHistoryMutation(ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier)
     }
 
     var body: some View {
@@ -159,7 +160,7 @@ struct WorkoutHistoryDetailView: View {
         do {
             try WorkoutHistoryMutationService().deleteWorkoutHistory(
                 session,
-                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                 context: modelContext
             )
             syncScheduler.requestSync()

@@ -796,6 +796,185 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.finish()
     }
 
+    // MARK: - Local data owner
+
+    func testLocalDataOwnerIsUnknownUntilClerkIdentifiesTheOwner() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(clerkWaitsUntilResumed: true)
+
+        XCTAssertNil(harness.coordinator.localDataOwnerTokenIdentifier)
+        harness.coordinator.start()
+        try await waitUntil { harness.clerkSessionProvider.hasPendingLoad }
+
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: nil))
+        XCTAssertNil(harness.coordinator.localDataOwnerTokenIdentifier)
+
+        harness.clerkSessionProvider.resumeLoading()
+        try await waitUntil {
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
+        }
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+        harness.finish()
+    }
+
+    func testClerkSessionWithoutAKnownOwnerYieldsNoLocalDataOwner() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+
+        harness.coordinator.start()
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == ownerA }
+        harness.clerkSessionProvider.state = CurrentOwnerClerkSessionState(
+            hasActiveSession: true,
+            sessionIdentifier: "session_unknown"
+        )
+        harness.authenticationClient.sendAuthenticationState(.loading)
+        try await waitUntil {
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: nil)
+        }
+
+        XCTAssertNil(harness.coordinator.localDataOwnerTokenIdentifier)
+        harness.finish()
+    }
+
+    func testKnownLocalDataOwnerRemainsWhileOfflineAndResolving() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+
+        harness.coordinator.start()
+        try await waitUntil {
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
+        }
+        harness.syncScheduler.updateNetworkAvailability(.unavailable)
+        harness.authenticationClient.sendAuthenticationState(.unauthenticated)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerA))
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+        XCTAssertFalse(
+            harness.syncScheduler.isCloudSyncAuthorized,
+            "Local data access must not authorize cloud sync."
+        )
+        harness.finish()
+    }
+
+    func testActiveOwnerIsTheLocalDataOwner() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+
+        harness.coordinator.start()
+        try await waitUntil {
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerA)
+        }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil {
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+        }
+        try await waitUntil { harness.syncScheduler.lastSyncedAt != nil }
+
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+        harness.finish()
+    }
+
+    func testConfirmedSignOutClearsTheLocalDataOwnerAndKeepsUnclaimedDataVisible() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        let ownedWorkout = WorkoutSession(
+            title: "Owner A workout",
+            startedAt: Date(timeIntervalSince1970: 100),
+            endedAt: Date(timeIntervalSince1970: 200),
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: ownerA
+        )
+        let unclaimedWorkout = WorkoutSession(
+            title: "Unclaimed workout",
+            startedAt: Date(timeIntervalSince1970: 300),
+            endedAt: Date(timeIntervalSince1970: 400),
+            status: .completed,
+            source: .blank
+        )
+        harness.context.insert(ownedWorkout)
+        harness.context.insert(unclaimedWorkout)
+        try harness.context.save()
+
+        harness.coordinator.start()
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == ownerA }
+        harness.setClerkOwner(nil)
+        harness.authenticationClient.sendAuthenticationState(.unauthenticated)
+        try await waitUntil { harness.coordinator.state == .localOnly }
+
+        XCTAssertNil(harness.coordinator.localDataOwnerTokenIdentifier)
+        let visibleWorkouts = WorkoutSession.visibleCompletedSessions(
+            from: try harness.context.fetch(FetchDescriptor<WorkoutSession>()),
+            ownerTokenIdentifier: harness.coordinator.localDataOwnerTokenIdentifier
+        )
+        XCTAssertEqual(visibleWorkouts.map(\.id), [unclaimedWorkout.id])
+        harness.finish()
+    }
+
+    func testOwnerSwitchReplacesTheLocalDataOwnerBeforeAuthenticationResolves() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+
+        harness.coordinator.start()
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == ownerA }
+        harness.setClerkOwner(ownerB, sessionIdentifier: "session_b")
+        harness.authenticationClient.sendAuthenticationState(.loading)
+        try await waitUntil {
+            harness.coordinator.state == .resolving(ownerTokenIdentifier: ownerB)
+        }
+
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerB)
+        harness.finish()
+    }
+
+    func testSchedulerDataResetClearsTheLocalDataOwner() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+
+        harness.coordinator.start()
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == ownerA }
+        harness.syncScheduler.resetAfterDataDeletion()
+
+        XCTAssertNil(harness.coordinator.localDataOwnerTokenIdentifier)
+        harness.finish()
+    }
+
+    func testLocalDataOwnerChangesInvalidateObservers() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        harness.coordinator.start()
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == ownerA }
+
+        let ownerSwitch = expectLocalDataOwnerInvalidation(of: harness.coordinator)
+        harness.setClerkOwner(ownerB, sessionIdentifier: "session_b")
+        harness.authenticationClient.sendAuthenticationState(.loading)
+        await fulfillment(of: [ownerSwitch], timeout: 1)
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == ownerB }
+
+        let signOut = expectLocalDataOwnerInvalidation(of: harness.coordinator)
+        harness.setClerkOwner(nil)
+        harness.authenticationClient.sendAuthenticationState(.unauthenticated)
+        await fulfillment(of: [signOut], timeout: 1)
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == nil }
+
+        harness.setClerkOwner(ownerA)
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil {
+            harness.coordinator.state == .active(ownerTokenIdentifier: ownerA)
+        }
+        try await waitUntil { harness.syncScheduler.lastSyncedAt != nil }
+        let dataReset = expectLocalDataOwnerInvalidation(of: harness.coordinator)
+        harness.syncScheduler.resetAfterDataDeletion()
+        await fulfillment(of: [dataReset], timeout: 1)
+        XCTAssertNil(harness.coordinator.localDataOwnerTokenIdentifier)
+        harness.finish()
+    }
+
+    private func expectLocalDataOwnerInvalidation(
+        of coordinator: CurrentOwnerCoordinator
+    ) -> XCTestExpectation {
+        let invalidation = expectation(description: "Local data owner invalidated")
+        withObservationTracking {
+            _ = coordinator.localDataOwnerTokenIdentifier
+        } onChange: {
+            invalidation.fulfill()
+        }
+        return invalidation
+    }
+
     private func waitUntil(
         timeout: TimeInterval = 1.0,
         condition: @MainActor @escaping () -> Bool
