@@ -7,7 +7,7 @@ struct ExerciseQuickHistorySheet: View {
     @State private var selectedWorkoutID: UUID?
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
@@ -15,7 +15,7 @@ struct ExerciseQuickHistorySheet: View {
     private var weightUnit: MeasurementUnit {
         UserSettings.visibleSettingsRecords(
             from: settingsRecords,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).first?.weightUnit ?? .pounds
     }
 
@@ -24,7 +24,7 @@ struct ExerciseQuickHistorySheet: View {
     }
 
     var body: some View {
-        let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
+        let ownerTokenIdentifier = currentOwnerCoordinator.localDataOwnerTokenIdentifier
         let historyRoute = route
         let historySnapshot = ExerciseHistoryViewSnapshot(
             sessions: sessions,

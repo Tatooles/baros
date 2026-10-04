@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct SetRowView: View, @MainActor Equatable {
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let set: LoggedSet
@@ -221,7 +221,7 @@ struct SetRowView: View, @MainActor Equatable {
     private var canEditSet: Bool {
         guard !set.isDeleted, let session = set.loggedExercise?.session else { return false }
         return !WorkoutSession.visibleActiveSessions(from: [session],
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier).isEmpty
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier).isEmpty
     }
 
     private func previousColumn(accessibilityLabelIncludesContext: Bool = true) -> some View {

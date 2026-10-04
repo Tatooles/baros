@@ -24,7 +24,7 @@ struct SwapExerciseConfirmationContent {
 struct AddExerciseSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
     var onAddExercise: (LoggedExercise) -> Void = { _ in }
@@ -36,7 +36,7 @@ struct AddExerciseSheet: View {
                     let loggedExercise = try engine.addExercise(
                         exercise,
                         to: session,
-                        ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                        ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                         context: modelContext
                     )
                     onAddExercise(loggedExercise)
@@ -53,7 +53,7 @@ struct AddExerciseSheet: View {
 struct SwapExerciseSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     let loggedExercise: LoggedExercise
     @Bindable var engine: ActiveWorkoutEngine
     @State private var pendingReplacement: Exercise?
@@ -130,7 +130,7 @@ struct SwapExerciseSheet: View {
             try engine.swapLoggedExercise(
                 loggedExercise,
                 with: exercise,
-                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                 context: modelContext
             )
             dismiss()

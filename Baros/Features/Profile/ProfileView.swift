@@ -4,7 +4,7 @@ import SwiftUI
 struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppAppearancePreferenceStore.self) private var appAppearanceStore
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Bindable var navigationState: AppNavigationState
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
@@ -13,21 +13,21 @@ struct ProfileView: View {
     private var settings: UserSettings? {
         UserSettings.visibleSettingsRecords(
             from: settingsRecords,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).first
     }
 
     private var completedWorkoutCount: Int {
         WorkoutSession.visibleCompletedSessions(
             from: sessions,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).count
     }
 
     private var activeExerciseCount: Int {
         Exercise.visibleActiveExercises(
             from: exercises,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).count
     }
 
@@ -97,7 +97,7 @@ struct ProfileView: View {
                 ExerciseLibraryView()
             }
         }
-        .task(id: syncScheduler.currentOwnerTokenIdentifier) {
+        .task(id: currentOwnerCoordinator.localDataOwnerTokenIdentifier) {
             seedSettingsIfNeeded()
         }
     }
@@ -105,11 +105,11 @@ struct ProfileView: View {
     private func seedSettingsIfNeeded() {
         if UserSettings.visibleSettingsRecords(
             from: settingsRecords,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).isEmpty {
             try? SeedDataService.seedIfNeeded(
                 context: modelContext,
-                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
             )
         }
     }
@@ -153,7 +153,7 @@ struct ProfileView: View {
 
 private struct SettingsRouteView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
     let onDataDeletionCompleted: () -> Void
@@ -161,7 +161,7 @@ private struct SettingsRouteView: View {
     private var settings: UserSettings? {
         UserSettings.visibleSettingsRecords(
             from: settingsRecords,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).first
     }
 
@@ -179,7 +179,7 @@ private struct SettingsRouteView: View {
                     .background(AppTheme.canvasBackground.ignoresSafeArea())
             }
         }
-        .task(id: syncScheduler.currentOwnerTokenIdentifier) {
+        .task(id: currentOwnerCoordinator.localDataOwnerTokenIdentifier) {
             seedSettingsIfNeeded()
         }
     }
@@ -187,11 +187,11 @@ private struct SettingsRouteView: View {
     private func seedSettingsIfNeeded() {
         if UserSettings.visibleSettingsRecords(
             from: settingsRecords,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).isEmpty {
             try? SeedDataService.seedIfNeeded(
                 context: modelContext,
-                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
             )
         }
     }
