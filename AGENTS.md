@@ -2,6 +2,7 @@
 
 - If using XcodeBuildMCP, use the installed XcodeBuildMCP skill before calling XcodeBuildMCP tools.
 - Never open a draft pull request unless the user explicitly asks for one; otherwise, open a regular, ready-for-review pull request.
+- Merging `convex/` changes to `main` deploys them to production. Before changing a public Convex function or the schema, read README → "Production deploys" for the compatibility rule with installed app builds.
 
 <!-- convex-ai-start -->
 

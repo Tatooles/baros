@@ -99,12 +99,20 @@ Verify the production Convex deployment uses the matching issuer domain:
 pnpm exec convex env --prod get CLERK_JWT_ISSUER_DOMAIN
 ```
 
-Deploy the current Convex functions to production:
+#### Production deploys
+
+Every push to `main` that touches the backend deploys to production. The `deploy` job in `.github/workflows/convex-ci.yml` runs only after `convex-checks` passes. It never runs on pull requests. It reads `CONVEX_DEPLOY_KEY` from the `convex-production` GitHub environment. That environment is separate from Vercel's `Production` environment, which belongs to the support site. Check the Actions tab to see what shipped and when.
+
+Merging to `main` is deploying, so every backend change must keep working with every app build still installed. Users update the App Store build late, or never. Remove a public function, or tighten its arguments or return shape, only after no supported build calls it. Schema changes must accept the data already in production. Convex rejects a deploy whose schema doesn't match existing documents, and the run fails without shipping.
+
+Deploy by hand only as a fallback, for example when the Action is broken or production needs a redeploy without a new commit. Deploy from an up-to-date `main` so production still matches it:
 
 ```sh
 pnpm exec convex deploy
 pnpm exec convex function-spec --prod
 ```
+
+#### Production smoke
 
 For RC validation or production auth/sync troubleshooting, run a focused production smoke:
 
