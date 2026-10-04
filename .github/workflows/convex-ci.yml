@@ -20,7 +20,8 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded PR runs are safe to cancel; a main run may be mid-deploy.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   convex-checks:
@@ -52,3 +53,48 @@ jobs:
 
       - name: Run Convex typecheck
         run: pnpm run convex:typecheck
+
+  deploy:
+    name: deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: convex-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: convex-production
+    concurrency:
+      group: convex-production-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      # A preview or dev key would silently deploy somewhere other than production.
+      - name: Require a production deploy key
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          if [[ "$CONVEX_DEPLOY_KEY" != "prod:sensible-reindeer-16|"* ]]; then
+            echo "::error::CONVEX_DEPLOY_KEY in the convex-production environment must be a deploy key for production (sensible-reindeer-16)."
+            exit 1
+          fi
+
+      - name: Deploy Convex to production
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: pnpm exec convex deploy --message "GitHub Actions ${{ github.sha }}"
