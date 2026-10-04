@@ -117,6 +117,7 @@ struct WorkoutHistoryDetailView: View {
                         Button("Delete Workout", systemImage: "trash", role: .destructive) {
                             showsDeleteConfirmation = true
                         }
+                        .tint(AppTheme.destructive)
                     } label: {
                         Label("Workout actions", systemImage: "ellipsis")
                     }
