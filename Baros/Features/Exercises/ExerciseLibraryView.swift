@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ExerciseLibraryView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @State private var searchText = ""
@@ -12,7 +13,7 @@ struct ExerciseLibraryView: View {
     private var filteredExercises: [Exercise] {
         Exercise.visibleActiveExercises(
             from: exercises,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         )
             .filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) }
     }

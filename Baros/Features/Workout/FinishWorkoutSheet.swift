@@ -4,6 +4,7 @@ import SwiftUI
 struct FinishWorkoutSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
@@ -21,7 +22,7 @@ struct FinishWorkoutSheet: View {
     private var weightUnit: MeasurementUnit {
         UserSettings.visibleSettingsRecords(
             from: settingsRecords,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).first?.weightUnit ?? .pounds
     }
 
@@ -74,7 +75,7 @@ struct FinishWorkoutSheet: View {
                 do {
                     try engine.finishWorkout(
                         session,
-                        ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                        ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                         syncScheduler: syncScheduler,
                         context: modelContext
                     )

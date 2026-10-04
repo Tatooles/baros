@@ -19,7 +19,7 @@ extension Animation {
 struct WorkoutSessionView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
     @Bindable var navigationState: AppNavigationState
@@ -55,7 +55,7 @@ struct WorkoutSessionView: View {
     private var weightUnit: MeasurementUnit {
         UserSettings.visibleSettingsRecords(
             from: settingsRecords,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).first?.weightUnit ?? .pounds
     }
 
@@ -504,6 +504,7 @@ private struct LoggedExerciseStructureValue: Hashable {
 /// workout graph.
 private struct PreviousSetsCacheLoader: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
     @State private var cache = PreviousSetsCacheLoaderCache()
 
@@ -513,7 +514,7 @@ private struct PreviousSetsCacheLoader: View {
     var body: some View {
         let reloadTrigger = PreviousSetsCacheReloadTrigger(
             sessionID: session.id,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
             lastSyncedAt: syncScheduler.lastSyncedAt
         )
 
@@ -544,7 +545,7 @@ private struct PreviousSetsCacheLoader: View {
                 cache.reload(
                     session: session,
                     context: modelContext,
-                    ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                    ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                     lastSyncedAt: syncScheduler.lastSyncedAt,
                     onUpdate: onUpdate
                 )

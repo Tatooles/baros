@@ -673,6 +673,30 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testAccountSwitchHidesThePreviousOwnersMinimizedWorkoutAndHomeHistory() {
+        let app = makeApp(
+            extraArguments: [
+                "--uitest-sync-owner", "issuer|ui_owner",
+                "--uitest-current-owner-switch-control",
+            ],
+            completedBenchWorkoutTitles: ["Previous Owner Bench"]
+        )
+        app.launch()
+
+        XCTAssertTrue(app.buttons["HomeLastWorkoutButton"].waitForExistence(timeout: 3))
+        startBlankWorkout(in: app)
+        minimizeActiveWorkout(in: app)
+        XCTAssertTrue(app.buttons["ReturnToActiveWorkoutButton"].waitForExistence(timeout: 3))
+
+        app.buttons["UITestCurrentOwnerSwitchButton"].tap()
+
+        XCTAssertTrue(waitForAbsence(app.buttons["ActiveWorkoutAccessory"], timeout: 3))
+        XCTAssertFalse(app.buttons["ReturnToActiveWorkoutButton"].exists)
+        XCTAssertFalse(app.buttons["HomeLastWorkoutButton"].exists)
+        XCTAssertTrue(app.buttons["StartWorkoutButton"].exists)
+    }
+
+    @MainActor
     func testWorkoutTitleFieldsShowEditAffordance() {
         let app = makeApp(completedBenchWorkoutTitles: ["Existing Editable"])
         app.launch()

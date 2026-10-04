@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct HomeView: View {
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     let activeSession: WorkoutSession?
@@ -13,7 +13,7 @@ struct HomeView: View {
     @State private var sessionIDHiddenDuringLaunchHandoff: UUID?
 
     var body: some View {
-        let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
+        let ownerTokenIdentifier = currentOwnerCoordinator.localDataOwnerTokenIdentifier
 
         TimelineView(.periodic(from: .now, by: 60)) { timeline in
             let content = HomeContent(

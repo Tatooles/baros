@@ -5,6 +5,7 @@ import UIKit
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppAppearancePreferenceStore.self) private var appAppearanceStore
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
@@ -161,7 +162,7 @@ struct SettingsView: View {
     private func exportWorkoutHistory() {
         let completedSessions = WorkoutSession.visibleCompletedSessions(
             from: sessions,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         )
 
         guard !completedSessions.isEmpty else {
@@ -173,7 +174,7 @@ struct SettingsView: View {
             let csv = WorkoutDataExportService().csv(
                 for: completedSessions,
                 unit: settings.weightUnit,
-                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
             )
             let url = try WorkoutExportFileWriter().write(csv: csv)
             sheetPresentation = .export(ExportFile(url: url))

@@ -30,7 +30,7 @@ enum ExercisePickerMode {
 }
 
 struct ExercisePickerView: View {
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query private var sessions: [WorkoutSession]
     let mode: ExercisePickerMode
@@ -52,7 +52,7 @@ struct ExercisePickerView: View {
             baseRows: ExercisePickerContent.makeBaseRows(
                 exercises: exercises,
                 sessions: sessions,
-                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
             ),
             mode: mode,
             sortPreferenceStore: sortPreferenceStore,

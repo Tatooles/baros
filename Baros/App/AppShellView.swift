@@ -22,7 +22,7 @@ struct AppShellView: View {
     private var activeSession: WorkoutSession? {
         WorkoutSession.visibleActiveSessions(
             from: sessions,
-            ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         ).first
     }
 
@@ -151,7 +151,7 @@ struct AppShellView: View {
                             #if DEBUG
                             if ProcessInfo.processInfo.arguments.contains("--uitest-active-workout-current-owner-change-control") {
                                 Button("Simulate Current Owner Change") {
-                                    let ownerTokenIdentifier = syncScheduler.currentOwnerTokenIdentifier
+                                    let ownerTokenIdentifier = currentOwnerCoordinator.localDataOwnerTokenIdentifier
                                     activeSession.syncOwnerTokenIdentifier = "issuer|uitest_replacement_owner"
                                     activeSession.touch()
                                     try? modelContext.save()
@@ -217,14 +217,14 @@ struct AppShellView: View {
             .onChange(of: activeSession?.id) { _, _ in
                 activeWorkoutEngine.clearSetSaveIfInaccessible(in: activeSession)
             }
-            .onChange(of: syncScheduler.currentOwnerTokenIdentifier) { _, _ in
+            .onChange(of: currentOwnerCoordinator.localDataOwnerTokenIdentifier) { _, _ in
                 // Even an ownerless session may remain visible after sign-in;
                 // its old pending action must not cross that identity boundary.
                 activeWorkoutEngine.discardSetSave()
             }
             .task {
                 activeWorkoutEngine.loadActiveSession(
-                    ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                    ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                     context: modelContext
                 )
             }

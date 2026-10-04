@@ -9,7 +9,7 @@ private enum HomeStartRoute: Hashable {
 struct HomeStartWorkoutSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     let content: HomeContent
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     let onWorkoutStarted: (WorkoutSession) -> Void
@@ -120,7 +120,7 @@ struct HomeStartWorkoutSheet: View {
     private func startBlankWorkout() {
         performStart {
             try activeWorkoutEngine.startBlankWorkout(
-                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                 context: modelContext
             )
         }
@@ -169,7 +169,7 @@ struct HomeStartWorkoutSheet: View {
         performStart {
             try activeWorkoutEngine.startWorkout(
                 fromPast: session,
-                ownerTokenIdentifier: syncScheduler.currentOwnerTokenIdentifier,
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                 context: modelContext
             )
         }
