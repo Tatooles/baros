@@ -60,10 +60,11 @@ struct SyncStatusDisplayState {
             )
         }
 
+        // Being offline is never "up to date", even with nothing waiting: the
+        // app cannot know whether the cloud has newer changes.
         if networkAvailability == .unavailable || networkAvailability == .requiresConnection,
            lastFailureMessage == nil,
-           failedCount == 0,
-           isSyncing || pendingCount > 0 || hasQueuedSyncRequest || transientCondition != nil {
+           failedCount == 0 {
             let canRetry = networkAvailability == .requiresConnection
             return SyncStatusDisplayState(
                 kind: .waitingForConnection,
