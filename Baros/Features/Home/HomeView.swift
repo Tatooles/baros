@@ -11,6 +11,11 @@ struct HomeView: View {
     @State private var startSheetPresentation: HomeStartSheetPresentation?
     @State private var presentsWorkoutAfterStart = false
     @State private var sessionIDHiddenDuringLaunchHandoff: UUID?
+    // PROTOTYPE state
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
+    @AppStorage("HomePrototypeVariant") private var prototypeVariantRaw = HomePrototypeVariant.a.rawValue
+    @State private var quickStartSession: WorkoutSession?
 
     var body: some View {
         let ownerTokenIdentifier = currentOwnerCoordinator.localDataOwnerTokenIdentifier
@@ -22,41 +27,37 @@ struct HomeView: View {
                 now: timeline.date
             )
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(timeline.date.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                        .font(.caption.weight(.bold))
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-                        .foregroundStyle(AppTheme.textSecondary)
-
-                    Text("Home")
-                        .font(.largeTitle.weight(.bold))
-                        .foregroundStyle(AppTheme.textPrimary)
-                        .padding(.top, 3)
-                        .padding(.bottom, 18)
-                        .accessibilityIdentifier("HomeTitle")
-
-                    SignedOutReminderBanner(bottomSpacing: 18)
-
-                    HomePrimaryWorkoutButton(
-                        presentation: HomePrimaryWorkoutPresentation(
-                            activeSession: activeSession,
-                            sessionIDHiddenDuringLaunchHandoff: sessionIDHiddenDuringLaunchHandoff,
-                            now: timeline.date
-                        ),
-                        action: primaryWorkoutAction
-                    )
-
-                    HomeWeeklyActivityView(activity: content.weeklyActivity)
-
-                    if let lastWorkout = content.lastWorkout {
-                        HomeLastWorkoutView(session: lastWorkout) {
-                            navigationState.openWorkoutHistory(lastWorkout.id)
-                        }
-                    }
+            Group {
+                switch prototypeVariant.wrappedValue {
+                case .current:
+                    currentHome(content: content, now: timeline.date)
+                case .a:
+                    HomePrototypeVariantA(model: HomePrototypeModel(content: content, now: timeline.date), content: content, primary: primaryPresentation(now: timeline.date), unit: weightUnit, now: timeline.date, actions: prototypeActions)
+                case .b:
+                    HomePrototypeVariantB(model: HomePrototypeModel(content: content, now: timeline.date), content: content, primary: primaryPresentation(now: timeline.date), unit: weightUnit, now: timeline.date, actions: prototypeActions)
+                case .c:
+                    HomePrototypeVariantC(model: HomePrototypeModel(content: content, now: timeline.date), content: content, primary: primaryPresentation(now: timeline.date), unit: weightUnit, now: timeline.date, actions: prototypeActions)
                 }
-                .padding(AppTheme.shellPadding)
+            }
+            .overlay(alignment: .topTrailing) {
+                HomePrototypeSwitcher(variant: prototypeVariant)
+                    .padding(.trailing, AppTheme.shellPadding)
+            }
+            .task {
+                let arguments = ProcessInfo.processInfo.arguments
+                if let index = arguments.firstIndex(of: "--home-variant"), index + 1 < arguments.count {
+                    prototypeVariantRaw = arguments[index + 1]
+                }
+            }
+            .sheet(item: $quickStartSession, onDismiss: presentStartedWorkoutIfNeeded) { session in
+                NavigationStack {
+                    HomePastWorkoutReviewView(session: session) { startQuickStart(session) }
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Cancel") { quickStartSession = nil }
+                            }
+                        }
+                }
             }
             .background(AppTheme.canvasBackground.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
@@ -82,6 +83,93 @@ struct HomeView: View {
                 }
             }
         }
+    }
+
+    // MARK: PROTOTYPE helpers
+
+    private var prototypeVariant: Binding<HomePrototypeVariant> {
+        Binding(
+            get: { HomePrototypeVariant(rawValue: prototypeVariantRaw) ?? .a },
+            set: { prototypeVariantRaw = $0.rawValue }
+        )
+    }
+
+    private var weightUnit: MeasurementUnit {
+        UserSettings.visibleSettingsRecords(
+            from: settingsRecords,
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
+        ).first?.weightUnit ?? .pounds
+    }
+
+    private func primaryPresentation(now: Date) -> HomePrimaryWorkoutPresentation {
+        HomePrimaryWorkoutPresentation(
+            activeSession: activeSession,
+            sessionIDHiddenDuringLaunchHandoff: sessionIDHiddenDuringLaunchHandoff,
+            now: now
+        )
+    }
+
+    private var prototypeActions: HomePrototypeActions {
+        HomePrototypeActions(
+            primary: primaryWorkoutAction,
+            quickStart: { quickStartSession = $0 },
+            openWorkout: { navigationState.openWorkoutHistory($0.id) },
+            browseAll: { startSheetPresentation = HomeStartSheetPresentation() }
+        )
+    }
+
+    private func startQuickStart(_ session: WorkoutSession) {
+        do {
+            let started = try activeWorkoutEngine.startWorkout(
+                fromPast: session,
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
+                context: modelContext
+            )
+            sessionIDHiddenDuringLaunchHandoff = started.id
+            presentsWorkoutAfterStart = true
+            quickStartSession = nil
+        } catch {
+            activeWorkoutEngine.lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func currentHome(content: HomeContent, now: Date) -> some View {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                        .font(.caption.weight(.bold))
+                        .textCase(.uppercase)
+                        .tracking(0.8)
+                        .foregroundStyle(AppTheme.textSecondary)
+
+                    Text("Home")
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .padding(.top, 3)
+                        .padding(.bottom, 18)
+                        .accessibilityIdentifier("HomeTitle")
+
+                    SignedOutReminderBanner(bottomSpacing: 18)
+
+                    HomePrimaryWorkoutButton(
+                        presentation: HomePrimaryWorkoutPresentation(
+                            activeSession: activeSession,
+                            sessionIDHiddenDuringLaunchHandoff: sessionIDHiddenDuringLaunchHandoff,
+                            now: now
+                        ),
+                        action: primaryWorkoutAction
+                    )
+
+                    HomeWeeklyActivityView(activity: content.weeklyActivity)
+
+                    if let lastWorkout = content.lastWorkout {
+                        HomeLastWorkoutView(session: lastWorkout) {
+                            navigationState.openWorkoutHistory(lastWorkout.id)
+                        }
+                    }
+                }
+                .padding(AppTheme.shellPadding)
+            }
     }
 
     private func primaryWorkoutAction() {

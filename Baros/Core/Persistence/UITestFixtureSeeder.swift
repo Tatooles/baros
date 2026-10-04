@@ -37,6 +37,10 @@ enum UITestFixtureSeeder {
             )
         }
 
+        if arguments.contains(prototypeHomeArgument) {
+            try seedPrototypeHome(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
         if arguments.contains("--uitest-seed-history-blocks") {
             try seedHistoryBlocks(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         }
