@@ -9,6 +9,8 @@ enum HomePrototypeVariant: String, CaseIterable {
     case a = "A"
     case b = "B"
     case c = "C"
+    case d = "D"
+    case e = "E"
 
     var name: String {
         switch self {
@@ -16,6 +18,8 @@ enum HomePrototypeVariant: String, CaseIterable {
         case .a: "Launchpad"
         case .b: "Up Next"
         case .c: "Bottom Dock"
+        case .d: "C + Inline Actions"
+        case .e: "C + Slim Pinned Bar"
         }
     }
 
@@ -681,8 +685,35 @@ struct HomePrototypeVariantC: View {
     let unit: MeasurementUnit
     let now: Date
     let actions: HomePrototypeActions
+    var dockStyle: DockStyle = .sticky
 
+    enum DockStyle {
+        case sticky, inline, slimBar
+    }
+
+    private var showsChips: Bool {
+        !primary.isActive && !model.quickStarts.isEmpty
+    }
+
+    @ViewBuilder
     var body: some View {
+        switch dockStyle {
+        case .sticky:
+            scrollContent.safeAreaInset(edge: .bottom, spacing: 0) { dock }
+        case .inline:
+            scrollContent
+        case .slimBar:
+            scrollContent
+                .safeAreaBar(edge: .bottom) {
+                    HomePrototypeSolidButton(presentation: primary, action: actions.primary)
+                        .padding(.horizontal, AppTheme.shellPadding)
+                        .padding(.vertical, 8)
+                }
+                .scrollEdgeEffectStyle(.soft, for: .bottom)
+        }
+    }
+
+    private var scrollContent: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
                 HomePrototypeEyebrow(now: now)
@@ -701,6 +732,18 @@ struct HomePrototypeVariantC: View {
 
                 SurfaceCard(padding: 16) { calendarRows }
 
+                if dockStyle == .inline {
+                    VStack(spacing: 10) {
+                        if showsChips { chips.padding(.horizontal, -AppTheme.shellPadding) }
+                        HomePrototypeSolidButton(presentation: primary, action: actions.primary)
+                    }
+                    .padding(.top, 20)
+                } else if dockStyle == .slimBar, showsChips {
+                    chips
+                        .padding(.horizontal, -AppTheme.shellPadding)
+                        .padding(.top, 16)
+                }
+
                 if let lastWorkout = content.lastWorkout {
                     HomePrototypeLastWorkoutCard(session: lastWorkout, unit: unit) {
                         actions.openWorkout(lastWorkout)
@@ -711,7 +754,6 @@ struct HomePrototypeVariantC: View {
             .padding(AppTheme.shellPadding)
             .padding(.bottom, 12)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { dock }
     }
 
     private var calendarRows: some View {
@@ -766,7 +808,27 @@ struct HomePrototypeVariantC: View {
 
     private var dock: some View {
         VStack(spacing: 10) {
-            if !primary.isActive, !model.quickStarts.isEmpty {
+            if showsChips { chips }
+
+            HomePrototypeSolidButton(presentation: primary, action: actions.primary)
+                .padding(.horizontal, AppTheme.shellPadding)
+        }
+        .padding(.top, 18)
+        .padding(.bottom, 8)
+        .background {
+            LinearGradient(
+                stops: [
+                    .init(color: AppTheme.canvasBackground.opacity(0), location: 0),
+                    .init(color: AppTheme.canvasBackground, location: 0.12),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .bottom)
+        }
+    }
+
+    private var chips: some View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(model.quickStarts) { quickStart in
@@ -792,24 +854,6 @@ struct HomePrototypeVariantC: View {
                     }
                 }
                 .contentMargins(.horizontal, AppTheme.shellPadding, for: .scrollContent)
-            }
-
-            HomePrototypeSolidButton(presentation: primary, action: actions.primary)
-                .padding(.horizontal, AppTheme.shellPadding)
-        }
-        .padding(.top, 18)
-        .padding(.bottom, 8)
-        .background {
-            LinearGradient(
-                stops: [
-                    .init(color: AppTheme.canvasBackground.opacity(0), location: 0),
-                    .init(color: AppTheme.canvasBackground, location: 0.12),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea(edges: .bottom)
-        }
     }
 }
 #endif
