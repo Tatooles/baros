@@ -148,18 +148,9 @@ struct HomePrototypeModel {
             ? 0
             : Double(pastWeeks.reduce(0) { $0 + $1.count }) / Double(pastWeeks.count)
 
-        if let last = content.lastWorkout {
-            let days = daysAgo(last.startedAt)
-            switch days {
-            case ...0: headline = "Nice work today"
-            case 1: headline = "Yesterday: \(last.title)"
-            default: headline = "\(days) days since \(last.title)"
-            }
-            subheadline = "\(thisWeekCount) this week · \(lastWeekCount) last week"
-        } else {
-            headline = "Let's get started"
-            subheadline = "Your first workout fills in your weeks."
-        }
+        // Neutral headline: today's date only — no "days since" nudge.
+        headline = now.formatted(.dateTime.weekday(.wide))
+        subheadline = now.formatted(.dateTime.month(.wide).day())
     }
 
     static func topSet(_ loggedExercise: LoggedExercise, unit: MeasurementUnit) -> String? {
@@ -190,11 +181,8 @@ private struct HomePrototypeEyebrow: View {
     let now: Date
 
     var body: some View {
-        Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-            .font(.caption.weight(.bold))
-            .textCase(.uppercase)
-            .tracking(0.8)
-            .foregroundStyle(AppTheme.textSecondary)
+        // Date moved into the headline; keep a little top spacing for the switcher pill.
+        Color.clear.frame(height: 12)
     }
 }
 
