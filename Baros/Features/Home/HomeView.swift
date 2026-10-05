@@ -45,6 +45,10 @@ struct HomeView: View {
                     HomePrototypeVariantC(model: HomePrototypeModel(content: content, now: timeline.date), content: content, primary: primaryPresentation(now: timeline.date), unit: weightUnit, now: timeline.date, actions: prototypeActions, dockStyle: .sticky, showsLastWorkout: false, visibleWeekCount: 8)
                 case .g:
                     HomePrototypeVariantC(model: HomePrototypeModel(content: content, now: timeline.date), content: content, primary: primaryPresentation(now: timeline.date), unit: weightUnit, now: timeline.date, actions: prototypeActions, dockStyle: .inline, showsLastWorkout: false, visibleWeekCount: 8)
+                case .h:
+                    HomePrototypeVariantFill(model: HomePrototypeModel(content: content, now: timeline.date), primary: primaryPresentation(now: timeline.date), now: timeline.date, actions: prototypeActions, usesCards: false)
+                case .i:
+                    HomePrototypeVariantFill(model: HomePrototypeModel(content: content, now: timeline.date), primary: primaryPresentation(now: timeline.date), now: timeline.date, actions: prototypeActions, usesCards: true)
                 }
             }
             .overlay(alignment: .topTrailing) {

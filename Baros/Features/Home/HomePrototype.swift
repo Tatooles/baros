@@ -13,6 +13,8 @@ enum HomePrototypeVariant: String, CaseIterable {
     case e = "E"
     case f = "F"
     case g = "G"
+    case h = "H"
+    case i = "I"
 
     var name: String {
         switch self {
@@ -24,6 +26,8 @@ enum HomePrototypeVariant: String, CaseIterable {
         case .e: "C + Slim Pinned Bar"
         case .f: "No Last Workout · Dock"
         case .g: "No Last Workout · Inline"
+        case .h: "F + Calendar Fills · Chips"
+        case .i: "F + Calendar Fills · Cards"
         }
     }
 
@@ -860,6 +864,176 @@ struct HomePrototypeVariantC: View {
                     }
                 }
                 .contentMargins(.horizontal, AppTheme.shellPadding, for: .scrollContent)
+    }
+}
+
+// MARK: - Variant H/I — F, but the calendar shows as many weeks as fit the space
+
+struct HomePrototypeVariantFill: View {
+    let model: HomePrototypeModel
+    let primary: HomePrimaryWorkoutPresentation
+    let now: Date
+    let actions: HomePrototypeActions
+    let usesCards: Bool
+
+    private var showsQuickStarts: Bool {
+        !primary.isActive && !model.quickStarts.isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Color.clear.frame(height: 30)
+            Text(model.headline)
+                .font(.largeTitle.weight(.bold))
+                .foregroundStyle(AppTheme.textPrimary)
+                .padding(.top, 3)
+            Text(model.subheadline)
+                .font(.headline.weight(.medium))
+                .foregroundStyle(AppTheme.textSecondary)
+                .padding(.top, 4)
+                .padding(.bottom, 22)
+
+            SignedOutReminderBanner(bottomSpacing: 18)
+
+            ViewThatFits(in: .vertical) {
+                ForEach((4...12).reversed(), id: \.self) { weekCount in
+                    SurfaceCard(padding: 16) {
+                        HomePrototypeCalendar(weeks: Array(model.weeks.suffix(weekCount)))
+                    }
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+
+            VStack(spacing: 10) {
+                if showsQuickStarts {
+                    if usesCards { cards } else { chips }
+                }
+                HomePrototypeSolidButton(presentation: primary, action: actions.primary)
+            }
+            .padding(.top, 16)
+        }
+        .padding(.horizontal, AppTheme.shellPadding)
+        .padding(.bottom, 8)
+    }
+
+    private var chips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(model.quickStarts) { quickStart in
+                    Button { actions.quickStart(quickStart.session) } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(AppTheme.brandAccentForeground)
+                            Text(quickStart.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppTheme.textPrimary)
+                            Text(quickStart.lastDone)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(AppTheme.textSecondary)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(AppTheme.groupedSurface, in: Capsule())
+                        .overlay(Capsule().strokeBorder(AppTheme.subtleBorder))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .contentMargins(.horizontal, AppTheme.shellPadding, for: .scrollContent)
+        .padding(.horizontal, -AppTheme.shellPadding)
+    }
+
+    private var cards: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(model.quickStarts) { quickStart in
+                    Button { actions.quickStart(quickStart.session) } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(quickStart.title)
+                                    .font(.headline)
+                                    .foregroundStyle(AppTheme.textPrimary)
+                                    .lineLimit(1)
+                                Spacer(minLength: 4)
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(AppTheme.brandAccentForeground)
+                            }
+                            Text(quickStart.lastDone)
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(AppTheme.brandAccentForeground)
+                            Text(quickStart.exerciseNames.prefix(3).joined(separator: "\n"))
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .lineLimit(3)
+                                .padding(.top, 2)
+                        }
+                        .padding(14)
+                        .frame(width: 168, height: 134, alignment: .topLeading)
+                        .background(AppTheme.groupedSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(AppTheme.subtleBorder))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .contentMargins(.horizontal, AppTheme.shellPadding, for: .scrollContent)
+        .padding(.horizontal, -AppTheme.shellPadding)
+    }
+}
+
+private struct HomePrototypeCalendar: View {
+    let weeks: [HomePrototypeModel.Week]
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 0) {
+                Color.clear.frame(width: 50, height: 1)
+                ForEach(weeks.last?.days ?? []) { day in
+                    Text(day.date.formatted(.dateTime.weekday(.narrow)))
+                        .frame(maxWidth: .infinity)
+                }
+                Color.clear.frame(width: 26, height: 1)
+            }
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(AppTheme.textTertiary)
+
+            ForEach(weeks) { week in
+                HStack(spacing: 0) {
+                    Text(week.isCurrent ? "This wk" : week.start.formatted(.dateTime.month(.abbreviated).day()))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(week.isCurrent ? AppTheme.brandAccentForeground : AppTheme.textTertiary)
+                        .frame(width: 50, alignment: .leading)
+                    ForEach(week.days) { day in
+                        Circle()
+                            .fill(day.hasWorkout ? AppTheme.brandAccentFill : (day.isFuture ? Color.clear : AppTheme.recessedSurface))
+                            .overlay {
+                                if day.isToday {
+                                    Circle().strokeBorder(AppTheme.brandAccentForeground, lineWidth: 2)
+                                } else if day.isFuture {
+                                    Circle().strokeBorder(AppTheme.subtleBorder)
+                                }
+                            }
+                            .overlay {
+                                if day.hasWorkout {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption2.weight(.heavy))
+                                        .foregroundStyle(AppTheme.onBrandAccent)
+                                }
+                            }
+                            .frame(width: 28, height: 28)
+                            .frame(maxWidth: .infinity)
+                    }
+                    Text("\(week.count)")
+                        .font(.footnote.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(week.count > 0 ? AppTheme.textPrimary : AppTheme.textTertiary)
+                        .frame(width: 26, alignment: .trailing)
+                }
+            }
+        }
     }
 }
 #endif
