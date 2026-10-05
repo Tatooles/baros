@@ -15,6 +15,8 @@ enum HomePrototypeVariant: String, CaseIterable {
     case g = "G"
     case h = "H"
     case i = "I"
+    case j = "J"
+    case k = "K"
 
     var name: String {
         switch self {
@@ -28,6 +30,8 @@ enum HomePrototypeVariant: String, CaseIterable {
         case .g: "No Last Workout · Inline"
         case .h: "F + Calendar Fills · Chips"
         case .i: "F + Calendar Fills · Cards"
+        case .j: "I + Starts When You Do"
+        case .k: "J + Upcoming Weeks Fill"
         }
     }
 
@@ -103,6 +107,7 @@ struct HomePrototypeModel {
     let thisWeekCount: Int
     let lastWeekCount: Int
     let averagePerWeek: Double
+    let firstWorkoutDate: Date?
 
     init(content: HomeContent, now: Date, weekCount: Int = 12, calendar: Calendar = .current) {
         let today = calendar.startOfDay(for: now)
@@ -159,6 +164,8 @@ struct HomePrototypeModel {
         averagePerWeek = pastWeeks.isEmpty
             ? 0
             : Double(pastWeeks.reduce(0) { $0 + $1.count }) / Double(pastWeeks.count)
+
+        firstWorkoutDate = content.completedSessions.last?.startedAt
 
         // Neutral headline: today's date only — no "days since" nudge.
         headline = now.formatted(.dateTime.weekday(.wide))
@@ -875,6 +882,47 @@ struct HomePrototypeVariantFill: View {
     let now: Date
     let actions: HomePrototypeActions
     let usesCards: Bool
+    var startsWhenYouDo = false
+    var fillsWithUpcomingWeeks = false
+
+    private func upcomingWeeks(_ count: Int) -> [HomePrototypeModel.Week] {
+        guard count > 0, let current = model.weeks.last else { return [] }
+        let calendar = Calendar.current
+        return (1...count).compactMap { offset in
+            guard let start = calendar.date(byAdding: .weekOfYear, value: offset, to: current.start) else { return nil }
+            let days = (0..<7).compactMap { dayOffset -> HomePrototypeModel.Day? in
+                guard let date = calendar.date(byAdding: .day, value: dayOffset, to: start) else { return nil }
+                return HomePrototypeModel.Day(date: date, hasWorkout: false, isToday: false, isFuture: true)
+            }
+            return HomePrototypeModel.Week(start: start, days: days, count: 0, isCurrent: false)
+        }
+    }
+
+    /// Rows for a calendar of `rowCount`: newest history first priority, upcoming weeks fill the rest.
+    private func rows(_ rowCount: Int) -> [HomePrototypeModel.Week] {
+        let history = candidateWeeks
+        guard fillsWithUpcomingWeeks, history.count < rowCount else { return Array(history.suffix(rowCount)) }
+        return history + upcomingWeeks(rowCount - history.count)
+    }
+
+    private var maxRowCount: Int {
+        fillsWithUpcomingWeeks ? 12 : max(candidateWeeks.count, 1)
+    }
+
+    /// Weeks eligible for display: all of them, or only those since the first workout.
+    private var candidateWeeks: [HomePrototypeModel.Week] {
+        guard startsWhenYouDo else { return model.weeks }
+        guard let first = model.firstWorkoutDate else { return Array(model.weeks.suffix(1)) }
+        return model.weeks.filter { week in
+            guard let end = Calendar.current.date(byAdding: .day, value: 7, to: week.start) else { return true }
+            return end > first
+        }
+    }
+
+    private var historyStart: Date? {
+        guard startsWhenYouDo else { return nil }
+        return Calendar.current.startOfDay(for: model.firstWorkoutDate ?? now)
+    }
 
     private var showsQuickStarts: Bool {
         !primary.isActive && !model.quickStarts.isEmpty
@@ -896,9 +944,20 @@ struct HomePrototypeVariantFill: View {
             SignedOutReminderBanner(bottomSpacing: 18)
 
             ViewThatFits(in: .vertical) {
-                ForEach((4...12).reversed(), id: \.self) { weekCount in
+                ForEach((1...maxRowCount).reversed(), id: \.self) { weekCount in
                     SurfaceCard(padding: 16) {
-                        HomePrototypeCalendar(weeks: Array(model.weeks.suffix(weekCount)))
+                        VStack(alignment: .leading, spacing: 14) {
+                            HomePrototypeCalendar(
+                                weeks: rows(weekCount),
+                                historyStart: historyStart
+                            )
+                            if startsWhenYouDo, model.firstWorkoutDate == nil {
+                                Text("Each workout you finish adds a check here.")
+                                    .font(.footnote.weight(.medium))
+                                    .foregroundStyle(AppTheme.textSecondary)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                            }
+                        }
                     }
                 }
             }
@@ -986,6 +1045,12 @@ struct HomePrototypeVariantFill: View {
 
 private struct HomePrototypeCalendar: View {
     let weeks: [HomePrototypeModel.Week]
+    var historyStart: Date?
+
+    private func isBeforeHistory(_ day: HomePrototypeModel.Day) -> Bool {
+        guard let historyStart else { return false }
+        return day.date < historyStart
+    }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -1008,7 +1073,7 @@ private struct HomePrototypeCalendar: View {
                         .frame(width: 50, alignment: .leading)
                     ForEach(week.days) { day in
                         Circle()
-                            .fill(day.hasWorkout ? AppTheme.brandAccentFill : (day.isFuture ? Color.clear : AppTheme.recessedSurface))
+                            .fill(day.hasWorkout ? AppTheme.brandAccentFill : (day.isFuture || isBeforeHistory(day) ? Color.clear : AppTheme.recessedSurface))
                             .overlay {
                                 if day.isToday {
                                     Circle().strokeBorder(AppTheme.brandAccentForeground, lineWidth: 2)
@@ -1026,7 +1091,7 @@ private struct HomePrototypeCalendar: View {
                             .frame(width: 28, height: 28)
                             .frame(maxWidth: .infinity)
                     }
-                    Text("\(week.count)")
+                    Text(week.isCurrent || week.days.first?.isFuture == false ? "\(week.count)" : "")
                         .font(.footnote.weight(.bold))
                         .monospacedDigit()
                         .foregroundStyle(week.count > 0 ? AppTheme.textPrimary : AppTheme.textTertiary)

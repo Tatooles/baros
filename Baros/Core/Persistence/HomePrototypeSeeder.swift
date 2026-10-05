@@ -44,9 +44,13 @@ extension UITestFixtureSeeder {
         let today = calendar.startOfDay(for: .now)
         // Days-ago for each workout, oldest first. Mon/Wed/Fri-ish, a skipped week, a light week.
         var daysAgo: [Int] = []
-        for week in stride(from: 9, through: 0, by: -1) where week != 4 {
-            let base = week * 7
-            daysAgo += week == 7 ? [base + 6, base + 3] : [base + 6, base + 4, base + 2]
+        if ProcessInfo.processInfo.arguments.contains("--prototype-new-user") {
+            daysAgo = [4, 2]
+        } else {
+            for week in stride(from: 9, through: 0, by: -1) where week != 4 {
+                let base = week * 7
+                daysAgo += week == 7 ? [base + 6, base + 3] : [base + 6, base + 4, base + 2]
+            }
         }
 
         for (index, ago) in daysAgo.enumerated() {
