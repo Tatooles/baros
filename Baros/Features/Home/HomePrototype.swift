@@ -11,6 +11,8 @@ enum HomePrototypeVariant: String, CaseIterable {
     case c = "C"
     case d = "D"
     case e = "E"
+    case f = "F"
+    case g = "G"
 
     var name: String {
         switch self {
@@ -20,6 +22,8 @@ enum HomePrototypeVariant: String, CaseIterable {
         case .c: "Bottom Dock"
         case .d: "C + Inline Actions"
         case .e: "C + Slim Pinned Bar"
+        case .f: "No Last Workout · Dock"
+        case .g: "No Last Workout · Inline"
         }
     }
 
@@ -686,6 +690,8 @@ struct HomePrototypeVariantC: View {
     let now: Date
     let actions: HomePrototypeActions
     var dockStyle: DockStyle = .sticky
+    var showsLastWorkout = true
+    var visibleWeekCount = 6
 
     enum DockStyle {
         case sticky, inline, slimBar
@@ -744,7 +750,7 @@ struct HomePrototypeVariantC: View {
                         .padding(.top, 16)
                 }
 
-                if let lastWorkout = content.lastWorkout {
+                if showsLastWorkout, let lastWorkout = content.lastWorkout {
                     HomePrototypeLastWorkoutCard(session: lastWorkout, unit: unit) {
                         actions.openWorkout(lastWorkout)
                     }
@@ -757,7 +763,7 @@ struct HomePrototypeVariantC: View {
     }
 
     private var calendarRows: some View {
-        let recentWeeks = model.weeks.suffix(6)
+        let recentWeeks = model.weeks.suffix(visibleWeekCount)
         return VStack(spacing: 10) {
             HStack(spacing: 0) {
                 Color.clear.frame(width: 50, height: 1)
