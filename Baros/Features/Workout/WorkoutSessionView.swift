@@ -155,6 +155,9 @@ struct WorkoutSessionView: View {
                 .padding(.top, 8)
                 .padding(.bottom, contentBottomPadding)
             }
+            .onScrollPhaseChange { _, phase in
+                if phase == .interacting { RestTimerPrototype.shared.collapseControls() } // PROTOTYPE #114
+            }
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
                 ActiveWorkoutMetricsHeader(session: session) {
@@ -185,6 +188,7 @@ struct WorkoutSessionView: View {
                 completeExerciseSelection(scrollProxy: scrollProxy)
             }
             .onChange(of: focusedField) { previousField, newField in
+                if newField != nil { RestTimerPrototype.shared.collapseControls() } // PROTOTYPE #114
                 UIHangContextObservability.shared.focusChanged(to: newField)
                 focusTransitionCoordinator.observeFocusChange(
                     from: previousField,

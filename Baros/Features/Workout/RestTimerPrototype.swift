@@ -101,11 +101,19 @@ final class RestTimerPrototype {
         scheduleCollapse()
     }
 
-    private func scheduleCollapse() {
+    /// Collapses the control pill early: editing a field or scrolling means the
+    /// person has moved on.
+    func collapseControls() {
+        guard areControlsExpanded else { return }
+        collapseTask?.cancel()
+        withAnimation(.snappy(duration: 0.25)) { areControlsExpanded = false }
+    }
+
+    private func scheduleCollapse(after seconds: Double = 6) {
         collapseTask?.cancel()
         guard areControlsExpanded else { return }
         collapseTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(ProcessInfo.processInfo.arguments.contains("--rest-proto-sticky-controls") ? 600 : 6))
+            try? await Task.sleep(for: .seconds(ProcessInfo.processInfo.arguments.contains("--rest-proto-sticky-controls") ? 600 : seconds))
             guard !Task.isCancelled, let self else { return }
             withAnimation(.snappy(duration: 0.25)) { self.areControlsExpanded = false }
         }
@@ -151,9 +159,12 @@ final class RestTimerPrototype {
             startedAt = now
             endsAt = now.addingTimeInterval(usesShortRest ? 10 : 90)
             isFinished = false
-            areControlsExpanded = false
+            // Show the controls as rest begins, then shrink to the time. Not
+            // under VoiceOver, where the sudden element would move focus.
+            areControlsExpanded = variant.expandsControlsOnTap && !UIAccessibility.isVoiceOverRunning
         }
         scheduleEnd()
+        scheduleCollapse(after: 3)
     }
 
     func adjust(by seconds: TimeInterval) {
