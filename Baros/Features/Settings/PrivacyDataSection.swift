@@ -69,7 +69,6 @@ struct PrivacyDataSection: View {
 
     let exportWorkoutHistory: () -> Void
     let links: PrivacySupportConfiguration
-    let onDeletionCompleted: () -> Void
 
     private var deletionAction: PrivacyDataDeletionAction {
         let isAuthenticated =
@@ -99,8 +98,7 @@ struct PrivacyDataSection: View {
                         modelContext,
                         syncScheduler,
                         clerk
-                    ),
-                    onCompleted: onDeletionCompleted
+                    )
                 )
             } label: {
                 Label {

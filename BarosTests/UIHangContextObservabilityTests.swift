@@ -100,7 +100,7 @@ final class UIHangContextObservabilityTests: XCTestCase {
     }
 
     func testAllShellSurfacesPassFilterAndRejectUnboundedOrInconsistentFields() throws {
-        for surface in ["launch", "home", "history", "profile", "onboarding", "whats_new", "active_workout"] {
+        for surface in ["launch", "home", "history", "settings", "onboarding", "whats_new", "active_workout"] {
             let event = Event(level: .fatal)
             event.tags = ["ui_surface": surface]
             event.context = ["ui": ["schema_version": 1, "base_screen": "home", "scene_phase": "inactive"]]
@@ -120,13 +120,13 @@ final class UIHangContextObservabilityTests: XCTestCase {
         }
     }
 
-    func testSettingsWhatsNewRestoresProfileAndCannotOverrideAnotherPresentation() {
+    func testSettingsWhatsNewRestoresSettingsAndCannotOverrideAnotherPresentation() {
         let sink = RecordingUIHangContextSink()
         let context = UIHangContextObservability(sink: sink)
-        context.shellChanged(screen: .profile, presentation: nil)
+        context.shellChanged(screen: .settings, presentation: nil)
         context.settingsWhatsNewChanged(isPresented: true)
         XCTAssertEqual(sink.snapshots.last?.surface, .whatsNew)
-        XCTAssertEqual(sink.snapshots.last?.baseScreen, .profile)
+        XCTAssertEqual(sink.snapshots.last?.baseScreen, .settings)
         let breadcrumbCount = sink.breadcrumbs.count
         context.settingsWhatsNewChanged(isPresented: true)
         XCTAssertEqual(sink.breadcrumbs.count, breadcrumbCount)
@@ -134,15 +134,15 @@ final class UIHangContextObservabilityTests: XCTestCase {
         context.sceneChanged(to: .active)
         XCTAssertEqual(sink.snapshots.last?.surface, .whatsNew)
         context.settingsWhatsNewChanged(isPresented: false)
-        XCTAssertEqual(sink.snapshots.last?.surface, .profile)
+        XCTAssertEqual(sink.snapshots.last?.surface, .settings)
         context.settingsWhatsNewChanged(isPresented: true)
         context.shellChanged(screen: .home, presentation: .activeWorkout)
         context.settingsWhatsNewChanged(isPresented: false)
         context.settingsWhatsNewChanged(isPresented: true)
         XCTAssertEqual(sink.snapshots.last?.surface, .activeWorkout)
         XCTAssertEqual(sink.snapshots.last?.baseScreen, .home)
-        context.shellChanged(screen: .profile, presentation: nil)
-        XCTAssertEqual(sink.snapshots.last?.surface, .profile)
+        context.shellChanged(screen: .settings, presentation: nil)
+        XCTAssertEqual(sink.snapshots.last?.surface, .settings)
     }
 
     func testLaunchPresentationRestoresUnderlyingTabAndClearsWorkoutContext() throws {
@@ -161,16 +161,16 @@ final class UIHangContextObservabilityTests: XCTestCase {
         context.focusChanged(to: .setReps(UUID()))
         XCTAssertEqual(sink.snapshots.last?.surface, .exercisePicker)
         XCTAssertNil(sink.snapshots.last?.focusedField)
-        context.shellChanged(screen: .profile, presentation: .whatsNew)
+        context.shellChanged(screen: .settings, presentation: .whatsNew)
         // Late callbacks from the dismissed workout must not replace What's New.
         context.addExerciseDismissed()
         context.activeWorkoutStructureChanged(exerciseCount: 30, setCount: 100)
         context.activeWorkoutCeasedBeingCurrent()
         XCTAssertEqual(sink.snapshots.last?.surface, .whatsNew)
         XCTAssertNil(sink.snapshots.last?.setCountBucket)
-        context.shellChanged(screen: .profile, presentation: nil)
-        XCTAssertEqual(sink.snapshots.last?.surface, .profile)
-        XCTAssertEqual(sink.snapshots.last?.baseScreen, .profile)
+        context.shellChanged(screen: .settings, presentation: nil)
+        XCTAssertEqual(sink.snapshots.last?.surface, .settings)
+        XCTAssertEqual(sink.snapshots.last?.baseScreen, .settings)
         XCTAssertNil(sink.snapshots.last?.focusedField)
     }
 

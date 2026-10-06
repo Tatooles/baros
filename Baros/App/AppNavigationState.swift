@@ -4,7 +4,7 @@ import Observation
 enum AppTab: String, CaseIterable, Identifiable {
     case history
     case home
-    case profile
+    case settings
 
     var id: String { rawValue }
 
@@ -14,8 +14,8 @@ enum AppTab: String, CaseIterable, Identifiable {
             return "History"
         case .home:
             return "Home"
-        case .profile:
-            return "Profile"
+        case .settings:
+            return "Settings"
         }
     }
 
@@ -25,8 +25,8 @@ enum AppTab: String, CaseIterable, Identifiable {
             return "clock.arrow.circlepath"
         case .home:
             return "house.fill"
-        case .profile:
-            return "person"
+        case .settings:
+            return "gearshape"
         }
     }
 
@@ -36,8 +36,8 @@ enum AppTab: String, CaseIterable, Identifiable {
             return "HistoryTab"
         case .home:
             return "HomeTab"
-        case .profile:
-            return "ProfileTab"
+        case .settings:
+            return "SettingsTab"
         }
     }
 }
@@ -63,8 +63,7 @@ enum HistoryRoute: Hashable {
     case exercise(ExerciseHistoryRoute)
 }
 
-enum ProfileRoute: Hashable {
-    case settings
+enum SettingsRoute: Hashable {
     case exerciseLibrary
 }
 
@@ -73,7 +72,7 @@ final class AppNavigationState {
     var selectedTab: AppTab
     var historyMode: HistoryMode
     var historyPath: [HistoryRoute]
-    var profilePath: [ProfileRoute]
+    var settingsPath: [SettingsRoute]
     private(set) var activeWorkoutID: UUID?
     private(set) var isActiveWorkoutPresented: Bool
     private(set) var fullyPresentedActiveWorkoutID: UUID?
@@ -97,12 +96,12 @@ final class AppNavigationState {
         selectedTab: AppTab = .home,
         historyMode: HistoryMode = .workouts,
         historyPath: [HistoryRoute] = [],
-        profilePath: [ProfileRoute] = []
+        settingsPath: [SettingsRoute] = []
     ) {
         self.selectedTab = selectedTab
         self.historyMode = historyMode
         self.historyPath = historyPath
-        self.profilePath = profilePath
+        self.settingsPath = settingsPath
         activeWorkoutID = nil
         isActiveWorkoutPresented = false
         fullyPresentedActiveWorkoutID = nil
@@ -209,7 +208,7 @@ final class AppNavigationState {
     }
 
     func openSyncSettings() {
-        selectedTab = .profile
-        profilePath = [.settings]
+        selectedTab = .settings
+        settingsPath = []
     }
 }

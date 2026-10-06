@@ -124,7 +124,7 @@ private struct OnboardingSignInInvitationPage: View {
             .controlSize(.large)
             .accessibilityIdentifier("OnboardingContinueWithoutAccountButton")
 
-            Text("You can sign in anytime from Profile.")
+            Text("You can sign in anytime from Settings.")
                 .font(.footnote)
                 .foregroundStyle(AppTheme.textSecondary)
                 .multilineTextAlignment(.center)

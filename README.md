@@ -44,7 +44,7 @@ xcodebuild test \
   -only-testing:BarosUITests/BarosUITests/testLogWorkoutSmoke \
   -only-testing:BarosUITests/BarosUITests/testTabNavigationAndFinishSheetSmoke \
   -only-testing:BarosUITests/BarosUITests/testSettingsEditRequestsSyncInUITestMode \
-  -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToProfileAfterReset \
+  -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToSettingsAfterReset \
   -derivedDataPath /private/tmp/baros-ui-smoke-derived-data \
   -resultBundlePath /private/tmp/BarosUISmoke.xcresult
 ```

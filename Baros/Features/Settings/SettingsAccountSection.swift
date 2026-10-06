@@ -35,6 +35,8 @@ struct SettingsAccountSection: View {
 
     var body: some View {
         Section {
+            SettingsAccountRow()
+
             syncStatusRow
 
             #if DEBUG
