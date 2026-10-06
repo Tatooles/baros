@@ -156,6 +156,7 @@ struct WorkoutSessionView: View {
                 .padding(.bottom, contentBottomPadding)
             }
             .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 0) {
                 ActiveWorkoutMetricsHeader(session: session) {
                     // Flush any in-progress field edit through the commit path
                     // before the finish sheet reads the model.
@@ -163,6 +164,9 @@ struct WorkoutSessionView: View {
                     isFinishSheetPresented = true
                 }
                 .equatable()
+                RestTimerPrototypeSwitcher() // PROTOTYPE #114
+                    .padding(.bottom, 6)
+                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 // Resigning focus routes pending drafts through the normal
@@ -211,6 +215,9 @@ struct WorkoutSessionView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if focusedField != nil, !isChildPresentationActive {
                     keyboardAccessory
+                } else if RestTimerPrototype.shared.variant == .bottomCapsule,
+                          RestTimerPrototype.shared.isResting { // PROTOTYPE #114
+                    RestBottomCapsulePrototype()
                 }
             }
             .background {

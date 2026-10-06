@@ -21,6 +21,7 @@ struct ExerciseCardView: View {
     @State private var showsRemoveConfirmation = false
     @State private var cachedSortedSets: [LoggedSet]?
     @State private var setPreviews: [UUID: ActiveWorkoutSetInput.Values] = [:]
+    private let restPrototype = RestTimerPrototype.shared // PROTOTYPE #114
 
     init(
         loggedExercise: LoggedExercise,
@@ -57,6 +58,9 @@ struct ExerciseCardView: View {
     var body: some View {
         let sortedSets = cachedSortedSets ?? loggedExercise.sortedSets
         let focusedFieldValue = focusedField.wrappedValue
+        let completedSetIDs = Set(sortedSets.filter(\.isCompleted).map(\.id)) // PROTOTYPE #114
+        let restingSetID = restPrototype.restingSetID
+        let restVariant = restPrototype.variant
 
         SurfaceCard(role: .focus, padding: 0) {
             VStack(spacing: 0) {
@@ -158,9 +162,14 @@ struct ExerciseCardView: View {
                             VStack(spacing: 0) {
                                 ForEach(Array(sortedSets.enumerated()), id: \.element.id) { index, set in
                                     if index > 0 {
-                                        Divider()
-                                            .overlay(AppTheme.subtleBorder)
-                                            .padding(.horizontal, 16)
+                                        if restVariant == .dividerLine, restingSetID == sortedSets[index - 1].id {
+                                            RestDividerLinePrototype()
+                                                .padding(.horizontal, 16)
+                                        } else {
+                                            Divider()
+                                                .overlay(AppTheme.subtleBorder)
+                                                .padding(.horizontal, 16)
+                                        }
                                     }
                                     SetRowView(
                                         set: set,
@@ -187,11 +196,21 @@ struct ExerciseCardView: View {
                                     )
                                         .equatable()
                                         .padding(.horizontal, 16)
+
+                                    if restVariant == .insertedRow, restingSetID == set.id {
+                                        RestInlineRowPrototype()
+                                            .padding(.horizontal, 12)
+                                    }
                                 }
 
-                                Divider()
-                                    .overlay(AppTheme.subtleBorder)
-                                    .padding(.horizontal, 16)
+                                if restVariant == .dividerLine, restingSetID != nil, restingSetID == sortedSets.last?.id {
+                                    RestDividerLinePrototype()
+                                        .padding(.horizontal, 16)
+                                } else {
+                                    Divider()
+                                        .overlay(AppTheme.subtleBorder)
+                                        .padding(.horizontal, 16)
+                                }
                             }
 
                             addSetButton
@@ -233,6 +252,16 @@ struct ExerciseCardView: View {
         }
         .onChange(of: setStructureKey, initial: true) { _, _ in
             cachedSortedSets = loggedExercise.sortedSets
+        }
+        // PROTOTYPE #114: completing a set starts rest; un-completing or
+        // removing the set that started it cancels.
+        .onChange(of: completedSetIDs) { previous, current in
+            if let added = current.subtracting(previous).first {
+                restPrototype.start(after: added)
+            }
+            for removed in previous.subtracting(current) {
+                restPrototype.cancel(ifTriggeredBy: removed)
+            }
         }
     }
 

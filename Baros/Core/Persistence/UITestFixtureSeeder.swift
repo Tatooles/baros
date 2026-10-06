@@ -470,7 +470,7 @@ enum UITestFixtureSeeder {
         let activeSession = makePerformanceSession(
             id: stableUUID("00000000-0000-4000-8000-000000000001"),
             title: activeTitle,
-            startedAt: baseDate,
+            startedAt: Date.now.addingTimeInterval(-1_500), // PROTOTYPE #114: realistic elapsed time
             status: .active,
             exercises: fixtureExercises,
             setCount: 5,

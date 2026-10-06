@@ -14,6 +14,9 @@ struct WorkoutHeaderView: View {
     var body: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 10) {
+                if RestTimerPrototype.shared.showsHeaderFallback { // PROTOTYPE #114
+                    RestHeaderFallbackPrototype()
+                } else {
                 HStack(spacing: 7) {
                     Circle()
                         .fill(AppTheme.brandAccentFill)
@@ -28,6 +31,7 @@ struct WorkoutHeaderView: View {
                 .glassEffect(.regular)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Elapsed time \(AppTheme.formatDuration(elapsedSeconds))")
+                }
 
                 HStack(spacing: 10) {
                     ProgressView(value: progressValue)
