@@ -41,6 +41,7 @@ struct RPEChipRow: View {
     }
 }
 
+@MainActor
 enum RPEChipSelectionAction {
     static func apply(
         value: Double?,

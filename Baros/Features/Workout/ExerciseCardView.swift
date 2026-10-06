@@ -157,11 +157,6 @@ struct ExerciseCardView: View {
                         VStack(spacing: 0) {
                             VStack(spacing: 0) {
                                 ForEach(Array(sortedSets.enumerated()), id: \.element.id) { index, set in
-                                    if index > 0 {
-                                        Divider()
-                                            .overlay(AppTheme.subtleBorder)
-                                            .padding(.horizontal, 16)
-                                    }
                                     SetRowView(
                                         set: set,
                                         setID: set.id,
@@ -187,11 +182,15 @@ struct ExerciseCardView: View {
                                     )
                                         .equatable()
                                         .padding(.horizontal, 16)
+                                    RestSetDivider(slot: engine.restTimer.slot(for: set.id), timer: engine.restTimer)
+                                        .padding(.horizontal, 16)
                                 }
+                            }
 
-                                Divider()
-                                    .overlay(AppTheme.subtleBorder)
-                                    .padding(.horizontal, 16)
+                            .overlayPreferenceValue(RestGutterAnchorKey.self) { anchors in
+                                RestGutterOverlay(anchors: anchors,
+                                    slots: sortedSets.map { ($0.id, engine.restTimer.slot(for: $0.id)) },
+                                    timer: engine.restTimer)
                             }
 
                             addSetButton

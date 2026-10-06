@@ -20,10 +20,15 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
 }
 
 @Observable
+@MainActor
 final class ActiveWorkoutEngine {
     @ObservationIgnored private let reportSetSaveFailure: (ActiveWorkoutSetSaveFailure) -> Void
 
-    init(reportSetSaveFailure: @escaping (ActiveWorkoutSetSaveFailure) -> Void = { SentrySetSaveFailureReporter.capture($0) }) {
+    @ObservationIgnored let restTimer: RestTimerCoordinator
+    @ObservationIgnored var restSettingsOwnerTokenIdentifier: String?
+
+    init(restTimer: RestTimerCoordinator = RestTimerCoordinator(), reportSetSaveFailure: @escaping (ActiveWorkoutSetSaveFailure) -> Void = { SentrySetSaveFailureReporter.capture($0) }) {
+        self.restTimer = restTimer
         self.reportSetSaveFailure = reportSetSaveFailure
     }
 
@@ -39,7 +44,9 @@ final class ActiveWorkoutEngine {
 
     func loadActiveSession(ownerTokenIdentifier: String? = nil, context: ModelContext) {
         do {
-            activeSessionID = try currentActiveSession(ownerTokenIdentifier: ownerTokenIdentifier, context: context)?.id
+            let session = try currentActiveSession(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            activeSessionID = session?.id
+            restTimer.reconcile(with: session)
             lastErrorMessage = nil
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -190,6 +197,7 @@ final class ActiveWorkoutEngine {
             session.touch(now: now)
         }
         try context.save()
+        for set in loggedExercise.sets { restTimer.cancel(ifStartedBy: set.id) }
     }
 
     @discardableResult
@@ -246,6 +254,7 @@ final class ActiveWorkoutEngine {
 
         do {
             try save(context)
+            for set in loggedExercise.sets { restTimer.cancel(ifStartedBy: set.id) }
             return replacement
         } catch {
             session.loggedExercises.removeAll { $0.id == replacement.id }
@@ -322,6 +331,7 @@ final class ActiveWorkoutEngine {
             loggedExercise.touch(now: now)
         }
         try context.save()
+        restTimer.cancel(ifStartedBy: set.id)
     }
 
     /// Persists a focus-boundary weight/reps draft without turning a local
@@ -500,6 +510,18 @@ final class ActiveWorkoutEngine {
             #endif
             try save(context)
             discardSetSave()
+            if before.isCompleted != set.isCompleted {
+                if set.isCompleted, let exercise = set.loggedExercise,
+                   let session = exercise.session, session.status == .active {
+                    let records = (try? context.fetch(FetchDescriptor<UserSettings>())) ?? []
+                    let settings = UserSettings.visibleSettingsRecords(from: records,
+                        ownerTokenIdentifier: restSettingsOwnerTokenIdentifier ?? session.syncOwnerTokenIdentifier).first
+                    restTimer.start(sessionID: session.id, setID: set.id,
+                        duration: RestDurationLookup.seconds(for: exercise, settings: settings))
+                } else {
+                    restTimer.cancel(ifStartedBy: set.id)
+                }
+            }
         } catch {
             before.restore(set)
             pendingSetSave = PendingSetSave(set: set, action: action, date: now,
@@ -619,6 +641,7 @@ final class ActiveWorkoutEngine {
             context.rollback()
             throw error
         }
+        restTimer.cancel(sessionID: session.id)
         if activeSessionID == session.id {
             activeSessionID = nil
         }
@@ -637,6 +660,7 @@ final class ActiveWorkoutEngine {
             context.rollback()
             throw error
         }
+        restTimer.cancel(sessionID: session.id)
         if activeSessionID == session.id {
             activeSessionID = nil
         }

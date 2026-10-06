@@ -156,13 +156,16 @@ struct WorkoutSessionView: View {
                 .padding(.bottom, contentBottomPadding)
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                ActiveWorkoutMetricsHeader(session: session) {
+                ActiveWorkoutMetricsHeader(session: session, restTimer: engine.restTimer) {
                     // Flush any in-progress field edit through the commit path
                     // before the finish sheet reads the model.
                     guard prepareForPresentation() else { return }
                     isFinishSheetPresented = true
                 }
                 .equatable()
+            }
+            .onScrollPhaseChange { _, phase in
+                if phase != .idle { engine.restTimer.collapseControls() }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 // Resigning focus routes pending drafts through the normal
@@ -182,6 +185,7 @@ struct WorkoutSessionView: View {
             }
             .onChange(of: focusedField) { previousField, newField in
                 UIHangContextObservability.shared.focusChanged(to: newField)
+                if newField != nil { engine.restTimer.collapseControls() }
                 focusTransitionCoordinator.observeFocusChange(
                     from: previousField,
                     to: newField,
@@ -665,6 +669,7 @@ private final class PreviousSetsCacheLoaderCache {
 /// totals are recomputed only when their value inputs change.
 private struct ActiveWorkoutMetricsHeader: View, @MainActor Equatable {
     let session: WorkoutSession
+    let restTimer: RestTimerCoordinator
     let onFinish: () -> Void
     @State private var cachedMetrics: WorkoutMetrics?
 
@@ -675,14 +680,13 @@ private struct ActiveWorkoutMetricsHeader: View, @MainActor Equatable {
     var body: some View {
         let cacheKey = WorkoutMetrics.CacheKey(session: session)
 
-        TimelineView(.periodic(from: .now, by: 1)) { timeline in
-            WorkoutHeaderView(
-                elapsedSeconds: session.effectiveDurationSeconds(now: timeline.date),
-                completedSets: cachedMetrics?.completedSetCount ?? 0,
-                totalSets: cachedMetrics?.totalSetCount ?? 0,
-                onFinish: onFinish
-            )
-        }
+        WorkoutHeaderView(
+            startedAt: session.startedAt,
+            completedSets: cachedMetrics?.completedSetCount ?? 0,
+            totalSets: cachedMetrics?.totalSetCount ?? 0,
+            restTimer: restTimer,
+            onFinish: onFinish
+        )
         .onChange(of: cacheKey, initial: true) { _, _ in
             cachedMetrics = WorkoutMetrics(session: session, now: session.startedAt)
         }

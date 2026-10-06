@@ -8,6 +8,57 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testCompletingSetStartsRestAndSkipRemovesIt() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["SetCompletionButton-0-0"].tap()
+        let skip = app.buttons["SkipRestButton"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 2))
+        // The automatic pill closes in three seconds; tapping its time toggles it.
+        app.buttons.matching(identifier: "SkipRestButton").firstMatch.tap()
+        XCTAssertTrue(waitForAbsence(skip, timeout: 3))
+        XCTAssertFalse(app.buttons["RestTimerBadge"].exists)
+        app.buttons["SetCompletionButton-0-1"].tap()
+        XCTAssertTrue(skip.waitForExistence(timeout: 2))
+        app.buttons["SetCompletionButton-0-2"].tap()
+        XCTAssertEqual(app.buttons.matching(identifier: "SkipRestButton").count, 1)
+        app.buttons["SetCompletionButton-0-2"].tap()
+        XCTAssertTrue(waitForAbsence(skip, timeout: 3))
+    }
+
+    @MainActor
+    func testRestBadgeControlsAndCollapsedHeaderFallback() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["SetCompletionButton-0-0"].tap()
+        let badge = app.buttons["RestTimerBadge"]
+        XCTAssertTrue(badge.waitForExistence(timeout: 6))
+        let inline = XCTAttachment(screenshot: app.screenshot())
+        inline.name = "Inline rest gutter"
+        inline.lifetime = .keepAlways
+        add(inline)
+        badge.tap()
+        app.buttons["Add 15 seconds"].tap()
+        app.buttons["Subtract 15 seconds"].tap()
+        XCTAssertTrue(badge.waitForExistence(timeout: 8))
+        app.buttons["ExerciseHeader-0"].tap()
+        let headerBadge = app.buttons["RestTimerHeaderBadge"]
+        XCTAssertTrue(headerBadge.waitForExistence(timeout: 3))
+        XCTAssertFalse(badge.exists)
+        headerBadge.tap()
+        let skip = app.buttons["SkipRestButton"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 2))
+        let fallback = XCTAttachment(screenshot: app.screenshot())
+        fallback.name = "Header rest controls"
+        fallback.lifetime = .keepAlways
+        add(fallback)
+        skip.tap()
+        XCTAssertTrue(waitForAbsence(headerBadge, timeout: 3))
+    }
+
+    @MainActor
     func testFailedSetCompletionCanRetryWithoutLosingTypedWeight() {
         let app = makeApp(extraArguments: ["--uitest-fail-active-set-save-once"])
         app.launch()

@@ -18,7 +18,7 @@ struct BarosApp: App {
     >
     @Environment(\.scenePhase) private var scenePhase
     @State private var navigationState = AppNavigationState()
-    @State private var activeWorkoutEngine = ActiveWorkoutEngine()
+    @State private var activeWorkoutEngine = ActiveWorkoutEngine(restTimer: .live())
     @State private var workoutLiveActivityCoordinator = WorkoutLiveActivityCoordinator()
     @State private var appAppearanceStore: AppAppearancePreferenceStore
     @State private var syncScheduler: SyncScheduler
