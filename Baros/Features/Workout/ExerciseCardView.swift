@@ -254,6 +254,11 @@ struct ExerciseCardView: View {
         .onChange(of: setStructureKey, initial: true) { _, _ in
             cachedSortedSets = loggedExercise.sortedSets
         }
+        .onAppear { // PROTOTYPE #114 screenshot hook
+            if exerciseIndex == 0, sortedSets.count > 1 {
+                restPrototype.autostartIfRequested(after: sortedSets[1].id)
+            }
+        }
         // PROTOTYPE #114: completing a set starts rest; un-completing or
         // removing the set that started it cancels.
         .onChange(of: completedSetIDs) { previous, current in

@@ -50,6 +50,30 @@ final class RestTimerPrototype {
         didSet { UserDefaults.standard.set(variant.rawValue, forKey: Self.variantKey) }
     }
     var usesShortRest = false
+
+    /// B3 only: how the tappable time is drawn, to test discoverability.
+    enum ChipStyle: String, CaseIterable {
+        case plain = "Plain"
+        case badge = "Badge"
+        case badgeAdjust = "Badge ±"
+
+        /// Width reserved in the gutter so the bar starts after the chip.
+        var gutterWidth: CGFloat {
+            switch self {
+            case .plain: 36
+            case .badge: 44
+            case .badgeAdjust: 58
+            }
+        }
+    }
+
+    var chipStyle: ChipStyle = .badge
+
+    func cycleChipStyle() {
+        let all = ChipStyle.allCases
+        let index = all.firstIndex(of: chipStyle) ?? 0
+        withAnimation(.snappy) { chipStyle = all[(index + 1) % all.count] }
+    }
     private(set) var restingSetID: UUID?
     private(set) var startedAt: Date = .now
     private(set) var endsAt: Date = .now
@@ -60,6 +84,17 @@ final class RestTimerPrototype {
     private(set) var areControlsExpanded = false
     private var endTask: Task<Void, Never>?
     private var collapseTask: Task<Void, Never>?
+
+    /// Screenshot hook: --rest-proto-autostart starts rest after the given set
+    /// at launch; --rest-proto-expanded also opens the control pill.
+    func autostartIfRequested(after setID: UUID) {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("--rest-proto-autostart"), !isResting else { return }
+        start(after: setID)
+        if arguments.contains("--rest-proto-expanded") {
+            areControlsExpanded = true
+        }
+    }
 
     func toggleControls() {
         withAnimation(.snappy(duration: 0.25)) { areControlsExpanded.toggle() }
@@ -78,7 +113,13 @@ final class RestTimerPrototype {
 
     private init() {
         variant = UserDefaults.standard.string(forKey: Self.variantKey)
-            .flatMap(Variant.init(rawValue:)) ?? .insertedRow
+            .flatMap(Variant.init(rawValue:)) ?? .dividerGutter
+        // Screenshot hooks: --rest-proto-chip <Plain|Badge|Badge ±>
+        let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: "--rest-proto-chip"), index + 1 < arguments.count,
+           let style = ChipStyle(rawValue: arguments[index + 1]) {
+            chipStyle = style
+        }
     }
 
     var isResting: Bool { restingSetID != nil }
@@ -405,7 +446,7 @@ struct RestDividerGutterPrototype: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Color.clear.frame(width: 36) // the time button comes from the overlay
+            Color.clear.frame(width: timer.chipStyle.gutterWidth) // the time button comes from the overlay
             RestProgressBar(timer: timer, height: 3)
         }
         .frame(height: 18)
@@ -446,9 +487,7 @@ struct RestDividerControlsOverlay: View {
         Button { timer.toggleControls() } label: {
             Group {
                 if timer.variant == .dividerGutter {
-                    RestCompactTime(timer: timer)
-                        .foregroundStyle(AppTheme.brandAccentForeground)
-                        .frame(width: 36, height: 18)
+                    gutterChip
                 } else {
                     RestCompactTime(timer: timer)
                         .foregroundStyle(timer.isFinished ? AppTheme.onBrandAccent : AppTheme.brandAccentForeground)
@@ -460,11 +499,37 @@ struct RestDividerControlsOverlay: View {
                         .overlay(Capsule().strokeBorder(AppTheme.brandAccentFill, lineWidth: 1))
                 }
             }
-            .frame(width: 44, height: 44, alignment: .leading)
+            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Rest timer")
+        .accessibilityHint("Shows controls to adjust or skip rest.")
+    }
+
+    /// B3's time, in the style picked on the switcher. The badge styles reuse
+    /// the RPE badge's look (muted cobalt capsule), which already means "tap
+    /// to edit" on this screen.
+    @ViewBuilder
+    private var gutterChip: some View {
+        switch timer.chipStyle {
+        case .plain:
+            RestCompactTime(timer: timer)
+                .foregroundStyle(AppTheme.brandAccentForeground)
+                .frame(width: 36, height: 18)
+        case .badge, .badgeAdjust:
+            HStack(spacing: 3) {
+                RestCompactTime(timer: timer)
+                if timer.chipStyle == .badgeAdjust, !timer.isFinished {
+                    Image(systemName: "plus.forwardslash.minus")
+                        .font(.system(size: 9, weight: .bold))
+                }
+            }
+            .foregroundStyle(AppTheme.brandAccentForeground)
+            .padding(.horizontal, 6)
+            .frame(height: 18)
+            .background(AppTheme.brandAccentMuted, in: Capsule())
+        }
     }
 }
 
@@ -564,6 +629,11 @@ struct RestTimerPrototypeSwitcher: View {
             Divider().frame(height: 16).overlay(.black.opacity(0.3))
             Button(timer.usesShortRest ? "10s" : "90s") { timer.usesShortRest.toggle() }
                 .frame(minWidth: 36, minHeight: 30)
+            if timer.variant == .dividerGutter {
+                Divider().frame(height: 16).overlay(.black.opacity(0.3))
+                Button(timer.chipStyle.rawValue) { timer.cycleChipStyle() }
+                    .frame(minWidth: 56, minHeight: 30)
+            }
         }
         .font(.caption.weight(.bold).monospacedDigit())
         .foregroundStyle(.black)
