@@ -197,7 +197,7 @@ struct ExerciseCardView: View {
                                         .padding(.horizontal, 16)
 
                                     if restVariant == .insertedRow, restingSetID == set.id {
-                                        RestInlineRowPrototype()
+                                        RestInlineRowPrototype(setID: set.id)
                                             .padding(.horizontal, 12)
                                     }
                                 }
@@ -255,7 +255,10 @@ struct ExerciseCardView: View {
             cachedSortedSets = loggedExercise.sortedSets
         }
         .onAppear { // PROTOTYPE #114 screenshot hook
-            if exerciseIndex == 0, sortedSets.count > 1 {
+            let arguments = ProcessInfo.processInfo.arguments
+            let target = arguments.firstIndex(of: "--rest-proto-autostart-exercise")
+                .flatMap { $0 + 1 < arguments.count ? Int(arguments[$0 + 1]) : nil } ?? 0
+            if exerciseIndex == target, sortedSets.count > 1 {
                 restPrototype.autostartIfRequested(after: sortedSets[1].id)
             }
         }
@@ -276,9 +279,9 @@ struct ExerciseCardView: View {
     private func restDivider(_ variant: RestTimerPrototype.Variant) -> some View {
         Group {
             switch variant {
-            case .dividerCompact: RestDividerCompactPrototype()
-            case .dividerGutter: RestDividerGutterPrototype()
-            default: RestDividerLinePrototype()
+            case .dividerCompact: RestDividerCompactPrototype(setID: restPrototype.restingSetID)
+            case .dividerGutter: RestDividerGutterPrototype(setID: restPrototype.restingSetID)
+            default: RestDividerLinePrototype(setID: restPrototype.restingSetID)
             }
         }
         .padding(.horizontal, 16)

@@ -79,7 +79,17 @@ final class RestTimerPrototype {
     private(set) var endsAt: Date = .now
     private(set) var isFinished = false
     /// Whether the inline countdown (A/B) is on screen. Drives the header fallback.
-    var isInlineVisible = false
+    /// Last on-screen report from the inline countdown, tagged with the set it
+    /// belongs to. A report for another set (or none yet) counts as unknown,
+    /// which never shows the header fallback. Defaulting to "hidden" made the
+    /// header flash to the fallback for a frame whenever rest started.
+    private var inlineVisibility: (setID: UUID, isVisible: Bool)?
+
+    func reportInlineVisibility(_ isVisible: Bool, for setID: UUID?) {
+        guard let setID else { return }
+        guard inlineVisibility?.setID != setID || inlineVisibility?.isVisible != isVisible else { return }
+        inlineVisibility = (setID, isVisible)
+    }
     /// B2/B3: the transient control pill opened by tapping the time.
     private(set) var areControlsExpanded = false
     private var endTask: Task<Void, Never>?
@@ -133,7 +143,9 @@ final class RestTimerPrototype {
     var isResting: Bool { restingSetID != nil }
 
     var showsHeaderFallback: Bool {
-        isResting && variant.usesInlineCountdown && !isInlineVisible
+        guard isResting, variant.usesInlineCountdown,
+              let inlineVisibility, inlineVisibility.setID == restingSetID else { return false }
+        return !inlineVisibility.isVisible
     }
 
     var interval: ClosedRange<Date> { startedAt...max(startedAt, endsAt) }
@@ -296,13 +308,16 @@ private struct RestAdjustButtons: View {
 /// A/B only: report whether the inline countdown is on screen.
 private struct InlineVisibilityReporter: ViewModifier {
     let timer: RestTimerPrototype
+    /// Captured when the view is built, so a disappearing countdown for a
+    /// replaced rest can't report on behalf of the new one.
+    let setID: UUID?
 
     func body(content: Content) -> some View {
         content
             .onScrollVisibilityChange(threshold: 0.6) { isVisible in
-                timer.isInlineVisible = isVisible
+                timer.reportInlineVisibility(isVisible, for: setID)
             }
-            .onDisappear { timer.isInlineVisible = false }
+            .onDisappear { timer.reportInlineVisibility(false, for: setID) }
     }
 }
 
@@ -310,6 +325,7 @@ private struct InlineVisibilityReporter: ViewModifier {
 
 struct RestInlineRowPrototype: View {
     let timer = RestTimerPrototype.shared
+    let setID: UUID?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -326,7 +342,7 @@ struct RestInlineRowPrototype: View {
         .frame(minHeight: 44)
         .background(AppTheme.brandAccentMuted.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
         .padding(.vertical, 4)
-        .modifier(InlineVisibilityReporter(timer: timer))
+        .modifier(InlineVisibilityReporter(timer: timer, setID: setID))
         .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
     }
 }
@@ -335,6 +351,7 @@ struct RestInlineRowPrototype: View {
 
 struct RestDividerLinePrototype: View {
     let timer = RestTimerPrototype.shared
+    let setID: UUID?
 
     var body: some View {
         RestProgressBar(timer: timer, height: 3)
@@ -360,7 +377,7 @@ struct RestDividerLinePrototype: View {
                 .padding(.leading, 38)
             }
             .zIndex(1)
-            .modifier(InlineVisibilityReporter(timer: timer))
+            .modifier(InlineVisibilityReporter(timer: timer, setID: setID))
     }
 }
 
@@ -441,19 +458,21 @@ struct RestDividerAnchorKey: PreferenceKey {
 /// `RestDividerControlsOverlay`.
 struct RestDividerCompactPrototype: View {
     let timer = RestTimerPrototype.shared
+    let setID: UUID?
 
     var body: some View {
         RestProgressBar(timer: timer, height: 3)
             .padding(.leading, 40)
             .frame(height: 1)
             .anchorPreference(key: RestDividerAnchorKey.self, value: .bounds) { $0 }
-            .modifier(InlineVisibilityReporter(timer: timer))
+            .modifier(InlineVisibilityReporter(timer: timer, setID: setID))
     }
 }
 
 /// B3: the divider opens an 18pt gutter so the time never overlaps a row.
 struct RestDividerGutterPrototype: View {
     let timer = RestTimerPrototype.shared
+    let setID: UUID?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -462,7 +481,7 @@ struct RestDividerGutterPrototype: View {
         }
         .frame(height: 18)
         .anchorPreference(key: RestDividerAnchorKey.self, value: .bounds) { $0 }
-        .modifier(InlineVisibilityReporter(timer: timer))
+        .modifier(InlineVisibilityReporter(timer: timer, setID: setID))
         .transition(.opacity)
     }
 }
