@@ -2,15 +2,22 @@ import SwiftData
 import SwiftUI
 
 struct HomeView: View {
+    private static let topPadding: CGFloat = 12
+    private static let bottomPadding: CGFloat = 8
+    private static let minimumActionSpacing: CGFloat = 20
+
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     let activeSession: WorkoutSession?
     let presentWorkout: () -> Void
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @State private var startSheetPresentation: HomeStartSheetPresentation?
+    @State private var quickStartWorkout: HomeQuickStartWorkout?
     @State private var presentsWorkoutAfterStart = false
     @State private var sessionIDHiddenDuringLaunchHandoff: UUID?
+    @State private var layoutMetrics = HomeLayoutMetrics()
 
     var body: some View {
         let ownerTokenIdentifier = currentOwnerCoordinator.localDataOwnerTokenIdentifier
@@ -21,42 +28,62 @@ struct HomeView: View {
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 now: timeline.date
             )
+            let primaryPresentation = HomePrimaryWorkoutPresentation(
+                activeSession: activeSession,
+                sessionIDHiddenDuringLaunchHandoff: sessionIDHiddenDuringLaunchHandoff,
+                now: timeline.date
+            )
+            // Accessibility sizes put the actions first and keep the calendar at its minimum.
+            let visibleWeeks = content.trainingCalendar.visibleWeeks(
+                fitting: dynamicTypeSize.isAccessibilitySize ? 0 : layoutMetrics.calendarWeekCapacity(
+                    rowSpacing: HomeTrainingCalendarView.rowSpacing,
+                    fixedSpacing: Self.topPadding + Self.bottomPadding + Self.minimumActionSpacing
+                )
+            )
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(timeline.date.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                        .font(.caption.weight(.bold))
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-                        .foregroundStyle(AppTheme.textSecondary)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(timeline.date.formatted(.dateTime.weekday(.wide)))
+                            .font(.largeTitle.weight(.bold))
+                            .foregroundStyle(AppTheme.textPrimary)
+                            .accessibilityIdentifier("HomeTitle")
 
-                    Text("Home")
-                        .font(.largeTitle.weight(.bold))
-                        .foregroundStyle(AppTheme.textPrimary)
-                        .padding(.top, 3)
-                        .padding(.bottom, 18)
-                        .accessibilityIdentifier("HomeTitle")
+                        Text(timeline.date.formatted(.dateTime.month(.wide).day()))
+                            .font(.headline.weight(.medium))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .padding(.top, 2)
+                            .padding(.bottom, 20)
 
-                    SignedOutReminderBanner(bottomSpacing: 18)
+                        SignedOutReminderBanner(bottomSpacing: 18)
+                    }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                        layoutMetrics.headerHeight = $0
+                    }
 
-                    HomePrimaryWorkoutButton(
-                        presentation: HomePrimaryWorkoutPresentation(
-                            activeSession: activeSession,
-                            sessionIDHiddenDuringLaunchHandoff: sessionIDHiddenDuringLaunchHandoff,
-                            now: timeline.date
-                        ),
-                        action: primaryWorkoutAction
-                    )
-
-                    HomeWeeklyActivityView(activity: content.weeklyActivity)
-
-                    if let lastWorkout = content.lastWorkout {
-                        HomeLastWorkoutView(session: lastWorkout) {
-                            navigationState.openWorkoutHistory(lastWorkout.id)
-                        }
+                    if dynamicTypeSize.isAccessibilitySize {
+                        actions(content: content, primaryPresentation: primaryPresentation)
+                            .padding(.bottom, 24)
+                        trainingCalendar(content.trainingCalendar, visibleWeeks: visibleWeeks)
+                    } else {
+                        trainingCalendar(content.trainingCalendar, visibleWeeks: visibleWeeks)
+                        Spacer(minLength: Self.minimumActionSpacing)
+                        actions(content: content, primaryPresentation: primaryPresentation)
                     }
                 }
-                .padding(AppTheme.shellPadding)
+                .padding(.horizontal, AppTheme.shellPadding)
+                .padding(.top, Self.topPadding)
+                .padding(.bottom, Self.bottomPadding)
+                .frame(minHeight: layoutMetrics.viewportHeight, alignment: .top)
+            }
+            // The page fills the viewport exactly, so only scroll when content overflows. Without this, the
+            // tab bar items lost their accessibility identifiers in UI tests.
+            .scrollBounceBehavior(.basedOnSize)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                // Already excludes the safe areas (status bar, tab bar).
+                geometry.containerSize.height
+            } action: { _, height in
+                layoutMetrics.viewportHeight = height
             }
             .background(AppTheme.canvasBackground.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
@@ -64,10 +91,14 @@ struct HomeView: View {
                 HomeStartWorkoutSheet(
                     content: content,
                     activeWorkoutEngine: activeWorkoutEngine,
-                    onWorkoutStarted: { session in
-                        sessionIDHiddenDuringLaunchHandoff = session.id
-                        presentsWorkoutAfterStart = true
-                    }
+                    onWorkoutStarted: handOffStartedWorkout
+                )
+            }
+            .sheet(item: $quickStartWorkout, onDismiss: presentStartedWorkoutIfNeeded) { workout in
+                HomeQuickStartReviewSheet(
+                    session: workout.session,
+                    activeWorkoutEngine: activeWorkoutEngine,
+                    onWorkoutStarted: handOffStartedWorkout
                 )
             }
             .onChange(of: navigationState.fullyPresentedActiveWorkoutID) { _, presentedSessionID in
@@ -84,12 +115,51 @@ struct HomeView: View {
         }
     }
 
+    private func trainingCalendar(
+        _ trainingCalendar: HomeTrainingCalendar,
+        visibleWeeks: ArraySlice<HomeTrainingCalendar.Week>
+    ) -> some View {
+        HomeTrainingCalendarView(
+            trainingCalendar: trainingCalendar,
+            visibleWeeks: visibleWeeks,
+            layoutMetrics: $layoutMetrics
+        )
+        // A legible grid matters more than larger glyphs; VoiceOver reads the summary label instead.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+
+    private func actions(
+        content: HomeContent,
+        primaryPresentation: HomePrimaryWorkoutPresentation
+    ) -> some View {
+        VStack(spacing: 12) {
+            if !primaryPresentation.isActive, !content.quickStartWorkouts.isEmpty {
+                HomeQuickStartRow(workouts: content.quickStartWorkouts) { workout in
+                    quickStartWorkout = workout
+                }
+            }
+
+            HomePrimaryWorkoutButton(
+                presentation: primaryPresentation,
+                action: primaryWorkoutAction
+            )
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+            layoutMetrics.actionsHeight = $0
+        }
+    }
+
     private func primaryWorkoutAction() {
         if activeSession != nil {
             presentWorkout()
         } else {
             startSheetPresentation = HomeStartSheetPresentation()
         }
+    }
+
+    private func handOffStartedWorkout(_ session: WorkoutSession) {
+        sessionIDHiddenDuringLaunchHandoff = session.id
+        presentsWorkoutAfterStart = true
     }
 
     private func presentStartedWorkoutIfNeeded() {
@@ -105,65 +175,33 @@ private struct HomeStartSheetPresentation: Identifiable {
 }
 
 private struct HomePrimaryWorkoutButton: View {
-    private struct Layout {
-        let systemImage: String
-        let iconDimension: CGFloat
-        let minimumHeight: CGFloat
-        let verticalPadding: CGFloat
-        let titleFont: Font
-    }
+    @ScaledMetric(relativeTo: .title3) private var iconDimension: CGFloat = 40
 
     let presentation: HomePrimaryWorkoutPresentation
     let action: () -> Void
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
-    }
-
-    private var layout: Layout {
-        if presentation.isActive {
-            return Layout(
-                systemImage: "figure.strengthtraining.traditional",
-                iconDimension: 50,
-                minimumHeight: 112,
-                verticalPadding: 19,
-                titleFont: .title2.weight(.bold)
-            )
-        }
-
-        return Layout(
-            systemImage: "plus",
-            iconDimension: 50,
-            minimumHeight: 100,
-            verticalPadding: 16,
-            titleFont: .title3.weight(.bold)
-        )
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
     }
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
-                Image(systemName: layout.systemImage)
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(AppTheme.onBrandAccent)
-                    .frame(width: layout.iconDimension, height: layout.iconDimension)
-                    .background(AppTheme.brandAccentGradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(AppTheme.onBrandAccent.opacity(0.2), lineWidth: 1)
-                    }
+            HStack(spacing: 14) {
+                Image(systemName: presentation.isActive ? "figure.strengthtraining.traditional" : "plus")
+                    .font(.title3.weight(.bold))
+                    .frame(width: iconDimension, height: iconDimension)
+                    .background(AppTheme.onBrandAccent.opacity(0.18), in: Circle())
                     .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(presentation.title)
-                        .font(layout.titleFont)
-                        .foregroundStyle(AppTheme.textPrimary)
+                        .font(.title3.weight(.bold))
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let detail = presentation.detail {
                         Text(detail)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(AppTheme.textSecondary)
+                            .opacity(0.85)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -171,16 +209,15 @@ private struct HomePrimaryWorkoutButton: View {
                 Spacer(minLength: 8)
 
                 Image(systemName: "chevron.right")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .font(.headline.weight(.bold))
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, layout.verticalPadding)
-            .frame(maxWidth: .infinity, minHeight: layout.minimumHeight, alignment: .leading)
-            .background(AppTheme.focusSurface, in: shape)
-            .overlay(shape.strokeBorder(AppTheme.brandAccentForeground.opacity(0.9), lineWidth: 3))
-            .shadow(color: AppTheme.brandAccentGlow, radius: 18, y: 8)
+            .foregroundStyle(AppTheme.onBrandAccent)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .background(AppTheme.brandAccentGradient, in: shape)
+            .shadow(color: AppTheme.brandAccentGlow, radius: 14, y: 6)
             .contentShape(shape)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(presentation.title)
@@ -191,180 +228,182 @@ private struct HomePrimaryWorkoutButton: View {
     }
 }
 
-private struct HomeWeeklyActivityView: View {
-    let activity: HomeWeeklyActivity
+private struct HomeTrainingCalendarView: View {
+    static let rowSpacing: CGFloat = 10
 
-    private var workoutCountLabel: String {
-        "\(activity.completedWorkoutCount) "
-            + (activity.completedWorkoutCount == 1 ? "workout" : "workouts")
-    }
+    @ScaledMetric(relativeTo: .caption2) private var weekLabelWidth: CGFloat = 56
+    @ScaledMetric(relativeTo: .footnote) private var countWidth: CGFloat = 26
+    @ScaledMetric(relativeTo: .caption) private var markerSize: CGFloat = 28
+
+    let trainingCalendar: HomeTrainingCalendar
+    let visibleWeeks: ArraySlice<HomeTrainingCalendar.Week>
+    @Binding var layoutMetrics: HomeLayoutMetrics
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("This week")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(AppTheme.textPrimary)
-                Spacer()
-                Text(workoutCountLabel)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(AppTheme.textSecondary)
-            }
-            .padding(.horizontal, 2)
+        SurfaceCard(padding: 16) {
+            VStack(spacing: Self.rowSpacing) {
+                weekdayHeader
 
-            SurfaceCard(padding: 15) {
-                HStack(spacing: 4) {
-                    ForEach(activity.days) { day in
-                        HomeWeekDayView(day: day)
+                VStack(spacing: Self.rowSpacing) {
+                    ForEach(visibleWeeks) { week in
+                        weekRow(week)
                     }
                 }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(activity.accessibilityDescription())
-            .accessibilityIdentifier("HomeWeeklyActivity")
-        }
-        .padding(.top, 25)
-    }
-}
-
-private struct HomeWeekDayView: View {
-    let day: HomeWeeklyActivity.Day
-
-    private var markerText: String {
-        if day.hasCompletedWorkout {
-            return "✓"
-        }
-        if day.isToday {
-            return day.date.formatted(.dateTime.day())
-        }
-        return "—"
-    }
-
-    var body: some View {
-        VStack(spacing: 7) {
-            Text(day.date.formatted(.dateTime.weekday(.narrow)))
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(day.isToday ? AppTheme.brandAccentForeground : AppTheme.textTertiary)
-
-            Text(markerText)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(day.hasCompletedWorkout ? AppTheme.onBrandAccent : AppTheme.textSecondary)
-                .frame(width: 32, height: 32)
-                .background(
-                    day.hasCompletedWorkout ? AppTheme.brandAccentFill : AppTheme.recessedSurface,
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                )
-                .overlay {
-                    if day.isToday {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(AppTheme.brandAccentForeground.opacity(0.42), lineWidth: 2)
-                    }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    layoutMetrics.calendarRowsHeight = height
+                    layoutMetrics.calendarRowCount = visibleWeeks.count
                 }
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityHidden(true)
-    }
-}
 
-private struct HomeLastWorkoutView: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    let session: WorkoutSession
-    let openWorkout: () -> Void
-
-    private var metrics: WorkoutMetrics {
-        WorkoutMetrics(session: session)
-    }
-
-    var body: some View {
-        Button(action: openWorkout) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Last Workout")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(AppTheme.textPrimary)
-                    .padding(.horizontal, 2)
-
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack(alignment: .top, spacing: 12) {
-                            Capsule()
-                                .fill(AppTheme.brandAccentFill)
-                                .frame(width: 4, height: 48)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(session.title)
-                                    .font(.headline)
-                                    .foregroundStyle(AppTheme.textPrimary)
-
-                                Text(WorkoutFormatters.compactDate(session.startedAt))
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(AppTheme.textSecondary)
-                            }
-
-                            Spacer(minLength: 8)
-
-                            Image(systemName: "chevron.right")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(AppTheme.textTertiary)
-                                .padding(.top, 4)
-                                .accessibilityHidden(true)
-                        }
-
-                        Group {
-                            if dynamicTypeSize.isAccessibilitySize {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    workoutMetadata
-                                }
-                            } else {
-                                HStack(spacing: 12) {
-                                    workoutMetadata
-                                }
-                            }
-                        }
+                if !trainingCalendar.hasCompletedWorkouts {
+                    Text("Each workout you finish adds a check here.")
                         .font(.footnote.weight(.medium))
-                        .foregroundStyle(AppTheme.textTertiary)
-
-                        Divider()
-
-                        VStack(spacing: 10) {
-                            ForEach(session.sortedLoggedExercises.prefix(3)) { loggedExercise in
-                                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                                    Text(loggedExercise.exerciseSnapshotName)
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundStyle(AppTheme.textPrimary)
-                                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                                        .fixedSize(horizontal: false, vertical: true)
-
-                                    Spacer(minLength: 8)
-
-                                    Text(WorkoutFormatters.setCount(loggedExercise.sortedSets.count))
-                                        .font(.footnote.weight(.medium))
-                                        .foregroundStyle(AppTheme.textSecondary)
-                                }
-                            }
-
-                            let remainingExerciseCount = max(session.sortedLoggedExercises.count - 3, 0)
-                            if remainingExerciseCount > 0 {
-                                Text("+ \(remainingExerciseCount) more")
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(AppTheme.brandAccentForeground)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                    }
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 4)
                 }
             }
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("HomeLastWorkoutButton")
-        .padding(.top, 25)
-        .padding(.bottom, 12)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+            layoutMetrics.calendarCardHeight = $0
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(trainingCalendar.accessibilityDescription(for: visibleWeeks))
+        .accessibilityIdentifier("HomeTrainingCalendar")
+    }
+
+    private var weekdayHeader: some View {
+        HStack(spacing: 0) {
+            Color.clear.frame(width: weekLabelWidth, height: 1)
+            ForEach(visibleWeeks.last?.days ?? []) { day in
+                Text(day.date.formatted(.dateTime.weekday(.narrow)))
+                    .frame(maxWidth: .infinity)
+            }
+            Color.clear.frame(width: countWidth, height: 1)
+        }
+        .font(.caption2.weight(.bold))
+        .foregroundStyle(AppTheme.textTertiary)
+    }
+
+    private func weekRow(_ week: HomeTrainingCalendar.Week) -> some View {
+        HStack(spacing: 0) {
+            Text(week.isCurrent ? "This week" : week.start.formatted(.dateTime.month(.abbreviated).day()))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(week.isCurrent ? AppTheme.brandAccentForeground : AppTheme.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(width: weekLabelWidth, alignment: .leading)
+
+            ForEach(week.days) { day in
+                dayMarker(day)
+                    .frame(maxWidth: markerSize, maxHeight: markerSize)
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+            }
+
+            Text("\(week.completedWorkoutCount)")
+                .font(.footnote.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(week.completedWorkoutCount > 0 ? AppTheme.textPrimary : AppTheme.textTertiary)
+                .frame(width: countWidth, alignment: .trailing)
+        }
     }
 
     @ViewBuilder
-    private var workoutMetadata: some View {
-        Label(AppTheme.formatDuration(metrics.durationSeconds), systemImage: "clock")
-        Text(WorkoutFormatters.exerciseCount(session.visibleExerciseCount))
-        Text(WorkoutFormatters.setCount(metrics.totalSetCount))
+    private func dayMarker(_ day: HomeTrainingCalendar.Day) -> some View {
+        ZStack {
+            switch day.state {
+            case .completed:
+                Circle()
+                    .fill(AppTheme.brandAccentFill)
+                Image(systemName: "checkmark")
+                    .font(.caption2.weight(.heavy))
+                    .foregroundStyle(AppTheme.onBrandAccent)
+            case .noWorkout:
+                Circle()
+                    .fill(AppTheme.recessedSurface)
+            case .upcoming:
+                Circle()
+                    .strokeBorder(AppTheme.subtleBorder)
+            case .beforeFirstWorkout:
+                Color.clear
+            }
+
+            if day.isToday {
+                Circle()
+                    .strokeBorder(AppTheme.brandAccentForeground, lineWidth: 2)
+            }
+        }
+    }
+}
+
+private struct HomeQuickStartRow: View {
+    @ScaledMetric(relativeTo: .headline) private var cardWidth: CGFloat = 168
+
+    let workouts: [HomeQuickStartWorkout]
+    let start: (HomeQuickStartWorkout) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 10) {
+                ForEach(Array(workouts.enumerated()), id: \.element.id) { index, workout in
+                    Button { start(workout) } label: {
+                        HomeQuickStartCard(workout: workout)
+                            .frame(width: cardWidth)
+                            .frame(maxHeight: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Review and start this workout")
+                    .accessibilityIdentifier("HomeQuickStartButton-\(index)")
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .contentMargins(.horizontal, AppTheme.shellPadding, for: .scrollContent)
+        .padding(.horizontal, -AppTheme.shellPadding)
+    }
+}
+
+private struct HomeQuickStartCard: View {
+    let workout: HomeQuickStartWorkout
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(workout.title)
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Image(systemName: "arrow.counterclockwise")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .accessibilityHidden(true)
+            }
+
+            Text(workout.lastCompletedDescription)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AppTheme.brandAccentForeground)
+
+            Text(workout.previewExerciseNames.joined(separator: "\n"))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(AppTheme.textSecondary)
+                .lineLimit(HomeQuickStartWorkout.previewExerciseCount)
+                .padding(.top, 2)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(AppTheme.groupedSurface, in: shape)
+        .overlay(shape.strokeBorder(AppTheme.subtleBorder))
+        .contentShape(shape)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            ([workout.title, workout.lastCompletedDescription] + workout.previewExerciseNames)
+                .joined(separator: ", ")
+        )
     }
 }

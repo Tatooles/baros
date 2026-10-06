@@ -80,6 +80,9 @@ final class WorkoutSession: Identifiable {
         deletedAt != nil
     }
 
+    /// Title for workouts the person hasn't named.
+    static let defaultTitle = "Workout"
+
     var sortedLoggedExercises: [LoggedExercise] {
         loggedExercises
             .filter { $0.deletedAt == nil }

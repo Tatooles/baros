@@ -66,11 +66,8 @@ struct HomePastWorkoutReviewPresentation: Equatable {
 
 struct HomeContent {
     let completedSessions: [WorkoutSession]
-    let weeklyActivity: HomeWeeklyActivity
-
-    var lastWorkout: WorkoutSession? {
-        completedSessions.first
-    }
+    let trainingCalendar: HomeTrainingCalendar
+    let quickStartWorkouts: [HomeQuickStartWorkout]
 
     init(
         sessions: [WorkoutSession],
@@ -87,8 +84,13 @@ struct HomeContent {
             }
             return lhs.id.uuidString < rhs.id.uuidString
         }
-        weeklyActivity = HomeWeeklyActivity(
+        trainingCalendar = HomeTrainingCalendar(
             completedSessions: completedSessions,
+            now: now,
+            calendar: calendar
+        )
+        quickStartWorkouts = HomeQuickStartWorkout.workouts(
+            from: completedSessions,
             now: now,
             calendar: calendar
         )
@@ -109,66 +111,185 @@ struct HomeContent {
     }
 }
 
-struct HomeWeeklyActivity: Equatable {
+/// A recent distinct completed workout that Home offers to repeat.
+struct HomeQuickStartWorkout: Identifiable {
+    static let maximumCount = 5
+    static let previewExerciseCount = 3
+
+    let session: WorkoutSession
+    let lastCompletedDescription: String
+    let previewExerciseNames: [String]
+
+    var id: UUID { session.id }
+    var title: String { session.title }
+
+    /// Expects `completedSessions` newest first. Custom titles group by title; workouts still using the
+    /// default title group by their ordered exercises so unrenamed workouts stay distinguishable.
+    static func workouts(
+        from completedSessions: [WorkoutSession],
+        now: Date,
+        calendar: Calendar
+    ) -> [HomeQuickStartWorkout] {
+        var seenKeys = Set<String>()
+        var workouts: [HomeQuickStartWorkout] = []
+        for session in completedSessions where workouts.count < maximumCount {
+            let exerciseNames = session.sortedLoggedExercises.map(\.exerciseSnapshotName)
+            guard !exerciseNames.isEmpty,
+                  seenKeys.insert(groupingKey(title: session.title, exerciseNames: exerciseNames)).inserted else {
+                continue
+            }
+            workouts.append(HomeQuickStartWorkout(
+                session: session,
+                lastCompletedDescription: lastCompletedDescription(
+                    for: session.startedAt,
+                    now: now,
+                    calendar: calendar
+                ),
+                previewExerciseNames: Array(exerciseNames.prefix(previewExerciseCount))
+            ))
+        }
+        return workouts
+    }
+
+    private static func groupingKey(title: String, exerciseNames: [String]) -> String {
+        let normalizedTitle = normalized(title)
+        guard normalizedTitle == normalized(WorkoutSession.defaultTitle) else {
+            return "title:\(normalizedTitle)"
+        }
+        return "exercises:" + exerciseNames.map(normalized).joined(separator: "\u{1F}")
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+    }
+
+    private static func lastCompletedDescription(for date: Date, now: Date, calendar: Calendar) -> String {
+        let days = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: date),
+            to: calendar.startOfDay(for: now)
+        ).day ?? 0
+        switch days {
+        case ...0: return "Today"
+        case 1: return "Yesterday"
+        case 2..<14: return "\(days) days ago"
+        default: return "\(days / 7) weeks ago"
+        }
+    }
+}
+
+/// Calendar weeks of completed workouts, starting at the week of the first one so earlier weeks never
+/// read as missed.
+struct HomeTrainingCalendar: Equatable {
+    static let maximumWeekCount = 12
+    static let minimumVisibleWeekCount = 4
+
+    enum DayState: Equatable {
+        case completed
+        case noWorkout
+        case beforeFirstWorkout
+        case upcoming
+    }
+
     struct Day: Identifiable, Equatable {
         let date: Date
-        let hasCompletedWorkout: Bool
+        let state: DayState
         let isToday: Bool
 
         var id: Date { date }
     }
 
-    let days: [Day]
-    let completedWorkoutCount: Int
+    struct Week: Identifiable, Equatable {
+        let start: Date
+        let days: [Day]
+        let completedWorkoutCount: Int
+        let isCurrent: Bool
 
-    init(
-        completedSessions: [WorkoutSession],
-        now: Date,
-        calendar: Calendar
-    ) {
-        let weekInterval = calendar.dateInterval(of: .weekOfYear, for: now)
-        let weekStart = weekInterval?.start ?? calendar.startOfDay(for: now)
-        let weekEnd = weekInterval?.end
-            ?? calendar.date(byAdding: .day, value: 7, to: weekStart)
-            ?? weekStart
-        let sessionsThisWeek = completedSessions.filter { session in
-            session.startedAt >= weekStart && session.startedAt < weekEnd
-        }
+        var id: Date { start }
+    }
 
-        completedWorkoutCount = sessionsThisWeek.count
-        days = (0..<7).compactMap { offset in
-            guard let date = calendar.date(byAdding: .day, value: offset, to: weekStart) else {
+    /// Oldest first; the last week is the current one.
+    let weeks: [Week]
+    let hasCompletedWorkouts: Bool
+
+    init(completedSessions: [WorkoutSession], now: Date, calendar: Calendar) {
+        let today = calendar.startOfDay(for: now)
+        let currentWeekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? today
+        let firstWorkoutDate = completedSessions.map(\.startedAt).min()
+        let historyStart = min(calendar.startOfDay(for: firstWorkoutDate ?? now), today)
+        let firstWeekStart = calendar.dateInterval(of: .weekOfYear, for: historyStart)?.start ?? currentWeekStart
+        let daysOfHistory = calendar.dateComponents([.day], from: firstWeekStart, to: currentWeekStart).day ?? 0
+        let weekCount = min(daysOfHistory / 7 + 1, Self.maximumWeekCount)
+
+        hasCompletedWorkouts = firstWorkoutDate != nil
+        weeks = (0..<weekCount).reversed().compactMap { weeksBack in
+            guard let start = calendar.date(byAdding: .weekOfYear, value: -weeksBack, to: currentWeekStart),
+                  let end = calendar.date(byAdding: .day, value: 7, to: start) else {
                 return nil
             }
-            return Day(
-                date: date,
-                hasCompletedWorkout: sessionsThisWeek.contains { session in
-                    calendar.isDate(session.startedAt, inSameDayAs: date)
-                },
-                isToday: calendar.isDate(date, inSameDayAs: now)
+            let sessionsInWeek = completedSessions.filter { session in
+                session.startedAt >= start && session.startedAt < end
+            }
+            let days = (0..<7).compactMap { offset -> Day? in
+                guard let date = calendar.date(byAdding: .day, value: offset, to: start) else {
+                    return nil
+                }
+                let state: DayState = if sessionsInWeek.contains(where: {
+                    calendar.isDate($0.startedAt, inSameDayAs: date)
+                }) {
+                    .completed
+                } else if date > today {
+                    .upcoming
+                } else if date < historyStart {
+                    .beforeFirstWorkout
+                } else {
+                    .noWorkout
+                }
+                return Day(date: date, state: state, isToday: date == today)
+            }
+            return Week(
+                start: start,
+                days: days,
+                completedWorkoutCount: sessionsInWeek.count,
+                isCurrent: weeksBack == 0
             )
         }
     }
 
-    func accessibilityDescription(
-        calendar: Calendar = .current,
-        locale: Locale = .current
-    ) -> String {
-        let workoutLabel = completedWorkoutCount == 1 ? "workout" : "workouts"
-        let completedDays = days.filter(\.hasCompletedWorkout)
-        guard !completedDays.isEmpty else {
-            return "\(completedWorkoutCount) \(workoutLabel) completed this week."
-        }
+    /// The most recent weeks that fit `capacity` rows, never fewer than the minimum (or all history if shorter).
+    func visibleWeeks(fitting capacity: Int) -> ArraySlice<Week> {
+        weeks.suffix(min(weeks.count, max(capacity, Self.minimumVisibleWeekCount)))
+    }
 
-        let weekdayFormatter = DateFormatter()
-        weekdayFormatter.calendar = calendar
-        weekdayFormatter.locale = locale
-        weekdayFormatter.timeZone = calendar.timeZone
-        weekdayFormatter.dateFormat = "EEEE"
-        let weekdayNames = completedDays.map { weekdayFormatter.string(from: $0.date) }
-        let listFormatter = ListFormatter()
-        listFormatter.locale = locale
-        let dayList = listFormatter.string(from: weekdayNames) ?? weekdayNames.joined(separator: ", ")
-        return "\(completedWorkoutCount) \(workoutLabel) completed this week: \(dayList)."
+    func accessibilityDescription(for visibleWeeks: ArraySlice<Week>) -> String {
+        let thisWeek = visibleWeeks.last?.completedWorkoutCount ?? 0
+        var description = "\(thisWeek) \(Self.workoutLabel(thisWeek)) this week."
+        if visibleWeeks.count > 1 {
+            let total = visibleWeeks.reduce(0) { $0 + $1.completedWorkoutCount }
+            description += " \(total) \(Self.workoutLabel(total)) in the last \(visibleWeeks.count) weeks."
+        }
+        return description
+    }
+
+    private static func workoutLabel(_ count: Int) -> String {
+        count == 1 ? "workout" : "workouts"
+    }
+}
+
+/// Measured Home heights used to fit as many calendar weeks as the screen allows.
+struct HomeLayoutMetrics: Equatable {
+    var viewportHeight: CGFloat = 0
+    var headerHeight: CGFloat = 0
+    var actionsHeight: CGFloat = 0
+    var calendarCardHeight: CGFloat = 0
+    var calendarRowsHeight: CGFloat = 0
+    var calendarRowCount = 0
+
+    func calendarWeekCapacity(rowSpacing: CGFloat, fixedSpacing: CGFloat) -> Int {
+        guard viewportHeight > 0, calendarRowCount > 0, calendarRowsHeight > 0 else { return 0 }
+        let cardChrome = calendarCardHeight - calendarRowsHeight
+        let rowPitch = (calendarRowsHeight + rowSpacing) / CGFloat(calendarRowCount)
+        let available = viewportHeight - fixedSpacing - headerHeight - actionsHeight - cardChrome
+        return max(0, Int(((available + rowSpacing) / rowPitch).rounded(.down)))
     }
 }

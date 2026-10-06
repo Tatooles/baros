@@ -259,8 +259,8 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(app.buttons["WorkoutTab"].exists)
         XCTAssertTrue(app.staticTexts["HomeTitle"].exists)
         XCTAssertTrue(app.buttons["StartWorkoutButton"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["HomeWeeklyActivity"].exists)
-        XCTAssertFalse(app.buttons["HomeLastWorkoutButton"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["HomeTrainingCalendar"].exists)
+        XCTAssertFalse(app.buttons["HomeQuickStartButton-0"].exists)
     }
 
     @MainActor
@@ -268,10 +268,11 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        let weeklyActivity = app.descendants(matching: .any)["HomeWeeklyActivity"]
-        XCTAssertTrue(weeklyActivity.waitForExistence(timeout: 3))
-        XCTAssertEqual(weeklyActivity.label, "0 workouts completed this week.")
-        XCTAssertFalse(app.buttons["HomeLastWorkoutButton"].exists)
+        let trainingCalendar = app.descendants(matching: .any)["HomeTrainingCalendar"]
+        XCTAssertTrue(trainingCalendar.waitForExistence(timeout: 3))
+        XCTAssertEqual(trainingCalendar.label, "0 workouts this week.")
+        XCTAssertTrue(app.staticTexts["Each workout you finish adds a check here."].exists)
+        XCTAssertFalse(app.buttons["HomeQuickStartButton-0"].exists)
 
         app.buttons["StartWorkoutButton"].tap()
 
@@ -283,7 +284,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testHomePastWorkoutSearchReviewAndLastWorkoutNavigation() {
+    func testHomePastWorkoutSearchReviewAndQuickStart() {
         let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
         app.launch()
 
@@ -303,9 +304,17 @@ final class BarosUITests: XCTestCase {
         assertPastWorkoutReview(in: app, title: "Past Push")
 
         dismissStartWorkoutFromReview(in: app)
-        XCTAssertTrue(app.buttons["HomeLastWorkoutButton"].waitForExistence(timeout: 3))
-        app.buttons["HomeLastWorkoutButton"].tap()
-        XCTAssertTrue(app.navigationBars["Past Push"].waitForExistence(timeout: 3))
+        let quickStart = app.buttons["HomeQuickStartButton-0"]
+        XCTAssertTrue(quickStart.waitForExistence(timeout: 3))
+        XCTAssertTrue(quickStart.label.hasPrefix("Past Push, "))
+        quickStart.tap()
+
+        XCTAssertTrue(app.buttons["QuickStartCancelButton"].waitForExistence(timeout: 3))
+        assertPastWorkoutReview(in: app, title: "Past Push")
+        confirmStartFromPastWorkout(in: app)
+
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.textFields["WorkoutTitle"].value as? String, "Past Push")
     }
 
     @MainActor
@@ -324,7 +333,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(startWorkoutButton.waitForExistence(timeout: 3))
         XCTAssertTrue(startWorkoutButton.isHittable)
         XCTAssertGreaterThanOrEqual(startWorkoutButton.frame.height, 96)
-        XCTAssertTrue(app.descendants(matching: .any)["HomeWeeklyActivity"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["HomeTrainingCalendar"].exists)
 
         startWorkoutButton.tap()
         XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].waitForExistence(timeout: 3))
@@ -683,7 +692,7 @@ final class BarosUITests: XCTestCase {
         )
         app.launch()
 
-        XCTAssertTrue(app.buttons["HomeLastWorkoutButton"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["HomeQuickStartButton-0"].waitForExistence(timeout: 3))
         startBlankWorkout(in: app)
         minimizeActiveWorkout(in: app)
         XCTAssertTrue(app.buttons["ReturnToActiveWorkoutButton"].waitForExistence(timeout: 3))
@@ -692,7 +701,7 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(waitForAbsence(app.buttons["ActiveWorkoutAccessory"], timeout: 3))
         XCTAssertFalse(app.buttons["ReturnToActiveWorkoutButton"].exists)
-        XCTAssertFalse(app.buttons["HomeLastWorkoutButton"].exists)
+        XCTAssertFalse(app.buttons["HomeQuickStartButton-0"].exists)
         XCTAssertTrue(app.buttons["StartWorkoutButton"].exists)
     }
 
@@ -859,11 +868,7 @@ final class BarosUITests: XCTestCase {
         app.launch()
 
         // Summaries count every saved row, matching the detail's "2 sets".
-        let lastWorkout = app.buttons["HomeLastWorkoutButton"]
-        XCTAssertTrue(lastWorkout.waitForExistence(timeout: 3))
-        XCTAssertTrue(lastWorkout.label.contains("1 exercise, 2 sets"))
-        XCTAssertTrue(lastWorkout.label.contains("Bench Press, 2 sets"))
-
+        XCTAssertTrue(app.buttons["HistoryTab"].waitForExistence(timeout: 3))
         app.buttons["HistoryTab"].tap()
         let workout = app.buttons["WorkoutHistoryButton-0"]
         XCTAssertTrue(workout.waitForExistence(timeout: 3))
@@ -3622,7 +3627,7 @@ final class BarosUITests: XCTestCase {
         )
         XCTAssertTrue(app.buttons["SignedOutReminderSignInButton"].exists)
         XCTAssertTrue(app.buttons["StartWorkoutButton"].isHittable)
-        XCTAssertFalse(app.buttons["HomeLastWorkoutButton"].exists)
+        XCTAssertFalse(app.buttons["HomeQuickStartButton-0"].exists)
 
         tapTab(identifier: "HistoryTab", label: "History", in: app)
         XCTAssertTrue(app.staticTexts["You're signed out"].waitForExistence(timeout: 3))
@@ -3758,7 +3763,7 @@ final class BarosUITests: XCTestCase {
     func testVisibleUnclaimedLocalHistorySuppressesRecoveryPrompt() {
         let app = makeApp(completedBenchWorkoutTitles: ["Visible Local History"])
         app.launch()
-        XCTAssertTrue(app.buttons["HomeLastWorkoutButton"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["HomeQuickStartButton-0"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["EmptyHistorySignInButton"].exists)
 
         app.buttons["HistoryTab"].tap()

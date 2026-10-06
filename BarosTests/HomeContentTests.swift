@@ -1,8 +1,23 @@
 import Foundation
+import SwiftData
 import XCTest
 @testable import Baros
 
+@MainActor
 final class HomeContentTests: XCTestCase {
+    // Unsaved models duplicate to-many relationships, so fixtures live in an in-memory store.
+    private var container: ModelContainer!
+
+    override func setUp() async throws {
+        try await super.setUp()
+        container = try SwiftDataTestSupport.makeInMemoryContainer()
+    }
+
+    override func tearDown() async throws {
+        container = nil
+        try await super.tearDown()
+    }
+
     func testPrimaryWorkoutPresentationStartsWhenThereIsNoActiveWorkout() {
         let presentation = HomePrimaryWorkoutPresentation(activeSession: nil, now: date(2026, 8, 19))
 
@@ -196,7 +211,6 @@ final class HomeContentTests: XCTestCase {
         )
 
         XCTAssertEqual(content.completedSessions.map(\.id), [newest.id, recentlyEditedOlder.id])
-        XCTAssertEqual(content.lastWorkout?.id, newest.id)
     }
 
     func testContentAppliesCurrentOwnerVisibilityToEveryHomeCollection() {
@@ -220,8 +234,7 @@ final class HomeContentTests: XCTestCase {
         )
 
         XCTAssertEqual(content.completedSessions.map(\.id), [ownerA.id, unclaimed.id])
-        XCTAssertEqual(content.lastWorkout?.id, ownerA.id)
-        XCTAssertEqual(content.weeklyActivity.completedWorkoutCount, 2)
+        XCTAssertEqual(content.trainingCalendar.weeks.last?.completedWorkoutCount, 2)
     }
 
     func testPastWorkoutSearchMatchesTitlesAndExerciseNamesCaseInsensitivelyButNotNotes() {
@@ -277,8 +290,66 @@ final class HomeContentTests: XCTestCase {
         XCTAssertEqual(content.pastWorkouts(matching: "Workout 11").map(\.title), ["Workout 11"])
     }
 
-    func testWeeklyActivityUsesStartDateWithBinaryDayMarkersAndCountsEveryCompletion() throws {
-        let now = date(2026, 8, 19, hour: 12)
+    func testTrainingCalendarWithoutHistoryShowsOnlyTheCurrentWeekWithoutPastMarkers() {
+        let content = HomeContent(
+            sessions: [],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        )
+
+        let trainingCalendar = content.trainingCalendar
+        XCTAssertFalse(trainingCalendar.hasCompletedWorkouts)
+        XCTAssertEqual(trainingCalendar.weeks.count, 1)
+        let week = trainingCalendar.weeks[0]
+        XCTAssertTrue(week.isCurrent)
+        XCTAssertEqual(week.start, date(2026, 8, 17))
+        XCTAssertEqual(week.completedWorkoutCount, 0)
+        XCTAssertEqual(
+            week.days.map(\.state),
+            [.beforeFirstWorkout, .beforeFirstWorkout, .noWorkout, .upcoming, .upcoming, .upcoming, .upcoming]
+        )
+        XCTAssertEqual(week.days.map(\.isToday), [false, false, true, false, false, false, false])
+    }
+
+    func testTrainingCalendarStartsAtTheWeekOfTheFirstWorkout() {
+        let firstWorkout = session(title: "First", startedAt: date(2026, 8, 5, hour: 18))
+        let content = HomeContent(
+            sessions: [firstWorkout],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        )
+
+        let weeks = content.trainingCalendar.weeks
+        XCTAssertTrue(content.trainingCalendar.hasCompletedWorkouts)
+        XCTAssertEqual(weeks.map(\.start), [date(2026, 8, 3), date(2026, 8, 10), date(2026, 8, 17)])
+        XCTAssertEqual(weeks.map(\.isCurrent), [false, false, true])
+        XCTAssertEqual(weeks.map(\.completedWorkoutCount), [1, 0, 0])
+        XCTAssertEqual(
+            weeks[0].days.map(\.state),
+            [.beforeFirstWorkout, .beforeFirstWorkout, .completed, .noWorkout, .noWorkout, .noWorkout, .noWorkout]
+        )
+        XCTAssertEqual(weeks[1].days.map(\.state), Array(repeating: .noWorkout, count: 7))
+    }
+
+    func testTrainingCalendarKeepsAtMostTwelveWeeksOfHistory() {
+        let longAgo = session(title: "Long Ago", startedAt: date(2026, 3, 2, hour: 18))
+        let content = HomeContent(
+            sessions: [longAgo],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        )
+
+        let weeks = content.trainingCalendar.weeks
+        XCTAssertEqual(weeks.count, HomeTrainingCalendar.maximumWeekCount)
+        XCTAssertEqual(weeks.last?.start, date(2026, 8, 17))
+        XCTAssertEqual(weeks.first?.start, date(2026, 6, 1))
+        XCTAssertFalse(weeks.flatMap(\.days).contains { $0.state == .beforeFirstWorkout })
+    }
+
+    func testTrainingCalendarUsesStartDateWithBinaryDayMarkersAndCountsEveryCompletion() throws {
         let mondayMorning = session(title: "Monday One", startedAt: date(2026, 8, 17, hour: 8))
         let mondayEvening = session(title: "Monday Two", startedAt: date(2026, 8, 17, hour: 20))
         let wednesdayCrossMidnight = session(
@@ -287,24 +358,51 @@ final class HomeContentTests: XCTestCase {
             endedAt: date(2026, 8, 20, hour: 1)
         )
         let priorSunday = session(title: "Prior Week", startedAt: date(2026, 8, 16, hour: 23))
+        let active = session(title: "Active", startedAt: date(2026, 8, 18, hour: 9), status: .active)
 
         let content = HomeContent(
-            sessions: [priorSunday, wednesdayCrossMidnight, mondayEvening, mondayMorning],
+            sessions: [active, priorSunday, wednesdayCrossMidnight, mondayEvening, mondayMorning],
             ownerTokenIdentifier: nil,
-            now: now,
+            now: date(2026, 8, 19, hour: 12),
             calendar: calendar
         )
 
-        XCTAssertEqual(content.weeklyActivity.completedWorkoutCount, 3)
-        XCTAssertEqual(content.weeklyActivity.days.count, 7)
-        XCTAssertEqual(content.weeklyActivity.days.filter(\.hasCompletedWorkout).count, 2)
-        XCTAssertTrue(try XCTUnwrap(content.weeklyActivity.days.first).hasCompletedWorkout)
-        XCTAssertTrue(try XCTUnwrap(content.weeklyActivity.days.first(where: \.isToday)).hasCompletedWorkout)
+        let weeks = content.trainingCalendar.weeks
+        XCTAssertEqual(weeks.map(\.completedWorkoutCount), [1, 3])
+        let currentWeek = try XCTUnwrap(weeks.last)
+        XCTAssertEqual(
+            currentWeek.days.map(\.state),
+            [.completed, .noWorkout, .completed, .upcoming, .upcoming, .upcoming, .upcoming]
+        )
+        XCTAssertEqual(weeks[0].days.last?.state, .completed)
     }
 
-    func testWeeklyActivityAccessibilitySummaryNamesCompletedDaysOnce() {
+    func testTrainingCalendarVisibleWeeksFillCapacityWithinMinimumAndHistory() {
+        let longHistory = HomeContent(
+            sessions: [session(title: "Long Ago", startedAt: date(2026, 3, 2, hour: 18))],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        ).trainingCalendar
+        XCTAssertEqual(longHistory.visibleWeeks(fitting: 0).count, HomeTrainingCalendar.minimumVisibleWeekCount)
+        XCTAssertEqual(longHistory.visibleWeeks(fitting: 7).count, 7)
+        XCTAssertEqual(longHistory.visibleWeeks(fitting: 30).count, 12)
+        XCTAssertEqual(longHistory.visibleWeeks(fitting: 7).last?.isCurrent, true)
+
+        let shortHistory = HomeContent(
+            sessions: [session(title: "Last Week", startedAt: date(2026, 8, 12, hour: 18))],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        ).trainingCalendar
+        XCTAssertEqual(shortHistory.visibleWeeks(fitting: 0).count, 2)
+        XCTAssertEqual(shortHistory.visibleWeeks(fitting: 10).count, 2)
+    }
+
+    func testTrainingCalendarAccessibilitySummaryCoversVisibleWeeks() {
         let content = HomeContent(
             sessions: [
+                session(title: "Earlier", startedAt: date(2026, 8, 4, hour: 8)),
                 session(title: "Monday One", startedAt: date(2026, 8, 17, hour: 8)),
                 session(title: "Monday Two", startedAt: date(2026, 8, 17, hour: 20)),
                 session(title: "Wednesday", startedAt: date(2026, 8, 19, hour: 8)),
@@ -313,13 +411,109 @@ final class HomeContentTests: XCTestCase {
             now: date(2026, 8, 19, hour: 12),
             calendar: calendar
         )
+        let trainingCalendar = content.trainingCalendar
 
-        let summary = content.weeklyActivity.accessibilityDescription(
-            calendar: calendar,
-            locale: Locale(identifier: "en_US")
+        XCTAssertEqual(
+            trainingCalendar.accessibilityDescription(for: trainingCalendar.visibleWeeks(fitting: 0)),
+            "3 workouts this week. 4 workouts in the last 3 weeks."
         )
 
-        XCTAssertEqual(summary, "3 workouts completed this week: Monday and Wednesday.")
+        let emptyCalendar = HomeContent(
+            sessions: [],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19),
+            calendar: calendar
+        ).trainingCalendar
+        XCTAssertEqual(
+            emptyCalendar.accessibilityDescription(for: emptyCalendar.visibleWeeks(fitting: 0)),
+            "0 workouts this week."
+        )
+    }
+
+    func testQuickStartGroupsCustomTitlesCaseAndWhitespaceInsensitivelyNewestFirst() {
+        let newestPush = session(title: "push  day ", startedAt: date(2026, 8, 19, hour: 8), exerciseNames: ["Bench Press"])
+        let pull = session(title: "Pull Day", startedAt: date(2026, 8, 18, hour: 8), exerciseNames: ["Deadlift"])
+        let olderPush = session(title: "Push Day", startedAt: date(2026, 8, 17, hour: 8), exerciseNames: ["Overhead Press"])
+
+        let content = HomeContent(
+            sessions: [olderPush, pull, newestPush],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(content.quickStartWorkouts.map(\.id), [newestPush.id, pull.id])
+    }
+
+    func testQuickStartGroupsDefaultTitledWorkoutsByTheirOrderedExercises() {
+        let benchNewest = session(title: "Workout", startedAt: date(2026, 8, 19, hour: 8), exerciseNames: ["Bench Press", "Row"])
+        let squat = session(title: "Workout", startedAt: date(2026, 8, 18, hour: 8), exerciseNames: ["Back Squat"])
+        let benchOlder = session(title: " workout", startedAt: date(2026, 8, 17, hour: 8), exerciseNames: ["bench press", "row"])
+        let reordered = session(title: "Workout", startedAt: date(2026, 8, 16, hour: 8), exerciseNames: ["Row", "Bench Press"])
+
+        let content = HomeContent(
+            sessions: [reordered, benchOlder, squat, benchNewest],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(content.quickStartWorkouts.map(\.id), [benchNewest.id, squat.id, reordered.id])
+    }
+
+    func testQuickStartSkipsWorkoutsWithoutExercisesAndCapsTheRow() {
+        let empty = session(title: "Empty", startedAt: date(2026, 8, 19, hour: 9))
+        let distinct = (0..<7).map { index in
+            session(
+                title: "Workout \(index)",
+                startedAt: date(2026, 8, 19, hour: 8).addingTimeInterval(TimeInterval(-index * 3_600)),
+                exerciseNames: ["Exercise \(index)"]
+            )
+        }
+
+        let content = HomeContent(
+            sessions: [empty] + distinct,
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(content.quickStartWorkouts.count, HomeQuickStartWorkout.maximumCount)
+        XCTAssertEqual(content.quickStartWorkouts.map(\.id), distinct.prefix(5).map(\.id))
+    }
+
+    func testQuickStartDescribesRecencyAndPreviewsTheFirstThreeExercises() throws {
+        let now = date(2026, 8, 19, hour: 12)
+        let workouts = [
+            session(title: "Today", startedAt: date(2026, 8, 19, hour: 7), exerciseNames: ["A", "B", "C", "D"]),
+            session(title: "Yesterday", startedAt: date(2026, 8, 18, hour: 23), exerciseNames: ["A"]),
+            session(title: "Days", startedAt: date(2026, 8, 6, hour: 7), exerciseNames: ["A"]),
+            session(title: "Weeks", startedAt: date(2026, 8, 5, hour: 7), exerciseNames: ["A"]),
+        ]
+
+        let content = HomeContent(sessions: workouts, ownerTokenIdentifier: nil, now: now, calendar: calendar)
+
+        XCTAssertEqual(
+            content.quickStartWorkouts.map(\.lastCompletedDescription),
+            ["Today", "Yesterday", "13 days ago", "2 weeks ago"]
+        )
+        XCTAssertEqual(try XCTUnwrap(content.quickStartWorkouts.first).previewExerciseNames, ["A", "B", "C"])
+    }
+
+    func testCalendarCapacityUsesSpaceLeftAfterHeaderActionsAndCardChrome() {
+        var metrics = HomeLayoutMetrics()
+        XCTAssertEqual(metrics.calendarWeekCapacity(rowSpacing: 4, fixedSpacing: 40), 0)
+
+        metrics.viewportHeight = 700
+        metrics.headerHeight = 80
+        metrics.actionsHeight = 220
+        metrics.calendarCardHeight = 190
+        metrics.calendarRowsHeight = 124
+        metrics.calendarRowCount = 4
+
+        // 700 - 40 fixed - 80 header - 220 actions - 66 card chrome leaves 294pt.
+        // Rows are 28pt with 4pt spacing: 9 rows take 284pt and 10 would take 316pt.
+        XCTAssertEqual(metrics.calendarWeekCapacity(rowSpacing: 4, fixedSpacing: 40), 9)
     }
 
     private var calendar: Calendar {
@@ -344,19 +538,19 @@ final class HomeContentTests: XCTestCase {
         ownerTokenIdentifier: String? = nil,
         workoutNotes: String = "",
         exerciseName: String? = nil,
-        exerciseNotes: String = ""
+        exerciseNotes: String = "",
+        exerciseNames: [String] = []
     ) -> WorkoutSession {
-        let loggedExercises = exerciseName.map { name in
-            [
-                LoggedExercise(
-                    orderIndex: 0,
-                    exerciseSnapshotName: name,
-                    notes: exerciseNotes,
-                    sets: [LoggedSet(orderIndex: 0, isCompleted: true)]
-                ),
-            ]
-        } ?? []
-        return WorkoutSession(
+        let names = (exerciseName.map { [$0] } ?? []) + exerciseNames
+        let loggedExercises = names.enumerated().map { index, name in
+            LoggedExercise(
+                orderIndex: index,
+                exerciseSnapshotName: name,
+                notes: exerciseNotes,
+                sets: [LoggedSet(orderIndex: 0, isCompleted: true)]
+            )
+        }
+        let session = WorkoutSession(
             title: title,
             startedAt: startedAt,
             endedAt: endedAt ?? startedAt.addingTimeInterval(3_600),
@@ -366,8 +560,10 @@ final class HomeContentTests: XCTestCase {
             source: .blank,
             updatedAt: updatedAt ?? startedAt,
             deletedAt: deletedAt,
-            syncOwnerTokenIdentifier: ownerTokenIdentifier,
-            loggedExercises: loggedExercises
+            syncOwnerTokenIdentifier: ownerTokenIdentifier
         )
+        container.mainContext.insert(session)
+        session.loggedExercises = loggedExercises
+        return session
     }
 }

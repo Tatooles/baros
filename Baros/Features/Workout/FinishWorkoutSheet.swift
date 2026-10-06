@@ -170,7 +170,7 @@ struct FinishWorkoutSheet: View {
     }
 
     private var showsDefaultTitleHint: Bool {
-        (titleDraft ?? session.title).trimmingCharacters(in: .whitespacesAndNewlines) == "Workout"
+        (titleDraft ?? session.title).trimmingCharacters(in: .whitespacesAndNewlines) == WorkoutSession.defaultTitle
     }
 
     private func commitWorkoutTitle() {

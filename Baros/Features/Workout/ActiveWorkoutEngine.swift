@@ -61,7 +61,7 @@ final class ActiveWorkoutEngine {
         defer { isStartingWorkout = false }
 
         let session = WorkoutSession(
-            title: "Workout",
+            title: WorkoutSession.defaultTitle,
             startedAt: now,
             status: .active,
             source: .blank,
@@ -708,6 +708,6 @@ final class ActiveWorkoutEngine {
 
     private func applyFinalWorkoutTitle(to session: WorkoutSession) {
         let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        session.title = trimmed.isEmpty ? "Workout" : trimmed
+        session.title = trimmed.isEmpty ? WorkoutSession.defaultTitle : trimmed
     }
 }
