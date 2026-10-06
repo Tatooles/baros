@@ -33,6 +33,8 @@ struct WorkoutHeaderView: View {
                 .accessibilityLabel("Elapsed time \(AppTheme.formatDuration(elapsedSeconds))")
                 }
 
+                if !(RestTimerPrototype.shared.showsHeaderFallback
+                    && RestTimerPrototype.shared.areControlsExpanded) { // PROTOTYPE #114
                 HStack(spacing: 10) {
                     ProgressView(value: progressValue)
                         .progressViewStyle(.linear)
@@ -47,6 +49,7 @@ struct WorkoutHeaderView: View {
                 .glassEffect(.regular)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("\(completedSets) of \(totalSets) sets completed")
+                }
 
                 Button(action: onFinish) {
                     ViewThatFits(in: .horizontal) {

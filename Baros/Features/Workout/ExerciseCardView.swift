@@ -162,9 +162,8 @@ struct ExerciseCardView: View {
                             VStack(spacing: 0) {
                                 ForEach(Array(sortedSets.enumerated()), id: \.element.id) { index, set in
                                     if index > 0 {
-                                        if restVariant == .dividerLine, restingSetID == sortedSets[index - 1].id {
-                                            RestDividerLinePrototype()
-                                                .padding(.horizontal, 16)
+                                        if restVariant.drawsOnDivider, restingSetID == sortedSets[index - 1].id {
+                                            restDivider(restVariant)
                                         } else {
                                             Divider()
                                                 .overlay(AppTheme.subtleBorder)
@@ -203,14 +202,16 @@ struct ExerciseCardView: View {
                                     }
                                 }
 
-                                if restVariant == .dividerLine, restingSetID != nil, restingSetID == sortedSets.last?.id {
-                                    RestDividerLinePrototype()
-                                        .padding(.horizontal, 16)
+                                if restVariant.drawsOnDivider, restingSetID != nil, restingSetID == sortedSets.last?.id {
+                                    restDivider(restVariant)
                                 } else {
                                     Divider()
                                         .overlay(AppTheme.subtleBorder)
                                         .padding(.horizontal, 16)
                                 }
+                            }
+                            .overlayPreferenceValue(RestDividerAnchorKey.self) { anchor in
+                                RestDividerControlsOverlay(anchor: anchor) // PROTOTYPE #114
                             }
 
                             addSetButton
@@ -263,6 +264,22 @@ struct ExerciseCardView: View {
                 restPrototype.cancel(ifTriggeredBy: removed)
             }
         }
+    }
+
+    // PROTOTYPE #114
+    @ViewBuilder
+    private func restDivider(_ variant: RestTimerPrototype.Variant) -> some View {
+        Group {
+            switch variant {
+            case .dividerCompact: RestDividerCompactPrototype()
+            case .dividerGutter: RestDividerGutterPrototype()
+            default: RestDividerLinePrototype()
+            }
+        }
+        .padding(.horizontal, 16)
+        // The chip and control pill hang over the neighboring rows; stack the
+        // divider above them so it receives taps.
+        .zIndex(1)
     }
 
     private var addSetButton: some View {
