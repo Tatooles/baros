@@ -76,8 +76,7 @@ struct HomeView: View {
                 .padding(.bottom, Self.bottomPadding)
                 .frame(minHeight: layoutMetrics.viewportHeight, alignment: .top)
             }
-            // The page fills the viewport exactly, so only scroll when content overflows. Without this, the
-            // tab bar items lost their accessibility identifiers in UI tests.
+            // The page fills the viewport exactly, so only scroll when content overflows.
             .scrollBounceBehavior(.basedOnSize)
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
                 // Already excludes the safe areas (status bar, tab bar).

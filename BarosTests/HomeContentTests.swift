@@ -500,6 +500,24 @@ final class HomeContentTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(content.quickStartWorkouts.first).previewExerciseNames, ["A", "B", "C"])
     }
 
+    func testQuickStartSwitchesFromWeeksToMonthsAtTwoMonthsAndToYearsAtTwelve() {
+        let now = date(2026, 8, 19, hour: 12)
+        let workouts = [
+            session(title: "Eight Weeks", startedAt: date(2026, 6, 20, hour: 7), exerciseNames: ["A"]),
+            session(title: "Two Months", startedAt: date(2026, 6, 19, hour: 7), exerciseNames: ["A"]),
+            session(title: "Eleven Months", startedAt: date(2025, 9, 19, hour: 7), exerciseNames: ["A"]),
+            session(title: "One Year", startedAt: date(2025, 8, 19, hour: 7), exerciseNames: ["A"]),
+            session(title: "Two Years", startedAt: date(2024, 2, 1, hour: 7), exerciseNames: ["A"]),
+        ]
+
+        let content = HomeContent(sessions: workouts, ownerTokenIdentifier: nil, now: now, calendar: calendar)
+
+        XCTAssertEqual(
+            content.quickStartWorkouts.map(\.lastCompletedDescription),
+            ["8 weeks ago", "2 months ago", "11 months ago", "1 year ago", "2 years ago"]
+        )
+    }
+
     func testCalendarCapacityUsesSpaceLeftAfterHeaderActionsAndCardChrome() {
         var metrics = HomeLayoutMetrics()
         XCTAssertEqual(metrics.calendarWeekCapacity(rowSpacing: 4, fixedSpacing: 40), 0)

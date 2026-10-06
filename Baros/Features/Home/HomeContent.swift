@@ -163,17 +163,21 @@ struct HomeQuickStartWorkout: Identifiable {
         text.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
     }
 
+    /// Days for the first two weeks, weeks until two calendar months, months for the first year, then years.
     private static func lastCompletedDescription(for date: Date, now: Date, calendar: Calendar) -> String {
-        let days = calendar.dateComponents(
-            [.day],
-            from: calendar.startOfDay(for: date),
-            to: calendar.startOfDay(for: now)
-        ).day ?? 0
-        switch days {
-        case ...0: return "Today"
-        case 1: return "Yesterday"
-        case 2..<14: return "\(days) days ago"
-        default: return "\(days / 7) weeks ago"
+        let day = calendar.startOfDay(for: date)
+        let today = calendar.startOfDay(for: now)
+        let days = calendar.dateComponents([.day], from: day, to: today).day ?? 0
+        let months = calendar.dateComponents([.month], from: day, to: today).month ?? 0
+        switch (days, months) {
+        case (...0, _): return "Today"
+        case (1, _): return "Yesterday"
+        case (2..<14, _): return "\(days) days ago"
+        case (_, ..<2): return "\(days / 7) weeks ago"
+        case (_, ..<12): return "\(months) months ago"
+        default:
+            let years = months / 12
+            return years == 1 ? "1 year ago" : "\(years) years ago"
         }
     }
 }
