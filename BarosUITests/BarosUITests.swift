@@ -3403,7 +3403,7 @@ final class BarosUITests: XCTestCase {
         app.buttons["SettingsTab"].tap()
         let signInRow = app.buttons["SettingsSignInButton"]
         XCTAssertTrue(signInRow.waitForExistence(timeout: 3))
-        XCTAssertEqual(signInRow.label, "Sign in")
+        XCTAssertEqual(signInRow.label, "Local workout data, Sign in to keep your workouts backed up.")
         XCTAssertFalse(app.buttons["SettingsManageAccountButton"].exists)
 
         app.buttons["HomeTab"].tap()

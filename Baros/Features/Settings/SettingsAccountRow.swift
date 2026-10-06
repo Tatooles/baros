@@ -85,8 +85,8 @@ struct SettingsAccountRow: View {
         }
         .buttonStyle(AccountRowButtonStyle(showsDisclosure: displayState.isSignedIn))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint(displayState.isSignedIn ? displayState.actionTitle : displayState.subtitle)
+        .accessibilityLabel(displayState.accessibilityLabel)
+        .accessibilityHint(displayState.actionTitle)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier(displayState.isSignedIn ? "SettingsManageAccountButton" : "SettingsSignInButton")
         .prefetchClerkImages()
@@ -113,12 +113,6 @@ struct SettingsAccountRow: View {
         dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
             : AnyLayout(HStackLayout(spacing: 14))
-    }
-
-    private var accessibilityLabel: String {
-        displayState.isSignedIn
-            ? "\(displayState.title), \(displayState.subtitle)"
-            : displayState.actionTitle
     }
 
     @ViewBuilder
