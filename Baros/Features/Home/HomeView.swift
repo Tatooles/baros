@@ -18,7 +18,8 @@ struct HomeView: View {
     @State private var presentsWorkoutAfterStart = false
     @State private var sessionIDHiddenDuringLaunchHandoff: UUID?
     @State private var layoutMetrics = HomeLayoutMetrics()
-    @State private var calendarDayChoice: HomeTrainingCalendar.Day?
+    /// Only the date is kept; its workouts are resolved from the current owner's calendar on every render.
+    @State private var calendarDayChoice: Date?
 
     var body: some View {
         let ownerTokenIdentifier = currentOwnerCoordinator.localDataOwnerTokenIdentifier
@@ -35,6 +36,9 @@ struct HomeView: View {
                 now: timeline.date
             )
             // Accessibility sizes put the actions first and keep the calendar at its minimum.
+            let chosenCalendarDay = calendarDayChoice.flatMap { chosenDate in
+                content.trainingCalendar.weeks.lazy.flatMap(\.days).first { $0.date == chosenDate }
+            }
             let visibleWeeks = content.trainingCalendar.visibleWeeks(
                 fitting: dynamicTypeSize.isAccessibilitySize ? 0 : layoutMetrics.calendarWeekCapacity(
                     rowSpacing: HomeTrainingCalendarView.rowSpacing,
@@ -106,17 +110,20 @@ struct HomeView: View {
             .confirmationDialog(
                 "Open Workout",
                 isPresented: Binding(
-                    get: { calendarDayChoice != nil },
+                    get: { chosenCalendarDay?.workouts.isEmpty == false },
                     set: { if !$0 { calendarDayChoice = nil } }
                 ),
                 titleVisibility: .visible,
-                presenting: calendarDayChoice
+                presenting: chosenCalendarDay
             ) { day in
                 ForEach(day.workouts) { workout in
                     Button("\(workout.title) · \(workout.startedAt.formatted(date: .omitted, time: .shortened))") {
                         navigationState.openWorkoutHistory(workout.id)
                     }
                 }
+            }
+            .onChange(of: ownerTokenIdentifier) {
+                calendarDayChoice = nil
             }
             .onChange(of: navigationState.fullyPresentedActiveWorkoutID) { _, presentedSessionID in
                 if presentedSessionID == sessionIDHiddenDuringLaunchHandoff {
@@ -171,7 +178,7 @@ struct HomeView: View {
         if day.workouts.count == 1, let workout = day.workouts.first {
             navigationState.openWorkoutHistory(workout.id)
         } else if day.workouts.count > 1 {
-            calendarDayChoice = day
+            calendarDayChoice = day.date
         }
     }
 
