@@ -379,20 +379,22 @@ final class HomeContentTests: XCTestCase {
 
     func testHomeIgnoresFutureDatedCompletedWorkouts() {
         let recent = session(title: "Recent", startedAt: date(2026, 8, 18, hour: 8), exerciseNames: ["A"])
+        let laterToday = session(title: "Later Today", startedAt: date(2026, 8, 19, hour: 14), exerciseNames: ["D"])
         let tomorrow = session(title: "Tomorrow", startedAt: date(2026, 8, 20, hour: 8), exerciseNames: ["B"])
         let farFuture = session(title: "Far Future", startedAt: date(2031, 1, 1, hour: 8), exerciseNames: ["C"])
 
         let content = HomeContent(
-            sessions: [farFuture, tomorrow, recent],
+            sessions: [farFuture, tomorrow, laterToday, recent],
             ownerTokenIdentifier: nil,
             now: date(2026, 8, 19, hour: 12),
             calendar: calendar
         )
 
-        XCTAssertEqual(content.completedSessions.count, 3, "Past-workout search still offers them")
+        XCTAssertEqual(content.completedSessions.count, 4, "Past-workout search still offers them")
         XCTAssertEqual(content.quickStartWorkouts.map(\.id), [recent.id])
         let currentWeek = content.trainingCalendar.weeks.last
         XCTAssertEqual(currentWeek?.completedWorkoutCount, 1)
+        XCTAssertEqual(currentWeek?.days[2].state, .noWorkout)
         XCTAssertEqual(currentWeek?.days[3].state, .upcoming)
 
         let futureOnly = HomeContent(
