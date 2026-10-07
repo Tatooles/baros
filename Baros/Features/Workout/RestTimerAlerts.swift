@@ -57,7 +57,10 @@ final class RestTimerNotifications: RestNotificationScheduling {
 }
 
 extension RestTimerCoordinator {
-    static func live(defaults: UserDefaults = .standard) -> RestTimerCoordinator {
+    static func live(
+        defaults: UserDefaults = .standard,
+        notifications: (any RestNotificationScheduling)? = nil
+    ) -> RestTimerCoordinator {
         let key = "active-workout-rest-v1"
         let restored = defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(WorkoutRest.self, from: $0) }
         #if DEBUG
@@ -75,7 +78,9 @@ extension RestTimerCoordinator {
                     defaults.removeObject(forKey: key)
                 }
             },
-            notifications: isUITest ? SilentRestNotifications() : RestTimerNotifications(),
+            notifications: notifications
+                ?? (isUITest && !ProcessInfo.processInfo.arguments.contains("--uitest-enable-rest-notifications")
+                    ? SilentRestNotifications() : RestTimerNotifications()),
             foregroundAlert: {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 AudioServicesPlaySystemSound(1007)

@@ -15,10 +15,14 @@ final class BarosUITests: XCTestCase {
         app.buttons["SetCompletionButton-0-0"].tap()
         let skip = app.buttons["SkipRestButton"]
         XCTAssertTrue(skip.waitForExistence(timeout: 2))
-        // The automatic pill closes in three seconds; tapping its time toggles it.
-        app.buttons.matching(identifier: "SkipRestButton").firstMatch.tap()
+        // Wait for the three-second preview to close before opening a six-second
+        // manual interaction window; XCTest's idle waits can outlast the preview.
+        let badge = app.buttons["RestTimerBadge"]
+        XCTAssertTrue(badge.waitForExistence(timeout: 6))
+        badge.tap()
+        skip.tap()
+        XCTAssertTrue(waitForAbsence(badge, timeout: 3))
         XCTAssertTrue(waitForAbsence(skip, timeout: 3))
-        XCTAssertFalse(app.buttons["RestTimerBadge"].exists)
         app.buttons["SetCompletionButton-0-1"].tap()
         XCTAssertTrue(skip.waitForExistence(timeout: 2))
         app.buttons["SetCompletionButton-0-2"].tap()
@@ -56,6 +60,57 @@ final class BarosUITests: XCTestCase {
         add(fallback)
         skip.tap()
         XCTAssertTrue(waitForAbsence(headerBadge, timeout: 3))
+    }
+
+    @MainActor
+    func testRestControlsAtAccessibilityTextSizeAndFocusDuringRest() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout", "--uitest-accessibility-dynamic-type", "--uitest-reduce-motion"])
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["SetCompletionButton-0-0"].tap()
+        let badge = app.buttons["RestTimerBadge"]
+        XCTAssertTrue(badge.waitForExistence(timeout: 6))
+        XCTAssertTrue(badge.isHittable)
+        badge.tap()
+        XCTAssertTrue(app.buttons["SkipRestButton"].waitForExistence(timeout: 2))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Rest controls at accessibility text size"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        // Focusing a field closes the pill and edits remain available during rest.
+        let weight = app.textFields["SetWeightField-0-0"]
+        weight.tap()
+        XCTAssertTrue(waitForKeyboardFocus(on: weight))
+        XCTAssertTrue(waitForAbsence(app.buttons["SkipRestButton"], timeout: 3))
+        weight.typeText("5")
+        XCTAssertTrue(badge.exists)
+    }
+
+    @MainActor
+    func testRestOverNotificationWhenAppIsBackgrounded() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout", "--uitest-rest-30-seconds",
+                                          "--uitest-enable-rest-notifications"])
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["SetCompletionButton-0-0"].tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = springboard.buttons["Allow"]
+        if allow.waitForExistence(timeout: 3) { allow.tap() }
+        XCTAssertTrue(app.buttons["RestTimerBadge"].waitForExistence(timeout: 6))
+        let active = XCTAttachment(screenshot: app.screenshot())
+        active.name = "30 second rest before backgrounding"
+        active.lifetime = .keepAlways
+        add(active)
+        XCUIDevice.shared.press(.home)
+        let alert = springboard.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "Rest over")).firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 35))
+        let notification = XCTAttachment(screenshot: springboard.screenshot())
+        notification.name = "Background Rest over notification"
+        notification.lifetime = .keepAlways
+        add(notification)
+        app.activate()
+        XCTAssertTrue(waitForAbsence(app.buttons["RestTimerBadge"], timeout: 6))
     }
 
     @MainActor

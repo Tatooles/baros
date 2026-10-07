@@ -26,7 +26,7 @@ struct RestSetDivider: View {
                 Divider().overlay(AppTheme.subtleBorder)
             }
         }
-        .animation(reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.25), value: slot.period?.rest.id)
+        .animation(restTimerReducesMotion(reduceMotion) ? nil : .snappy(duration: 0.25), value: slot.period?.rest.id)
     }
 }
 
@@ -35,6 +35,8 @@ private struct RestGutter: View {
     let timer: RestTimerCoordinator
     let height: CGFloat
     let badgeWidth: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hasAppeared = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -42,6 +44,10 @@ private struct RestGutter: View {
             RestProgressBar(period: period)
         }
         .frame(height: height)
+        .opacity(restTimerReducesMotion(reduceMotion) && !hasAppeared ? 0 : 1)
+        .onAppear {
+            withAnimation(restTimerReducesMotion(reduceMotion) ? .easeOut(duration: 0.15) : nil) { hasAppeared = true }
+        }
         .anchorPreference(key: RestGutterAnchorKey.self, value: .bounds) { [period.rest.setID: $0] }
         .onScrollVisibilityChange(threshold: 0.6) { visible in
             timer.reportInlineVisibility(visible, restID: period.rest.id)
@@ -112,7 +118,8 @@ private struct RestInlineControls: View {
                     .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.25), value: period.controlsExpanded)
+        .animation(
+            .easeOut(duration: restTimerReducesMotion(reduceMotion) ? 0.15 : 0.25), value: period.controlsExpanded)
     }
 }
 
@@ -215,4 +222,48 @@ struct RestExpandedControls: View {
             .contentShape(Rectangle())
             .accessibilityLabel(label)
     }
+}
+
+/// Owns model observation for rest eligibility, including sync writes while
+/// the workout is minimized. None of these reads belongs in card/row bodies.
+struct RestTimerLifecycleObserver: View {
+    let session: WorkoutSession?
+    let timer: RestTimerCoordinator
+    let ownerState: CurrentOwnerCoordinator.State
+
+    var body: some View {
+        let state = RestTimerLifecycleState(session: session, rest: timer.restForReconciliation, ownerState: ownerState)
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onChange(of: state, initial: true) { _, _ in
+                timer.reconcile(with: session, ownerState: ownerState)
+            }
+    }
+}
+
+struct RestTimerLifecycleState: Equatable {
+    let restID: UUID?
+    let sessionID: UUID?
+    let ownerState: CurrentOwnerCoordinator.State
+    let starterIsEligible: Bool
+
+    init(session: WorkoutSession?, rest: WorkoutRest?, ownerState: CurrentOwnerCoordinator.State) {
+        restID = rest?.id
+        sessionID = session?.id
+        self.ownerState = ownerState
+        starterIsEligible =
+            session?.sortedLoggedExercises.contains { exercise in
+                exercise.sortedSets.contains { $0.id == rest?.setID && $0.isCompleted }
+            } ?? false
+    }
+}
+
+/// The system environment value is read-only. This Debug-only launch hook lets
+/// UI tests exercise the same motion policy without changing Simulator settings.
+func restTimerReducesMotion(_ systemValue: Bool) -> Bool {
+    #if DEBUG
+        systemValue || ProcessInfo.processInfo.arguments.contains("--uitest-reduce-motion")
+    #else
+        systemValue
+    #endif
 }

@@ -143,7 +143,12 @@ final class RestTimerCoordinator {
 
     /// Called at the shell, including while the workout is minimized. A
     /// disappearing workout sheet is not a workout ending.
-    func reconcile(with session: WorkoutSession?) {
+    var restForReconciliation: WorkoutRest? { current?.rest ?? savedRest }
+
+    func reconcile(with session: WorkoutSession?, ownerState: CurrentOwnerCoordinator.State = .localOnly) {
+        // Initial ownership recovery is asynchronous. Absence in that temporary
+        // scope is not proof that a persisted workout belongs to another owner.
+        if current == nil, case .resolving(ownerTokenIdentifier: nil) = ownerState { return }
         guard let rest = current?.rest ?? savedRest else { return }
         guard let session, session.id == rest.sessionID, session.status == .active, !session.isDeleted,
             session.sortedLoggedExercises.contains(where: { exercise in

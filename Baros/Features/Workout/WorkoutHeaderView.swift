@@ -79,7 +79,7 @@ private struct WorkoutHeaderMetrics: View {
                 }
             }
         }
-        .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: timer.showsHeaderFallback)
+        .animation(.easeOut(duration: restTimerReducesMotion(reduceMotion) ? 0.15 : 0.2), value: timer.showsHeaderFallback)
     }
 
     private var elapsedTime: some View {

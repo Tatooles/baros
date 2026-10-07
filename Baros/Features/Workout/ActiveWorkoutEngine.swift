@@ -46,7 +46,6 @@ final class ActiveWorkoutEngine {
         do {
             let session = try currentActiveSession(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
             activeSessionID = session?.id
-            restTimer.reconcile(with: session)
             lastErrorMessage = nil
         } catch {
             lastErrorMessage = error.localizedDescription

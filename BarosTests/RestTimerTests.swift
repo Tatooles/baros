@@ -186,6 +186,77 @@ final class RestTimerTests: XCTestCase {
         }
     }
 
+    func testOwnedRestWaitsForInitialOwnerResolutionAndCancelsAfterConfirmedSignOut() throws {
+        let h = Harness()
+        let (context, engine, session, exercise) = try fixture(timer: h.timer)
+        session.syncOwnerTokenIdentifier = "owner-a"
+        try engine.toggleSetCompletion(exercise.sortedSets[0], context: context)
+        let rest = try XCTUnwrap(h.persisted)
+        let restored = RestTimerCoordinator(
+            restoredRest: rest, clock: { h.now }, notifications: h.notifications,
+            schedulesTasks: false)
+        restored.reconcile(with: nil, ownerState: .resolving(ownerTokenIdentifier: nil))
+        XCTAssertEqual(restored.restForReconciliation, rest)
+        XCTAssertEqual(h.notifications.removals, 0)
+        let unrelated = WorkoutSession(title: "Unclaimed", startedAt: h.now, status: .active, source: .blank)
+        restored.reconcile(with: unrelated, ownerState: .resolving(ownerTokenIdentifier: nil))
+        XCTAssertEqual(restored.restForReconciliation, rest)
+        XCTAssertEqual(h.notifications.removals, 0)
+        restored.reconcile(with: session, ownerState: .active(ownerTokenIdentifier: "owner-a"))
+        XCTAssertEqual(restored.current?.rest, rest)
+        restored.reconcile(with: nil, ownerState: .localOnly)
+        XCTAssertNil(restored.restForReconciliation)
+        XCTAssertEqual(h.notifications.removals, 1)
+    }
+
+    func testSyncAppliedUncompletionAndDeletionChangeLifecycleStateAndCancel() throws {
+        for deletion in [false, true] {
+            let h = Harness()
+            let (context, engine, session, exercise) = try fixture(timer: h.timer)
+            let set = exercise.sortedSets[0]
+            try engine.toggleSetCompletion(set, context: context)
+            let before = RestTimerLifecycleState(
+                session: session, rest: h.timer.restForReconciliation, ownerState: .localOnly)
+            if deletion { set.markDeleted() } else { set.isCompleted = false }
+            let after = RestTimerLifecycleState(
+                session: session, rest: h.timer.restForReconciliation, ownerState: .localOnly)
+            XCTAssertNotEqual(before, after)
+            h.timer.reconcile(with: session)
+            XCTAssertNil(h.timer.current)
+            XCTAssertEqual(h.notifications.removals, 1)
+        }
+    }
+
+    func testCompletionUsesCurrentOwnerSettingsForVisibleUnclaimedWorkout() throws {
+        let h = Harness()
+        let (context, engine, _, exercise) = try fixture(timer: h.timer)
+        let settings = UserSettings(defaultRestTimerSeconds: 120, syncOwnerTokenIdentifier: "owner-a")
+        context.insert(settings)
+        engine.restSettingsOwnerTokenIdentifier = "owner-a"
+        try engine.toggleSetCompletion(exercise.sortedSets[0], context: context)
+        XCTAssertEqual(h.timer.current?.rest.remainingSeconds(at: h.now), 120)
+    }
+
+    func testLivePersistenceRestoresLocallyAndSkipSurvivesAnotherLaunch() throws {
+        let suite = "RestTimerTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let notifications = Notifications()
+        let timer = RestTimerCoordinator.live(defaults: defaults, notifications: notifications)
+        let (context, engine, session, exercise) = try fixture(timer: timer)
+        try engine.toggleSetCompletion(exercise.sortedSets[0], context: context)
+        let original = try XCTUnwrap(timer.current?.rest)
+        let restored = RestTimerCoordinator.live(defaults: defaults, notifications: notifications)
+        restored.reconcile(with: session)
+        XCTAssertEqual(restored.current?.rest, original)
+        restored.skip()
+        let afterSkip = RestTimerCoordinator.live(defaults: defaults, notifications: notifications)
+        afterSkip.reconcile(with: session)
+        XCTAssertNil(afterSkip.current)
+        timer.cancel()
+        XCTAssertNil(defaults.data(forKey: "active-workout-rest-v1"))
+    }
+
     func testDurationLookupUsesSettingsWithoutChangingThemWhenAdjusted() throws {
         let h = Harness()
         let (context, engine, _, exercise) = try fixture(timer: h.timer)

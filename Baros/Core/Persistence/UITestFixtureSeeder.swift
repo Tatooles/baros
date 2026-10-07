@@ -75,6 +75,15 @@ enum UITestFixtureSeeder {
             )
         }
 
+        if arguments.contains("--uitest-rest-30-seconds"),
+           let settings = UserSettings.visibleSettingsRecords(
+               from: try context.fetch(FetchDescriptor<UserSettings>()),
+               ownerTokenIdentifier: ownerTokenIdentifier
+           ).first {
+            settings.defaultRestTimerSeconds = 30
+            try context.save()
+        }
+
         if arguments.contains("--uitest-seed-strength-records") {
             try seedStrengthRecords(
                 scenario: values(after: "--uitest-strength-records-scenario", in: arguments).first,
