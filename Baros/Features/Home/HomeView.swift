@@ -398,11 +398,16 @@ private struct HomeQuickStartCard: View {
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(AppTheme.textSecondary)
 
-            Text(workout.previewExerciseNames.joined(separator: "\n"))
-                .font(.caption.weight(.medium))
-                .foregroundStyle(AppTheme.textSecondary)
-                .lineLimit(HomeQuickStartWorkout.previewExerciseCount)
-                .padding(.top, 2)
+            // One line per exercise so a long name can't hide the ones after it.
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(workout.previewExerciseNames.enumerated()), id: \.offset) { _, name in
+                    Text(name)
+                        .lineLimit(1)
+                }
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(AppTheme.textSecondary)
+            .padding(.top, 2)
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
