@@ -84,13 +84,19 @@ struct HomeContent {
             }
             return lhs.id.uuidString < rhs.id.uuidString
         }
+        // Home reflects what has happened. Future-dated completions (imports, wrong device clocks) stay in
+        // History and Use Past Workout but never mark upcoming days or read as "Today".
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now
+        let pastSessions = completedSessions.filter { session in
+            (session.endedAt ?? session.startedAt) < startOfTomorrow
+        }
         trainingCalendar = HomeTrainingCalendar(
-            completedSessions: completedSessions,
+            completedSessions: pastSessions,
             now: now,
             calendar: calendar
         )
         quickStartWorkouts = HomeQuickStartWorkout.workouts(
-            from: completedSessions,
+            from: pastSessions,
             now: now,
             calendar: calendar
         )

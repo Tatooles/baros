@@ -363,7 +363,7 @@ final class HomeContentTests: XCTestCase {
         let content = HomeContent(
             sessions: [active, priorSunday, wednesdayCrossMidnight, mondayEvening, mondayMorning],
             ownerTokenIdentifier: nil,
-            now: date(2026, 8, 19, hour: 12),
+            now: date(2026, 8, 20, hour: 12),
             calendar: calendar
         )
 
@@ -372,9 +372,37 @@ final class HomeContentTests: XCTestCase {
         let currentWeek = try XCTUnwrap(weeks.last)
         XCTAssertEqual(
             currentWeek.days.map(\.state),
-            [.completed, .noWorkout, .completed, .upcoming, .upcoming, .upcoming, .upcoming]
+            [.completed, .noWorkout, .completed, .noWorkout, .upcoming, .upcoming, .upcoming]
         )
         XCTAssertEqual(weeks[0].days.last?.state, .completed)
+    }
+
+    func testHomeIgnoresFutureDatedCompletedWorkouts() {
+        let recent = session(title: "Recent", startedAt: date(2026, 8, 18, hour: 8), exerciseNames: ["A"])
+        let tomorrow = session(title: "Tomorrow", startedAt: date(2026, 8, 20, hour: 8), exerciseNames: ["B"])
+        let farFuture = session(title: "Far Future", startedAt: date(2031, 1, 1, hour: 8), exerciseNames: ["C"])
+
+        let content = HomeContent(
+            sessions: [farFuture, tomorrow, recent],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(content.completedSessions.count, 3, "Past-workout search still offers them")
+        XCTAssertEqual(content.quickStartWorkouts.map(\.id), [recent.id])
+        let currentWeek = content.trainingCalendar.weeks.last
+        XCTAssertEqual(currentWeek?.completedWorkoutCount, 1)
+        XCTAssertEqual(currentWeek?.days[3].state, .upcoming)
+
+        let futureOnly = HomeContent(
+            sessions: [tomorrow],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        )
+        XCTAssertFalse(futureOnly.trainingCalendar.hasCompletedWorkouts)
+        XCTAssertTrue(futureOnly.quickStartWorkouts.isEmpty)
     }
 
     func testTrainingCalendarVisibleWeeksFillCapacityWithinMinimumAndHistory() {
