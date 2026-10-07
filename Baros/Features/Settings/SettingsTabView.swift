@@ -45,6 +45,12 @@ struct SettingsTabView: View {
             switch route {
             case .exerciseLibrary:
                 ExerciseLibraryView()
+            case .deleteData(let mode):
+                DeleteDataDestination(mode: mode)
+            #if DEBUG
+            case .developerDiagnostics:
+                DeveloperDiagnosticsView()
+            #endif
             }
         }
         .task(id: currentOwnerCoordinator.localDataOwnerTokenIdentifier) {

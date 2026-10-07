@@ -40,9 +40,7 @@ struct SettingsAccountSection: View {
             syncStatusRow
 
             #if DEBUG
-            NavigationLink {
-                DeveloperDiagnosticsView()
-            } label: {
+            NavigationLink(value: SettingsRoute.developerDiagnostics) {
                 Label {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Developer Diagnostics")

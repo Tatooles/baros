@@ -65,6 +65,10 @@ enum HistoryRoute: Hashable {
 
 enum SettingsRoute: Hashable {
     case exerciseLibrary
+    case deleteData(DeleteDataMode)
+    #if DEBUG
+    case developerDiagnostics
+    #endif
 }
 
 @Observable

@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum DeleteDataMode {
+enum DeleteDataMode: Hashable {
     case account
     case localData
 

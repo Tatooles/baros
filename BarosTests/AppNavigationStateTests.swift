@@ -332,11 +332,13 @@ final class AppNavigationStateTests: XCTestCase {
     }
 
     func testOpenSyncSettingsSelectsSettingsAtItsRoot() {
-        let navigationState = AppNavigationState(settingsPath: [.exerciseLibrary])
+        for route in [SettingsRoute.exerciseLibrary, .deleteData(.localData), .developerDiagnostics] {
+            let navigationState = AppNavigationState(settingsPath: [route])
 
-        navigationState.openSyncSettings()
+            navigationState.openSyncSettings()
 
-        XCTAssertEqual(navigationState.selectedTab, .settings)
-        XCTAssertEqual(navigationState.settingsPath, [])
+            XCTAssertEqual(navigationState.selectedTab, .settings)
+            XCTAssertEqual(navigationState.settingsPath, [])
+        }
     }
 }
