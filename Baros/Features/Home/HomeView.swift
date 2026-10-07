@@ -272,8 +272,8 @@ private struct HomeTrainingCalendarView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
             layoutMetrics.calendarCardHeight = $0
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(trainingCalendar.accessibilityDescription(for: visibleWeeks))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Training calendar")
         .accessibilityIdentifier("HomeTrainingCalendar")
     }
 
@@ -288,6 +288,7 @@ private struct HomeTrainingCalendarView: View {
         }
         .font(.caption2.weight(.bold))
         .foregroundStyle(AppTheme.textTertiary)
+        .accessibilityHidden(true)
     }
 
     private func weekRow(_ week: HomeTrainingCalendar.Week) -> some View {
@@ -312,6 +313,9 @@ private struct HomeTrainingCalendarView: View {
                 .foregroundStyle(week.completedWorkoutCount > 0 ? AppTheme.textPrimary : AppTheme.textTertiary)
                 .frame(width: countWidth, alignment: .trailing)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(trainingCalendar.accessibilityLabel(for: week))
+        .accessibilityIdentifier(week.isCurrent ? "HomeTrainingCalendarCurrentWeek" : "HomeTrainingCalendarWeek")
     }
 
     @ViewBuilder

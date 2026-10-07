@@ -123,16 +123,24 @@ struct HomeQuickStartWorkout: Identifiable {
     var id: UUID { session.id }
     var title: String { session.title }
 
-    /// Expects `completedSessions` newest first. Custom titles group by title; workouts still using the
-    /// default title group by their ordered exercises so unrenamed workouts stay distinguishable.
+    /// Newest completion first. Custom titles group by title; workouts still using the default title group by
+    /// their ordered exercises so unrenamed workouts stay distinguishable.
     static func workouts(
         from completedSessions: [WorkoutSession],
         now: Date,
         calendar: Calendar
     ) -> [HomeQuickStartWorkout] {
+        let newestCompletionFirst = completedSessions.sorted { lhs, rhs in
+            let lhsCompletion = lhs.endedAt ?? lhs.startedAt
+            let rhsCompletion = rhs.endedAt ?? rhs.startedAt
+            if lhsCompletion != rhsCompletion {
+                return lhsCompletion > rhsCompletion
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
         var seenKeys = Set<String>()
         var workouts: [HomeQuickStartWorkout] = []
-        for session in completedSessions where workouts.count < maximumCount {
+        for session in newestCompletionFirst where workouts.count < maximumCount {
             let loggedExercises = session.sortedLoggedExercises
             let exerciseNames = loggedExercises.map(\.exerciseSnapshotName)
             guard !loggedExercises.isEmpty,
@@ -270,14 +278,39 @@ struct HomeTrainingCalendar: Equatable {
         weeks.suffix(min(weeks.count, max(capacity, Self.minimumVisibleWeekCount)))
     }
 
-    func accessibilityDescription(for visibleWeeks: ArraySlice<Week>) -> String {
-        let thisWeek = visibleWeeks.last?.completedWorkoutCount ?? 0
-        var description = "\(thisWeek) \(Self.workoutLabel(thisWeek)) this week."
-        if visibleWeeks.count > 1 {
-            let total = visibleWeeks.reduce(0) { $0 + $1.completedWorkoutCount }
-            description += " \(total) \(Self.workoutLabel(total)) in the last \(visibleWeeks.count) weeks."
+    /// VoiceOver label for one week row, naming the days with workouts.
+    func accessibilityLabel(
+        for week: Week,
+        calendar: Calendar = .current,
+        locale: Locale = .current
+    ) -> String {
+        let weekName: String
+        if week.isCurrent {
+            weekName = "This week"
+        } else {
+            let formatter = DateFormatter()
+            formatter.calendar = calendar
+            formatter.locale = locale
+            formatter.timeZone = calendar.timeZone
+            formatter.setLocalizedDateFormatFromTemplate("MMMMd")
+            weekName = "Week of \(formatter.string(from: week.start))"
         }
-        return description
+
+        guard week.completedWorkoutCount > 0 else {
+            return "\(weekName): no workouts."
+        }
+
+        let weekdayFormatter = DateFormatter()
+        weekdayFormatter.calendar = calendar
+        weekdayFormatter.locale = locale
+        weekdayFormatter.timeZone = calendar.timeZone
+        weekdayFormatter.dateFormat = "EEEE"
+        let weekdays = week.days.filter { $0.state == .completed }.map { weekdayFormatter.string(from: $0.date) }
+        let listFormatter = ListFormatter()
+        listFormatter.locale = locale
+        let dayList = listFormatter.string(from: weekdays) ?? weekdays.joined(separator: ", ")
+        let count = week.completedWorkoutCount
+        return "\(weekName): \(count) \(Self.workoutLabel(count)), \(dayList)."
     }
 
     private static func workoutLabel(_ count: Int) -> String {

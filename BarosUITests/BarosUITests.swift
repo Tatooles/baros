@@ -268,9 +268,9 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        let trainingCalendar = app.descendants(matching: .any)["HomeTrainingCalendar"]
-        XCTAssertTrue(trainingCalendar.waitForExistence(timeout: 3))
-        XCTAssertEqual(trainingCalendar.label, "0 workouts this week.")
+        let currentWeek = app.descendants(matching: .any)["HomeTrainingCalendarCurrentWeek"]
+        XCTAssertTrue(currentWeek.waitForExistence(timeout: 3))
+        XCTAssertEqual(currentWeek.label, "This week: no workouts.")
         XCTAssertTrue(app.staticTexts["Each workout you finish adds a check here."].exists)
         XCTAssertFalse(app.buttons["HomeQuickStartButton-0"].exists)
 
