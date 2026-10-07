@@ -213,10 +213,19 @@ struct HomeTrainingCalendar: Equatable {
         case upcoming
     }
 
+    /// A completed workout that started on a calendar day.
+    struct DayWorkout: Identifiable, Equatable {
+        let id: UUID
+        let title: String
+        let startedAt: Date
+    }
+
     struct Day: Identifiable, Equatable {
         let date: Date
         let state: DayState
         let isToday: Bool
+        /// Oldest first; empty unless `state` is `.completed`.
+        var workouts: [DayWorkout] = []
 
         var id: Date { date }
     }
@@ -256,9 +265,11 @@ struct HomeTrainingCalendar: Equatable {
                 guard let date = calendar.date(byAdding: .day, value: offset, to: start) else {
                     return nil
                 }
-                let state: DayState = if sessionsInWeek.contains(where: {
-                    calendar.isDate($0.startedAt, inSameDayAs: date)
-                }) {
+                let workouts = sessionsInWeek
+                    .filter { calendar.isDate($0.startedAt, inSameDayAs: date) }
+                    .sorted { $0.startedAt < $1.startedAt }
+                    .map { DayWorkout(id: $0.id, title: $0.title, startedAt: $0.startedAt) }
+                let state: DayState = if !workouts.isEmpty {
                     .completed
                 } else if date > today {
                     .upcoming
@@ -267,7 +278,7 @@ struct HomeTrainingCalendar: Equatable {
                 } else {
                     .noWorkout
                 }
-                return Day(date: date, state: state, isToday: date == today)
+                return Day(date: date, state: state, isToday: date == today, workouts: workouts)
             }
             return Week(
                 start: start,
@@ -316,6 +327,23 @@ struct HomeTrainingCalendar: Equatable {
         let dayList = listFormatter.string(from: weekdays) ?? weekdays.joined(separator: ", ")
         let count = week.completedWorkoutCount
         return "\(weekName): \(count) \(Self.workoutLabel(count)), \(dayList)."
+    }
+
+    /// VoiceOver label for a completed day's button.
+    func accessibilityLabel(
+        for day: Day,
+        calendar: Calendar = .current,
+        locale: Locale = .current
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = locale
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate("EEEEMMMMd")
+        let listFormatter = ListFormatter()
+        listFormatter.locale = locale
+        let titles = day.workouts.map(\.title)
+        return "\(formatter.string(from: day.date)): \(listFormatter.string(from: titles) ?? titles.joined(separator: ", "))"
     }
 
     private static func workoutLabel(_ count: Int) -> String {

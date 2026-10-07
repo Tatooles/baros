@@ -377,6 +377,26 @@ final class HomeContentTests: XCTestCase {
         XCTAssertEqual(weeks[0].days.last?.state, .completed)
     }
 
+    func testTrainingCalendarDaysListTheirWorkoutsForNavigation() throws {
+        let mondayEvening = session(title: "Monday Two", startedAt: date(2026, 8, 17, hour: 20))
+        let mondayMorning = session(title: "Monday One", startedAt: date(2026, 8, 17, hour: 8))
+        let content = HomeContent(
+            sessions: [mondayEvening, mondayMorning],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        )
+
+        let trainingCalendar = content.trainingCalendar
+        let monday = try XCTUnwrap(trainingCalendar.weeks.last?.days.first)
+        XCTAssertEqual(monday.workouts.map(\.id), [mondayMorning.id, mondayEvening.id])
+        XCTAssertTrue(try XCTUnwrap(trainingCalendar.weeks.last?.days[1]).workouts.isEmpty)
+        XCTAssertEqual(
+            trainingCalendar.accessibilityLabel(for: monday, calendar: calendar, locale: Locale(identifier: "en_US")),
+            "Monday, August 17: Monday One and Monday Two"
+        )
+    }
+
     func testHomeIgnoresFutureDatedCompletedWorkouts() {
         let recent = session(title: "Recent", startedAt: date(2026, 8, 18, hour: 8), exerciseNames: ["A"])
         let laterToday = session(title: "Later Today", startedAt: date(2026, 8, 19, hour: 14), exerciseNames: ["D"])

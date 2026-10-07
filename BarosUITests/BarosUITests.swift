@@ -457,6 +457,29 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testTappingACompletedCalendarDayOpensThatWorkoutInHistory() {
+        let app = makeApp()
+        app.launch()
+
+        startBlankWorkout(in: app)
+        let workoutTitle = app.textFields["WorkoutTitle"]
+        XCTAssertTrue(workoutTitle.waitForExistence(timeout: 3))
+        replaceText(in: workoutTitle, with: "Calendar Push")
+        openFinishWorkoutSheet(in: app)
+        app.buttons["SaveWorkoutButton"].tap()
+
+        let today = app.buttons["HomeTrainingCalendarToday"]
+        XCTAssertTrue(waitForHittable(today, timeout: 3))
+        XCTAssertTrue(today.label.hasSuffix(": Calendar Push"))
+        today.tap()
+
+        let heading = app.staticTexts["WorkoutHistoryHeading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 3))
+        XCTAssertTrue(heading.label.hasPrefix("Calendar Push"))
+        XCTAssertTrue(app.tabButton(.history).isSelected)
+    }
+
+    @MainActor
     func testMinimizedStateDoesNotPersistAcrossRelaunch() {
         let app = makeDiskBackedResetApp()
         app.launch()

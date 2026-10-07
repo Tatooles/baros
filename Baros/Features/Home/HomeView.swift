@@ -18,6 +18,7 @@ struct HomeView: View {
     @State private var presentsWorkoutAfterStart = false
     @State private var sessionIDHiddenDuringLaunchHandoff: UUID?
     @State private var layoutMetrics = HomeLayoutMetrics()
+    @State private var calendarDayChoice: HomeTrainingCalendar.Day?
 
     var body: some View {
         let ownerTokenIdentifier = currentOwnerCoordinator.localDataOwnerTokenIdentifier
@@ -102,6 +103,21 @@ struct HomeView: View {
                     onWorkoutStarted: handOffStartedWorkout
                 )
             }
+            .confirmationDialog(
+                "Open Workout",
+                isPresented: Binding(
+                    get: { calendarDayChoice != nil },
+                    set: { if !$0 { calendarDayChoice = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: calendarDayChoice
+            ) { day in
+                ForEach(day.workouts) { workout in
+                    Button("\(workout.title) · \(workout.startedAt.formatted(date: .omitted, time: .shortened))") {
+                        navigationState.openWorkoutHistory(workout.id)
+                    }
+                }
+            }
             .onChange(of: navigationState.fullyPresentedActiveWorkoutID) { _, presentedSessionID in
                 if presentedSessionID == sessionIDHiddenDuringLaunchHandoff {
                     sessionIDHiddenDuringLaunchHandoff = nil
@@ -123,7 +139,8 @@ struct HomeView: View {
         HomeTrainingCalendarView(
             trainingCalendar: trainingCalendar,
             visibleWeeks: visibleWeeks,
-            layoutMetrics: $layoutMetrics
+            layoutMetrics: $layoutMetrics,
+            openDay: openCalendarDay
         )
         // A legible grid matters more than larger glyphs; VoiceOver reads the summary label instead.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -147,6 +164,14 @@ struct HomeView: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
             layoutMetrics.actionsHeight = $0
+        }
+    }
+
+    private func openCalendarDay(_ day: HomeTrainingCalendar.Day) {
+        if day.workouts.count == 1, let workout = day.workouts.first {
+            navigationState.openWorkoutHistory(workout.id)
+        } else if day.workouts.count > 1 {
+            calendarDayChoice = day
         }
     }
 
@@ -234,7 +259,9 @@ private struct HomePrimaryWorkoutButton: View {
 }
 
 private struct HomeTrainingCalendarView: View {
-    static let rowSpacing: CGFloat = 10
+    /// Rows carry their own vertical padding so completed days get taller tap targets.
+    static let rowSpacing: CGFloat = 0
+    private static let rowPadding: CGFloat = 5
 
     @ScaledMetric(relativeTo: .caption2) private var weekLabelWidth: CGFloat = 56
     @ScaledMetric(relativeTo: .footnote) private var countWidth: CGFloat = 26
@@ -243,10 +270,11 @@ private struct HomeTrainingCalendarView: View {
     let trainingCalendar: HomeTrainingCalendar
     let visibleWeeks: ArraySlice<HomeTrainingCalendar.Week>
     @Binding var layoutMetrics: HomeLayoutMetrics
+    let openDay: (HomeTrainingCalendar.Day) -> Void
 
     var body: some View {
         SurfaceCard(padding: 16) {
-            VStack(spacing: Self.rowSpacing) {
+            VStack(spacing: Self.rowPadding) {
                 weekdayHeader
 
                 VStack(spacing: Self.rowSpacing) {
@@ -293,18 +321,30 @@ private struct HomeTrainingCalendarView: View {
 
     private func weekRow(_ week: HomeTrainingCalendar.Week) -> some View {
         HStack(spacing: 0) {
+            // VoiceOver reads the week summary here, then each completed day as a button.
             Text(week.isCurrent ? "This week" : week.start.formatted(.dateTime.month(.abbreviated).day()))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(week.isCurrent ? AppTheme.brandAccentForeground : AppTheme.textTertiary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .frame(width: weekLabelWidth, alignment: .leading)
+                .padding(.vertical, Self.rowPadding)
+                .accessibilityLabel(trainingCalendar.accessibilityLabel(for: week))
+                .accessibilityIdentifier(week.isCurrent ? "HomeTrainingCalendarCurrentWeek" : "HomeTrainingCalendarWeek")
 
             ForEach(week.days) { day in
-                dayMarker(day)
-                    .frame(maxWidth: markerSize, maxHeight: markerSize)
-                    .aspectRatio(1, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
+                if day.workouts.isEmpty {
+                    dayCell(day)
+                        .accessibilityHidden(true)
+                } else {
+                    Button { openDay(day) } label: {
+                        dayCell(day)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(trainingCalendar.accessibilityLabel(for: day))
+                    .accessibilityHint(day.workouts.count == 1 ? "Opens in History" : "Choose a workout to open in History")
+                    .accessibilityIdentifier(day.isToday ? "HomeTrainingCalendarToday" : "HomeTrainingCalendarDay")
+                }
             }
 
             Text("\(week.completedWorkoutCount)")
@@ -312,10 +352,18 @@ private struct HomeTrainingCalendarView: View {
                 .monospacedDigit()
                 .foregroundStyle(week.completedWorkoutCount > 0 ? AppTheme.textPrimary : AppTheme.textTertiary)
                 .frame(width: countWidth, alignment: .trailing)
+                .padding(.vertical, Self.rowPadding)
+                .accessibilityHidden(true)
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(trainingCalendar.accessibilityLabel(for: week))
-        .accessibilityIdentifier(week.isCurrent ? "HomeTrainingCalendarCurrentWeek" : "HomeTrainingCalendarWeek")
+    }
+
+    private func dayCell(_ day: HomeTrainingCalendar.Day) -> some View {
+        dayMarker(day)
+            .frame(maxWidth: markerSize, maxHeight: markerSize)
+            .aspectRatio(1, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Self.rowPadding)
+            .contentShape(Rectangle())
     }
 
     @ViewBuilder
