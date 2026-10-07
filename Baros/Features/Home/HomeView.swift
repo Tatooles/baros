@@ -14,7 +14,7 @@ struct HomeView: View {
     let presentWorkout: () -> Void
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @State private var startSheetPresentation: HomeStartSheetPresentation?
-    @State private var quickStartWorkout: HomeQuickStartWorkout?
+    @State private var quickStartSelection: HomeQuickStartSelection?
     @State private var presentsWorkoutAfterStart = false
     @State private var sessionIDHiddenDuringLaunchHandoff: UUID?
     @State private var layoutMetrics = HomeLayoutMetrics()
@@ -93,9 +93,11 @@ struct HomeView: View {
                     onWorkoutStarted: handOffStartedWorkout
                 )
             }
-            .sheet(item: $quickStartWorkout, onDismiss: presentStartedWorkoutIfNeeded) { workout in
+            .sheet(item: $quickStartSelection, onDismiss: presentStartedWorkoutIfNeeded) { selection in
+                // Resolve from the current owner's visible workouts on every render so an owner change never
+                // leaves the previous owner's workout on screen.
                 HomeQuickStartReviewSheet(
-                    session: workout.session,
+                    session: content.completedSessions.first { $0.id == selection.id },
                     activeWorkoutEngine: activeWorkoutEngine,
                     onWorkoutStarted: handOffStartedWorkout
                 )
@@ -134,7 +136,7 @@ struct HomeView: View {
         VStack(spacing: 12) {
             if !primaryPresentation.isActive, !content.quickStartWorkouts.isEmpty {
                 HomeQuickStartRow(workouts: content.quickStartWorkouts) { workout in
-                    quickStartWorkout = workout
+                    quickStartSelection = HomeQuickStartSelection(id: workout.id)
                 }
             }
 
@@ -171,6 +173,10 @@ struct HomeView: View {
 
 private struct HomeStartSheetPresentation: Identifiable {
     let id = UUID()
+}
+
+private struct HomeQuickStartSelection: Identifiable {
+    let id: UUID
 }
 
 private struct HomePrimaryWorkoutButton: View {
@@ -386,7 +392,7 @@ private struct HomeQuickStartCard: View {
 
             Text(workout.lastCompletedDescription)
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(AppTheme.brandAccentForeground)
+                .foregroundStyle(AppTheme.textSecondary)
 
             Text(workout.previewExerciseNames.joined(separator: "\n"))
                 .font(.caption.weight(.medium))

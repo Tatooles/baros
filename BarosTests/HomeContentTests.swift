@@ -461,6 +461,41 @@ final class HomeContentTests: XCTestCase {
         XCTAssertEqual(content.quickStartWorkouts.map(\.id), [benchNewest.id, squat.id, reordered.id])
     }
 
+    func testQuickStartKeepsDefaultTitledWorkoutsWithDifferentEquipmentApart() {
+        let barbellRow = session(title: "Workout", startedAt: date(2026, 8, 19, hour: 8), exerciseNames: ["Row"])
+        barbellRow.sortedLoggedExercises.first?.exerciseSnapshotEquipmentRaw = ExerciseEquipment.barbell.rawValue
+        let cableRow = session(title: "Workout", startedAt: date(2026, 8, 18, hour: 8), exerciseNames: ["Row"])
+        cableRow.sortedLoggedExercises.first?.exerciseSnapshotEquipmentRaw = ExerciseEquipment.cable.rawValue
+
+        let content = HomeContent(
+            sessions: [cableRow, barbellRow],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(content.quickStartWorkouts.map(\.id), [barbellRow.id, cableRow.id])
+    }
+
+    func testQuickStartRecencyUsesCompletionTimeForCrossMidnightWorkouts() {
+        let lateNight = session(
+            title: "Late Night",
+            startedAt: date(2026, 8, 18, hour: 23),
+            endedAt: date(2026, 8, 19, hour: 1),
+            exerciseNames: ["A"]
+        )
+
+        let content = HomeContent(
+            sessions: [lateNight],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(content.quickStartWorkouts.first?.lastCompletedDescription, "Today")
+        XCTAssertEqual(content.trainingCalendar.weeks.last?.days[1].state, .completed)
+    }
+
     func testQuickStartSkipsWorkoutsWithoutExercisesAndCapsTheRow() {
         let empty = session(title: "Empty", startedAt: date(2026, 8, 19, hour: 9))
         let distinct = (0..<7).map { index in
@@ -486,7 +521,7 @@ final class HomeContentTests: XCTestCase {
         let now = date(2026, 8, 19, hour: 12)
         let workouts = [
             session(title: "Today", startedAt: date(2026, 8, 19, hour: 7), exerciseNames: ["A", "B", "C", "D"]),
-            session(title: "Yesterday", startedAt: date(2026, 8, 18, hour: 23), exerciseNames: ["A"]),
+            session(title: "Yesterday", startedAt: date(2026, 8, 18, hour: 20), exerciseNames: ["A"]),
             session(title: "Days", startedAt: date(2026, 8, 6, hour: 7), exerciseNames: ["A"]),
             session(title: "Weeks", startedAt: date(2026, 8, 5, hour: 7), exerciseNames: ["A"]),
         ]

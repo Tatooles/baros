@@ -133,15 +133,17 @@ struct HomeQuickStartWorkout: Identifiable {
         var seenKeys = Set<String>()
         var workouts: [HomeQuickStartWorkout] = []
         for session in completedSessions where workouts.count < maximumCount {
-            let exerciseNames = session.sortedLoggedExercises.map(\.exerciseSnapshotName)
-            guard !exerciseNames.isEmpty,
-                  seenKeys.insert(groupingKey(title: session.title, exerciseNames: exerciseNames)).inserted else {
+            let loggedExercises = session.sortedLoggedExercises
+            let exerciseNames = loggedExercises.map(\.exerciseSnapshotName)
+            guard !loggedExercises.isEmpty,
+                  seenKeys.insert(groupingKey(title: session.title, loggedExercises: loggedExercises)).inserted else {
                 continue
             }
             workouts.append(HomeQuickStartWorkout(
                 session: session,
+                // Completion time, matching the review screen; a workout finished after midnight reads "Today".
                 lastCompletedDescription: lastCompletedDescription(
-                    for: session.startedAt,
+                    for: session.endedAt ?? session.startedAt,
                     now: now,
                     calendar: calendar
                 ),
@@ -151,12 +153,15 @@ struct HomeQuickStartWorkout: Identifiable {
         return workouts
     }
 
-    private static func groupingKey(title: String, exerciseNames: [String]) -> String {
+    private static func groupingKey(title: String, loggedExercises: [LoggedExercise]) -> String {
         let normalizedTitle = normalized(title)
         guard normalizedTitle == normalized(WorkoutSession.defaultTitle) else {
             return "title:\(normalizedTitle)"
         }
-        return "exercises:" + exerciseNames.map(normalized).joined(separator: "\u{1F}")
+        // Equipment keeps same-named variants (barbell vs. cable Row) apart.
+        return "exercises:" + loggedExercises.map { loggedExercise in
+            "\(normalized(loggedExercise.exerciseSnapshotName))|\(loggedExercise.resolvedSnapshotEquipmentRaw ?? "")"
+        }.joined(separator: "\u{1F}")
     }
 
     private static func normalized(_ text: String) -> String {

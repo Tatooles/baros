@@ -200,20 +200,32 @@ struct HomeQuickStartReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
-    let session: WorkoutSession
+    /// Nil when the workout is no longer visible to the Current Owner.
+    let session: WorkoutSession?
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     let onWorkoutStarted: (WorkoutSession) -> Void
     @State private var actionError: HomeStartWorkoutActionError?
 
     var body: some View {
         NavigationStack {
-            HomePastWorkoutReviewView(session: session, startWorkout: startWorkout)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                            .accessibilityIdentifier("QuickStartCancelButton")
-                    }
+            Group {
+                if let session {
+                    HomePastWorkoutReviewView(session: session) { startWorkout(from: session) }
+                } else {
+                    EmptyStateView(
+                        title: "Workout Unavailable",
+                        message: "This workout is no longer available to reuse."
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AppTheme.canvasBackground.ignoresSafeArea())
                 }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .accessibilityIdentifier("QuickStartCancelButton")
+                }
+            }
         }
         .alert(item: $actionError) { actionError in
             Alert(
@@ -225,7 +237,7 @@ struct HomeQuickStartReviewSheet: View {
         .accessibilityIdentifier("QuickStartReviewSheet")
     }
 
-    private func startWorkout() {
+    private func startWorkout(from session: WorkoutSession) {
         do {
             let startedSession = try activeWorkoutEngine.startWorkout(
                 fromPast: session,
