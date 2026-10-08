@@ -10,7 +10,6 @@ struct SettingsView: View {
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     let settings: UserSettings
-    let onDataDeletionCompleted: () -> Void
     @State private var alert: SettingsAlert?
     @State private var copyFeedbackResetTask: Task<Void, Never>?
     @State private var copyFeedbackState = CopyAppInfoFeedbackState.idle
@@ -18,6 +17,28 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            SettingsAccountSection()
+
+            Section("Workouts") {
+                NavigationLink(value: SettingsRoute.exerciseLibrary) {
+                    Label("Exercise Library", systemImage: "dumbbell")
+                }
+                .accessibilityIdentifier("SettingsExerciseLibraryLink")
+
+                Picker("Weight Unit", selection: weightUnitBinding) {
+                    ForEach(MeasurementUnit.allCases) { unit in
+                        Text(unit.displayName).tag(unit)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("WeightUnitPicker")
+
+                Stepper(value: restTimerBinding, in: 30...300, step: 15) {
+                    LabeledContent("Rest Timer", value: "\(settings.defaultRestTimerSeconds) seconds")
+                }
+                .accessibilityIdentifier("SettingsRestTimerStepper")
+            }
+
             Section {
                 HStack(spacing: 12) {
                     Image(systemName: appAppearanceStore.appearance.systemImage)
@@ -60,36 +81,15 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Units") {
-                Picker("Weight Unit", selection: weightUnitBinding) {
-                    ForEach(MeasurementUnit.allCases) { unit in
-                        Text(unit.displayName).tag(unit)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("WeightUnitPicker")
-            }
-
-            Section("Rest Timer") {
-                Stepper(value: restTimerBinding, in: 30...300, step: 15) {
-                    Text("\(settings.defaultRestTimerSeconds) seconds")
-                }
-            }
-
-            SettingsAccountSection()
-
             PrivacyDataSection(
                 exportWorkoutHistory: exportWorkoutHistory,
-                links: .release,
-                onDeletionCompleted: onDataDeletionCompleted
+                links: .release
             )
 
             appInfoSection
         }
         .scrollContentBackground(.hidden)
         .background(AppTheme.canvasBackground.ignoresSafeArea())
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
         .alert(item: $alert) { alert in
             Alert(
                 title: Text(alert.title),

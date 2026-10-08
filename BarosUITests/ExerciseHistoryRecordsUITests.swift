@@ -257,8 +257,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         ] + extraArguments
         app.launch()
         if kilograms {
-            app.tabButton(.profile).tap()
-            app.buttons["ProfileSettingsLink"].tap()
+            app.tabButton(.settings).tap()
             let units = app.segmentedControls["WeightUnitPicker"]
             XCTAssertTrue(units.waitForExistence(timeout: 3))
             units.buttons["Kilograms"].tap()

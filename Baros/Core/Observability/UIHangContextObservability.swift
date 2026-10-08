@@ -1,13 +1,13 @@
 import Foundation
 
 enum UIHangScreen: String, CaseIterable {
-    case launch, home, history, profile
+    case launch, home, history, settings
 
     init(tab: AppTab) {
         switch tab {
         case .home: self = .home
         case .history: self = .history
-        case .profile: self = .profile
+        case .settings: self = .settings
         }
     }
 }
@@ -23,7 +23,7 @@ enum UIHangScenePhase: String, CaseIterable {
 }
 
 enum UIHangSurface: String, Equatable {
-    case launch, home, history, profile, onboarding
+    case launch, home, history, settings, onboarding
     case whatsNew = "whats_new"
     case activeWorkout = "active_workout"
     case exercisePicker = "exercise_picker"
@@ -97,7 +97,7 @@ enum UIHangBreadcrumb: String, Equatable {
     case launchStarted = "launch_started"
     case homeShown = "home_shown"
     case historyShown = "history_shown"
-    case profileShown = "profile_shown"
+    case settingsShown = "settings_shown"
     case onboardingPresented = "onboarding_presented"
     case whatsNewPresented = "whats_new_presented"
     case activeWorkoutPresented = "active_workout_presented"
@@ -169,7 +169,7 @@ final class UIHangContextObservability {
             case .launch: .launchStarted
             case .home: .homeShown
             case .history: .historyShown
-            case .profile: .profileShown
+            case .settings: .settingsShown
             }
             sink.addBreadcrumb(breadcrumb)
         }
@@ -184,14 +184,14 @@ final class UIHangContextObservability {
         }
         baseScreen = screen
         self.presentation = presentation
-        if screen != .profile || presentation != nil { settingsWhatsNewIsPresented = false }
+        if screen != .settings || presentation != nil { settingsWhatsNewIsPresented = false }
         if presentation != .activeWorkout { clearWorkout() }
         publish()
     }
 
     func settingsWhatsNewChanged(isPresented: Bool) {
         // This sheet belongs to Settings, independently of the shell's launch sheet.
-        guard !isPresented || (baseScreen == .profile && presentation == nil),
+        guard !isPresented || (baseScreen == .settings && presentation == nil),
               isPresented != settingsWhatsNewIsPresented else { return }
         settingsWhatsNewIsPresented = isPresented
         sink.addBreadcrumb(isPresented ? .whatsNewPresented : .presentationDismissed)

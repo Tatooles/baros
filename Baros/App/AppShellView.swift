@@ -294,14 +294,14 @@ struct AppShellView: View {
             }
             .tag(AppTab.home)
 
-            NavigationStack(path: $navigationState.profilePath) {
-                ProfileView(navigationState: navigationState)
+            NavigationStack(path: $navigationState.settingsPath) {
+                SettingsTabView()
             }
             .tabItem {
-                Label(AppTab.profile.title, systemImage: AppTab.profile.symbolName)
-                    .accessibilityIdentifier(AppTab.profile.accessibilityIdentifier)
+                Label(AppTab.settings.title, systemImage: AppTab.settings.symbolName)
+                    .accessibilityIdentifier(AppTab.settings.accessibilityIdentifier)
             }
-            .tag(AppTab.profile)
+            .tag(AppTab.settings)
         }
     }
 
