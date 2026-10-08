@@ -520,7 +520,7 @@ final class HomeContentTests: XCTestCase {
         XCTAssertEqual(content.quickStartWorkouts.map(\.id), [barbellRow.id, cableRow.id])
     }
 
-    func testQuickStartRecencyUsesCompletionTimeForCrossMidnightWorkouts() {
+    func testQuickStartRecencyFollowsTheStartDateLikeTheCalendar() {
         let lateNight = session(
             title: "Late Night",
             startedAt: date(2026, 8, 18, hour: 23),
@@ -535,11 +535,12 @@ final class HomeContentTests: XCTestCase {
             calendar: calendar
         )
 
-        XCTAssertEqual(content.quickStartWorkouts.first?.lastCompletedDescription, "Today")
+        // Started yesterday, finished after midnight: the card and the calendar both say yesterday.
+        XCTAssertEqual(content.quickStartWorkouts.first?.lastDoneDescription, "Yesterday")
         XCTAssertEqual(content.trainingCalendar.weeks.last?.days[1].state, .completed)
     }
 
-    func testQuickStartOrdersAndPicksRepresentativesByCompletionTime() {
+    func testQuickStartOrdersAndPicksRepresentativesByStartTime() {
         let longSession = session(
             title: "Long",
             startedAt: date(2026, 8, 19, hour: 6),
@@ -572,7 +573,7 @@ final class HomeContentTests: XCTestCase {
             calendar: calendar
         )
 
-        XCTAssertEqual(content.quickStartWorkouts.map(\.id), [longSession.id, shortSession.id, laterFinishedPush.id])
+        XCTAssertEqual(content.quickStartWorkouts.map(\.id), [shortSession.id, longSession.id, laterStartedPush.id])
     }
 
     func testQuickStartSkipsWorkoutsWithoutExercisesAndCapsTheRow() {
@@ -608,7 +609,7 @@ final class HomeContentTests: XCTestCase {
         let content = HomeContent(sessions: workouts, ownerTokenIdentifier: nil, now: now, calendar: calendar)
 
         XCTAssertEqual(
-            content.quickStartWorkouts.map(\.lastCompletedDescription),
+            content.quickStartWorkouts.map(\.lastDoneDescription),
             ["Today", "Yesterday", "13 days ago", "2 weeks ago"]
         )
         XCTAssertEqual(try XCTUnwrap(content.quickStartWorkouts.first).previewExerciseNames, ["A", "B", "C"])
@@ -627,7 +628,7 @@ final class HomeContentTests: XCTestCase {
         let content = HomeContent(sessions: workouts, ownerTokenIdentifier: nil, now: now, calendar: calendar)
 
         XCTAssertEqual(
-            content.quickStartWorkouts.map(\.lastCompletedDescription),
+            content.quickStartWorkouts.map(\.lastDoneDescription),
             ["8 weeks ago", "2 months ago", "11 months ago", "1 year ago", "2 years ago"]
         )
     }

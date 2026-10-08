@@ -122,30 +122,23 @@ struct HomeQuickStartWorkout: Identifiable {
     static let previewExerciseCount = 3
 
     let session: WorkoutSession
-    let lastCompletedDescription: String
+    let lastDoneDescription: String
     let previewExerciseNames: [String]
 
     var id: UUID { session.id }
     var title: String { session.title }
 
-    /// Newest completion first. Custom titles group by title; workouts still using the default title group by
-    /// their ordered exercises so unrenamed workouts stay distinguishable.
+    /// Expects `completedSessions` newest start first, the same date the calendar and History use. Custom titles
+    /// group by title; workouts still using the default title group by their ordered exercises so unrenamed
+    /// workouts stay distinguishable.
     static func workouts(
         from completedSessions: [WorkoutSession],
         now: Date,
         calendar: Calendar
     ) -> [HomeQuickStartWorkout] {
-        let newestCompletionFirst = completedSessions.sorted { lhs, rhs in
-            let lhsCompletion = lhs.endedAt ?? lhs.startedAt
-            let rhsCompletion = rhs.endedAt ?? rhs.startedAt
-            if lhsCompletion != rhsCompletion {
-                return lhsCompletion > rhsCompletion
-            }
-            return lhs.id.uuidString < rhs.id.uuidString
-        }
         var seenKeys = Set<String>()
         var workouts: [HomeQuickStartWorkout] = []
-        for session in newestCompletionFirst where workouts.count < maximumCount {
+        for session in completedSessions where workouts.count < maximumCount {
             let loggedExercises = session.sortedLoggedExercises
             let exerciseNames = loggedExercises.map(\.exerciseSnapshotName)
             guard !loggedExercises.isEmpty,
@@ -154,9 +147,9 @@ struct HomeQuickStartWorkout: Identifiable {
             }
             workouts.append(HomeQuickStartWorkout(
                 session: session,
-                // Completion time, matching the review screen; a workout finished after midnight reads "Today".
-                lastCompletedDescription: lastCompletedDescription(
-                    for: session.endedAt ?? session.startedAt,
+                // Start date, so the card always agrees with the calendar and History.
+                lastDoneDescription: lastDoneDescription(
+                    for: session.startedAt,
                     now: now,
                     calendar: calendar
                 ),
@@ -182,7 +175,7 @@ struct HomeQuickStartWorkout: Identifiable {
     }
 
     /// Days for the first two weeks, weeks until two calendar months, months for the first year, then years.
-    private static func lastCompletedDescription(for date: Date, now: Date, calendar: Calendar) -> String {
+    private static func lastDoneDescription(for date: Date, now: Date, calendar: Calendar) -> String {
         let day = calendar.startOfDay(for: date)
         let today = calendar.startOfDay(for: now)
         let days = calendar.dateComponents([.day], from: day, to: today).day ?? 0

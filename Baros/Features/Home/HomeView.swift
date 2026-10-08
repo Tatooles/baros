@@ -18,8 +18,6 @@ struct HomeView: View {
     @State private var presentsWorkoutAfterStart = false
     @State private var sessionIDHiddenDuringLaunchHandoff: UUID?
     @State private var layoutMetrics = HomeLayoutMetrics()
-    /// Only the date is kept; its workouts are resolved from the current owner's calendar on every render.
-    @State private var calendarDayChoice: Date?
 
     var body: some View {
         let ownerTokenIdentifier = currentOwnerCoordinator.localDataOwnerTokenIdentifier
@@ -36,9 +34,6 @@ struct HomeView: View {
                 now: timeline.date
             )
             // Accessibility sizes put the actions first and keep the calendar at its minimum.
-            let chosenCalendarDay = calendarDayChoice.flatMap { chosenDate in
-                content.trainingCalendar.weeks.lazy.flatMap(\.days).first { $0.date == chosenDate }
-            }
             let visibleWeeks = content.trainingCalendar.visibleWeeks(
                 fitting: dynamicTypeSize.isAccessibilitySize ? 0 : layoutMetrics.calendarWeekCapacity(
                     rowSpacing: HomeTrainingCalendarView.rowSpacing,
@@ -107,24 +102,6 @@ struct HomeView: View {
                     onWorkoutStarted: handOffStartedWorkout
                 )
             }
-            .confirmationDialog(
-                "Open Workout",
-                isPresented: Binding(
-                    get: { chosenCalendarDay?.workouts.isEmpty == false },
-                    set: { if !$0 { calendarDayChoice = nil } }
-                ),
-                titleVisibility: .visible,
-                presenting: chosenCalendarDay
-            ) { day in
-                ForEach(day.workouts) { workout in
-                    Button("\(workout.title) · \(workout.startedAt.formatted(date: .omitted, time: .shortened))") {
-                        navigationState.openWorkoutHistory(workout.id)
-                    }
-                }
-            }
-            .onChange(of: ownerTokenIdentifier) {
-                calendarDayChoice = nil
-            }
             .onChange(of: navigationState.fullyPresentedActiveWorkoutID) { _, presentedSessionID in
                 if presentedSessionID == sessionIDHiddenDuringLaunchHandoff {
                     sessionIDHiddenDuringLaunchHandoff = nil
@@ -147,7 +124,7 @@ struct HomeView: View {
             trainingCalendar: trainingCalendar,
             visibleWeeks: visibleWeeks,
             layoutMetrics: $layoutMetrics,
-            openDay: openCalendarDay
+            openWorkout: { navigationState.openWorkoutHistory($0) }
         )
         // A legible grid matters more than larger glyphs; VoiceOver reads the summary label instead.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -171,14 +148,6 @@ struct HomeView: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
             layoutMetrics.actionsHeight = $0
-        }
-    }
-
-    private func openCalendarDay(_ day: HomeTrainingCalendar.Day) {
-        if day.workouts.count == 1, let workout = day.workouts.first {
-            navigationState.openWorkoutHistory(workout.id)
-        } else if day.workouts.count > 1 {
-            calendarDayChoice = day.date
         }
     }
 
@@ -277,7 +246,7 @@ private struct HomeTrainingCalendarView: View {
     let trainingCalendar: HomeTrainingCalendar
     let visibleWeeks: ArraySlice<HomeTrainingCalendar.Week>
     @Binding var layoutMetrics: HomeLayoutMetrics
-    let openDay: (HomeTrainingCalendar.Day) -> Void
+    let openWorkout: (UUID) -> Void
 
     var body: some View {
         SurfaceCard(padding: 16) {
@@ -344,13 +313,9 @@ private struct HomeTrainingCalendarView: View {
                     dayCell(day)
                         .accessibilityHidden(true)
                 } else {
-                    Button { openDay(day) } label: {
-                        dayCell(day)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(trainingCalendar.accessibilityLabel(for: day))
-                    .accessibilityHint(day.workouts.count == 1 ? "Opens in History" : "Choose a workout to open in History")
-                    .accessibilityIdentifier(day.isToday ? "HomeTrainingCalendarToday" : "HomeTrainingCalendarDay")
+                    completedDay(day)
+                        .accessibilityLabel(trainingCalendar.accessibilityLabel(for: day))
+                        .accessibilityIdentifier(day.isToday ? "HomeTrainingCalendarToday" : "HomeTrainingCalendarDay")
                 }
             }
 
@@ -361,6 +326,34 @@ private struct HomeTrainingCalendarView: View {
                 .frame(width: countWidth, alignment: .trailing)
                 .padding(.vertical, Self.rowPadding)
                 .accessibilityHidden(true)
+        }
+    }
+
+    /// One workout opens directly. Several open a menu anchored on the dot, built from the current calendar so it
+    /// never lists another owner's workouts.
+    @ViewBuilder
+    private func completedDay(_ day: HomeTrainingCalendar.Day) -> some View {
+        if day.workouts.count == 1, let workout = day.workouts.first {
+            Button { openWorkout(workout.id) } label: {
+                dayCell(day)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens in History")
+        } else {
+            Menu {
+                Section("Open in History") {
+                    ForEach(day.workouts) { workout in
+                        Button { openWorkout(workout.id) } label: {
+                            Text(workout.title)
+                            Text(workout.startedAt.formatted(date: .omitted, time: .shortened))
+                        }
+                    }
+                }
+            } label: {
+                dayCell(day)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Choose a workout to open in History")
         }
     }
 
@@ -449,7 +442,7 @@ private struct HomeQuickStartCard: View {
                     .accessibilityHidden(true)
             }
 
-            Text(workout.lastCompletedDescription)
+            Text(workout.lastDoneDescription)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(AppTheme.textSecondary)
 
@@ -471,7 +464,7 @@ private struct HomeQuickStartCard: View {
         .contentShape(shape)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            ([workout.title, workout.lastCompletedDescription] + workout.previewExerciseNames)
+            ([workout.title, workout.lastDoneDescription] + workout.previewExerciseNames)
                 .joined(separator: ", ")
         )
     }

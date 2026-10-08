@@ -480,6 +480,35 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testCalendarDayWithTwoWorkoutsOffersAMenuOfBoth() {
+        let app = makeApp()
+        app.launch()
+
+        for title in ["Morning Lift", "Evening Lift"] {
+            startBlankWorkout(in: app)
+            let workoutTitle = app.textFields["WorkoutTitle"]
+            XCTAssertTrue(workoutTitle.waitForExistence(timeout: 3))
+            replaceText(in: workoutTitle, with: title)
+            openFinishWorkoutSheet(in: app)
+            app.buttons["SaveWorkoutButton"].tap()
+            XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        }
+
+        let today = app.buttons["HomeTrainingCalendarToday"]
+        XCTAssertTrue(waitForHittable(today, timeout: 3))
+        today.tap()
+
+        let evening = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Evening Lift")).firstMatch
+        XCTAssertTrue(waitForHittable(evening, timeout: 3))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Morning Lift")).firstMatch.exists)
+        evening.tap()
+
+        let heading = app.staticTexts["WorkoutHistoryHeading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 3))
+        XCTAssertTrue(heading.label.hasPrefix("Evening Lift"))
+    }
+
+    @MainActor
     func testMinimizedStateDoesNotPersistAcrossRelaunch() {
         let app = makeDiskBackedResetApp()
         app.launch()
