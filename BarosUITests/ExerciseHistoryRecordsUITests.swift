@@ -214,7 +214,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         workout.tap()
         assertMaximumValuesFit(in: app, identifierPrefix: "WorkoutHistorySetSummary-", screen: "workout")
 
-        app.buttons["HomeTab"].tap()
+        app.tabButton(.home).tap()
         let start = app.buttons["StartWorkoutButton"]
         XCTAssertTrue(start.waitForExistence(timeout: 5))
         start.tap()
@@ -257,7 +257,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         ] + extraArguments
         app.launch()
         if kilograms {
-            app.buttons["SettingsTab"].tap()
+            app.tabButton(.settings).tap()
             let units = app.segmentedControls["WeightUnitPicker"]
             XCTAssertTrue(units.waitForExistence(timeout: 3))
             units.buttons["Kilograms"].tap()

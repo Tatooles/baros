@@ -195,6 +195,65 @@ struct HomeStartWorkoutSheet: View {
     }
 }
 
+/// Review-and-start sheet for a Home quick-start card.
+struct HomeQuickStartReviewSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
+    /// Nil when the workout is no longer visible to the Current Owner.
+    let session: WorkoutSession?
+    @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
+    let onWorkoutStarted: (WorkoutSession) -> Void
+    @State private var actionError: HomeStartWorkoutActionError?
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let session {
+                    HomePastWorkoutReviewView(session: session) { startWorkout(from: session) }
+                } else {
+                    EmptyStateView(
+                        title: "Workout Unavailable",
+                        message: "This workout is no longer available to reuse."
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AppTheme.canvasBackground.ignoresSafeArea())
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .accessibilityIdentifier("QuickStartCancelButton")
+                }
+            }
+        }
+        .alert(item: $actionError) { actionError in
+            Alert(
+                title: Text(actionError.title),
+                message: Text(actionError.message),
+                dismissButton: .cancel(Text("OK"))
+            )
+        }
+        .accessibilityIdentifier("QuickStartReviewSheet")
+    }
+
+    private func startWorkout(from session: WorkoutSession) {
+        do {
+            let startedSession = try activeWorkoutEngine.startWorkout(
+                fromPast: session,
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
+                context: modelContext
+            )
+            onWorkoutStarted(startedSession)
+            dismiss()
+        } catch {
+            let message = error.localizedDescription
+            activeWorkoutEngine.lastErrorMessage = message
+            actionError = HomeStartWorkoutActionError(title: "Couldn't Start Workout", message: message)
+        }
+    }
+}
+
 private struct HomeStartChoiceRow: View {
     let title: String
     let detail: String

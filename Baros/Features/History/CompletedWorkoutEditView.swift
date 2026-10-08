@@ -523,7 +523,7 @@ struct CompletedWorkoutEditView: View {
         focusedField = nil
 
         let trimmedTitle = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        draft.title = trimmedTitle.isEmpty ? "Workout" : trimmedTitle
+        draft.title = trimmedTitle.isEmpty ? WorkoutSession.defaultTitle : trimmedTitle
 
         if hasDurationChange {
             draft.durationSeconds = durationSelection.totalSeconds
