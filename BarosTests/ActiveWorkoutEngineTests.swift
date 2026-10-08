@@ -1417,6 +1417,12 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(RPEChipRow.values, [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10])
     }
 
+    func testTappingTheSelectedRPEChipClearsItAndOtherChipsSelectTheirValue() {
+        XCTAssertEqual(RPEChipRow.selection(afterTapping: 9, current: nil), 9)
+        XCTAssertEqual(RPEChipRow.selection(afterTapping: 9, current: 8.5), 9)
+        XCTAssertNil(RPEChipRow.selection(afterTapping: 9, current: 9))
+    }
+
     func testRPEChipSelectionCommitsPreparedValuesAndCompletesSet() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
