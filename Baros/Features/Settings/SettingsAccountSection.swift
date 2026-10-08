@@ -35,12 +35,12 @@ struct SettingsAccountSection: View {
 
     var body: some View {
         Section {
+            SettingsAccountRow()
+
             syncStatusRow
 
             #if DEBUG
-            NavigationLink {
-                DeveloperDiagnosticsView()
-            } label: {
+            NavigationLink(value: SettingsRoute.developerDiagnostics) {
                 Label {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Developer Diagnostics")

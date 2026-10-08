@@ -61,15 +61,11 @@ enum PrivacyDataDeletionAction: Equatable {
 }
 
 struct PrivacyDataSection: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.accountDeletionFactory) private var accountDeletionFactory
     @Environment(\.openURL) private var openURL
     @Environment(Clerk.self) private var clerk
-    @Environment(SyncScheduler.self) private var syncScheduler
 
     let exportWorkoutHistory: () -> Void
     let links: PrivacySupportConfiguration
-    let onDeletionCompleted: () -> Void
 
     private var deletionAction: PrivacyDataDeletionAction {
         let isAuthenticated =
@@ -92,17 +88,7 @@ struct PrivacyDataSection: View {
             linkRow(title: "Support", systemImage: "questionmark.circle", url: links.supportURL)
                 .accessibilityIdentifier("SettingsSupportRow")
 
-            NavigationLink {
-                DeleteDataConfirmationView(
-                    mode: deletionAction.mode,
-                    coordinator: accountDeletionFactory.makeCoordinator(
-                        modelContext,
-                        syncScheduler,
-                        clerk
-                    ),
-                    onCompleted: onDeletionCompleted
-                )
-            } label: {
+            NavigationLink(value: SettingsRoute.deleteData(deletionAction.mode)) {
                 Label {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(deletionAction.title)
@@ -126,5 +112,26 @@ struct PrivacyDataSection: View {
         } label: {
             Label(title, systemImage: systemImage)
         }
+    }
+}
+
+/// Builds the deletion coordinator where the confirmation screen is pushed onto the Settings path.
+struct DeleteDataDestination: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.accountDeletionFactory) private var accountDeletionFactory
+    @Environment(Clerk.self) private var clerk
+    @Environment(SyncScheduler.self) private var syncScheduler
+
+    let mode: DeleteDataMode
+
+    var body: some View {
+        DeleteDataConfirmationView(
+            mode: mode,
+            coordinator: accountDeletionFactory.makeCoordinator(
+                modelContext,
+                syncScheduler,
+                clerk
+            )
+        )
     }
 }

@@ -176,7 +176,7 @@ jobs:
             -only-testing:BarosUITests/BarosUITests/testLogWorkoutSmoke \
             -only-testing:BarosUITests/BarosUITests/testTabNavigationAndFinishSheetSmoke \
             -only-testing:BarosUITests/BarosUITests/testSettingsEditRequestsSyncInUITestMode \
-            -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToProfileAfterReset \
+            -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToSettingsAfterReset \
             -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData" \
             -resultBundlePath "${RUNNER_TEMP}/BarosUISmoke.xcresult" \
             2>&1 | tee "${RUNNER_TEMP}/BarosUISmoke.log"

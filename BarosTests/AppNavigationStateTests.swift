@@ -3,15 +3,15 @@ import XCTest
 
 @MainActor
 final class AppNavigationStateTests: XCTestCase {
-    func testPermanentTabsAreHistoryHomeProfileAndDefaultToHome() {
+    func testPermanentTabsAreHistoryHomeSettingsAndDefaultToHome() {
         let navigationState = AppNavigationState()
 
-        XCTAssertEqual(AppTab.allCases, [.history, .home, .profile])
+        XCTAssertEqual(AppTab.allCases, [.history, .home, .settings])
         XCTAssertEqual(navigationState.selectedTab, .home)
     }
 
     func testLaunchWithoutActiveWorkoutShowsHomeWithoutPresentationOrAccessory() {
-        let navigationState = AppNavigationState(selectedTab: .profile)
+        let navigationState = AppNavigationState(selectedTab: .settings)
 
         navigationState.reconcileActiveWorkout(sessionID: nil)
 
@@ -21,7 +21,7 @@ final class AppNavigationStateTests: XCTestCase {
     }
 
     func testLaunchWithActiveWorkoutDefersAccessoryUntilPresentationFinishes() {
-        let navigationState = AppNavigationState(selectedTab: .profile)
+        let navigationState = AppNavigationState(selectedTab: .settings)
         let sessionID = UUID()
 
         navigationState.reconcileActiveWorkout(sessionID: sessionID)
@@ -103,17 +103,17 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertTrue(navigationState.mountsActiveWorkoutAccessory)
     }
 
-    func testOpeningAndMinimizingAccessoryPreservesHistoryOrProfileSelectionAndPaths() {
+    func testOpeningAndMinimizingAccessoryPreservesHistoryOrSettingsSelectionAndPaths() {
         let exerciseRoute = ExerciseHistoryRoute(exerciseID: UUID(), name: "Bench Press")
         let workoutID = UUID()
 
-        for selectedTab in [AppTab.history, .profile] {
+        for selectedTab in [AppTab.history, .settings] {
             let navigationState = AppNavigationState()
             navigationState.reconcileActiveWorkout(sessionID: UUID())
             navigationState.minimizeActiveWorkout()
             navigationState.selectedTab = selectedTab
             navigationState.historyPath = [.workout(workoutID), .exercise(exerciseRoute)]
-            navigationState.profilePath = [.exerciseLibrary]
+            navigationState.settingsPath = [.exerciseLibrary]
 
             navigationState.presentActiveWorkout()
 
@@ -121,14 +121,14 @@ final class AppNavigationStateTests: XCTestCase {
             XCTAssertTrue(navigationState.isActiveWorkoutPresented)
             XCTAssertTrue(navigationState.mountsActiveWorkoutAccessory)
             XCTAssertEqual(navigationState.historyPath, [.workout(workoutID), .exercise(exerciseRoute)])
-            XCTAssertEqual(navigationState.profilePath, [.exerciseLibrary])
+            XCTAssertEqual(navigationState.settingsPath, [.exerciseLibrary])
 
             navigationState.minimizeActiveWorkout()
 
             XCTAssertEqual(navigationState.selectedTab, selectedTab)
             XCTAssertTrue(navigationState.mountsActiveWorkoutAccessory)
             XCTAssertEqual(navigationState.historyPath, [.workout(workoutID), .exercise(exerciseRoute)])
-            XCTAssertEqual(navigationState.profilePath, [.exerciseLibrary])
+            XCTAssertEqual(navigationState.settingsPath, [.exerciseLibrary])
         }
     }
 
@@ -137,7 +137,7 @@ final class AppNavigationStateTests: XCTestCase {
             let navigationState = AppNavigationState()
             navigationState.reconcileActiveWorkout(sessionID: UUID())
             navigationState.minimizeActiveWorkout()
-            navigationState.selectedTab = .profile
+            navigationState.selectedTab = .settings
 
             navigationState.reconcileActiveWorkout(sessionID: nil)
 
@@ -246,20 +246,20 @@ final class AppNavigationStateTests: XCTestCase {
         let navigationState = AppNavigationState()
         navigationState.reconcileActiveWorkout(sessionID: workoutID)
         navigationState.minimizeActiveWorkout()
-        navigationState.selectedTab = .profile
+        navigationState.selectedTab = .settings
 
         navigationState.openWorkoutLiveActivity(
             workoutID: workoutID,
             visibleActiveWorkoutID: workoutID
         )
 
-        XCTAssertEqual(navigationState.selectedTab, .profile)
+        XCTAssertEqual(navigationState.selectedTab, .settings)
         XCTAssertTrue(navigationState.isActiveWorkoutPresented)
     }
 
     func testLiveActivityReturnOnColdLaunchPresentsMatchingWorkoutOverHome() {
         let workoutID = UUID()
-        let navigationState = AppNavigationState(selectedTab: .profile)
+        let navigationState = AppNavigationState(selectedTab: .settings)
 
         navigationState.openWorkoutLiveActivity(
             workoutID: workoutID,
@@ -290,7 +290,7 @@ final class AppNavigationStateTests: XCTestCase {
     func testMalformedLiveActivityReturnFallsBackHome() {
         let navigationState = AppNavigationState()
         navigationState.reconcileActiveWorkout(sessionID: UUID())
-        navigationState.selectedTab = .profile
+        navigationState.selectedTab = .settings
 
         navigationState.returnHomeFromUnopenableWorkoutLiveActivityLink()
 
@@ -331,12 +331,14 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertTrue(navigationState.historyPath.isEmpty)
     }
 
-    func testOpenSyncSettingsSelectsProfileAndPushesSettingsRoute() {
-        let navigationState = AppNavigationState()
+    func testOpenSyncSettingsSelectsSettingsAtItsRoot() {
+        for route in [SettingsRoute.exerciseLibrary, .deleteData(.localData), .developerDiagnostics] {
+            let navigationState = AppNavigationState(settingsPath: [route])
 
-        navigationState.openSyncSettings()
+            navigationState.openSyncSettings()
 
-        XCTAssertEqual(navigationState.selectedTab, .profile)
-        XCTAssertEqual(navigationState.profilePath, [.settings])
+            XCTAssertEqual(navigationState.selectedTab, .settings)
+            XCTAssertEqual(navigationState.settingsPath, [])
+        }
     }
 }

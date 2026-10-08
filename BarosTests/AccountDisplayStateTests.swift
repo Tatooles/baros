@@ -9,6 +9,7 @@ final class AccountDisplayStateTests: XCTestCase {
         XCTAssertEqual(state.subtitle, "Sign in to keep your workouts backed up.")
         XCTAssertEqual(state.actionTitle, "Sign in")
         XCTAssertFalse(state.isSignedIn)
+        XCTAssertEqual(state.accessibilityLabel, "Local workout data, Sign in to keep your workouts backed up.")
     }
 
     func testSignedInStatePrefersFullNameOverEmail() {
@@ -18,6 +19,7 @@ final class AccountDisplayStateTests: XCTestCase {
         XCTAssertEqual(state.subtitle, "kevin@example.com")
         XCTAssertEqual(state.actionTitle, "Manage account")
         XCTAssertTrue(state.isSignedIn)
+        XCTAssertEqual(state.accessibilityLabel, "Kevin Tatooles, kevin@example.com")
     }
 
     func testSignedInStateFallsBackToEmail() {

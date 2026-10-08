@@ -6,6 +6,11 @@ struct AccountDisplayState: Equatable {
     let actionTitle: String
     let isSignedIn: Bool
 
+    /// The row reads as one button, so it carries the visible title and subtitle together.
+    var accessibilityLabel: String {
+        "\(title), \(subtitle)"
+    }
+
     static let signedOut = AccountDisplayState(
         title: "Local workout data",
         subtitle: "Sign in to keep your workouts backed up.",
