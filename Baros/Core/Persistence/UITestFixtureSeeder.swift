@@ -75,6 +75,15 @@ enum UITestFixtureSeeder {
             )
         }
 
+        if arguments.contains("--uitest-rest-30-seconds"),
+           let settings = UserSettings.visibleSettingsRecords(
+               from: try context.fetch(FetchDescriptor<UserSettings>()),
+               ownerTokenIdentifier: ownerTokenIdentifier
+           ).first {
+            settings.defaultRestTimerSeconds = 30
+            try context.save()
+        }
+
         if arguments.contains("--uitest-seed-strength-records") {
             try seedStrengthRecords(
                 scenario: values(after: "--uitest-strength-records-scenario", in: arguments).first,
@@ -470,7 +479,7 @@ enum UITestFixtureSeeder {
         let activeSession = makePerformanceSession(
             id: stableUUID("00000000-0000-4000-8000-000000000001"),
             title: activeTitle,
-            startedAt: baseDate,
+            startedAt: .now,
             status: .active,
             exercises: fixtureExercises,
             setCount: 5,

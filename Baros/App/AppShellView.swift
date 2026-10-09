@@ -92,6 +92,10 @@ struct AppShellView: View {
 
     var body: some View {
         tabShell
+            .background {
+                RestTimerLifecycleObserver(session: activeSession, timer: activeWorkoutEngine.restTimer,
+                    ownerState: currentOwnerCoordinator.state)
+            }
             .onChange(of: uiHangShellState, initial: true) { oldState, newState in
                 let context = UIHangContextObservability.shared
                 context.shellChanged(screen: newState.screen, presentation: newState.presentation)
@@ -112,6 +116,7 @@ struct AppShellView: View {
                 @unknown default: .inactive
                 }
                 UIHangContextObservability.shared.sceneChanged(to: diagnosticPhase)
+                activeWorkoutEngine.restTimer.setAppActive(phase == .active)
             }
             .tint(AppTheme.brandAccentForeground)
             .tabBarMinimizeBehavior(.never)
@@ -214,10 +219,11 @@ struct AppShellView: View {
                 coordinator: workoutLiveActivityCoordinator,
                 willHandleWorkoutLiveActivityLink: { launchPresentation = nil }
             )
-            .onChange(of: activeSession?.id) { _, _ in
+            .onChange(of: activeSession?.id, initial: true) { _, _ in
                 activeWorkoutEngine.clearSetSaveIfInaccessible(in: activeSession)
             }
-            .onChange(of: currentOwnerCoordinator.localDataOwnerTokenIdentifier) { _, _ in
+            .onChange(of: currentOwnerCoordinator.localDataOwnerTokenIdentifier, initial: true) { _, owner in
+                activeWorkoutEngine.restSettingsOwnerTokenIdentifier = owner
                 // Even an ownerless session may remain visible after sign-in;
                 // its old pending action must not cross that identity boundary.
                 activeWorkoutEngine.discardSetSave()
