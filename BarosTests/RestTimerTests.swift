@@ -257,6 +257,95 @@ final class RestTimerTests: XCTestCase {
         XCTAssertNil(defaults.data(forKey: "active-workout-rest-v1"))
     }
 
+    func testDisabledCheckmarkAndRPECompletionSaveWithoutRestOrPermission() throws {
+        let h = Harness()
+        let (context, engine, session, exercise) = try fixture(timer: h.timer)
+        context.insert(UserSettings(defaultRestTimerSeconds: 150))
+        let first = exercise.sortedSets[0]
+        let second = try engine.addSet(to: exercise, context: context)
+        let third = try engine.addSet(to: exercise, context: context)
+        h.timer.setEnabled(false)
+        try engine.toggleSetCompletion(first, context: context)
+        try engine.applyActiveSetRPESelection(
+            second, rpe: 8, preparedValues: .init(weight: 100, reps: 5), context: context)
+        XCTAssertTrue(first.isCompleted)
+        XCTAssertTrue(second.isCompleted)
+        XCTAssertEqual(second.rpe, 8)
+        enum SaveFailure: Error { case expected }
+        XCTAssertThrowsError(
+            try engine.toggleSetCompletion(third, context: context, save: { _ in throw SaveFailure.expected }))
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertTrue(third.isCompleted)
+        XCTAssertNil(h.timer.current)
+        XCTAssertNil(h.timer.restForReconciliation)
+        XCTAssertNil(h.persisted)
+        XCTAssertTrue(h.notifications.scheduled.isEmpty)
+        XCTAssertTrue(h.notifications.authorizationRequests.isEmpty)
+        XCTAssertEqual(h.alerts, 0)
+
+        // Re-enabling never starts rest for a set that is already complete.
+        h.timer.setEnabled(true)
+        XCTAssertNil(h.timer.current)
+        let fourth = try engine.addSet(to: exercise, context: context)
+        try engine.toggleSetCompletion(fourth, context: context)
+        XCTAssertEqual(h.timer.current?.rest.setID, fourth.id)
+        XCTAssertEqual(h.timer.current?.rest.remainingSeconds(at: h.now), 150)
+    }
+
+    func testDisablingDuringRestCancelsPresentationAlertsAndRestorableState() throws {
+        let h = Harness()
+        let (context, engine, session, exercise) = try fixture(timer: h.timer)
+        let set = exercise.sortedSets[0]
+        let slot = h.timer.slot(for: set.id)
+        try engine.toggleSetCompletion(set, context: context)
+        let rest = try XCTUnwrap(h.timer.current?.rest)
+        h.timer.reportInlineVisibility(false, restID: rest.id)
+        XCTAssertTrue(h.timer.showsHeaderFallback)
+        h.timer.setEnabled(false)
+        XCTAssertNil(h.timer.current)
+        XCTAssertNil(slot.period)
+        XCTAssertFalse(h.timer.showsHeaderFallback)
+        XCTAssertNil(h.timer.restForReconciliation)
+        XCTAssertNil(h.persisted)
+        XCTAssertEqual(h.notifications.removals, 1)
+        h.now = rest.endsAt.addingTimeInterval(1)
+        h.timer.expireIfNeeded()
+        h.timer.setAppActive(false)
+        h.timer.setAppActive(true)
+        XCTAssertEqual(h.alerts, 0)
+        let restored = RestTimerCoordinator(
+            restoredRest: rest, isEnabled: false, clock: { h.now }, notifications: h.notifications,
+            schedulesTasks: false)
+        restored.reconcile(with: session, ownerState: .resolving(ownerTokenIdentifier: nil))
+        XCTAssertNil(restored.restForReconciliation)
+        XCTAssertEqual(h.notifications.scheduled.count, 1)
+    }
+
+    func testLiveEnabledPreferenceDefaultsOnPersistsAndDisabledLaunchDropsSavedRest() throws {
+        let suite = "RestTimerTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let notifications = Notifications()
+        let timer = RestTimerCoordinator.live(defaults: defaults, notifications: notifications)
+        XCTAssertTrue(timer.isEnabled)
+        let (context, engine, session, exercise) = try fixture(timer: timer)
+        try engine.toggleSetCompletion(exercise.sortedSets[0], context: context)
+        XCTAssertNotNil(defaults.data(forKey: "active-workout-rest-v1"))
+
+        // A rest saved before timers were turned off elsewhere must not come back.
+        defaults.set(false, forKey: "rest-timers-enabled-v1")
+        let disabledLaunch = RestTimerCoordinator.live(defaults: defaults, notifications: notifications)
+        XCTAssertFalse(disabledLaunch.isEnabled)
+        disabledLaunch.reconcile(with: session)
+        XCTAssertNil(disabledLaunch.current)
+        XCTAssertNil(defaults.data(forKey: "active-workout-rest-v1"))
+
+        disabledLaunch.setEnabled(true)
+        XCTAssertTrue(RestTimerCoordinator.live(defaults: defaults, notifications: notifications).isEnabled)
+        disabledLaunch.setEnabled(false)
+        XCTAssertFalse(RestTimerCoordinator.live(defaults: defaults, notifications: notifications).isEnabled)
+    }
+
     func testDurationLookupUsesSettingsWithoutChangingThemWhenAdjusted() throws {
         let h = Harness()
         let (context, engine, _, exercise) = try fixture(timer: h.timer)
