@@ -36,6 +36,13 @@ final class RestTimerSlot {
     var period: RestTimerPeriod?
 }
 
+/// Scene state that matters to rest alerts. A system overlay or permission
+/// prompt makes the scene inactive, but the app still owns the alert there.
+enum RestTimerScenePhase {
+    case foreground
+    case background
+}
+
 @MainActor
 protocol RestNotificationScheduling {
     func schedule(_ rest: WorkoutRest, requestAuthorization: Bool)
@@ -53,7 +60,10 @@ struct SilentRestNotifications: RestNotificationScheduling {
 final class RestTimerCoordinator {
     private(set) var current: RestTimerPeriod?
     private(set) var inlineIsVisible: Bool?
-    @ObservationIgnored private var slots: [UUID: RestTimerSlot] = [:]
+    /// Visible dividers keep their slots alive; the coordinator keeps only the
+    /// slot it is presenting. Slots for sets nobody shows are released.
+    @ObservationIgnored private var slots: [UUID: WeakSlot] = [:]
+    @ObservationIgnored private var presentedSlot: RestTimerSlot?
     @ObservationIgnored private var savedRest: WorkoutRest?
     @ObservationIgnored private let clock: () -> Date
     @ObservationIgnored private let persist: (WorkoutRest?) -> Void
@@ -63,7 +73,8 @@ final class RestTimerCoordinator {
     @ObservationIgnored private let schedulesTasks: Bool
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var collapseTask: Task<Void, Never>?
-    @ObservationIgnored private var isAppActive = true
+    @ObservationIgnored private var scenePhase = RestTimerScenePhase.foreground
+    @ObservationIgnored private var expiredInBackground = false
 
     init(
         restoredRest: WorkoutRest? = nil,
@@ -86,11 +97,13 @@ final class RestTimerCoordinator {
     var showsHeaderFallback: Bool { current != nil && inlineIsVisible == false }
 
     func slot(for setID: UUID) -> RestTimerSlot {
-        if let slot = slots[setID] { return slot }
+        if let slot = slots[setID]?.slot { return slot }
         let slot = RestTimerSlot()
-        slots[setID] = slot
+        slots[setID] = WeakSlot(slot: slot)
         return slot
     }
+
+    var retainedSlotCount: Int { slots.count }
 
     func start(sessionID: UUID, setID: UUID, duration: Int) {
         clearPresentation()
@@ -168,11 +181,17 @@ final class RestTimerCoordinator {
         scheduleExpiry()
     }
 
-    func setAppActive(_ active: Bool) {
+    func setScenePhase(_ phase: RestTimerScenePhase) {
         // Reconcile elapsed background time before foregrounding, so an alert
         // that belonged to the background is never replayed on return.
-        if active, !isAppActive { expireIfNeeded() }
-        isAppActive = active
+        if phase == .foreground, scenePhase == .background {
+            expireIfNeeded()
+            // Back in the app, the delivered "Rest over" is stale. Relaunch
+            // reconciliation clears it the same way.
+            if expiredInBackground { notifications.remove() }
+            expiredInBackground = false
+        }
+        scenePhase = phase
     }
 
     func expireIfNeeded() {
@@ -181,11 +200,13 @@ final class RestTimerCoordinator {
         collapseControls()
         savedRest = nil
         persist(nil)
-        if isAppActive {
+        if scenePhase == .foreground {
             notifications.remove()
             foregroundAlert()
+        } else {
+            // Background delivery belongs to the OS until the user returns.
+            expiredInBackground = true
         }
-        // Background delivery belongs to the OS. Leave its notification alone.
         if clock().timeIntervalSince(period.rest.endsAt) >= 4 {
             clearPresentation()
         }
@@ -211,7 +232,9 @@ final class RestTimerCoordinator {
         let period = RestTimerPeriod(rest: rest)
         current = period
         inlineIsVisible = nil
-        slot(for: rest.setID).period = period
+        slots = slots.filter { $0.value.slot != nil }
+        presentedSlot = slot(for: rest.setID)
+        presentedSlot?.period = period
         savedRest = rest
         persist(rest)
     }
@@ -219,7 +242,8 @@ final class RestTimerCoordinator {
     private func clearPresentation() {
         expiryTask?.cancel()
         collapseTask?.cancel()
-        if let current { slot(for: current.rest.setID).period = nil }
+        presentedSlot?.period = nil
+        presentedSlot = nil
         current = nil
         inlineIsVisible = nil
     }
@@ -248,6 +272,10 @@ final class RestTimerCoordinator {
             self?.collapseControls()
         }
     }
+}
+
+private struct WeakSlot {
+    weak var slot: RestTimerSlot?
 }
 
 enum RestDurationLookup {

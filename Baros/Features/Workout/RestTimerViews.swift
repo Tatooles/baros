@@ -135,7 +135,7 @@ struct RestTimerBadge: View {
             } label: {
                 HStack(spacing: 6) {
                     if showsHourglass { Image(systemName: "hourglass") }
-                    RestTimeText(period: period, compact: !showsHourglass)
+                    RestTimeText(period: period, date: timeline.date, compact: !showsHourglass)
                 }
                 .foregroundStyle(AppTheme.brandAccentForeground)
                 .padding(.horizontal, showsHourglass ? 14 : 6)
@@ -160,16 +160,19 @@ private func restSpokenValue(_ period: RestTimerPeriod, at date: Date) -> String
             .formatted(.units(allowed: [.minutes, .seconds], width: .wide))
 }
 
+/// Draws one tick of its caller's TimelineView, which also drives the
+/// button's spoken value; it doesn't schedule a second timeline.
 private struct RestTimeText: View {
     let period: RestTimerPeriod
+    let date: Date
     var compact = false
 
     var body: some View {
-        TimelineView(.periodic(from: period.rest.startedAt, by: 1)) { timeline in
+        Group {
             if period.isFinished {
                 Image(systemName: "checkmark")
             } else {
-                let seconds = period.rest.remainingSeconds(at: timeline.date)
+                let seconds = period.rest.remainingSeconds(at: date)
                 Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
                     .monospacedDigit()
             }
@@ -191,7 +194,7 @@ struct RestExpandedControls: View {
                 Button {
                     timer.toggleControls()
                 } label: {
-                    RestTimeText(period: period)
+                    RestTimeText(period: period, date: timeline.date)
                         .padding(.horizontal, 6)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
@@ -251,10 +254,15 @@ struct RestTimerLifecycleState: Equatable {
         restID = rest?.id
         sessionID = session?.id
         self.ownerState = ownerState
-        starterIsEligible =
-            session?.sortedLoggedExercises.contains { exercise in
-                exercise.sortedSets.contains { $0.id == rest?.setID && $0.isCompleted }
-            } ?? false
+        // Without a rest, or with another workout visible, reconciliation
+        // doesn't read the starter; skip walking every set on each change.
+        guard let rest, let session, session.id == rest.sessionID else {
+            starterIsEligible = false
+            return
+        }
+        starterIsEligible = session.sortedLoggedExercises.contains { exercise in
+            exercise.sortedSets.contains { $0.id == rest.setID && $0.isCompleted }
+        }
     }
 }
 
