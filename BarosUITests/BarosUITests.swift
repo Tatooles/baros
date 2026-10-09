@@ -2998,9 +2998,10 @@ final class BarosUITests: XCTestCase {
         let badge = app.buttons["SetRPEBadge-0-0"]
         XCTAssertTrue(badge.waitForExistence(timeout: 3))
         badge.tap()
-        let clearChip = app.buttons["RPEChipClear"]
-        XCTAssertTrue(clearChip.waitForExistence(timeout: 3))
-        clearChip.tap()
+        // Tapping the selected chip again clears the RPE.
+        let selectedChip = app.buttons["RPEChip-8"]
+        XCTAssertTrue(selectedChip.waitForExistence(timeout: 3))
+        selectedChip.tap()
 
         XCTAssertTrue(waitForAbsence(badge, timeout: 3))
         XCTAssertEqual(completionButton.label, "Mark set incomplete")

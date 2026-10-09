@@ -6,38 +6,46 @@ struct RPEChipRow: View {
     let selected: Double?
     let onSelect: (Double?) -> Void
 
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                chip(title: "Clear", value: nil)
-                    .accessibilityIdentifier("RPEChipClear")
+    /// Tapping the selected value clears it, so the row needs no Clear chip
+    /// and every value fits without scrolling.
+    static func selection(afterTapping value: Double, current: Double?) -> Double? {
+        current == value ? nil : value
+    }
 
-                ForEach(Self.values, id: \.self) { value in
-                    chip(title: WorkoutFormatters.number(value), value: value)
-                        .accessibilityIdentifier("RPEChip-\(WorkoutFormatters.number(value))")
-                }
+    var body: some View {
+        // No spacing: each chip insets its own capsule, so the gaps between
+        // capsules still belong to a chip and the row has no dead zones.
+        HStack(spacing: 0) {
+            ForEach(Self.values, id: \.self) { value in
+                chip(value: value)
+                    .accessibilityIdentifier("RPEChip-\(WorkoutFormatters.number(value))")
             }
-            .padding(.horizontal, 2)
         }
     }
 
-    private func chip(title: String, value: Double?) -> some View {
+    private func chip(value: Double) -> some View {
         let isSelected = selected == value
 
         return Button {
-            onSelect(value)
+            onSelect(Self.selection(afterTapping: value, current: selected))
         } label: {
-            Text(title)
+            Text(WorkoutFormatters.number(value))
                 .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
                 .foregroundStyle(isSelected ? AppTheme.onBrandAccent : AppTheme.textPrimary)
-                .padding(.horizontal, 12)
                 .padding(.vertical, 6)
+                .frame(maxWidth: .infinity)
                 .background(
                     isSelected ? AnyShapeStyle(AppTheme.brandAccentFill) : AnyShapeStyle(AppTheme.recessedSurface),
                     in: Capsule()
                 )
+                .padding(.horizontal, 3)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityHint(isSelected ? "Clears the RPE" : "")
     }
 }
 
