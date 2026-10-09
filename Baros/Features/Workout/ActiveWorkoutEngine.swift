@@ -510,7 +510,7 @@ final class ActiveWorkoutEngine {
             try save(context)
             discardSetSave()
             if before.isCompleted != set.isCompleted {
-                if set.isCompleted, let exercise = set.loggedExercise,
+                if set.isCompleted, restTimer.isEnabled, let exercise = set.loggedExercise,
                    let session = exercise.session, session.status == .active {
                     let records = (try? context.fetch(FetchDescriptor<UserSettings>())) ?? []
                     let settings = UserSettings.visibleSettingsRecords(from: records,

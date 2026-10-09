@@ -137,6 +137,7 @@ struct BarosApp: App {
             .modelContainer(modelContainer)
             .environment(Clerk.shared)
             .environment(appAppearanceStore)
+            .environment(activeWorkoutEngine.restTimer)
             .environment(syncScheduler)
             .environment(currentOwnerCoordinator)
             .environment(

@@ -52,11 +52,15 @@ struct SilentRestNotifications: RestNotificationScheduling {
 @MainActor
 final class RestTimerCoordinator {
     private(set) var current: RestTimerPeriod?
+    /// Device-local preference. Disabled means rest never starts, so nothing
+    /// downstream (gutter, header, alerts, notifications) has a rest to show.
+    private(set) var isEnabled: Bool
     private(set) var inlineIsVisible: Bool?
     @ObservationIgnored private var slots: [UUID: RestTimerSlot] = [:]
     @ObservationIgnored private var savedRest: WorkoutRest?
     @ObservationIgnored private let clock: () -> Date
     @ObservationIgnored private let persist: (WorkoutRest?) -> Void
+    @ObservationIgnored private let persistEnabled: (Bool) -> Void
     @ObservationIgnored private let notifications: any RestNotificationScheduling
     @ObservationIgnored private let foregroundAlert: () -> Void
     @ObservationIgnored private let voiceOverRunning: () -> Bool
@@ -67,16 +71,20 @@ final class RestTimerCoordinator {
 
     init(
         restoredRest: WorkoutRest? = nil,
+        isEnabled: Bool = true,
         clock: @escaping () -> Date = { .now },
         persist: @escaping (WorkoutRest?) -> Void = { _ in },
+        persistEnabled: @escaping (Bool) -> Void = { _ in },
         notifications: any RestNotificationScheduling = SilentRestNotifications(),
         foregroundAlert: @escaping () -> Void = {},
         voiceOverRunning: @escaping () -> Bool = { false },
         schedulesTasks: Bool = true
     ) {
         savedRest = restoredRest
+        self.isEnabled = isEnabled
         self.clock = clock
         self.persist = persist
+        self.persistEnabled = persistEnabled
         self.notifications = notifications
         self.foregroundAlert = foregroundAlert
         self.voiceOverRunning = voiceOverRunning
@@ -92,7 +100,17 @@ final class RestTimerCoordinator {
         return slot
     }
 
+    /// Turning timers off ends any rest, including its alerts and resumable
+    /// state. Turning them on only affects later completions.
+    func setEnabled(_ enabled: Bool) {
+        guard enabled != isEnabled else { return }
+        isEnabled = enabled
+        persistEnabled(enabled)
+        if !enabled { cancel() }
+    }
+
     func start(sessionID: UUID, setID: UUID, duration: Int) {
+        guard isEnabled else { return }
         clearPresentation()
         let now = clock()
         let rest = WorkoutRest(
@@ -146,6 +164,10 @@ final class RestTimerCoordinator {
     var restForReconciliation: WorkoutRest? { current?.rest ?? savedRest }
 
     func reconcile(with session: WorkoutSession?, ownerState: CurrentOwnerCoordinator.State = .localOnly) {
+        guard isEnabled else {
+            if restForReconciliation != nil { cancel() }
+            return
+        }
         // Initial ownership recovery is asynchronous. Absence in that temporary
         // scope is not proof that a persisted workout belongs to another owner.
         if current == nil, case .resolving(ownerTokenIdentifier: nil) = ownerState { return }

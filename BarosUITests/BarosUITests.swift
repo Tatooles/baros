@@ -114,6 +114,60 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testTurningRestTimersOffInSettingsEndsRestAndSkipsLaterCompletions() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["SetCompletionButton-0-0"].tap()
+        let skip = app.buttons["SkipRestButton"]
+        let badge = app.buttons["RestTimerBadge"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 2))
+
+        minimizeActiveWorkout(in: app)
+        tapTab(.settings, in: app)
+        let toggle = app.switches["SettingsRestTimerToggle"]
+        let stepper = app.steppers["SettingsRestTimerStepper"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        XCTAssertEqual(toggle.label, "Rest Timer")
+        XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertTrue(stepper.exists)
+        toggle.switches.firstMatch.tap()
+        XCTAssertEqual(toggle.value as? String, "0")
+        XCTAssertTrue(waitForAbsence(stepper, timeout: 3))
+
+        app.buttons["ActiveWorkoutAccessory"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(badge.exists)
+        XCTAssertFalse(skip.exists)
+        XCTAssertFalse(app.buttons["RestTimerHeaderBadge"].exists)
+
+        let checkmarked = app.buttons["SetCompletionButton-0-1"]
+        checkmarked.tap()
+        XCTAssertEqual(checkmarked.label, "Mark set incomplete")
+        let repsField = app.textFields["SetRepsField-0-2"]
+        repsField.tap()
+        XCTAssertTrue(waitForKeyboardFocus(on: repsField))
+        // The fixture's sets already carry RPE 8; choosing it again would clear it.
+        enterRPEViaChips("9", in: app)
+        XCTAssertEqual(app.buttons["SetCompletionButton-0-2"].label, "Mark set incomplete")
+        XCTAssertFalse(badge.waitForExistence(timeout: 2))
+        XCTAssertFalse(skip.exists)
+
+        minimizeActiveWorkout(in: app)
+        tapTab(.settings, in: app)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        toggle.switches.firstMatch.tap()
+        XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertTrue(stepper.waitForExistence(timeout: 3))
+
+        app.buttons["ActiveWorkoutAccessory"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(badge.exists)
+        app.buttons["SetCompletionButton-0-3"].tap()
+        XCTAssertTrue(skip.waitForExistence(timeout: 2))
+    }
+
+    @MainActor
     func testFailedSetCompletionCanRetryWithoutLosingTypedWeight() {
         let app = makeApp(extraArguments: ["--uitest-fail-active-set-save-once"])
         app.launch()
