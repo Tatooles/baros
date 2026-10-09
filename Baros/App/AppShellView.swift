@@ -116,7 +116,7 @@ struct AppShellView: View {
                 @unknown default: .inactive
                 }
                 UIHangContextObservability.shared.sceneChanged(to: diagnosticPhase)
-                activeWorkoutEngine.restTimer.setAppActive(phase == .active)
+                activeWorkoutEngine.restTimer.setScenePhase(RestTimerScenePhase(phase))
             }
             .tint(AppTheme.brandAccentForeground)
             .tabBarMinimizeBehavior(.never)
