@@ -4,6 +4,14 @@
 - Never open a draft pull request unless the user explicitly asks for one; otherwise, open a regular, ready-for-review pull request.
 - Merging `convex/` changes to `main` deploys them to production. Before changing a public Convex function or the schema, read README → "Production deploys" for the compatibility rule with installed app builds.
 
+## Pull requests
+
+- UI or visual changes need before/after screenshots in the PR description. For new UI, include screenshots of the new screen or state.
+- Changes to motion, timing, gestures, navigation, or other interactions need a short screen recording showing the changed behavior.
+- Capture evidence from the running app after the final relevant changes. State the device or simulator and iOS version. Build and test success do not substitute for visual evidence.
+- Upload PR evidence directly to GitHub and verify that it renders in the PR. Never commit PR-only screenshots or recordings, including directories such as `.github/pr-assets/`.
+- If presentation-related files change without affecting visible UI or interactions, explain why in the PR description under "No visual impact."
+
 <!-- convex-ai-start -->
 
 This project uses [Convex](https://convex.dev) as its backend.
