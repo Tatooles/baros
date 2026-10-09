@@ -13,13 +13,14 @@ struct RPEChipRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
+        // No spacing: each chip insets its own capsule, so the gaps between
+        // capsules still belong to a chip and the row has no dead zones.
+        HStack(spacing: 0) {
             ForEach(Self.values, id: \.self) { value in
                 chip(value: value)
                     .accessibilityIdentifier("RPEChip-\(WorkoutFormatters.number(value))")
             }
         }
-        .padding(.horizontal, 2)
     }
 
     private func chip(value: Double) -> some View {
@@ -39,7 +40,8 @@ struct RPEChipRow: View {
                     isSelected ? AnyShapeStyle(AppTheme.brandAccentFill) : AnyShapeStyle(AppTheme.recessedSurface),
                     in: Capsule()
                 )
-                .contentShape(Capsule())
+                .padding(.horizontal, 3)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
