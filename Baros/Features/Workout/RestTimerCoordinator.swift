@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftData
+import SwiftUI
 
 /// Device-local state, intentionally kept out of the synced workout graph.
 struct WorkoutRest: Codable, Equatable {
@@ -17,6 +18,14 @@ struct WorkoutRest: Codable, Equatable {
 
     func remainingFraction(at date: Date) -> Double {
         min(1, max(0, endsAt.timeIntervalSince(date) / max(1, endsAt.timeIntervalSince(startedAt))))
+    }
+
+    /// Whether `session` is this rest's workout and still holds its completed starting set.
+    func starterIsCompleted(in session: WorkoutSession) -> Bool {
+        session.id == sessionID
+            && session.sortedLoggedExercises.contains { exercise in
+                exercise.sortedSets.contains { $0.id == setID && $0.isCompleted }
+            }
     }
 }
 
@@ -36,11 +45,16 @@ final class RestTimerSlot {
     var period: RestTimerPeriod?
 }
 
-/// Scene state that matters to rest alerts. A system overlay or permission
-/// prompt makes the scene inactive, but the app still owns the alert there.
+/// Scene state that matters to rest alerts. Control Center, Notification
+/// Center, and the first permission prompt make the scene inactive, but the
+/// app still owns the alert there; only background delivery is the OS's.
 enum RestTimerScenePhase {
     case foreground
     case background
+
+    init(_ phase: ScenePhase) {
+        self = phase == .background ? .background : .foreground
+    }
 }
 
 @MainActor
@@ -103,7 +117,7 @@ final class RestTimerCoordinator {
         return slot
     }
 
-    var retainedSlotCount: Int { slots.count }
+    var liveSlotCount: Int { slots.values.count(where: { $0.slot != nil }) }
 
     func start(sessionID: UUID, setID: UUID, duration: Int) {
         clearPresentation()
@@ -163,10 +177,7 @@ final class RestTimerCoordinator {
         // scope is not proof that a persisted workout belongs to another owner.
         if current == nil, case .resolving(ownerTokenIdentifier: nil) = ownerState { return }
         guard let rest = current?.rest ?? savedRest else { return }
-        guard let session, session.id == rest.sessionID, session.status == .active, !session.isDeleted,
-            session.sortedLoggedExercises.contains(where: { exercise in
-                exercise.sortedSets.contains { $0.id == rest.setID && $0.isCompleted }
-            })
+        guard let session, session.status == .active, !session.isDeleted, rest.starterIsCompleted(in: session)
         else {
             cancel()
             return

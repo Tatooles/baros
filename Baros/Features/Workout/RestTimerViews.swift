@@ -256,13 +256,11 @@ struct RestTimerLifecycleState: Equatable {
         self.ownerState = ownerState
         // Without a rest, or with another workout visible, reconciliation
         // doesn't read the starter; skip walking every set on each change.
-        guard let rest, let session, session.id == rest.sessionID else {
+        guard let rest, let session else {
             starterIsEligible = false
             return
         }
-        starterIsEligible = session.sortedLoggedExercises.contains { exercise in
-            exercise.sortedSets.contains { $0.id == rest.setID && $0.isCompleted }
-        }
+        starterIsEligible = rest.starterIsCompleted(in: session)
     }
 }
 

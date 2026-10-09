@@ -125,16 +125,17 @@ final class RestTimerTests: XCTestCase {
     }
 
     func testExpiryUnderSystemOverlayAlertsInAppOnce() {
-        // AppShellView maps an inactive scene (Control Center, Notification
-        // Center, permission prompt) to foreground; only background is the OS's.
+        XCTAssertEqual(RestTimerScenePhase(.active), .foreground)
+        XCTAssertEqual(RestTimerScenePhase(.background), .background)
         let h = Harness()
         h.timer.start(sessionID: UUID(), setID: UUID(), duration: 90)
-        h.timer.setScenePhase(.foreground)
+        // Control Center, Notification Center, or the permission prompt.
+        h.timer.setScenePhase(RestTimerScenePhase(.inactive))
         h.now = h.now.addingTimeInterval(90)
         h.timer.expireIfNeeded()
         XCTAssertEqual(h.alerts, 1)
         XCTAssertEqual(h.notifications.removals, 1)
-        h.timer.setScenePhase(.foreground)
+        h.timer.setScenePhase(RestTimerScenePhase(.active))
         h.timer.expireIfNeeded()
         XCTAssertEqual(h.alerts, 1)
         XCTAssertEqual(h.notifications.removals, 1)
@@ -147,6 +148,7 @@ final class RestTimerTests: XCTestCase {
         let h = Harness()
         h.timer.start(sessionID: UUID(), setID: UUID(), duration: 90)
         XCTAssertEqual(h.notifications.authorizationRequests, [true])
+        h.timer.setScenePhase(RestTimerScenePhase(.inactive))
         h.now = h.now.addingTimeInterval(91)
         h.timer.expireIfNeeded()
         XCTAssertEqual(h.alerts, 1)
@@ -174,13 +176,13 @@ final class RestTimerTests: XCTestCase {
         h.timer.start(sessionID: UUID(), setID: unshown, duration: 90)
         let period = try XCTUnwrap(h.timer.current)
         XCTAssertTrue(h.timer.slot(for: unshown).period === period)
-        XCTAssertEqual(h.timer.retainedSlotCount, 2)
+        XCTAssertEqual(h.timer.liveSlotCount, 2)
         XCTAssertTrue(h.timer.slot(for: shown) === shownSlot)
         h.timer.cancel()
         XCTAssertNil(h.timer.slot(for: unshown).period)
         h.timer.start(sessionID: UUID(), setID: shown, duration: 90)
         XCTAssertTrue(shownSlot.period === h.timer.current)
-        XCTAssertEqual(h.timer.retainedSlotCount, 1)
+        XCTAssertEqual(h.timer.liveSlotCount, 1)
     }
 
     func testVoiceOverDoesNotAutoOpenControls() {
@@ -311,12 +313,20 @@ final class RestTimerTests: XCTestCase {
 
     func testLifecycleStateWithoutRestIgnoresSetChanges() throws {
         let h = Harness()
-        let (_, _, session, exercise) = try fixture(timer: h.timer)
+        let (context, engine, session, exercise) = try fixture(timer: h.timer)
         let before = RestTimerLifecycleState(session: session, rest: nil, ownerState: .localOnly)
         exercise.sortedSets[0].isCompleted = true
         XCTAssertEqual(RestTimerLifecycleState(session: session, rest: nil, ownerState: .localOnly), before)
         XCTAssertNotEqual(
             RestTimerLifecycleState(session: nil, rest: nil, ownerState: .localOnly), before)
+        exercise.sortedSets[0].isCompleted = false
+        try engine.toggleSetCompletion(exercise.sortedSets[0], context: context)
+        let rest = try XCTUnwrap(h.timer.restForReconciliation)
+        let other = WorkoutSession(title: "Other", startedAt: h.now, status: .active, source: .blank)
+        XCTAssertFalse(
+            RestTimerLifecycleState(session: other, rest: rest, ownerState: .localOnly).starterIsEligible)
+        XCTAssertTrue(
+            RestTimerLifecycleState(session: session, rest: rest, ownerState: .localOnly).starterIsEligible)
     }
 
     func testCompletionUsesCurrentOwnerSettingsForVisibleUnclaimedWorkout() throws {

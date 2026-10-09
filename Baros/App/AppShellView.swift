@@ -116,10 +116,7 @@ struct AppShellView: View {
                 @unknown default: .inactive
                 }
                 UIHangContextObservability.shared.sceneChanged(to: diagnosticPhase)
-                // Control Center, Notification Center, and the first permission
-                // prompt make the scene inactive. Rest expiring there still
-                // needs the in-app alert; only background delivery is the OS's.
-                activeWorkoutEngine.restTimer.setScenePhase(phase == .background ? .background : .foreground)
+                activeWorkoutEngine.restTimer.setScenePhase(RestTimerScenePhase(phase))
             }
             .tint(AppTheme.brandAccentForeground)
             .tabBarMinimizeBehavior(.never)
