@@ -133,16 +133,27 @@ struct RestTimerBadge: View {
             Button {
                 timer.toggleControls()
             } label: {
-                HStack(spacing: 6) {
-                    if showsHourglass { Image(systemName: "hourglass") }
-                    RestTimeText(period: period, date: timeline.date, compact: !showsHourglass)
+                if showsHourglass {
+                    // Workout content scrolls under the header, so the header
+                    // badge needs the same glass backing as its neighbors.
+                    HStack(spacing: 6) {
+                        Image(systemName: "hourglass")
+                        RestTimeText(period: period, date: timeline.date)
+                    }
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .padding(.horizontal, 14)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .glassEffect(.regular.tint(AppTheme.brandAccentMuted).interactive(), in: .capsule)
+                    .contentShape(Capsule())
+                } else {
+                    RestTimeText(period: period, date: timeline.date, compact: true)
+                        .foregroundStyle(AppTheme.brandAccentForeground)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AppTheme.brandAccentMuted, in: Capsule())
+                        .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
-                .foregroundStyle(AppTheme.brandAccentForeground)
-                .padding(.horizontal, showsHourglass ? 14 : 6)
-                .padding(.vertical, showsHourglass ? 10 : 2)
-                .background(AppTheme.brandAccentMuted, in: Capsule())
-                .frame(minWidth: 44, minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(showsHourglass ? "RestTimerHeaderBadge" : "RestTimerBadge")
