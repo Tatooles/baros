@@ -522,8 +522,7 @@ struct CompletedWorkoutEditView: View {
     private func save() {
         focusedField = nil
 
-        let trimmedTitle = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        draft.title = trimmedTitle.isEmpty ? WorkoutSession.defaultTitle : trimmedTitle
+        draft.prepareTitleForSave()
 
         if hasDurationChange {
             draft.durationSeconds = durationSelection.totalSeconds

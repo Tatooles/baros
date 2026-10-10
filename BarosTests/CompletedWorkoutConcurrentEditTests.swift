@@ -4,6 +4,28 @@ import XCTest
 
 @MainActor
 final class CompletedWorkoutConcurrentEditTests: XCTestCase {
+    func testNotesOnlySavePreparationPreservesNewerTitleWhenOriginalNeedsNormalization() throws {
+        for originalTitle in [" Old ", " \n"] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let fixture = makeWorkout(context: context)
+            fixture.session.title = originalTitle
+            try context.save()
+            var draft = CompletedWorkoutEditDraft(session: fixture.session)
+            draft.notes = "Local note correction"
+            fixture.session.title = "Newer saved title"
+            fixture.session.updatedAt = remoteTime
+            try context.save()
+
+            // Use the same preparation that the editor performs before saving.
+            draft.prepareTitleForSave()
+            try save(draft, fixture: fixture, context: context)
+
+            XCTAssertEqual(fixture.session.title, "Newer saved title")
+            XCTAssertEqual(fixture.session.notes, "Local note correction")
+        }
+    }
+
     func testNotesOnlyEditPreservesNewerUntouchedWorkoutExerciseAndSetFields() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

@@ -65,6 +65,12 @@ struct CompletedWorkoutEditDraft {
         exercises = session.sortedLoggedExercises.map(CompletedWorkoutEditExerciseDraft.init(loggedExercise:))
     }
 
+    mutating func prepareTitleForSave() {
+        guard title != originalTitle else { return }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        title = trimmedTitle.isEmpty ? WorkoutSession.defaultTitle : trimmedTitle
+    }
+
     fileprivate func mergingSavedChanges(from session: WorkoutSession) throws -> Self {
         var merged = self
         merged.title = try mergedHistoryValue(original: originalTitle, edited: title, saved: session.title)
