@@ -20,6 +20,9 @@ struct CurrentOwnerClerkSessionState: Equatable {
 protocol CurrentOwnerClerkSessionProviding: AnyObject {
     var state: CurrentOwnerClerkSessionState { get }
     func waitUntilLoaded() async
+    func observeSessionStates(
+        _ receive: @MainActor @escaping (CurrentOwnerClerkSessionState) -> Void
+    ) async
 }
 
 enum CurrentOwnerConvexAuthenticationState: Equatable {
@@ -73,6 +76,8 @@ final class CurrentOwnerCoordinator {
     private var hasStarted = false
     private var startupTask: Task<Void, Never>?
     private var authenticationStateTask: Task<Void, Never>?
+    private var clerkSessionTask: Task<Void, Never>?
+    private var lastObservedClerkSessionState: CurrentOwnerClerkSessionState?
     private var authenticationRecoveryCount = 0
     private var isHandlingAuthenticationRecovery = false
     @ObservationIgnored
@@ -118,6 +123,12 @@ final class CurrentOwnerCoordinator {
             return
         }
 
+        clerkSessionTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await clerkSessionProvider.observeSessionStates { [weak self] sessionState in
+                self?.handleClerkSessionState(sessionState)
+            }
+        }
         authenticationStateTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await authenticationClient.observeAuthenticationStates { [weak self] authenticationState in
@@ -307,6 +318,28 @@ final class CurrentOwnerCoordinator {
             case .reject:
                 return
             }
+        }
+    }
+
+    private func handleClerkSessionState(_ sessionState: CurrentOwnerClerkSessionState) {
+        let previousSessionState = lastObservedClerkSessionState
+        lastObservedClerkSessionState = sessionState
+        guard previousSessionState != sessionState else { return }
+
+        guard sessionState.hasActiveSession else {
+            setHandlingAuthenticationRecovery(false)
+            if state != .localOnly || syncScheduler.currentOwnerTokenIdentifier != nil {
+                enterLocalOnlyMode()
+            }
+            return
+        }
+
+        // A Convex callback may already have validated this owner before the
+        // Clerk event is delivered. Reconcile access without downgrading that
+        // successful authentication or an unchanged owner's cached access.
+        if syncScheduler.currentOwnerTokenIdentifier != sessionState.ownerTokenIdentifier
+            || state == .localOnly {
+            enterResolvingState(ownerTokenIdentifier: sessionState.ownerTokenIdentifier)
         }
     }
 

@@ -204,6 +204,84 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.finish()
     }
 
+    func testConfirmedClerkSignOutHidesOwnerDataWhileAuthenticationIsPending() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.authenticationClient.waitsForLoginResume = true
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.hasPendingLogin }
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+
+        harness.setClerkOwner(nil)
+        try await waitUntil { harness.coordinator.state == .localOnly }
+
+        XCTAssertNil(harness.coordinator.localDataOwnerTokenIdentifier)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.succeedLogin(as: ownerA)
+        harness.authenticationClient.resumeLogin()
+        try await waitUntil { !harness.coordinator.isRecoveringAuthentication }
+        XCTAssertNil(harness.coordinator.localDataOwnerTokenIdentifier)
+        harness.finish()
+    }
+
+    func testClerkAccountSwitchReplacesLocalAccessWhileOldAuthenticationIsPending() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.authenticationClient.waitsForLoginResume = true
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.hasPendingLogin }
+
+        harness.setClerkOwner(ownerB, sessionIdentifier: "session_b")
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == ownerB }
+
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerB))
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.succeedLogin(as: ownerA)
+        harness.authenticationClient.resumeLogin()
+        try await waitUntil { !harness.coordinator.isRecoveringAuthentication }
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerB)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
+    }
+
+    func testDelayedClerkSessionObservationKeepsAlreadyValidatedNewOwnerActive() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+
+        harness.clerkSessionProvider.waitsForSessionDelivery = true
+        harness.setClerkOwner(ownerB, sessionIdentifier: "session_b")
+        try await waitUntil { harness.clerkSessionProvider.hasPendingSessionDelivery }
+        harness.sendAuthenticated(as: ownerB)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerB) }
+        let deliveredStates = harness.clerkSessionProvider.deliveredStateCount
+
+        harness.clerkSessionProvider.resumeSessionDelivery()
+        try await waitUntil { harness.clerkSessionProvider.deliveredStateCount > deliveredStates }
+
+        XCTAssertEqual(harness.coordinator.state, .active(ownerTokenIdentifier: ownerB))
+        XCTAssertTrue(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
+    }
+
+    func testUnchangedClerkSessionKeepsCachedOwnerAccessDuringOfflineRevalidation() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+
+        harness.authenticationClient.sendAuthenticationState(.loading)
+        try await waitUntil { !harness.syncScheduler.isCloudSyncAuthorized }
+        harness.setClerkOwner(ownerA)
+        harness.authenticationClient.sendAuthenticationState(.unauthenticated)
+        try await waitUntil { !harness.coordinator.isRecoveringAuthentication }
+
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerA))
+        harness.finish()
+    }
+
     func testClerkAccountSwitchHidesThePreviousOwnerBeforeConvexAuthenticationResolves() async throws {
         let harness = try CurrentOwnerCoordinatorHarness()
 
@@ -1069,6 +1147,7 @@ private final class CurrentOwnerCoordinatorHarness {
 
     func finish() {
         authenticationClient.finishAuthenticationStates()
+        clerkSessionProvider.finishSessionStates()
     }
 
     private static func clerkState(
@@ -1101,9 +1180,18 @@ private final class CurrentOwnerCoordinatorHarness {
 
 @MainActor
 private final class TestCurrentOwnerClerkSessionProvider: CurrentOwnerClerkSessionProviding {
-    var state: CurrentOwnerClerkSessionState
+    var state: CurrentOwnerClerkSessionState {
+        didSet { sessionContinuation.yield(state) }
+    }
+    private let sessionStates: AsyncStream<CurrentOwnerClerkSessionState>
+    private let sessionContinuation: AsyncStream<CurrentOwnerClerkSessionState>.Continuation
     private let waitsUntilResumed: Bool
     private var loadContinuations: [CheckedContinuation<Void, Never>] = []
+    var waitsForSessionDelivery = false
+    private var sessionDeliveryContinuation: CheckedContinuation<Void, Never>?
+    private(set) var deliveredStateCount = 0
+
+    var hasPendingSessionDelivery: Bool { sessionDeliveryContinuation != nil }
 
     var hasPendingLoad: Bool {
         !loadContinuations.isEmpty
@@ -1113,6 +1201,9 @@ private final class TestCurrentOwnerClerkSessionProvider: CurrentOwnerClerkSessi
         state: CurrentOwnerClerkSessionState,
         waitsUntilResumed: Bool = false
     ) {
+        let stream = AsyncStream<CurrentOwnerClerkSessionState>.makeStream()
+        sessionStates = stream.stream
+        sessionContinuation = stream.continuation
         self.state = state
         self.waitsUntilResumed = waitsUntilResumed
     }
@@ -1122,6 +1213,30 @@ private final class TestCurrentOwnerClerkSessionProvider: CurrentOwnerClerkSessi
         await withCheckedContinuation { continuation in
             loadContinuations.append(continuation)
         }
+    }
+
+    func observeSessionStates(
+        _ receive: @MainActor @escaping (CurrentOwnerClerkSessionState) -> Void
+    ) async {
+        await waitUntilLoaded()
+        receive(state)
+        for await _ in sessionStates {
+            if waitsForSessionDelivery {
+                await withCheckedContinuation { sessionDeliveryContinuation = $0 }
+            }
+            receive(state)
+            deliveredStateCount += 1
+        }
+    }
+
+    func resumeSessionDelivery() {
+        waitsForSessionDelivery = false
+        sessionDeliveryContinuation?.resume()
+        sessionDeliveryContinuation = nil
+    }
+
+    func finishSessionStates() {
+        sessionContinuation.finish()
     }
 
     func resumeLoading() {
