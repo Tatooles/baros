@@ -1761,6 +1761,71 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testAddExerciseSaveFailureAllowsRetryWithoutDuplicateCards() {
+        let app = makeApp(extraArguments: ["--uitest-fail-add-exercise-save-once"])
+        app.launch()
+        startBlankWorkout(in: app)
+        app.buttons["AddExerciseButton"].tap()
+        let benchRow = app.buttons["ExercisePickerRow-Bench Press-Barbell"]
+        XCTAssertTrue(benchRow.waitForExistence(timeout: 3))
+        benchRow.tap()
+
+        XCTAssertTrue(app.alerts["Couldn't Add Exercise"].waitForExistence(timeout: 3))
+        app.alerts.buttons["OK"].tap()
+        XCTAssertTrue(app.navigationBars["Add Exercise"].waitForExistence(timeout: 3))
+        benchRow.tap()
+        dismissKeyboardIfNeeded(in: app)
+        assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
+    }
+
+    @MainActor
+    func testCreatedExerciseAutoAddFailureKeepsPickerAndAllowsRetryWithoutDuplicates() {
+        let app = makeApp(extraArguments: ["--uitest-fail-add-exercise-save-once"])
+        app.launch()
+        startBlankWorkout(in: app)
+        app.buttons["AddExerciseButton"].tap()
+        XCTAssertTrue(app.navigationBars["Add Exercise"].waitForExistence(timeout: 3))
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        search.tap()
+        search.typeText("Created Recovery Press")
+        app.buttons["ExercisePickerCreateExerciseFromSearchButton"].tap()
+        XCTAssertTrue(app.navigationBars["Create Exercise"].waitForExistence(timeout: 3))
+        app.buttons["ExerciseEditorSaveButton"].tap()
+
+        XCTAssertTrue(app.alerts["Couldn't Add Exercise"].waitForExistence(timeout: 3))
+        app.alerts.buttons["OK"].tap()
+        let created = app.buttons["ExercisePickerRow-Created Recovery Press-Barbell"]
+        XCTAssertTrue(created.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ExerciseEditorSaveButton"].exists)
+        created.tap()
+        dismissKeyboardIfNeeded(in: app)
+        assertActiveWorkoutExerciseOrder(["Created Recovery Press"], in: app)
+    }
+
+    @MainActor
+    func testReorderSaveFailureKeepsSheetOpenAndRetrySavesOrder() {
+        let app = makeApp(extraArguments: ["--uitest-fail-reorder-exercises-save-once"])
+        app.launch()
+        startBlankWorkout(in: app)
+        addExercise("ExercisePickerRow-Back Squat-Barbell", in: app)
+        dismissKeyboardIfNeeded(in: app)
+        addExercise("ExercisePickerRow-Bench Press-Barbell", in: app)
+        dismissKeyboardIfNeeded(in: app)
+        app.buttons["ExerciseMenuButton-0"].tap()
+        app.buttons["ReorderExercisesButton-0"].tap()
+        XCTAssertTrue(waitForReorderExercisesList(in: app, timeout: 3))
+        moveReorderExercise(named: "Bench Press", before: "Back Squat", in: app)
+        app.buttons["DoneReorderExercisesButton"].tap()
+
+        XCTAssertTrue(app.alerts["Couldn't Reorder Exercises"].waitForExistence(timeout: 3))
+        app.alerts.buttons["OK"].tap()
+        XCTAssertTrue(waitForReorderExercisesList(in: app, timeout: 3))
+        app.buttons["DoneReorderExercisesButton"].tap()
+        assertActiveWorkoutExerciseOrder(["Bench Press", "Back Squat"], in: app)
+    }
+
+    @MainActor
     func testReorderingActiveWorkoutExercisesChangesCardOrder() {
         let app = makeApp()
         app.launch()
