@@ -9,6 +9,7 @@ enum WorkoutHistoryMutationError: LocalizedError, Equatable {
     case invalidWorkoutDate
     case missingLoggedExercise
     case missingLoggedSet
+    case editConflict
 
     var errorDescription: String? {
         switch self {
@@ -26,6 +27,8 @@ enum WorkoutHistoryMutationError: LocalizedError, Equatable {
             return "One of the edited exercises no longer exists."
         case .missingLoggedSet:
             return "One of the edited sets no longer exists."
+        case .editConflict:
+            return "This workout changed while you were editing it. Cancel and reopen Edit to review the latest values, then make your correction again."
         }
     }
 }
@@ -45,15 +48,38 @@ struct CompletedWorkoutEditDraft {
     var exercises: [CompletedWorkoutEditExerciseDraft]
     let calendar: Calendar
     private let originalStartedAt: Date
+    private let originalTitle: String
+    private let originalNotes: String
+    private let originalDurationSeconds: Int
 
     init(session: WorkoutSession, calendar: Calendar = .current) {
         title = session.title
         notes = session.notes
         durationSeconds = session.effectiveDurationSeconds()
+        originalTitle = title
+        originalNotes = notes
+        originalDurationSeconds = durationSeconds
         self.calendar = calendar
         originalStartedAt = session.startedAt
         date = calendar.startOfDay(for: session.startedAt)
         exercises = session.sortedLoggedExercises.map(CompletedWorkoutEditExerciseDraft.init(loggedExercise:))
+    }
+
+    fileprivate func mergingSavedChanges(from session: WorkoutSession) throws -> Self {
+        var merged = self
+        merged.title = try mergedHistoryValue(original: originalTitle, edited: title, saved: session.title)
+        merged.notes = try mergedHistoryValue(original: originalNotes, edited: notes, saved: session.notes)
+        merged.durationSeconds = try mergedHistoryValue(
+            original: originalDurationSeconds, edited: durationSeconds, saved: session.effectiveDurationSeconds()
+        )
+        let savedExercises = Dictionary(uniqueKeysWithValues: session.sortedLoggedExercises.map { ($0.id, $0) })
+        merged.exercises = try exercises.map { exercise in
+            guard let saved = savedExercises[exercise.id] else {
+                throw WorkoutHistoryMutationError.missingLoggedExercise
+            }
+            return try exercise.mergingSavedChanges(from: saved)
+        }
+        return merged
     }
 
     var hasDateChange: Bool {
@@ -123,13 +149,27 @@ struct CompletedWorkoutEditExerciseDraft: Identifiable {
     let metadataDisplayText: String?
     var notes: String
     var sets: [CompletedWorkoutEditSetDraft]
+    private let originalNotes: String
 
     init(loggedExercise: LoggedExercise) {
         id = loggedExercise.id
         exerciseSnapshotName = loggedExercise.exerciseSnapshotName
         metadataDisplayText = loggedExercise.metadataDisplayText
         notes = loggedExercise.notes
+        originalNotes = notes
         sets = loggedExercise.sortedSets.map(CompletedWorkoutEditSetDraft.init(set:))
+    }
+
+    fileprivate func mergingSavedChanges(from exercise: LoggedExercise) throws -> Self {
+        var merged = self
+        merged.notes = try mergedHistoryValue(original: originalNotes, edited: notes, saved: exercise.notes)
+        let savedSets = Dictionary(uniqueKeysWithValues: exercise.sortedSets.map { ($0.id, $0) })
+        merged.sets = try sets.map { set in
+            guard let id = set.id else { return set }
+            guard let saved = savedSets[id] else { throw WorkoutHistoryMutationError.missingLoggedSet }
+            return try set.mergingSavedChanges(from: saved)
+        }
+        return merged
     }
 }
 
@@ -144,6 +184,7 @@ struct CompletedWorkoutEditSetDraft: Identifiable {
     var completedAt: Date?
     var notes: String
     var isRemoved: Bool
+    private let originalValues: CompletedWorkoutEditSetValues?
 
     init(set: LoggedSet) {
         id = set.id
@@ -156,6 +197,7 @@ struct CompletedWorkoutEditSetDraft: Identifiable {
         completedAt = set.completedAt
         notes = set.notes
         isRemoved = false
+        originalValues = CompletedWorkoutEditSetValues(set: set)
     }
 
     init(
@@ -179,6 +221,71 @@ struct CompletedWorkoutEditSetDraft: Identifiable {
         self.completedAt = completedAt
         self.notes = notes
         self.isRemoved = isRemoved
+        originalValues = nil
+    }
+
+    fileprivate func mergingSavedChanges(from set: LoggedSet) throws -> Self {
+        guard let original = originalValues else { return self }
+        let saved = CompletedWorkoutEditSetValues(set: set)
+        if isRemoved {
+            guard saved == original else { throw WorkoutHistoryMutationError.editConflict }
+            return self
+        }
+        var merged = self
+        merged.weight = try mergedHistoryValue(
+            original: original.weight, edited: weight, saved: saved.weight, areEqual: historyNumbersAreEqual
+        )
+        merged.reps = try mergedHistoryValue(original: original.reps, edited: reps, saved: saved.reps)
+        merged.rpe = try mergedHistoryValue(
+            original: original.rpe, edited: rpe, saved: saved.rpe, areEqual: historyNumbersAreEqual
+        )
+        merged.kind = try mergedHistoryValue(original: original.kind, edited: kind, saved: saved.kind)
+        merged.isCompleted = try mergedHistoryValue(original: original.isCompleted, edited: isCompleted, saved: saved.isCompleted)
+        merged.notes = try mergedHistoryValue(original: original.notes, edited: notes, saved: saved.notes)
+        return merged
+    }
+}
+
+private struct CompletedWorkoutEditSetValues: Equatable {
+    let weight: Double?
+    let reps: Int?
+    let rpe: Double?
+    let kind: SetKind
+    let isCompleted: Bool
+    let notes: String
+
+    init(set: LoggedSet) {
+        weight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
+        reps = WorkoutNumericInputPolicy.validatedReps(set.reps)
+        rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe)
+        kind = set.kind
+        isCompleted = set.isCompleted
+        notes = set.notes
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        historyNumbersAreEqual(lhs.weight, rhs.weight) && lhs.reps == rhs.reps &&
+            historyNumbersAreEqual(lhs.rpe, rhs.rpe) && lhs.kind == rhs.kind &&
+            lhs.isCompleted == rhs.isCompleted && lhs.notes == rhs.notes
+    }
+}
+
+// A field the person did not edit follows the latest saved value. Identical edits
+// converge; divergent changes to the same field require reviewing a fresh draft.
+private func mergedHistoryValue<Value: Equatable>(
+    original: Value, edited: Value, saved: Value,
+    areEqual: (Value, Value) -> Bool = (==)
+) throws -> Value {
+    guard !areEqual(edited, original) else { return saved }
+    guard areEqual(saved, original) || areEqual(saved, edited) else { throw WorkoutHistoryMutationError.editConflict }
+    return edited
+}
+
+private func historyNumbersAreEqual(_ lhs: Double?, _ rhs: Double?) -> Bool {
+    switch (lhs, rhs) {
+    case (.none, .none): true
+    case let (.some(lhs), .some(rhs)): abs(lhs - rhs) < 0.0001
+    default: false
     }
 }
 
@@ -195,6 +302,8 @@ struct WorkoutHistoryMutationService {
     ) throws {
         try validateEditable(session, ownerTokenIdentifier: ownerTokenIdentifier)
         try validateDraftReferences(draft, for: session)
+        // Reconcile the complete draft before changing any saved values or outbox entries.
+        let draft = try draft.mergingSavedChanges(from: session)
 
         var didChange = false
         var didChangeSessionFields = false
@@ -709,13 +818,6 @@ struct WorkoutHistoryMutationService {
     }
 
     private static func weightsAreEqual(_ lhs: Double?, _ rhs: Double?) -> Bool {
-        switch (lhs, rhs) {
-        case (.none, .none):
-            return true
-        case let (.some(lhs), .some(rhs)):
-            return abs(lhs - rhs) < 0.0001
-        default:
-            return false
-        }
+        historyNumbersAreEqual(lhs, rhs)
     }
 }

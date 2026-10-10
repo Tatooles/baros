@@ -532,6 +532,9 @@ struct CompletedWorkoutEditView: View {
         }
 
         do {
+            #if DEBUG
+            try UITestFixtureSeeder.simulateConcurrentHistorySave(session: session, context: modelContext)
+            #endif
             try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
                 draft,
                 for: session,

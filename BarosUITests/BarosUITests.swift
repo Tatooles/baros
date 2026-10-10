@@ -2420,6 +2420,60 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testCompletedWorkoutNotesOnlySavePreservesConcurrentWeightAndDuration() {
+        let app = makeApp(
+            extraArguments: ["--uitest-concurrent-history-save"],
+            completedBenchWorkoutTitles: ["Concurrent History"]
+        )
+        app.launch()
+        app.tabButton(.history).tap()
+        app.buttons["WorkoutHistoryButton-0"].tap()
+        app.buttons["EditWorkoutButton"].tap()
+        let notes = app.textFields["CompletedWorkoutNotesField"]
+        XCTAssertTrue(notes.waitForExistence(timeout: 3))
+        replaceText(in: notes, with: "Local note correction")
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+
+        XCTAssertTrue(app.staticTexts["WorkoutHistoryNoteText"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.staticTexts["WorkoutHistoryNoteText"].label, "Local note correction")
+        XCTAssertTrue(workoutHistorySetValue("210 pounds, 5 reps", in: app).exists)
+        XCTAssertTrue(app.descendants(matching: .any)["WorkoutHistorySummary"].label.contains("1:10:00"))
+    }
+
+    @MainActor
+    func testCompletedWorkoutConcurrentWeightConflictKeepsEditorOpenAndSavedValuesIntact() {
+        let app = makeApp(
+            extraArguments: ["--uitest-concurrent-history-save"],
+            completedBenchWorkoutTitles: ["Concurrent History"]
+        )
+        app.launch()
+        app.tabButton(.history).tap()
+        app.buttons["WorkoutHistoryButton-0"].tap()
+        app.buttons["EditWorkoutButton"].tap()
+        let weight = app.textFields["HistorySetWeightField-0-0"]
+        XCTAssertTrue(weight.waitForExistence(timeout: 3))
+        replaceText(in: weight, with: "225")
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+
+        let alert = app.alerts["Couldn't Save Workout"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        XCTAssertTrue(alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Cancel and reopen Edit")).firstMatch.exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "History concurrent edit conflict"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        alert.buttons["OK"].tap()
+        XCTAssertTrue(app.navigationBars["Edit Workout"].exists)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(workoutHistorySetValue("210 pounds, 5 reps", in: app).waitForExistence(timeout: 3))
+        app.buttons["EditWorkoutButton"].tap()
+        XCTAssertEqual(app.textFields["HistorySetWeightField-0-0"].value as? String, "210")
+        replaceText(in: app.textFields["HistorySetWeightField-0-0"], with: "225")
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+        XCTAssertTrue(workoutHistorySetValue("225 pounds, 5 reps", in: app).waitForExistence(timeout: 3))
+    }
+
+    @MainActor
     func testEditingCompletedWorkoutUpdatesHistoryDetailAndExerciseHistory() {
         let app = makeApp()
         app.launch()
