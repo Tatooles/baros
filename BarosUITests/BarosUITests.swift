@@ -3534,6 +3534,35 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testFailedLocalResetPreservesHistoryAndAllowsRetry() {
+        let app = makeApp(extraArguments: ["--uitest-force-signed-out-auth",
+                                          "--uitest-seed-completed-bench-workout", "Reset Recovery Bench",
+                                          "--uitest-fail-local-reset-once"])
+        app.launch()
+        tapTab(.history, in: app)
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+        tapTab(.settings, in: app)
+        revealSettingsRow(app.buttons["SettingsDeleteLocalDataRow"], in: app)
+        app.buttons["SettingsDeleteLocalDataRow"].tap()
+        enterDeleteConfirmation(in: app)
+        app.buttons["DeleteDataConfirmButton"].tap()
+        XCTAssertTrue(app.staticTexts["DeleteDataErrorMessage"].waitForExistence(timeout: 3))
+        app.navigationBars["Delete Local Data"].buttons.element(boundBy: 0).tap()
+        tapTab(.history, in: app)
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["WorkoutHistoryButton-0"].tap()
+        XCTAssertTrue(app.staticTexts["Bench Press"].waitForExistence(timeout: 3))
+        tapTab(.settings, in: app)
+        revealSettingsRow(app.buttons["SettingsDeleteLocalDataRow"], in: app)
+        app.buttons["SettingsDeleteLocalDataRow"].tap()
+        enterDeleteConfirmation(in: app)
+        app.buttons["DeleteDataConfirmButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+        tapTab(.history, in: app)
+        XCTAssertFalse(app.buttons["WorkoutHistoryButton-0"].exists)
+    }
+
+    @MainActor
     func testSettingsShowsSignedInAccountDeletionOnly() {
         let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth"])
         app.launch()
