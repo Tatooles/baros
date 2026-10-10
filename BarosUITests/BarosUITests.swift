@@ -1795,9 +1795,9 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(app.alerts["Couldn't Add Exercise"].waitForExistence(timeout: 3))
         app.alerts.buttons["OK"].tap()
-        XCTAssertTrue(app.navigationBars["Add Exercise"].waitForExistence(timeout: 3))
         let created = app.buttons["ExercisePickerRow-Created Recovery Press-Barbell"]
         XCTAssertTrue(created.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ExerciseEditorSaveButton"].exists)
         created.tap()
         dismissKeyboardIfNeeded(in: app)
         assertActiveWorkoutExerciseOrder(["Created Recovery Press"], in: app)
