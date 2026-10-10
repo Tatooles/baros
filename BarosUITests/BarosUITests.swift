@@ -3557,6 +3557,27 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testCloudDeletionFailureExplainsUncertaintyAndAllowsRetry() {
+        let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth", "--uitest-fail-cloud-deletion-once"])
+        app.launch()
+        tapTab(.settings, in: app)
+        revealSettingsRow(app.buttons["SettingsDeleteAccountRow"], in: app)
+        app.buttons["SettingsDeleteAccountRow"].tap()
+        enterDeleteConfirmation(in: app)
+        app.buttons["DeleteDataConfirmButton"].tap()
+        let error = app.staticTexts["DeleteDataErrorMessage"]
+        XCTAssertTrue(error.waitForExistence(timeout: 3))
+        XCTAssertTrue(error.label.contains("Some cloud data may already be deleted"))
+        XCTAssertTrue(error.label.contains("Your account has not been deleted"))
+        XCTAssertTrue(error.label.contains("your local copy is still on this iPhone"))
+        XCTAssertTrue(error.label.contains("Try Delete Account again"))
+        XCTAssertTrue(app.buttons["DeleteDataConfirmButton"].isEnabled)
+        app.buttons["DeleteDataConfirmButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.navigationBars["Delete Account"].exists)
+    }
+
+    @MainActor
     func testSignedOutSettingsShowsOptionalAuthAndWorkoutStillWorks() {
         let app = makeApp()
         app.launchArguments.append("--uitest-force-signed-out-auth")

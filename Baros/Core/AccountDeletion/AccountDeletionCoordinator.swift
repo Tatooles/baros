@@ -142,7 +142,7 @@ final class AccountDeletionCoordinator: ObservableObject {
             syncScheduler.endDeletionMode()
             switch phase {
             case .deletingCloudData:
-                phase = .failed("Cloud data could not be deleted. Your account and data are still intact.")
+                phase = .failed("Cloud deletion could not finish or be confirmed. Some cloud data may already be deleted. Your account has not been deleted, and your local copy is still on this iPhone. Try Delete Account again to finish deletion.")
             case .deletingAccount:
                 phase = .failed("Account deletion could not finish. Your local data is still saved on this iPhone.")
             case .clearingLocalData:
