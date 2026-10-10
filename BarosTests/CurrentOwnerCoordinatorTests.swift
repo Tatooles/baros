@@ -293,6 +293,58 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.finish()
     }
 
+    func testLateAuthenticationForPreviousClerkSessionDoesNotAuthorizeReplacementSession() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+
+        harness.setClerkOwner(ownerA, sessionIdentifier: "replacement_session")
+        try await waitUntil { !harness.syncScheduler.isCloudSyncAuthorized }
+        harness.authenticationClient.sendAuthenticationState(.authenticated(token:
+            CurrentOwnerCoordinatorHarness.makeJWT(ownerTokenIdentifier: ownerA, sessionIdentifier: "session_a")
+        ))
+        // Wait for the client boundary to deliver the callback, rather than
+        // asserting the paused state before the late token has been handled.
+        let deliveredStates = harness.authenticationClient.deliveredStateCount
+        try await waitUntil { harness.authenticationClient.deliveredStateCount > deliveredStates }
+
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerA))
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+        XCTAssertTrue(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
+    }
+
+    func testAuthenticationWithoutSessionClaimRequiresCapturedSessionRecovery() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+
+        let deliveredStates = harness.authenticationClient.deliveredStateCount
+        harness.authenticationClient.sendAuthenticationState(.authenticated(token:
+            CurrentOwnerCoordinatorHarness.makeJWT(ownerTokenIdentifier: ownerA, sessionIdentifier: nil)
+        ))
+        try await waitUntil { harness.authenticationClient.deliveredStateCount > deliveredStates }
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerA))
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+
+        harness.authenticationClient.waitsForLoginResume = true
+        harness.coordinator.retrySync()
+        try await waitUntil { harness.authenticationClient.hasPendingLogin }
+        harness.succeedLogin(as: ownerA)
+        harness.authenticationClient.resumeLogin()
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+        XCTAssertTrue(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
+    }
+
     func testUnchangedClerkSessionKeepsCachedOwnerAccessDuringOfflineRevalidation() async throws {
         let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
         harness.coordinator.start()
@@ -1164,7 +1216,10 @@ private final class CurrentOwnerCoordinatorHarness {
 
     func sendAuthenticated(as owner: String) {
         authenticationClient.sendAuthenticationState(
-            .authenticated(token: Self.makeJWT(ownerTokenIdentifier: owner))
+            .authenticated(token: Self.makeJWT(
+                ownerTokenIdentifier: owner,
+                sessionIdentifier: clerkSessionProvider.state.sessionIdentifier
+            ))
         )
     }
 
@@ -1197,11 +1252,12 @@ private final class CurrentOwnerCoordinatorHarness {
         return LastKnownSyncOwnerTokenStore(userDefaults: defaults)
     }
 
-    private static func makeJWT(ownerTokenIdentifier: String) -> String {
+    static func makeJWT(ownerTokenIdentifier: String, sessionIdentifier: String? = "session_a") -> String {
         let parts = ownerTokenIdentifier.split(separator: "|", maxSplits: 1).map(String.init)
         precondition(parts.count == 2, "Test owners must use the issuer|subject format")
         let header = Data("{}".utf8).base64URLEncodedString()
-        let payload = Data(#"{"iss":"\#(parts[0])","sub":"\#(parts[1])"}"#.utf8)
+        let sessionClaim = sessionIdentifier.map { #", "sid":"\#($0)""# } ?? ""
+        let payload = Data(#"{"iss":"\#(parts[0])","sub":"\#(parts[1])"\#(sessionClaim)}"#.utf8)
             .base64URLEncodedString()
         return "\(header).\(payload).signature"
     }
@@ -1283,6 +1339,7 @@ private final class TestCurrentOwnerAuthenticationClient: CurrentOwnerAuthentica
     var waitsForLoginResume = false
     private var loginContinuations: [CheckedContinuation<Result<String, Error>, Never>] = []
     private(set) var observeAuthenticationStatesCallCount = 0
+    private(set) var deliveredStateCount = 0
     private(set) var loginFromCacheCallCount = 0
     private(set) var logoutCallCount = 0
 
@@ -1303,6 +1360,7 @@ private final class TestCurrentOwnerAuthenticationClient: CurrentOwnerAuthentica
         observeAuthenticationStatesCallCount += 1
         for await state in states {
             await receive(state)
+            deliveredStateCount += 1
         }
     }
 

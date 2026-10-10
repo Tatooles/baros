@@ -306,9 +306,17 @@ final class CurrentOwnerCoordinator {
                 )
                 return
             }
+            // The pinned provider fetches a standard Clerk session token.
+            // Its sid identifies the session that actually authenticated;
+            // the current Clerk snapshot cannot identify a late callback.
+            guard let authenticatedSessionIdentifier = ClerkJWTIdentityResolver.sessionIdentifier(from: token),
+                  authenticatedSessionIdentifier == clerkSessionProvider.state.sessionIdentifier else {
+                enterResolvingState(ownerTokenIdentifier: expectedOwnerTokenIdentifier)
+                return
+            }
             let decision = await syncRecoveryCoordinator.authenticatedStateDecision(
                 ownerTokenIdentifier: ownerTokenIdentifier,
-                sessionIdentifier: clerkSessionProvider.state.sessionIdentifier
+                sessionIdentifier: authenticatedSessionIdentifier
             )
             switch decision {
             case .activate:
