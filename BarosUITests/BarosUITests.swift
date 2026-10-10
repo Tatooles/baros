@@ -810,6 +810,44 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testClerkSignOutHidesHistoryWhileConvexAuthenticationIsPending() {
+        let app = makeApp(
+            extraArguments: [
+                "--uitest-sync-owner", "issuer|ui_owner",
+                "--uitest-clerk-session-control",
+            ],
+            completedBenchWorkoutTitles: ["Previous Owner Bench"]
+        )
+        app.launch()
+        tapTab(.history, in: app)
+        let historyRow = app.buttons["WorkoutHistoryButton-0"]
+        XCTAssertTrue(historyRow.waitForExistence(timeout: 3))
+
+        app.buttons["UITestClerkSignOutButton"].tap()
+
+        XCTAssertTrue(historyRow.waitForNonExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testClerkAccountSwitchHidesHistoryWhileConvexAuthenticationIsPending() {
+        let app = makeApp(
+            extraArguments: [
+                "--uitest-sync-owner", "issuer|ui_owner",
+                "--uitest-clerk-session-control",
+            ],
+            completedBenchWorkoutTitles: ["Previous Owner Bench"]
+        )
+        app.launch()
+        tapTab(.history, in: app)
+        let historyRow = app.buttons["WorkoutHistoryButton-0"]
+        XCTAssertTrue(historyRow.waitForExistence(timeout: 3))
+
+        app.buttons["UITestClerkAccountSwitchButton"].tap()
+
+        XCTAssertTrue(historyRow.waitForNonExistence(timeout: 3))
+    }
+
+    @MainActor
     func testAccountSwitchHidesThePreviousOwnersOpenWorkoutHistory() {
         let app = makeApp(
             extraArguments: [

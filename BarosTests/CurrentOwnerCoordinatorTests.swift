@@ -204,6 +204,165 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.finish()
     }
 
+    func testConfirmedClerkSignOutHidesOwnerDataWhileAuthenticationIsPending() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.authenticationClient.waitsForLoginResume = true
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.hasPendingLogin }
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+
+        harness.setClerkOwner(nil)
+        try await waitUntil { harness.coordinator.state == .localOnly }
+
+        XCTAssertNil(harness.coordinator.localDataOwnerTokenIdentifier)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.succeedLogin(as: ownerA)
+        harness.authenticationClient.resumeLogin()
+        try await waitUntil { !harness.coordinator.isRecoveringAuthentication }
+        XCTAssertNil(harness.coordinator.localDataOwnerTokenIdentifier)
+        harness.finish()
+    }
+
+    func testClerkAccountSwitchReplacesLocalAccessWhileOldAuthenticationIsPending() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.authenticationClient.waitsForLoginResume = true
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.hasPendingLogin }
+
+        harness.setClerkOwner(ownerB, sessionIdentifier: "session_b")
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == ownerB }
+
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerB))
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.succeedLogin(as: ownerA)
+        harness.authenticationClient.resumeLogin()
+        try await waitUntil { !harness.coordinator.isRecoveringAuthentication }
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerB)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
+    }
+
+    func testDelayedClerkSessionObservationKeepsAlreadyValidatedNewOwnerActive() async throws {
+        try await assertDelayedClerkObservationKeepsValidatedOwnerActive(ownerB)
+        try await assertDelayedClerkObservationKeepsValidatedOwnerActive(ownerA)
+    }
+
+    private func assertDelayedClerkObservationKeepsValidatedOwnerActive(_ owner: String) async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+
+        harness.clerkSessionProvider.waitsForSessionDelivery = true
+        harness.setClerkOwner(owner, sessionIdentifier: "session_b")
+        try await waitUntil { harness.clerkSessionProvider.hasPendingSessionDelivery }
+        harness.authenticationClient.sendAuthenticationState(.loading)
+        try await waitUntil { harness.coordinator.state == .resolving(ownerTokenIdentifier: owner) }
+        harness.sendAuthenticated(as: owner)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: owner) }
+        let deliveredStates = harness.clerkSessionProvider.deliveredStateCount
+
+        harness.clerkSessionProvider.resumeSessionDelivery()
+        try await waitUntil { harness.clerkSessionProvider.deliveredStateCount > deliveredStates }
+
+        XCTAssertEqual(harness.coordinator.state, .active(ownerTokenIdentifier: owner))
+        XCTAssertTrue(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
+    }
+
+    func testReplacementClerkSessionPausesSyncForSameOwnerBeforeConvexLoadingArrives() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+        XCTAssertTrue(harness.syncScheduler.isCloudSyncAuthorized)
+
+        let deliveredStates = harness.clerkSessionProvider.deliveredStateCount
+        harness.setClerkOwner(ownerA, sessionIdentifier: "replacement_session")
+        try await waitUntil { harness.clerkSessionProvider.deliveredStateCount > deliveredStates }
+
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerA))
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+        XCTAssertTrue(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
+    }
+
+    func testLateAuthenticationForPreviousClerkSessionDoesNotAuthorizeReplacementSession() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+
+        harness.setClerkOwner(ownerA, sessionIdentifier: "replacement_session")
+        try await waitUntil { !harness.syncScheduler.isCloudSyncAuthorized }
+        harness.authenticationClient.sendAuthenticationState(.authenticated(token:
+            CurrentOwnerCoordinatorHarness.makeJWT(ownerTokenIdentifier: ownerA, sessionIdentifier: "session_a")
+        ))
+        // Wait for the client boundary to deliver the callback, rather than
+        // asserting the paused state before the late token has been handled.
+        let deliveredStates = harness.authenticationClient.deliveredStateCount
+        try await waitUntil { harness.authenticationClient.deliveredStateCount > deliveredStates }
+
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerA))
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+        XCTAssertTrue(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
+    }
+
+    func testAuthenticationWithoutSessionClaimRequiresCapturedSessionRecovery() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+
+        let deliveredStates = harness.authenticationClient.deliveredStateCount
+        harness.authenticationClient.sendAuthenticationState(.authenticated(token:
+            CurrentOwnerCoordinatorHarness.makeJWT(ownerTokenIdentifier: ownerA, sessionIdentifier: nil)
+        ))
+        try await waitUntil { harness.authenticationClient.deliveredStateCount > deliveredStates }
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerA))
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+
+        harness.authenticationClient.waitsForLoginResume = true
+        harness.coordinator.retrySync()
+        try await waitUntil { harness.authenticationClient.hasPendingLogin }
+        harness.succeedLogin(as: ownerA)
+        harness.authenticationClient.resumeLogin()
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+        XCTAssertTrue(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
+    }
+
+    func testUnchangedClerkSessionKeepsCachedOwnerAccessDuringOfflineRevalidation() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+
+        harness.authenticationClient.sendAuthenticationState(.loading)
+        try await waitUntil { !harness.syncScheduler.isCloudSyncAuthorized }
+        harness.setClerkOwner(ownerA)
+        harness.authenticationClient.sendAuthenticationState(.unauthenticated)
+        try await waitUntil { !harness.coordinator.isRecoveringAuthentication }
+
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerA))
+        harness.finish()
+    }
+
     func testClerkAccountSwitchHidesThePreviousOwnerBeforeConvexAuthenticationResolves() async throws {
         let harness = try CurrentOwnerCoordinatorHarness()
 
@@ -1057,7 +1216,10 @@ private final class CurrentOwnerCoordinatorHarness {
 
     func sendAuthenticated(as owner: String) {
         authenticationClient.sendAuthenticationState(
-            .authenticated(token: Self.makeJWT(ownerTokenIdentifier: owner))
+            .authenticated(token: Self.makeJWT(
+                ownerTokenIdentifier: owner,
+                sessionIdentifier: clerkSessionProvider.state.sessionIdentifier
+            ))
         )
     }
 
@@ -1069,6 +1231,7 @@ private final class CurrentOwnerCoordinatorHarness {
 
     func finish() {
         authenticationClient.finishAuthenticationStates()
+        clerkSessionProvider.finishSessionStates()
     }
 
     private static func clerkState(
@@ -1089,11 +1252,12 @@ private final class CurrentOwnerCoordinatorHarness {
         return LastKnownSyncOwnerTokenStore(userDefaults: defaults)
     }
 
-    private static func makeJWT(ownerTokenIdentifier: String) -> String {
+    static func makeJWT(ownerTokenIdentifier: String, sessionIdentifier: String? = "session_a") -> String {
         let parts = ownerTokenIdentifier.split(separator: "|", maxSplits: 1).map(String.init)
         precondition(parts.count == 2, "Test owners must use the issuer|subject format")
         let header = Data("{}".utf8).base64URLEncodedString()
-        let payload = Data(#"{"iss":"\#(parts[0])","sub":"\#(parts[1])"}"#.utf8)
+        let sessionClaim = sessionIdentifier.map { #", "sid":"\#($0)""# } ?? ""
+        let payload = Data(#"{"iss":"\#(parts[0])","sub":"\#(parts[1])"\#(sessionClaim)}"#.utf8)
             .base64URLEncodedString()
         return "\(header).\(payload).signature"
     }
@@ -1101,9 +1265,18 @@ private final class CurrentOwnerCoordinatorHarness {
 
 @MainActor
 private final class TestCurrentOwnerClerkSessionProvider: CurrentOwnerClerkSessionProviding {
-    var state: CurrentOwnerClerkSessionState
+    var state: CurrentOwnerClerkSessionState {
+        didSet { sessionContinuation.yield(state) }
+    }
+    private let sessionStates: AsyncStream<CurrentOwnerClerkSessionState>
+    private let sessionContinuation: AsyncStream<CurrentOwnerClerkSessionState>.Continuation
     private let waitsUntilResumed: Bool
     private var loadContinuations: [CheckedContinuation<Void, Never>] = []
+    var waitsForSessionDelivery = false
+    private var sessionDeliveryContinuation: CheckedContinuation<Void, Never>?
+    private(set) var deliveredStateCount = 0
+
+    var hasPendingSessionDelivery: Bool { sessionDeliveryContinuation != nil }
 
     var hasPendingLoad: Bool {
         !loadContinuations.isEmpty
@@ -1113,6 +1286,9 @@ private final class TestCurrentOwnerClerkSessionProvider: CurrentOwnerClerkSessi
         state: CurrentOwnerClerkSessionState,
         waitsUntilResumed: Bool = false
     ) {
+        let stream = AsyncStream<CurrentOwnerClerkSessionState>.makeStream()
+        sessionStates = stream.stream
+        sessionContinuation = stream.continuation
         self.state = state
         self.waitsUntilResumed = waitsUntilResumed
     }
@@ -1122,6 +1298,30 @@ private final class TestCurrentOwnerClerkSessionProvider: CurrentOwnerClerkSessi
         await withCheckedContinuation { continuation in
             loadContinuations.append(continuation)
         }
+    }
+
+    func observeSessionStates(
+        _ receive: @MainActor @escaping (CurrentOwnerClerkSessionState) -> Void
+    ) async {
+        await waitUntilLoaded()
+        receive(state)
+        for await _ in sessionStates {
+            if waitsForSessionDelivery {
+                await withCheckedContinuation { sessionDeliveryContinuation = $0 }
+            }
+            receive(state)
+            deliveredStateCount += 1
+        }
+    }
+
+    func resumeSessionDelivery() {
+        waitsForSessionDelivery = false
+        sessionDeliveryContinuation?.resume()
+        sessionDeliveryContinuation = nil
+    }
+
+    func finishSessionStates() {
+        sessionContinuation.finish()
     }
 
     func resumeLoading() {
@@ -1139,6 +1339,7 @@ private final class TestCurrentOwnerAuthenticationClient: CurrentOwnerAuthentica
     var waitsForLoginResume = false
     private var loginContinuations: [CheckedContinuation<Result<String, Error>, Never>] = []
     private(set) var observeAuthenticationStatesCallCount = 0
+    private(set) var deliveredStateCount = 0
     private(set) var loginFromCacheCallCount = 0
     private(set) var logoutCallCount = 0
 
@@ -1159,6 +1360,7 @@ private final class TestCurrentOwnerAuthenticationClient: CurrentOwnerAuthentica
         observeAuthenticationStatesCallCount += 1
         for await state in states {
             await receive(state)
+            deliveredStateCount += 1
         }
     }
 

@@ -10,6 +10,9 @@ struct BarosApp: App {
     private let convexClient: ConvexClientWithAuth<String>
     private let uiTestSyncOwner: String?
     private let uiTestSyncFailureMessage: String?
+    #if DEBUG
+    private let uiTestClerkSessionProvider: CurrentOwnerClerkSessionUITestProvider?
+    #endif
     private let delaysCurrentOwnerStartForUITesting: Bool
     private let observesNetworkRecovery: Bool
     private let networkRecoveryActivity: NetworkRecoveryActivity
@@ -44,6 +47,14 @@ struct BarosApp: App {
         let networkRecoveryActivity = NetworkRecoveryActivity()
         self.networkRecoveryActivity = networkRecoveryActivity
         uiTestSyncOwner = ownerLaunchConfiguration.fixedOwnerTokenIdentifier
+        #if DEBUG
+        let uiTestClerkSessionProvider = arguments.contains("--uitest-clerk-session-control")
+            ? CurrentOwnerClerkSessionUITestProvider(
+                ownerTokenIdentifier: uiTestSyncOwner ?? "issuer|ui_owner"
+            )
+            : nil
+        self.uiTestClerkSessionProvider = uiTestClerkSessionProvider
+        #endif
         uiTestSyncFailureMessage = if let uiTestSyncOwner,
                                       arguments.contains("--uitest-show-sync-failure") {
             "Convex function sync:fetchChanges failed for token \(uiTestSyncOwner)"
@@ -102,13 +113,30 @@ struct BarosApp: App {
                 break
             }
             _syncScheduler = State(initialValue: syncScheduler)
+            let authenticationClient: any CurrentOwnerAuthenticationClient
+            let clerkSessionProvider: any CurrentOwnerClerkSessionProviding
+            let startupMode: CurrentOwnerCoordinator.StartupMode
+            #if DEBUG
+            if let uiTestClerkSessionProvider {
+                syncScheduler.configure(modelContext: container.mainContext)
+                authenticationClient = PendingCurrentOwnerUITestAuthenticationClient()
+                clerkSessionProvider = uiTestClerkSessionProvider
+                startupMode = .live
+            } else {
+                authenticationClient = ConvexCurrentOwnerAuthenticationClient(client: convexClient)
+                clerkSessionProvider = ClerkCurrentOwnerSessionProvider()
+                startupMode = ownerLaunchConfiguration.startupMode
+            }
+            #else
+            authenticationClient = ConvexCurrentOwnerAuthenticationClient(client: convexClient)
+            clerkSessionProvider = ClerkCurrentOwnerSessionProvider()
+            startupMode = ownerLaunchConfiguration.startupMode
+            #endif
             let currentOwnerCoordinator = CurrentOwnerCoordinator(
-                authenticationClient: ConvexCurrentOwnerAuthenticationClient(
-                    client: convexClient
-                ),
+                authenticationClient: authenticationClient,
                 syncScheduler: syncScheduler,
-                clerkSessionProvider: ClerkCurrentOwnerSessionProvider(),
-                startupMode: ownerLaunchConfiguration.startupMode
+                clerkSessionProvider: clerkSessionProvider,
+                startupMode: startupMode
             )
             _currentOwnerCoordinator = State(initialValue: currentOwnerCoordinator)
             networkPathObserver = NetworkPathObserver {
@@ -162,6 +190,17 @@ struct BarosApp: App {
             }
             .overlay(alignment: .trailing) {
                 CurrentOwnerSwitchUITestControl(syncScheduler: syncScheduler)
+            }
+            .overlay(alignment: .top) {
+                if let uiTestClerkSessionProvider {
+                    VStack {
+                        Button("Simulate Clerk Sign Out") { uiTestClerkSessionProvider.signOut() }
+                            .accessibilityIdentifier("UITestClerkSignOutButton")
+                        Button("Simulate Clerk Account Switch") { uiTestClerkSessionProvider.switchAccount() }
+                            .accessibilityIdentifier("UITestClerkAccountSwitchButton")
+                    }
+                    .font(.caption2)
+                }
             }
             #endif
             .task {

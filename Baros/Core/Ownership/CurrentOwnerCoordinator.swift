@@ -20,6 +20,9 @@ struct CurrentOwnerClerkSessionState: Equatable {
 protocol CurrentOwnerClerkSessionProviding: AnyObject {
     var state: CurrentOwnerClerkSessionState { get }
     func waitUntilLoaded() async
+    func observeSessionStates(
+        _ receive: @MainActor @escaping (CurrentOwnerClerkSessionState) -> Void
+    ) async
 }
 
 enum CurrentOwnerConvexAuthenticationState: Equatable {
@@ -73,6 +76,9 @@ final class CurrentOwnerCoordinator {
     private var hasStarted = false
     private var startupTask: Task<Void, Never>?
     private var authenticationStateTask: Task<Void, Never>?
+    private var clerkSessionTask: Task<Void, Never>?
+    private var lastObservedClerkSessionState: CurrentOwnerClerkSessionState?
+    private var validatedClerkSessionState: CurrentOwnerClerkSessionState?
     private var authenticationRecoveryCount = 0
     private var isHandlingAuthenticationRecovery = false
     @ObservationIgnored
@@ -118,6 +124,12 @@ final class CurrentOwnerCoordinator {
             return
         }
 
+        clerkSessionTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await clerkSessionProvider.observeSessionStates { [weak self] sessionState in
+                self?.handleClerkSessionState(sessionState)
+            }
+        }
         authenticationStateTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await authenticationClient.observeAuthenticationStates { [weak self] authenticationState in
@@ -294,9 +306,17 @@ final class CurrentOwnerCoordinator {
                 )
                 return
             }
+            // The pinned provider fetches a standard Clerk session token.
+            // Its sid identifies the session that actually authenticated;
+            // the current Clerk snapshot cannot identify a late callback.
+            guard let authenticatedSessionIdentifier = ClerkJWTIdentityResolver.sessionIdentifier(from: token),
+                  authenticatedSessionIdentifier == clerkSessionProvider.state.sessionIdentifier else {
+                enterResolvingState(ownerTokenIdentifier: expectedOwnerTokenIdentifier)
+                return
+            }
             let decision = await syncRecoveryCoordinator.authenticatedStateDecision(
                 ownerTokenIdentifier: ownerTokenIdentifier,
-                sessionIdentifier: clerkSessionProvider.state.sessionIdentifier
+                sessionIdentifier: authenticatedSessionIdentifier
             )
             switch decision {
             case .activate:
@@ -307,6 +327,29 @@ final class CurrentOwnerCoordinator {
             case .reject:
                 return
             }
+        }
+    }
+
+    private func handleClerkSessionState(_ sessionState: CurrentOwnerClerkSessionState) {
+        let previousSessionState = lastObservedClerkSessionState
+        lastObservedClerkSessionState = sessionState
+        guard previousSessionState != sessionState else { return }
+
+        guard sessionState.hasActiveSession else {
+            setHandlingAuthenticationRecovery(false)
+            if state != .localOnly || syncScheduler.currentOwnerTokenIdentifier != nil {
+                enterLocalOnlyMode()
+            }
+            return
+        }
+
+        // Convex may have validated the current Clerk session before its event
+        // arrives. Keep that validation, but pause sync for a replacement
+        // session even when it belongs to the same owner.
+        if syncScheduler.currentOwnerTokenIdentifier != sessionState.ownerTokenIdentifier
+            || state == .localOnly
+            || validatedClerkSessionState != sessionState {
+            enterResolvingState(ownerTokenIdentifier: sessionState.ownerTokenIdentifier)
         }
     }
 
@@ -330,6 +373,7 @@ final class CurrentOwnerCoordinator {
     }
 
     private func enterResolvingState(ownerTokenIdentifier: String?) {
+        validatedClerkSessionState = nil
         syncScheduler.pauseCloudSync()
         if let ownerTokenIdentifier {
             _ = syncScheduler.activateValidatedOwnerTokenIdentifier(ownerTokenIdentifier)
@@ -340,12 +384,14 @@ final class CurrentOwnerCoordinator {
     }
 
     private func enterLocalOnlyMode() {
+        validatedClerkSessionState = nil
         syncScheduler.pauseCloudSync()
         syncScheduler.enterSignedOutMode()
         state = .localOnly
     }
 
     private func activateValidatedOwner(_ ownerTokenIdentifier: String) {
+        validatedClerkSessionState = clerkSessionProvider.state
         syncScheduler.authorizeCloudSync()
         _ = syncScheduler.activateValidatedOwnerTokenIdentifier(ownerTokenIdentifier)
         state = .active(ownerTokenIdentifier: ownerTokenIdentifier)

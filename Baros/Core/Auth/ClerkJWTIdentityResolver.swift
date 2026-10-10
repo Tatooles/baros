@@ -2,16 +2,29 @@ import Foundation
 
 enum ClerkJWTIdentityResolver {
     static func ownerTokenIdentifier(from jwt: String) -> String? {
-        let segments = jwt.split(separator: ".")
-        guard segments.count >= 2,
-              let payloadData = base64URLDecodedData(String(segments[1])),
-              let claims = try? JSONDecoder().decode(Claims.self, from: payloadData),
+        guard let claims = claims(from: jwt),
               !claims.iss.isEmpty,
               !claims.sub.isEmpty else {
             return nil
         }
 
         return "\(claims.iss)|\(claims.sub)"
+    }
+
+    static func sessionIdentifier(from jwt: String) -> String? {
+        guard let sessionIdentifier = claims(from: jwt)?.sid,
+              !sessionIdentifier.isEmpty else { return nil }
+        return sessionIdentifier
+    }
+
+    private static func claims(from jwt: String) -> Claims? {
+        let segments = jwt.split(separator: ".")
+        guard segments.count >= 2,
+              let payloadData = base64URLDecodedData(String(segments[1])),
+              let claims = try? JSONDecoder().decode(Claims.self, from: payloadData) else {
+            return nil
+        }
+        return claims
     }
 
     static func issuer(fromPublishableKey publishableKey: String) -> String? {
@@ -49,5 +62,6 @@ enum ClerkJWTIdentityResolver {
     private struct Claims: Decodable {
         let iss: String
         let sub: String
+        let sid: String?
     }
 }
