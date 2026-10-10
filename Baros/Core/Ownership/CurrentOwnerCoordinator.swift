@@ -78,6 +78,7 @@ final class CurrentOwnerCoordinator {
     private var authenticationStateTask: Task<Void, Never>?
     private var clerkSessionTask: Task<Void, Never>?
     private var lastObservedClerkSessionState: CurrentOwnerClerkSessionState?
+    private var validatedClerkSessionState: CurrentOwnerClerkSessionState?
     private var authenticationRecoveryCount = 0
     private var isHandlingAuthenticationRecovery = false
     @ObservationIgnored
@@ -334,11 +335,12 @@ final class CurrentOwnerCoordinator {
             return
         }
 
-        // A Convex callback may already have validated this owner before the
-        // Clerk event is delivered. Reconcile access without downgrading that
-        // successful authentication or an unchanged owner's cached access.
+        // Convex may have validated the current Clerk session before its event
+        // arrives. Keep that validation, but pause sync for a replacement
+        // session even when it belongs to the same owner.
         if syncScheduler.currentOwnerTokenIdentifier != sessionState.ownerTokenIdentifier
-            || state == .localOnly {
+            || state == .localOnly
+            || validatedClerkSessionState != sessionState {
             enterResolvingState(ownerTokenIdentifier: sessionState.ownerTokenIdentifier)
         }
     }
@@ -363,6 +365,7 @@ final class CurrentOwnerCoordinator {
     }
 
     private func enterResolvingState(ownerTokenIdentifier: String?) {
+        validatedClerkSessionState = nil
         syncScheduler.pauseCloudSync()
         if let ownerTokenIdentifier {
             _ = syncScheduler.activateValidatedOwnerTokenIdentifier(ownerTokenIdentifier)
@@ -373,12 +376,14 @@ final class CurrentOwnerCoordinator {
     }
 
     private func enterLocalOnlyMode() {
+        validatedClerkSessionState = nil
         syncScheduler.pauseCloudSync()
         syncScheduler.enterSignedOutMode()
         state = .localOnly
     }
 
     private func activateValidatedOwner(_ ownerTokenIdentifier: String) {
+        validatedClerkSessionState = clerkSessionProvider.state
         syncScheduler.authorizeCloudSync()
         _ = syncScheduler.activateValidatedOwnerTokenIdentifier(ownerTokenIdentifier)
         state = .active(ownerTokenIdentifier: ownerTokenIdentifier)

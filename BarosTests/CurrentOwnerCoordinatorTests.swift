@@ -243,6 +243,11 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
     }
 
     func testDelayedClerkSessionObservationKeepsAlreadyValidatedNewOwnerActive() async throws {
+        try await assertDelayedClerkObservationKeepsValidatedOwnerActive(ownerB)
+        try await assertDelayedClerkObservationKeepsValidatedOwnerActive(ownerA)
+    }
+
+    private func assertDelayedClerkObservationKeepsValidatedOwnerActive(_ owner: String) async throws {
         let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
         harness.coordinator.start()
         try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
@@ -250,16 +255,40 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
 
         harness.clerkSessionProvider.waitsForSessionDelivery = true
-        harness.setClerkOwner(ownerB, sessionIdentifier: "session_b")
+        harness.setClerkOwner(owner, sessionIdentifier: "session_b")
         try await waitUntil { harness.clerkSessionProvider.hasPendingSessionDelivery }
-        harness.sendAuthenticated(as: ownerB)
-        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerB) }
+        harness.authenticationClient.sendAuthenticationState(.loading)
+        try await waitUntil { harness.coordinator.state == .resolving(ownerTokenIdentifier: owner) }
+        harness.sendAuthenticated(as: owner)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: owner) }
         let deliveredStates = harness.clerkSessionProvider.deliveredStateCount
 
         harness.clerkSessionProvider.resumeSessionDelivery()
         try await waitUntil { harness.clerkSessionProvider.deliveredStateCount > deliveredStates }
 
-        XCTAssertEqual(harness.coordinator.state, .active(ownerTokenIdentifier: ownerB))
+        XCTAssertEqual(harness.coordinator.state, .active(ownerTokenIdentifier: owner))
+        XCTAssertTrue(harness.syncScheduler.isCloudSyncAuthorized)
+        harness.finish()
+    }
+
+    func testReplacementClerkSessionPausesSyncForSameOwnerBeforeConvexLoadingArrives() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness(schedulerMode: .unconfigured)
+        harness.coordinator.start()
+        try await waitUntil { harness.authenticationClient.loginFromCacheCallCount == 1 }
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
+        XCTAssertTrue(harness.syncScheduler.isCloudSyncAuthorized)
+
+        let deliveredStates = harness.clerkSessionProvider.deliveredStateCount
+        harness.setClerkOwner(ownerA, sessionIdentifier: "replacement_session")
+        try await waitUntil { harness.clerkSessionProvider.deliveredStateCount > deliveredStates }
+
+        XCTAssertEqual(harness.coordinator.localDataOwnerTokenIdentifier, ownerA)
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerA))
+        XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
+
+        harness.sendAuthenticated(as: ownerA)
+        try await waitUntil { harness.coordinator.state == .active(ownerTokenIdentifier: ownerA) }
         XCTAssertTrue(harness.syncScheduler.isCloudSyncAuthorized)
         harness.finish()
     }
