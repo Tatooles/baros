@@ -38,6 +38,8 @@ final class ActiveWorkoutEngine {
     private var pendingSetSave: PendingSetSave?
     #if DEBUG
     @ObservationIgnored private var injectedSetSaveFailureCount = 0
+    @ObservationIgnored private var injectedAddExerciseSaveFailureCount = 0
+    @ObservationIgnored private var injectedReorderExercisesSaveFailureCount = 0
     #endif
     var hasPendingSetSave: Bool { pendingSetSave != nil }
     var pendingSetSaveID: UUID? { pendingSetSave?.id }
@@ -161,13 +163,15 @@ final class ActiveWorkoutEngine {
         _ exercise: Exercise,
         to session: WorkoutSession,
         ownerTokenIdentifier: String? = nil,
-        context: ModelContext
+        context: ModelContext,
+        save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws -> LoggedExercise {
         let setKinds = try initialSetKinds(
             for: exercise,
             ownerTokenIdentifier: ownerTokenIdentifier,
             context: context
         )
+        let originalSessionUpdatedAt = session.updatedAt
         let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
         let loggedExercise = LoggedExercise(orderIndex: nextIndex, exercise: exercise)
         loggedExercise.session = session
@@ -181,8 +185,27 @@ final class ActiveWorkoutEngine {
         }
         session.loggedExercises.append(loggedExercise)
         session.touch()
-        try context.save()
-        return loggedExercise
+        do {
+            #if DEBUG
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--uitest-in-memory-store"),
+               arguments.contains("--uitest-fail-add-exercise-save-once"),
+               injectedAddExerciseSaveFailureCount == 0 {
+                injectedAddExerciseSaveFailureCount += 1
+                throw CocoaError(.fileWriteUnknown)
+            }
+            #endif
+            try save(context)
+            return loggedExercise
+        } catch {
+            session.loggedExercises.removeAll { $0.id == loggedExercise.id }
+            for set in loggedExercise.sets {
+                context.delete(set)
+            }
+            context.delete(loggedExercise)
+            session.updatedAt = originalSessionUpdatedAt
+            throw error
+        }
     }
 
     func removeLoggedExercise(_ loggedExercise: LoggedExercise, context: ModelContext, now: Date = .now) throws {
@@ -277,7 +300,8 @@ final class ActiveWorkoutEngine {
         in session: WorkoutSession,
         orderedIDs: [UUID],
         context: ModelContext,
-        now: Date = .now
+        now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws {
         let visibleExercises = session.sortedLoggedExercises
         let visibleIDs = visibleExercises.map(\.id)
@@ -286,6 +310,10 @@ final class ActiveWorkoutEngine {
         }
 
         let exercisesByID = Dictionary(uniqueKeysWithValues: visibleExercises.map { ($0.id, $0) })
+        let originalSessionUpdatedAt = session.updatedAt
+        let originalExerciseStates = visibleExercises.map {
+            (exercise: $0, orderIndex: $0.orderIndex, updatedAt: $0.updatedAt)
+        }
         var didChangeOrder = false
 
         for (index, id) in orderedIDs.enumerated() {
@@ -302,7 +330,25 @@ final class ActiveWorkoutEngine {
 
         guard didChangeOrder else { return }
         session.touch(now: now)
-        try context.save()
+        do {
+            #if DEBUG
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--uitest-in-memory-store"),
+               arguments.contains("--uitest-fail-reorder-exercises-save-once"),
+               injectedReorderExercisesSaveFailureCount == 0 {
+                injectedReorderExercisesSaveFailureCount += 1
+                throw CocoaError(.fileWriteUnknown)
+            }
+            #endif
+            try save(context)
+        } catch {
+            for state in originalExerciseStates {
+                state.exercise.orderIndex = state.orderIndex
+                state.exercise.updatedAt = state.updatedAt
+            }
+            session.updatedAt = originalSessionUpdatedAt
+            throw error
+        }
     }
 
     @discardableResult
