@@ -7,6 +7,8 @@ enum UITestFixtureSeeder {
     static let futureCompletedBenchWorkoutArgument = "--uitest-seed-future-completed-bench-workout"
     static let historyExerciseNoteArgument = "--uitest-seed-history-exercise-note"
     static let historyUncompletedSetArgument = "--uitest-seed-history-uncompleted-set"
+    static let concurrentHistorySaveArgument = "--uitest-concurrent-history-save"
+    @MainActor private static var concurrentHistorySaveSessionIDs: Set<UUID> = []
     static let exerciseHistoryPerformanceArgument = "--uitest-seed-exercise-history-performance"
     static let matchingExercisePerformanceWorkoutsArgument =
         "--uitest-seed-matching-exercise-performance-workouts"
@@ -17,6 +19,25 @@ enum UITestFixtureSeeder {
 
     static func signedOutOwner(in arguments: [String]) -> String? {
         values(after: signedOutOwnerArgument, in: arguments).first
+    }
+
+    /// Reproduces a newer saved value arriving after the Edit sheet snapshots its draft.
+    /// Restricted to disposable in-memory UI-test stores; the editor still uses its real save path.
+    @MainActor
+    static func simulateConcurrentHistorySave(session: WorkoutSession, context: ModelContext) throws {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains(concurrentHistorySaveArgument),
+              arguments.contains("--uitest-in-memory-store"),
+              !concurrentHistorySaveSessionIDs.contains(session.id),
+              let set = session.sortedLoggedExercises.first?.sortedSets.first else { return }
+        let now = Date.now
+        set.weight = (set.weight ?? 0) + 25
+        set.updatedAt = now
+        session.durationSeconds = session.effectiveDurationSeconds() + 600
+        session.endedAt = session.startedAt.addingTimeInterval(TimeInterval(session.durationSeconds))
+        session.updatedAt = now
+        try context.save()
+        concurrentHistorySaveSessionIDs.insert(session.id)
     }
 
     static func seedFixtures(
