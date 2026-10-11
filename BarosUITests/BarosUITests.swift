@@ -2448,6 +2448,7 @@ final class BarosUITests: XCTestCase {
         )
         app.launch()
         app.tabButton(.history).tap()
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
         app.buttons["WorkoutHistoryButton-0"].tap()
         app.buttons["EditWorkoutButton"].tap()
         let weight = app.textFields["HistorySetWeightField-0-0"]
