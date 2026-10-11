@@ -3,6 +3,17 @@ import SwiftData
 
 @MainActor
 struct SyncOutboxRecorder {
+    struct CreateRecord {
+        let entityKind: SyncEntityKind
+        let entityID: UUID
+    }
+
+    private struct EntryKey: Hashable {
+        let entityKind: SyncEntityKind
+        let entityID: UUID
+        let ownerTokenIdentifier: String?
+    }
+
     func recordCreate(
         entityKind: SyncEntityKind,
         entityID: UUID,
@@ -12,28 +23,112 @@ struct SyncOutboxRecorder {
     ) throws {
         guard entityKind.isV1Synced else { return }
 
-        if let entry = try activeEntry(
+        let entry = try activeEntry(
             entityKind: entityKind,
             entityID: entityID,
             ownerTokenIdentifier: ownerTokenIdentifier,
             context: context
-        ) {
+        )
+        coalesceCreate(
+            entityKind: entityKind,
+            entityID: entityID,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            existingEntry: entry,
+            context: context,
+            now: now
+        )
+    }
+
+    /// Records one owner's graph with a single scoped lookup. The caller owns
+    /// the save/rollback transaction; this cache lives only for this call.
+    func recordCreates(
+        _ records: [CreateRecord],
+        ownerTokenIdentifier: String?,
+        context: ModelContext,
+        now: Date
+    ) throws {
+        let records = records.filter { $0.entityKind.isV1Synced }
+        guard !records.isEmpty else { return }
+
+        let entityIDs = Array(Set(records.map(\.entityID)))
+        let entityKinds = Array(Set(records.map { $0.entityKind.rawValue }))
+        let completedStatus = SyncOutboxStatus.completed.rawValue
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>(
+            predicate: #Predicate { entry in
+                entityIDs.contains(entry.entityID)
+                    && entityKinds.contains(entry.entityKindRaw)
+                    && entry.ownerTokenIdentifier == ownerTokenIdentifier
+                    && entry.statusRaw != completedStatus
+                    && entry.operationRaw != ""
+            }
+        ))
+        var entriesByKey: [EntryKey: [SyncOutboxEntry]] = [:]
+        for entry in entries where entry.operation != nil {
+            guard let entityKind = entry.entityKind else { continue }
+            let key = EntryKey(
+                entityKind: entityKind,
+                entityID: entry.entityID,
+                ownerTokenIdentifier: entry.ownerTokenIdentifier
+            )
+            entriesByKey[key, default: []].append(entry)
+        }
+
+        for record in records {
+            let key = EntryKey(
+                entityKind: record.entityKind,
+                entityID: record.entityID,
+                ownerTokenIdentifier: ownerTokenIdentifier
+            )
+            // Re-evaluate updatedAt for repeated IDs, just as individual calls
+            // do when multiple active entries have the same createdAt.
+            let existingEntry = entriesByKey[key]?.min(by: Self.activeEntryPrecedes)
+            let entry = coalesceCreate(
+                entityKind: record.entityKind,
+                entityID: record.entityID,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                existingEntry: existingEntry,
+                context: context,
+                now: now
+            )
+            if existingEntry == nil {
+                entriesByKey[key, default: []].append(entry)
+            }
+        }
+    }
+
+    @discardableResult
+    private func coalesceCreate(
+        entityKind: SyncEntityKind,
+        entityID: UUID,
+        ownerTokenIdentifier: String?,
+        existingEntry: SyncOutboxEntry?,
+        context: ModelContext,
+        now: Date
+    ) -> SyncOutboxEntry {
+        if let entry = existingEntry {
             if entry.operation != .delete {
                 entry.operation = .create
             }
             entry.refreshPending(now: now)
-            return
+            return entry
         }
 
-        context.insert(
-            SyncOutboxEntry(
-                entityKind: entityKind,
-                entityID: entityID,
-                operation: .create,
-                ownerTokenIdentifier: ownerTokenIdentifier,
-                now: now
-            )
+        let entry = SyncOutboxEntry(
+            entityKind: entityKind,
+            entityID: entityID,
+            operation: .create,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            now: now
         )
+        context.insert(entry)
+        return entry
+    }
+
+    private static func activeEntryPrecedes(_ lhs: SyncOutboxEntry, _ rhs: SyncOutboxEntry) -> Bool {
+        if lhs.createdAt == rhs.createdAt {
+            return lhs.updatedAt < rhs.updatedAt
+        }
+        return lhs.createdAt < rhs.createdAt
     }
 
     func recordUpdate(
@@ -303,13 +398,7 @@ struct SyncOutboxRecorder {
             .filter { entry in
                 entry.operation != nil
             }
-            .sorted { lhs, rhs in
-                if lhs.createdAt == rhs.createdAt {
-                    return lhs.updatedAt < rhs.updatedAt
-                }
-
-                return lhs.createdAt < rhs.createdAt
-            }
+            .sorted(by: Self.activeEntryPrecedes)
             .first
     }
 

@@ -4,6 +4,76 @@ import XCTest
 
 @MainActor
 final class SyncOutboxRecorderTests: XCTestCase {
+    func testBulkCreatesMatchIndividualCreatesAcrossExistingOutboxStates() throws {
+        for owner in ["issuer|owner_a", nil] as [String?] {
+            let singleContainer = try SwiftDataTestSupport.makeInMemoryContainer()
+            let bulkContainer = try SwiftDataTestSupport.makeInMemoryContainer()
+            let singleContext = singleContainer.mainContext
+            let bulkContext = bulkContainer.mainContext
+            let entityIDs = (0..<10).map { _ in UUID() }
+            try seedCreateCoalescingCases(entityIDs: entityIDs, owner: owner, context: singleContext)
+            try seedCreateCoalescingCases(entityIDs: entityIDs, owner: owner, context: bulkContext)
+            let records: [SyncOutboxRecorder.CreateRecord] = [
+                .init(entityKind: .workoutSession, entityID: entityIDs[0]),
+                .init(entityKind: .loggedExercise, entityID: entityIDs[1]),
+                .init(entityKind: .loggedSet, entityID: entityIDs[2]),
+                .init(entityKind: .loggedSet, entityID: entityIDs[3]),
+                .init(entityKind: .loggedSet, entityID: entityIDs[4]),
+                .init(entityKind: .loggedSet, entityID: entityIDs[4]),
+                .init(entityKind: .loggedSet, entityID: entityIDs[5]),
+                .init(entityKind: .loggedSet, entityID: entityIDs[6]),
+                .init(entityKind: .loggedSet, entityID: entityIDs[7]),
+                .init(entityKind: .workoutTemplate, entityID: entityIDs[8]),
+            ]
+            let recorder = SyncOutboxRecorder()
+            let now = Date(timeIntervalSince1970: 500)
+            for record in records {
+                try recorder.recordCreate(
+                    entityKind: record.entityKind,
+                    entityID: record.entityID,
+                    ownerTokenIdentifier: owner,
+                    context: singleContext,
+                    now: now
+                )
+            }
+            try recorder.recordCreates(records, ownerTokenIdentifier: owner, context: bulkContext, now: now)
+            XCTAssertTrue(bulkContext.hasChanges, "The caller still owns the save")
+            try singleContext.save()
+            try bulkContext.save()
+
+            XCTAssertEqual(try entryStates(singleContext), try entryStates(bulkContext))
+            let entries = try fetchEntries(bulkContext)
+            let repaired = try XCTUnwrap(entries.first { $0.entityID == entityIDs[3] && $0.ownerTokenIdentifier == owner })
+            XCTAssertEqual(repaired.status, .pending)
+            XCTAssertEqual(repaired.operation, .create)
+            let delete = try XCTUnwrap(entries.first { $0.entityID == entityIDs[2] && $0.ownerTokenIdentifier == owner })
+            XCTAssertEqual(delete.operation, .delete)
+            XCTAssertEqual(delete.attemptCount, 3)
+            XCTAssertEqual(delete.lastAttemptAt, Date(timeIntervalSince1970: 150))
+            XCTAssertNil(delete.lastErrorMessage)
+        }
+    }
+
+    func testBulkCreatesIgnoreEmptyAndUnsupportedInputs() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let recorder = SyncOutboxRecorder()
+        let now = Date(timeIntervalSince1970: 500)
+
+        try recorder.recordCreates([], ownerTokenIdentifier: nil, context: context, now: now)
+        try recorder.recordCreates(
+            [.init(entityKind: .workoutTemplate, entityID: UUID()),
+             .init(entityKind: .healthDataLink, entityID: UUID()),
+             .init(entityKind: .seedMetadata, entityID: UUID())],
+            ownerTokenIdentifier: "issuer|owner_a",
+            context: context,
+            now: now
+        )
+
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertTrue(try fetchEntries(context).isEmpty)
+    }
+
     func testRecordCreateCreatesPendingEntry() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -678,6 +748,66 @@ final class SyncOutboxRecorderTests: XCTestCase {
         try context.save()
 
         XCTAssertTrue(try fetchEntries(context).isEmpty)
+    }
+
+    private func seedCreateCoalescingCases(entityIDs: [UUID], owner: String?, context: ModelContext) throws {
+        func add(
+            _ kind: SyncEntityKind,
+            _ index: Int,
+            _ operation: SyncOperation,
+            createdAt: TimeInterval = 100,
+            updatedAt: TimeInterval = 200,
+            status: SyncOutboxStatus = .pending
+        ) -> SyncOutboxEntry {
+            let entry = SyncOutboxEntry(
+                entityKind: kind,
+                entityID: entityIDs[index],
+                operation: operation,
+                status: status,
+                ownerTokenIdentifier: owner,
+                createdAt: Date(timeIntervalSince1970: createdAt),
+                updatedAt: Date(timeIntervalSince1970: updatedAt)
+            )
+            context.insert(entry)
+            return entry
+        }
+
+        _ = add(.workoutSession, 0, .create)
+        let failed = add(.loggedExercise, 1, .update, status: .failed)
+        failed.attemptCount = 2
+        failed.lastAttemptAt = Date(timeIntervalSince1970: 140)
+        failed.lastErrorMessage = "retry me"
+        let delete = add(.loggedSet, 2, .delete, status: .inFlight)
+        delete.attemptCount = 3
+        delete.lastAttemptAt = Date(timeIntervalSince1970: 150)
+        delete.lastErrorMessage = "preserve delete"
+        add(.loggedSet, 3, .update).statusRaw = "future-status"
+        // The first repeated create refreshes the oldest updatedAt; the second
+        // must then select the other entry with the same oldest createdAt.
+        _ = add(.loggedSet, 4, .update, createdAt: 90, updatedAt: 80)
+        _ = add(.loggedSet, 4, .delete, createdAt: 90, updatedAt: 95)
+        _ = add(.loggedSet, 4, .create, createdAt: 100, updatedAt: 20)
+        _ = add(.loggedSet, 5, .update, createdAt: 10, status: .completed)
+        add(.loggedSet, 6, .update, createdAt: 10).operationRaw = "future-operation"
+        add(.loggedSet, 6, .update, createdAt: 20).operationRaw = ""
+        _ = add(.workoutTemplate, 8, .update)
+        _ = add(.loggedSet, 9, .update, createdAt: 1, updatedAt: 2)
+        // Same ID in a different kind, plus matching IDs owned by someone else.
+        _ = add(.loggedExercise, 0, .delete, createdAt: 1)
+        add(.workoutSession, 0, .delete, createdAt: 1).ownerTokenIdentifier = "issuer|owner_b"
+        add(.loggedSet, 2, .update, createdAt: 1).ownerTokenIdentifier = owner == nil ? "issuer|owner_a" : nil
+        try context.save()
+    }
+
+    /// Compare every persisted field other than newly generated outbox row IDs.
+    private func entryStates(_ context: ModelContext) throws -> [[String]] {
+        try fetchEntries(context).map { entry in
+            [entry.entityKindRaw, entry.entityID.uuidString, entry.operationRaw,
+             entry.statusRaw, entry.ownerTokenIdentifier ?? "<nil>",
+             String(entry.createdAt.timeIntervalSince1970), String(entry.updatedAt.timeIntervalSince1970),
+             entry.lastAttemptAt.map { String($0.timeIntervalSince1970) } ?? "<nil>",
+             String(entry.attemptCount), entry.lastErrorMessage ?? "<nil>"]
+        }.sorted { $0.lexicographicallyPrecedes($1) }
     }
 
     private func fetchEntries(_ context: ModelContext) throws -> [SyncOutboxEntry] {

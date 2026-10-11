@@ -610,31 +610,25 @@ final class ActiveWorkoutEngine {
         session.touch(now: now)
         do {
             let recorder = SyncOutboxRecorder()
-            try recorder.recordCreate(
-                entityKind: .workoutSession,
-                entityID: session.id,
+            var records = [SyncOutboxRecorder.CreateRecord(entityKind: .workoutSession, entityID: session.id)]
+            for loggedExercise in session.sortedLoggedExercises {
+                records.append(.init(
+                    entityKind: .loggedExercise,
+                    entityID: loggedExercise.id
+                ))
+                for set in loggedExercise.sortedSets {
+                    records.append(.init(
+                        entityKind: .loggedSet,
+                        entityID: set.id
+                    ))
+                }
+            }
+            try recorder.recordCreates(
+                records,
                 ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
                 context: context,
                 now: now
             )
-            for loggedExercise in session.sortedLoggedExercises {
-                try recorder.recordCreate(
-                    entityKind: .loggedExercise,
-                    entityID: loggedExercise.id,
-                    ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
-                    context: context,
-                    now: now
-                )
-                for set in loggedExercise.sortedSets {
-                    try recorder.recordCreate(
-                        entityKind: .loggedSet,
-                        entityID: set.id,
-                        ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
-                        context: context,
-                        now: now
-                    )
-                }
-            }
             try context.save()
         } catch {
             context.rollback()
