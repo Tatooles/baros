@@ -533,20 +533,8 @@ private struct PreviousSetsCacheLoader: View {
                 )
             }
             .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
-                let changes = PreviousSetsCacheSaveChanges(notification: notification)
-                let activeGraphIDs = cache.activeGraphIDs(for: session)
-                let activeStructureChanged = cache.activeStructureChanged(for: session)
-
-                guard PreviousSetsCacheReloadPolicy.shouldReload(
-                    insertedIDs: changes.insertedIDs,
-                    updatedIDs: changes.updatedIDs,
-                    deletedIDs: changes.deletedIDs,
-                    activeGraphIDs: activeGraphIDs,
-                    activeStructureChanged: activeStructureChanged,
-                    invalidatedAllIdentifiers: changes.invalidatedAllIdentifiers
-                ) else { return }
-
-                cache.reload(
+                cache.reloadIfNeeded(
+                    after: notification,
                     session: session,
                     context: modelContext,
                     ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
@@ -562,6 +550,18 @@ struct PreviousSetsCacheSaveChanges {
     let updatedIDs: Set<PersistentIdentifier>
     let deletedIDs: Set<PersistentIdentifier>
     let invalidatedAllIdentifiers: Bool
+
+    /// Keep unknown entities conservative. Only these two model types are
+    /// bookkeeping that cannot change historical values or route matching.
+    var containsOnlySyncBookkeeping: Bool {
+        guard !invalidatedAllIdentifiers else { return false }
+        let identifiers = insertedIDs.union(updatedIDs).union(deletedIDs)
+        guard !identifiers.isEmpty else { return false }
+        return identifiers.allSatisfy {
+            $0.entityName == String(describing: SyncOutboxEntry.self)
+                || $0.entityName == String(describing: SyncCursorState.self)
+        }
+    }
 
     init(notification: Notification) {
         insertedIDs = Self.identifiers(for: .insertedIdentifiers, in: notification)
@@ -588,7 +588,7 @@ struct PreviousSetsCacheSaveChanges {
 }
 
 @MainActor
-private final class PreviousSetsCacheLoaderCache {
+final class PreviousSetsCacheLoaderCache {
     private struct ActiveStructureKey: Equatable {
         private struct ExerciseEntry: Equatable {
             let id: UUID
@@ -617,6 +617,63 @@ private final class PreviousSetsCacheLoaderCache {
 
     private var activeStructureKey: ActiveStructureKey?
     private var cacheKey: PreviousSetPerformance.CacheKey?
+    private let fetchSessions: @MainActor (ModelContext, String?) throws -> [WorkoutSession]
+
+    init(
+        fetchSessions: (@MainActor (ModelContext, String?) throws -> [WorkoutSession])? = nil
+    ) {
+        self.fetchSessions = fetchSessions ?? Self.fetchCompletedHistory
+    }
+
+    func reloadIfNeeded(
+        after notification: Notification,
+        session: WorkoutSession,
+        context: ModelContext,
+        ownerTokenIdentifier: String?,
+        lastSyncedAt: Date?,
+        onUpdate: ([UUID: [PreviousSetPerformance]]) -> Void
+    ) {
+        // Other contexts in this container can change history too. An
+        // unrelated container cannot affect the values shown by this loader.
+        if let savedContext = notification.object as? ModelContext,
+           savedContext.container !== context.container {
+            return
+        }
+        let changes = PreviousSetsCacheSaveChanges(notification: notification)
+        guard !changes.containsOnlySyncBookkeeping else { return }
+        guard PreviousSetsCacheReloadPolicy.shouldReload(
+            insertedIDs: changes.insertedIDs,
+            updatedIDs: changes.updatedIDs,
+            deletedIDs: changes.deletedIDs,
+            activeGraphIDs: activeGraphIDs(for: session),
+            activeStructureChanged: activeStructureChanged(for: session),
+            invalidatedAllIdentifiers: changes.invalidatedAllIdentifiers
+        ) else { return }
+
+        reload(
+            session: session,
+            context: context,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            lastSyncedAt: lastSyncedAt,
+            onUpdate: onUpdate
+        )
+    }
+
+    static func fetchCompletedHistory(
+        context: ModelContext,
+        ownerTokenIdentifier: String?
+    ) throws -> [WorkoutSession] {
+        let completedStatus = WorkoutSessionStatus.completed.rawValue
+        return try context.fetch(FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { session in
+                session.statusRaw == completedStatus
+                    && session.deletedAt == nil
+                    && (session.syncOwnerTokenIdentifier == ownerTokenIdentifier
+                        || session.syncOwnerTokenIdentifier == nil)
+            },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        ))
+    }
 
     func activeGraphIDs(for session: WorkoutSession) -> Set<PersistentIdentifier> {
         var identifiers: Set<PersistentIdentifier> = [session.persistentModelID]
@@ -638,10 +695,7 @@ private final class PreviousSetsCacheLoaderCache {
         lastSyncedAt: Date?,
         onUpdate: ([UUID: [PreviousSetPerformance]]) -> Void
     ) {
-        let descriptor = FetchDescriptor<WorkoutSession>(
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-        )
-        guard let sessions = try? context.fetch(descriptor) else { return }
+        guard let sessions = try? fetchSessions(context, ownerTokenIdentifier) else { return }
 
         let nextActiveStructureKey = ActiveStructureKey(session: session)
         let nextCacheKey = PreviousSetPerformance.CacheKey(
