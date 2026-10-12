@@ -21,6 +21,8 @@ final class RestTimerNotifications: RestNotificationScheduling {
             await previous?.value
             guard self.revision == revision else { return }
             var settings = await center.notificationSettings()
+            // Turning timers off or skipping during the lookup must not prompt.
+            guard self.revision == revision else { return }
             if requestAuthorization, settings.authorizationStatus == .notDetermined {
                 _ = try? await center.requestAuthorization(options: [.alert, .sound])
                 settings = await center.notificationSettings()
@@ -62,14 +64,20 @@ extension RestTimerCoordinator {
         notifications: (any RestNotificationScheduling)? = nil
     ) -> RestTimerCoordinator {
         let key = "active-workout-rest-v1"
+        let enabledKey = "rest-timers-enabled-v1"
         let restored = defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(WorkoutRest.self, from: $0) }
         #if DEBUG
             let isUITest = ProcessInfo.processInfo.arguments.contains("--uitest-in-memory-store")
+            let uiTestEnabled = !ProcessInfo.processInfo.arguments.contains("--uitest-disable-rest-timers")
         #else
             let isUITest = false
+            let uiTestEnabled = true
         #endif
+        // Absent means the default: on.
+        let isEnabled = isUITest ? uiTestEnabled : (defaults.object(forKey: enabledKey) as? Bool ?? true)
         return RestTimerCoordinator(
             restoredRest: isUITest ? nil : restored,
+            isEnabled: isEnabled,
             persist: { rest in
                 guard !isUITest else { return }
                 if let rest, let data = try? JSONEncoder().encode(rest) {
@@ -77,6 +85,10 @@ extension RestTimerCoordinator {
                 } else {
                     defaults.removeObject(forKey: key)
                 }
+            },
+            persistEnabled: { enabled in
+                guard !isUITest else { return }
+                defaults.set(enabled, forKey: enabledKey)
             },
             notifications: notifications
                 ?? (isUITest && !ProcessInfo.processInfo.arguments.contains("--uitest-enable-rest-notifications")
