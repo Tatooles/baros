@@ -1786,6 +1786,75 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(try completedSessions(in: context).count, 1)
     }
 
+    func testFinishingRecordsEntireGraphForCapturedOwnerAndPreservesDeleteIntent() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let owner = "issuer|owner_a"
+        let session = try engine.startBlankWorkout(
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let firstSet = try XCTUnwrap(logged.sortedSets.first)
+        let deletedAt = Date(timeIntervalSince1970: 150)
+        let delete = SyncOutboxEntry(
+            entityKind: .loggedSet,
+            entityID: firstSet.id,
+            operation: .delete,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: deletedAt,
+            updatedAt: deletedAt,
+            lastAttemptAt: deletedAt,
+            attemptCount: 2,
+            lastErrorMessage: "retry"
+        )
+        let foreignEntry = SyncOutboxEntry(
+            entityKind: .loggedSet,
+            entityID: firstSet.id,
+            operation: .update,
+            ownerTokenIdentifier: "issuer|owner_b",
+            now: deletedAt
+        )
+        let historyEntry = SyncOutboxEntry(
+            entityKind: .workoutSession,
+            entityID: UUID(),
+            operation: .update,
+            ownerTokenIdentifier: owner,
+            now: deletedAt
+        )
+        context.insert(delete)
+        context.insert(foreignEntry)
+        context.insert(historyEntry)
+        try context.save()
+        let finishedAt = Date(timeIntervalSince1970: 220)
+
+        try engine.finishWorkout(session, ownerTokenIdentifier: "issuer|owner_b", context: context, now: finishedAt)
+
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        let graphIDs = Set([session.id, logged.id] + logged.sets.map(\.id))
+        let graphEntries = entries.filter { graphIDs.contains($0.entityID) && $0.ownerTokenIdentifier == owner }
+        XCTAssertEqual(graphEntries.count, graphIDs.count)
+        XCTAssertEqual(Set(graphEntries.map(\.entityID)), graphIDs)
+        XCTAssertTrue(graphEntries.allSatisfy { $0.status == .pending && $0.updatedAt == finishedAt })
+        XCTAssertTrue(graphEntries.filter { $0.entityID != firstSet.id }.allSatisfy { $0.operation == .create })
+        XCTAssertEqual(delete.operation, .delete)
+        XCTAssertEqual(delete.createdAt, deletedAt)
+        XCTAssertEqual(delete.attemptCount, 2)
+        XCTAssertEqual(delete.lastAttemptAt, deletedAt)
+        XCTAssertNil(delete.lastErrorMessage)
+        XCTAssertEqual(foreignEntry.operation, .update)
+        XCTAssertEqual(foreignEntry.updatedAt, deletedAt)
+        XCTAssertEqual(historyEntry.operation, .update)
+        XCTAssertEqual(historyEntry.updatedAt, deletedAt)
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertNil(engine.activeSessionID)
+    }
+
     func testFinishingAuthenticatedWorkoutRequestsSync() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
