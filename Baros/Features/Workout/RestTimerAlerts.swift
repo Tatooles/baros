@@ -21,6 +21,8 @@ final class RestTimerNotifications: RestNotificationScheduling {
             await previous?.value
             guard self.revision == revision else { return }
             var settings = await center.notificationSettings()
+            // Turning timers off or skipping during the lookup must not prompt.
+            guard self.revision == revision else { return }
             if requestAuthorization, settings.authorizationStatus == .notDetermined {
                 _ = try? await center.requestAuthorization(options: [.alert, .sound])
                 settings = await center.notificationSettings()
