@@ -133,16 +133,27 @@ struct RestTimerBadge: View {
             Button {
                 timer.toggleControls()
             } label: {
-                HStack(spacing: 6) {
-                    if showsHourglass { Image(systemName: "hourglass") }
-                    RestTimeText(period: period, compact: !showsHourglass)
+                if showsHourglass {
+                    // Workout content scrolls under the header, so the header
+                    // badge needs the same glass backing as its neighbors.
+                    HStack(spacing: 6) {
+                        Image(systemName: "hourglass")
+                        RestTimeText(period: period, date: timeline.date)
+                    }
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .padding(.horizontal, 14)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .glassEffect(.regular.tint(AppTheme.brandAccentMuted).interactive(), in: .capsule)
+                    .contentShape(Capsule())
+                } else {
+                    RestTimeText(period: period, date: timeline.date, compact: true)
+                        .foregroundStyle(AppTheme.brandAccentForeground)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AppTheme.brandAccentMuted, in: Capsule())
+                        .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
-                .foregroundStyle(AppTheme.brandAccentForeground)
-                .padding(.horizontal, showsHourglass ? 14 : 6)
-                .padding(.vertical, showsHourglass ? 10 : 2)
-                .background(AppTheme.brandAccentMuted, in: Capsule())
-                .frame(minWidth: 44, minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(showsHourglass ? "RestTimerHeaderBadge" : "RestTimerBadge")
@@ -160,16 +171,19 @@ private func restSpokenValue(_ period: RestTimerPeriod, at date: Date) -> String
             .formatted(.units(allowed: [.minutes, .seconds], width: .wide))
 }
 
+/// Draws one tick of its caller's TimelineView, which also drives the
+/// button's spoken value; it doesn't schedule a second timeline.
 private struct RestTimeText: View {
     let period: RestTimerPeriod
+    let date: Date
     var compact = false
 
     var body: some View {
-        TimelineView(.periodic(from: period.rest.startedAt, by: 1)) { timeline in
+        Group {
             if period.isFinished {
                 Image(systemName: "checkmark")
             } else {
-                let seconds = period.rest.remainingSeconds(at: timeline.date)
+                let seconds = period.rest.remainingSeconds(at: date)
                 Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
                     .monospacedDigit()
             }
@@ -191,7 +205,7 @@ struct RestExpandedControls: View {
                 Button {
                     timer.toggleControls()
                 } label: {
-                    RestTimeText(period: period)
+                    RestTimeText(period: period, date: timeline.date)
                         .padding(.horizontal, 6)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
@@ -251,10 +265,13 @@ struct RestTimerLifecycleState: Equatable {
         restID = rest?.id
         sessionID = session?.id
         self.ownerState = ownerState
-        starterIsEligible =
-            session?.sortedLoggedExercises.contains { exercise in
-                exercise.sortedSets.contains { $0.id == rest?.setID && $0.isCompleted }
-            } ?? false
+        // Without a rest, or with another workout visible, reconciliation
+        // doesn't read the starter; skip walking every set on each change.
+        guard let rest, let session else {
+            starterIsEligible = false
+            return
+        }
+        starterIsEligible = rest.starterIsCompleted(in: session)
     }
 }
 
