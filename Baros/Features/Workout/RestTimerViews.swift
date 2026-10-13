@@ -109,18 +109,47 @@ private struct RestInlineControls: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let reducesMotion = restTimerReducesMotion(reduceMotion)
         HStack(spacing: 0) {
             if period.controlsExpanded {
                 RestExpandedControls(period: period, timer: timer)
-                    .transition(.opacity)
+                    .transition(reducesMotion ? .opacity : AnyTransition(RestControlsShrink()))
             } else {
                 RestTimerBadge(period: period, timer: timer)
-                    .transition(.opacity)
+                    .transition(reducesMotion ? .opacity : .scale(scale: 0.6, anchor: .leading).combined(with: .opacity))
             }
         }
-        .animation(
-            .easeOut(duration: restTimerReducesMotion(reduceMotion) ? 0.15 : 0.25), value: period.controlsExpanded)
+        .animation(restControlsAnimation(reducesMotion: reducesMotion), value: period.controlsExpanded)
     }
+}
+
+/// The controls pill grows out of, and shrinks back into, the badge at its
+/// leading edge. It squashes toward the badge's proportions and stays opaque
+/// until it's nearly badge-sized, so the shrink reads instead of a fade.
+private struct RestControlsShrink: Transition {
+    func body(content: Content, phase: TransitionPhase) -> some View {
+        content.modifier(RestControlsShrinkEffect(progress: phase.isIdentity ? 1 : 0))
+    }
+}
+
+private struct RestControlsShrinkEffect: ViewModifier, Animatable {
+    var progress: Double
+
+    nonisolated var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(x: 0.25 + 0.75 * progress, y: 0.45 + 0.55 * progress, anchor: .leading)
+            .blur(radius: 3 * (1 - min(1, progress)))
+            .opacity(max(0, min(1, progress * 2.5)))
+    }
+}
+
+func restControlsAnimation(reducesMotion: Bool) -> Animation {
+    reducesMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.4, bounce: 0.25)
 }
 
 struct RestTimerBadge: View {
@@ -197,6 +226,9 @@ private struct RestTimeText: View {
 struct RestExpandedControls: View {
     let period: RestTimerPeriod
     let timer: RestTimerCoordinator
+    /// In the header's glass container, the pill morphs into and out of the
+    /// badge and progress pills instead of shrinking.
+    var usesGlass = false
 
     var body: some View {
         HStack(spacing: 2) {
@@ -225,9 +257,7 @@ struct RestExpandedControls: View {
         .foregroundStyle(AppTheme.brandAccentForeground)
         .buttonStyle(.plain)
         .padding(.horizontal, 4)
-        .background(AppTheme.groupedSurface, in: Capsule())
-        .overlay(Capsule().strokeBorder(AppTheme.brandAccentFill.opacity(0.7), lineWidth: 1))
-        .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+        .modifier(RestControlsBackground(usesGlass: usesGlass))
     }
 
     private func adjustButton(_ title: String, label: String, seconds: TimeInterval) -> some View {
@@ -235,6 +265,21 @@ struct RestExpandedControls: View {
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
             .accessibilityLabel(label)
+    }
+}
+
+private struct RestControlsBackground: ViewModifier {
+    let usesGlass: Bool
+
+    func body(content: Content) -> some View {
+        if usesGlass {
+            content.glassEffect(.regular.interactive(), in: .capsule)
+        } else {
+            content
+                .background(AppTheme.groupedSurface, in: Capsule())
+                .overlay(Capsule().strokeBorder(AppTheme.brandAccentFill.opacity(0.7), lineWidth: 1))
+                .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+        }
     }
 }
 
