@@ -352,7 +352,7 @@ private struct WorkoutLiveActivityProgressDial: View {
 private enum WorkoutLiveActivityAccessibility {
     static func value(context: ActivityViewContext<WorkoutLiveActivityAttributes>) -> Text {
         if let interval = context.restCountdownInterval {
-            return Text("\(context.state.title), rest time remaining \(timerInterval: interval, countsDown: true, showsHours: false), \(context.state.completedSetCount) of \(context.state.totalSetCount) sets complete")
+            return Text("\(context.state.title), elapsed time \(timerInterval: context.attributes.startedAt...Date.distantFuture, countsDown: false, showsHours: true), rest time remaining \(timerInterval: interval, countsDown: true, showsHours: false), \(context.state.completedSetCount) of \(context.state.totalSetCount) sets complete")
         }
         return Text("\(context.state.title), elapsed time \(timerInterval: context.attributes.startedAt...Date.distantFuture, countsDown: false, showsHours: true), \(context.state.completedSetCount) of \(context.state.totalSetCount) sets complete")
     }

@@ -122,6 +122,16 @@ final class WorkoutLiveActivityTests: XCTestCase {
         ).staleDate)
     }
 
+    func testContentStateDecodesPayloadFromBuildsWithoutRestFields() throws {
+        let legacy = Data(#"{"title":"Push Day","completedSetCount":2,"totalSetCount":5}"#.utf8)
+        let state = try JSONDecoder().decode(WorkoutLiveActivityAttributes.ContentState.self, from: legacy)
+        XCTAssertEqual(state.title, "Push Day")
+        XCTAssertEqual(state.completedSetCount, 2)
+        XCTAssertEqual(state.totalSetCount, 5)
+        XCTAssertNil(state.restStartedAt)
+        XCTAssertNil(state.restEndsAt)
+    }
+
     func testAccessoryRestStateMapsCountdownAndFinishedWindow() {
         let sessionID = UUID()
         let now = Date(timeIntervalSince1970: 1_000)
