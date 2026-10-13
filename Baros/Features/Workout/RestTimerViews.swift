@@ -144,7 +144,7 @@ private struct RestControlsShrinkEffect: ViewModifier, Animatable {
         content
             .scaleEffect(x: 0.25 + 0.75 * progress, y: 0.45 + 0.55 * progress, anchor: .leading)
             .blur(radius: 3 * (1 - min(1, progress)))
-            .opacity(min(1, progress * 2.5))
+            .opacity(max(0, min(1, progress * 2.5)))
     }
 }
 
