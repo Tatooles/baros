@@ -16,7 +16,7 @@ struct HomeView: View {
     @State private var now = Date.now
     @State private var replayID = 0
     @State private var ring = HomeRingModel(workouts: [], now: .now, calendar: .current)
-    @AppStorage("HomeRingPeriod") private var periodRaw = HomeRingPeriod.month.rawValue
+    @AppStorage(HomeRingPeriod.storageKey) private var periodRaw = HomeRingPeriod.month.rawValue
     #if DEBUG
     private let fixture = HomeRingFixture.launchFixture
     #endif
@@ -42,7 +42,7 @@ struct HomeView: View {
                     header
                     Spacer(minLength: 20).frame(maxHeight: 40)
                     VStack(spacing: 12) {
-                        HomeYearRingView(model: ring, period: ring.showsPeriodToggle ? period : .month,
+                        HomeYearRingView(model: ring, period: effectivePeriod,
                                          diameter: min(geometry.size.width * 0.80, 350),
                                          now: now, replayID: replayID)
                         Picker("History period", selection: $periodRaw) {
@@ -85,9 +85,6 @@ struct HomeView: View {
                 onWorkoutStarted: handOffStartedWorkout
             )
         }
-        .onChange(of: ring.showsPeriodToggle, initial: true) { _, showsToggle in
-            if !showsToggle { periodRaw = HomeRingPeriod.month.rawValue }
-        }
         .onChange(of: ringInput, initial: true) { previousInput, input in
             now = .now
             ring = HomeRingModel(workouts: input.workouts, now: now, calendar: input.calendar)
@@ -116,6 +113,7 @@ struct HomeView: View {
     }
 
     private var period: HomeRingPeriod { HomeRingPeriod(rawValue: periodRaw) ?? .month }
+    private var effectivePeriod: HomeRingPeriod { ring.showsPeriodToggle ? period : .month }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -139,11 +137,7 @@ struct HomeView: View {
         #if DEBUG
         if fixture != .live { return fixture.workouts(now: now, calendar: .current) }
         #endif
-        return content.completedSessions.compactMap { session in
-            let end = session.endedAt ?? session.startedAt
-            guard end <= now else { return nil }
-            return RingWorkout(date: session.startedAt, duration: end.timeIntervalSince(session.startedAt))
-        }
+        return RingWorkout.ringWorkouts(from: content.completedSessions, now: now)
     }
 
     private func actions(content: HomeContent, primaryPresentation: HomePrimaryWorkoutPresentation, hasHistory: Bool) -> some View {
@@ -151,7 +145,14 @@ struct HomeView: View {
             if hasHistory, !primaryPresentation.isActive {
                 if !content.quickStartWorkouts.isEmpty { livePills(content: content) }
             }
-            HomePrimaryWorkoutButton(presentation: primaryPresentation, action: primaryWorkoutAction)
+            TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                let presentation = HomePrimaryWorkoutPresentation(
+                    activeSession: activeSession,
+                    sessionIDHiddenDuringLaunchHandoff: sessionIDHiddenDuringLaunchHandoff,
+                    now: timeline.date
+                )
+                HomePrimaryWorkoutButton(presentation: presentation, action: primaryWorkoutAction)
+            }
         }
     }
 

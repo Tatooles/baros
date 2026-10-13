@@ -647,10 +647,29 @@ final class BarosUITests: XCTestCase {
         app.tabButton(.home).tap()
         XCTAssertTrue(ring.waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["StartWorkoutButton"].isHittable)
+        XCTAssertTrue(ring.label.hasPrefix("Last 52 weeks: trained in"))
         picker.buttons["Month"].tap()
         XCTAssertTrue(ring.label.hasPrefix("Last 30 days:"))
         app.buttons["StartWorkoutButton"].tap()
         XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testHomeRingYearSelectionPersistsAcrossRelaunch() {
+        let app = makeApp(extraArguments: ["--home-ring-fixture", "perWeek3"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertTrue(ring.label.hasPrefix("Last 30 days:"))
+        app.segmentedControls["HomeRingPeriodPicker"].buttons["Year"].tap()
+        XCTAssertTrue(ring.label.hasPrefix("Last 52 weeks:"))
+        app.terminate()
+
+        let relaunchedApp = makeApp(extraArguments: ["--home-ring-fixture", "perWeek3"], resetsHomeRingPeriod: false)
+        relaunchedApp.launch()
+        let relaunchedRing = relaunchedApp.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(relaunchedRing.waitForExistence(timeout: 3))
+        XCTAssertTrue(relaunchedRing.label.hasPrefix("Last 52 weeks:"))
     }
 
     @MainActor
@@ -4006,7 +4025,8 @@ final class BarosUITests: XCTestCase {
     private func makeApp(
         extraArguments: [String] = [],
         completedBenchWorkoutTitles: [String] = [],
-        resetsSignedOutReminder: Bool = true
+        resetsSignedOutReminder: Bool = true,
+        resetsHomeRingPeriod: Bool = true
     ) -> XCUIApplication {
         let app = XCUIApplication()
         let fixtureArguments = completedBenchWorkoutTitles.flatMap {
@@ -4021,6 +4041,9 @@ final class BarosUITests: XCTestCase {
             "--uitest-reset-exercise-picker-sort",
             "--uitest-reset-app-appearance",
         ] + fixtureArguments + authArguments
+        if resetsHomeRingPeriod {
+            launchArguments.append("--uitest-reset-home-ring-period")
+        }
         if resetsSignedOutReminder {
             launchArguments.append("--uitest-reset-signed-out-reminder")
         }
@@ -4081,6 +4104,7 @@ final class BarosUITests: XCTestCase {
             "--uitest-force-signed-out-auth",
             "--uitest-reset-exercise-picker-sort",
             "--uitest-reset-app-appearance",
+            "--uitest-reset-home-ring-period",
         ]
         if !extraArguments.contains("--uitest-reset-first-run-experience") {
             launchArguments.append("--uitest-skip-first-run-experience")

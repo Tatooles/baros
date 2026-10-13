@@ -4,6 +4,14 @@ import Foundation
 struct RingWorkout: Equatable {
     let date: Date
     let duration: TimeInterval
+
+    static func ringWorkouts(from sessions: [WorkoutSession], now: Date) -> [RingWorkout] {
+        sessions.compactMap { session in
+            let end = session.endedAt ?? session.startedAt
+            guard end <= now else { return nil }
+            return RingWorkout(date: session.startedAt, duration: TimeInterval(session.effectiveDurationSeconds(now: now)))
+        }
+    }
 }
 
 enum HomeRingPeriod: String, CaseIterable {
@@ -11,6 +19,13 @@ enum HomeRingPeriod: String, CaseIterable {
 
     var title: String { self == .month ? "Month" : "Year" }
     var slotCount: Int { self == .month ? 30 : 52 }
+
+    static let storageKey = "HomeRingPeriod"
+
+    static func resetForUITestingIfRequested(arguments: [String], defaults: UserDefaults = .standard) {
+        guard arguments.contains("--uitest-reset-home-ring-period") else { return }
+        defaults.removeObject(forKey: storageKey)
+    }
 }
 
 struct HomeRingSpoke: Equatable {

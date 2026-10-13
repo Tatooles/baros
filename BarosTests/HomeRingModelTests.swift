@@ -21,6 +21,27 @@ final class HomeRingModelTests: XCTestCase {
         RingWorkout(date: date, duration: minutes * 60)
     }
 
+    func testSessionAdaptationUsesSavedDurationWithoutEndDate() {
+        let session = WorkoutSession(title: "Workout", startedAt: date(hour: 7), durationSeconds: 3_600,
+                                     status: .completed, source: .blank)
+        XCTAssertEqual(RingWorkout.ringWorkouts(from: [session], now: date()),
+                       [RingWorkout(date: session.startedAt, duration: 3_600)])
+    }
+
+    func testSessionAdaptationFallsBackToElapsedDuration() {
+        let start = date(hour: 7)
+        let session = WorkoutSession(title: "Workout", startedAt: start, endedAt: start.addingTimeInterval(45 * 60),
+                                     durationSeconds: 0, status: .completed, source: .blank)
+        XCTAssertEqual(RingWorkout.ringWorkouts(from: [session], now: date()),
+                       [RingWorkout(date: start, duration: 2_700)])
+    }
+
+    func testSessionAdaptationExcludesFutureEndDate() {
+        let session = WorkoutSession(title: "Workout", startedAt: date(hour: 7), endedAt: date(hour: 13),
+                                     durationSeconds: 3_600, status: .completed, source: .blank)
+        XCTAssertTrue(RingWorkout.ringWorkouts(from: [session], now: date()).isEmpty)
+    }
+
     func testDayBucketingCombinesDoubleWorkoutBeforeCapping() {
         let now = date()
         let model = HomeRingModel(workouts: [workout(date(hour: 7), minutes: 55), workout(date(hour: 10), minutes: 50)], now: now, calendar: calendar)
