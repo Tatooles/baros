@@ -58,10 +58,10 @@ private struct WorkoutHeaderMetrics: View {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) {
                         RestTimerBadge(period: period, timer: timer, showsHourglass: true)
-                        RestExpandedControls(period: period, timer: timer)
+                        RestExpandedControls(period: period, timer: timer, usesGlass: true)
                     }
                     .fixedSize()
-                    RestExpandedControls(period: period, timer: timer)
+                    RestExpandedControls(period: period, timer: timer, usesGlass: true)
                         .fixedSize()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -79,8 +79,11 @@ private struct WorkoutHeaderMetrics: View {
                 }
             }
         }
-        .animation(.easeOut(duration: restTimerReducesMotion(reduceMotion) ? 0.15 : 0.2), value: timer.showsHeaderFallback)
+        .animation(.easeOut(duration: reducesMotion ? 0.15 : 0.2), value: timer.showsHeaderFallback)
+        .animation(restControlsAnimation(reducesMotion: reducesMotion), value: timer.current?.controlsExpanded)
     }
+
+    private var reducesMotion: Bool { restTimerReducesMotion(reduceMotion) }
 
     private var elapsedTime: some View {
         TimelineView(.periodic(from: startedAt, by: 1)) { timeline in
