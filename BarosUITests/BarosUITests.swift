@@ -8,6 +8,65 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testMinimizedAccessoryShowsRestCountdownFinishedWindowThenElapsed() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store", "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience", "--uitest-rest-30-seconds",
+            "--uitest-seed-large-active-workout",
+        ]
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["SetCompletionButton-0-0"].tap()
+        minimizeActiveWorkout(in: app)
+        let accessory = app.buttons["ActiveWorkoutAccessory"]
+        XCTAssertTrue((accessory.value as? String ?? "").contains("Rest 0:"))
+        XCTAssertTrue((accessory.value as? String ?? "").contains("1 of 50 sets completed"))
+        let restingValue = accessory.value as? String
+        let ticking = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in accessory.value as? String != restingValue },
+            object: accessory
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [ticking], timeout: 3), .completed)
+        let finished = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                (accessory.value as? String ?? "").contains("Rest over")
+            }, object: accessory
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 35), .completed)
+        let elapsed = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                (accessory.value as? String ?? "").contains("elapsed")
+            }, object: accessory
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [elapsed], timeout: 6), .completed)
+    }
+
+    @MainActor
+    func testMinimizedRestAccessoryAtAccessibilityTextSizeAndAfterSkip() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store", "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience", "--uitest-seed-large-active-workout",
+            "--uitest-accessibility-dynamic-type",
+        ]
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["SetCompletionButton-0-0"].tap()
+        minimizeActiveWorkout(in: app)
+        let accessory = app.buttons["ActiveWorkoutAccessory"]
+        XCTAssertTrue((accessory.value as? String ?? "").contains("Rest "))
+        accessory.tap()
+        let badge = app.buttons["RestTimerBadge"]
+        XCTAssertTrue(badge.waitForExistence(timeout: 3))
+        badge.tap()
+        app.buttons["SkipRestButton"].tap()
+        minimizeActiveWorkout(in: app)
+        XCTAssertTrue((accessory.value as? String ?? "").contains("elapsed"))
+        XCTAssertFalse((accessory.value as? String ?? "").contains("Rest "))
+    }
+
+    @MainActor
     func testCompletingSetStartsRestAndSkipRemovesIt() {
         let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
         app.launch()

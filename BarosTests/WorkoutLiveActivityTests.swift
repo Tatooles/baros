@@ -31,6 +31,120 @@ final class WorkoutLiveActivityTests: XCTestCase {
         XCTAssertEqual(snapshot.totalSetCount, 2)
     }
 
+    func testSnapshotIncludesOnlyThisSessionsUnfinishedRest() {
+        let session = WorkoutSession(title: "Push Day", startedAt: Date(timeIntervalSince1970: 1_000), status: .active, source: .blank)
+        let rest = WorkoutRest(
+            id: UUID(), sessionID: session.id, setID: UUID(),
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endsAt: Date(timeIntervalSince1970: 1_090), wasSkipped: false
+        )
+        let period = RestTimerPeriod(rest: rest)
+        let resting = WorkoutLiveActivitySnapshot(session: session, restPeriod: period)
+        XCTAssertEqual(resting.contentState.restStartedAt, rest.startedAt)
+        XCTAssertEqual(resting.contentState.restEndsAt, rest.endsAt)
+
+        let otherSession = WorkoutSession(title: "Other", startedAt: Date(timeIntervalSince1970: 1_000), status: .active, source: .blank)
+        let other = WorkoutLiveActivitySnapshot(session: otherSession, restPeriod: period)
+        XCTAssertNil(other.restStartedAt)
+        XCTAssertNil(other.restEndsAt)
+
+        period.isFinished = true
+        XCTAssertEqual(
+            WorkoutLiveActivitySnapshot(session: session, restPeriod: period),
+            WorkoutLiveActivitySnapshot(session: session)
+        )
+        period.isFinished = false
+        period.rest.wasSkipped = true
+        XCTAssertNil(WorkoutLiveActivitySnapshot(session: session, restPeriod: period).restEndsAt)
+        let idle = WorkoutLiveActivitySnapshot(session: session)
+        XCTAssertNil(idle.contentState.restStartedAt)
+        XCTAssertNil(idle.contentState.restEndsAt)
+    }
+
+    @MainActor
+    func testSnapshotChangesOnRestStartAdjustReplaceSkipClearAndDisable() {
+        let session = WorkoutSession(title: "Push Day", startedAt: Date(timeIntervalSince1970: 1_000), status: .active, source: .blank)
+        let now = Date(timeIntervalSince1970: 1_000)
+        let timer = RestTimerCoordinator(clock: { now }, schedulesTasks: false)
+        func snapshot() -> WorkoutLiveActivitySnapshot {
+            WorkoutLiveActivitySnapshot(session: session, restPeriod: timer.current)
+        }
+        let idle = snapshot()
+        timer.start(sessionID: session.id, setID: UUID(), duration: 90)
+        let started = snapshot()
+        XCTAssertNotEqual(started, idle)
+        XCTAssertEqual(started, snapshot())
+        timer.adjust(by: 15)
+        XCTAssertNotEqual(started, snapshot())
+        XCTAssertEqual(snapshot().restEndsAt, started.restEndsAt?.addingTimeInterval(15))
+        timer.adjust(by: -15)
+        XCTAssertEqual(started, snapshot())
+        timer.start(sessionID: session.id, setID: UUID(), duration: 120)
+        XCTAssertNotEqual(started, snapshot())
+        timer.skip()
+        XCTAssertEqual(idle, snapshot())
+        timer.start(sessionID: session.id, setID: UUID(), duration: 90)
+        timer.cancel()
+        XCTAssertEqual(idle, snapshot())
+        timer.start(sessionID: session.id, setID: UUID(), duration: 90)
+        timer.setEnabled(false)
+        XCTAssertNil(timer.current)
+        XCTAssertEqual(idle, snapshot())
+        timer.start(sessionID: session.id, setID: UUID(), duration: 90)
+        XCTAssertEqual(idle, snapshot())
+    }
+
+    @MainActor
+    func testActivityContentUsesRestEndAsStaleDateOnlyWhileResting() {
+        let session = WorkoutSession(title: "Push Day", startedAt: Date(timeIntervalSince1970: 1_000), status: .active, source: .blank)
+        let period = RestTimerPeriod(rest: WorkoutRest(
+            id: UUID(), sessionID: session.id, setID: UUID(),
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endsAt: Date(timeIntervalSince1970: 1_090), wasSkipped: false
+        ))
+        let resting = WorkoutLiveActivitySnapshot(session: session, restPeriod: period)
+        let content = WorkoutLiveActivityCoordinator.content(for: resting)
+        XCTAssertEqual(content.state, resting.contentState)
+        XCTAssertEqual(content.staleDate, period.rest.endsAt)
+        period.rest.endsAt += 15
+        XCTAssertEqual(
+            WorkoutLiveActivityCoordinator.content(
+                for: WorkoutLiveActivitySnapshot(session: session, restPeriod: period)
+            ).staleDate,
+            period.rest.endsAt
+        )
+        period.isFinished = true
+        XCTAssertNil(WorkoutLiveActivityCoordinator.content(
+            for: WorkoutLiveActivitySnapshot(session: session, restPeriod: period)
+        ).staleDate)
+        XCTAssertNil(WorkoutLiveActivityCoordinator.content(
+            for: WorkoutLiveActivitySnapshot(session: session)
+        ).staleDate)
+    }
+
+    func testAccessoryRestStateMapsCountdownAndFinishedWindow() {
+        let sessionID = UUID()
+        let now = Date(timeIntervalSince1970: 1_000)
+        let period = RestTimerPeriod(rest: WorkoutRest(
+            id: UUID(), sessionID: sessionID, setID: UUID(),
+            startedAt: now, endsAt: now.addingTimeInterval(90), wasSkipped: false
+        ))
+        func state(at date: Date) -> ActiveWorkoutAccessoryRestState? {
+            ActiveWorkoutAccessoryRestState(period: period, sessionID: sessionID, now: date)
+        }
+        XCTAssertEqual(state(at: now)?.subtitle, "Rest 1:30")
+        XCTAssertEqual(state(at: now)?.systemImage, "hourglass")
+        XCTAssertEqual(state(at: now.addingTimeInterval(70.1))?.subtitle, "Rest 0:20")
+        XCTAssertEqual(state(at: now.addingTimeInterval(91))?.subtitle, "Rest 0:00")
+        period.isFinished = true
+        XCTAssertEqual(state(at: now)?.subtitle, "Rest over")
+        XCTAssertEqual(state(at: now)?.systemImage, "checkmark")
+        XCTAssertNil(ActiveWorkoutAccessoryRestState(period: period, sessionID: UUID(), now: now))
+        XCTAssertNil(ActiveWorkoutAccessoryRestState(period: nil, sessionID: sessionID, now: now))
+        period.rest.wasSkipped = true
+        XCTAssertNil(state(at: now))
+    }
+
     func testLiveActivityLinkRoundTripsStableWorkoutIdentifier() {
         let workoutID = UUID()
         let url = WorkoutLiveActivityLink.url(for: workoutID)
