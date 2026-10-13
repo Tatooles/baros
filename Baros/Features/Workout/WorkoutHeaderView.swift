@@ -80,7 +80,9 @@ private struct WorkoutHeaderMetrics: View {
             }
         }
         .animation(.easeOut(duration: reducesMotion ? 0.15 : 0.2), value: timer.showsHeaderFallback)
-        .animation(restControlsAnimation(reducesMotion: reducesMotion), value: timer.current?.controlsExpanded)
+        // The glass container morphs the pill into the badge and progress
+        // pills; Reduce Motion keeps the instant swap instead.
+        .animation(reducesMotion ? nil : restControlsAnimation(reducesMotion: false), value: timer.current?.controlsExpanded)
     }
 
     private var reducesMotion: Bool { restTimerReducesMotion(reduceMotion) }
