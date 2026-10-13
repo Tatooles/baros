@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ActiveWorkoutAccessoryView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.tabViewBottomAccessoryPlacement) private var accessoryPlacement
     let session: WorkoutSession
     let restTimer: RestTimerCoordinator
     let showsReturnAction: Bool
@@ -30,18 +29,6 @@ struct ActiveWorkoutAccessoryView: View {
                         .foregroundStyle(AppTheme.textPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
-                    } else if accessoryPlacement == .inline {
-                        HStack(spacing: 4) {
-                            Text(session.title)
-                                .lineLimit(1)
-                            Text("·")
-                            Text(restSubtitle ?? WorkoutFormatters.elapsedCompactDescription(metrics.durationSeconds))
-                                .foregroundStyle(restState != nil ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
-                                .fixedSize()
-                        }
-                        .font(.caption.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(AppTheme.textPrimary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         HStack(spacing: 12) {
                             Image(systemName: restState?.systemImage ?? "timer")
@@ -78,7 +65,7 @@ struct ActiveWorkoutAccessoryView: View {
                 .padding(.horizontal, 16)
                 .frame(
                     maxWidth: .infinity,
-                    minHeight: dynamicTypeSize.isAccessibilitySize ? 96 : accessoryPlacement == .inline ? 44 : 52
+                    minHeight: dynamicTypeSize.isAccessibilitySize ? 96 : 52
                 )
                 .contentShape(Rectangle())
                 .accessibilityElement(children: .ignore)
