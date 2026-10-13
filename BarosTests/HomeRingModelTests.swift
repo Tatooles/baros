@@ -255,6 +255,26 @@ final class HomeRingModelTests: XCTestCase {
     }
 
     #if DEBUG
+    func testSaved500WorkoutHistoryIsIdempotentAndUsesLiveOwnerFiltering() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        try UITestFixtureSeeder.seedHomeRingHistory(ownerTokenIdentifier: "owner-a", context: context,
+                                                   now: date(), calendar: calendar)
+        try UITestFixtureSeeder.seedHomeRingHistory(ownerTokenIdentifier: "owner-a", context: context,
+                                                   now: date(), calendar: calendar)
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        XCTAssertEqual(sessions.count, 500)
+        let visible = HomeContent(sessions: sessions, ownerTokenIdentifier: "owner-a", now: date())
+        let model = HomeRingModel(workouts: visible.completedSessions.map {
+            RingWorkout(date: $0.startedAt, duration: $0.endedAt!.timeIntervalSince($0.startedAt))
+        }, now: date(), calendar: calendar)
+        XCTAssertEqual(model.totalWorkouts, 500)
+        XCTAssertEqual(model.monthWorkoutCount, 14)
+        XCTAssertTrue(model.showsPeriodToggle)
+        XCTAssertEqual(Set(model.yearSpokes.map(\.lap)), [0, 1, 2, 3])
+        XCTAssertTrue(HomeContent(sessions: sessions, ownerTokenIdentifier: "owner-b", now: date()).completedSessions.isEmpty)
+    }
+
     private var personas: [HomeRingFixture] { [.perWeek2, .perWeek3, .perWeek4, .perWeek5] }
 
     func testFixturePeriodToggleVisibility() {
