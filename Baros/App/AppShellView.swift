@@ -26,10 +26,6 @@ struct AppShellView: View {
         ).first
     }
 
-    private var workoutLiveActivitySnapshot: WorkoutLiveActivitySnapshot? {
-        activeSession.map(WorkoutLiveActivitySnapshot.init(session:))
-    }
-
     private var activeV1OutboxEntries: [SyncOutboxEntry] {
         outboxEntries.filter { entry in
             guard entry.isActive else { return false }
@@ -214,7 +210,8 @@ struct AppShellView: View {
                 chooseLaunchExperienceIfReady()
             }
             .workoutLiveActivityIntegration(
-                snapshot: workoutLiveActivitySnapshot,
+                session: activeSession,
+                restTimer: activeWorkoutEngine.restTimer,
                 navigationState: navigationState,
                 coordinator: workoutLiveActivityCoordinator,
                 willHandleWorkoutLiveActivityLink: { launchPresentation = nil }
@@ -316,6 +313,7 @@ struct AppShellView: View {
         if let activeSession {
             ActiveWorkoutAccessoryView(
                 session: activeSession,
+                restTimer: activeWorkoutEngine.restTimer,
                 showsReturnAction: navigationState.showsActiveWorkoutReturnAction,
                 returnToActiveWorkout: { navigationState.presentActiveWorkout() }
             )

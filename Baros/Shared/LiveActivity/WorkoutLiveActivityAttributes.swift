@@ -6,6 +6,8 @@ struct WorkoutLiveActivityAttributes: ActivityAttributes {
         let title: String
         let completedSetCount: Int
         let totalSetCount: Int
+        var restStartedAt: Date? = nil
+        var restEndsAt: Date? = nil
     }
 
     let workoutID: UUID
