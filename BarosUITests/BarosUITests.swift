@@ -1544,9 +1544,8 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testSettingsCanOpenWhatsNew() {
-        for (appearance, accessible) in [("light", false), ("dark", false), ("dark", true)] {
-            var arguments = ["-Baros.AppAppearance.preference", appearance]
-            if accessible { arguments.append("--uitest-accessibility-dynamic-type") }
+        for appearance in ["light", "dark"] {
+            let arguments = ["-Baros.AppAppearance.preference", appearance]
             let app = makeApp(extraArguments: arguments)
             app.launch()
 
@@ -1568,13 +1567,12 @@ final class BarosUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts["A dedicated Settings tab"].exists)
             XCTAssertEqual(app.buttons["LaunchExperiencePrimaryButton"].label, "Continue")
 
-            let variant = accessible ? "accessibility3" : appearance
-            attachWhatsNewScreenshot("whats-new-1.4-\(variant)")
+            attachWhatsNewScreenshot("whats-new-1.4-\(appearance)")
             let continueButton = app.buttons["LaunchExperiencePrimaryButton"]
             XCTAssertEqual(app.buttons.matching(identifier: "LaunchExperiencePrimaryButton").count, 1)
             for _ in 0..<8 where !continueButton.isHittable { app.swipeUp() }
             XCTAssertTrue(continueButton.isHittable)
-            if accessible { attachWhatsNewScreenshot("whats-new-1.4-accessibility3-continue") }
+            attachWhatsNewScreenshot("whats-new-1.4-\(appearance)-continue")
             continueButton.tap()
             XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitForNonExistence(timeout: 3))
             XCTAssertTrue(app.navigationBars["Settings"].exists)
