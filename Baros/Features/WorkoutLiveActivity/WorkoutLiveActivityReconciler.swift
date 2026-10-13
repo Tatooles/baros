@@ -9,11 +9,13 @@ struct WorkoutLiveActivityRecord: Equatable, Sendable {
         case dismissed
         case stale
 
+        /// `.stale` only means the content passed its stale date (rest ended while
+        /// suspended); the activity still accepts updates, so keep and refresh it.
         var canRemainVisible: Bool {
             switch self {
-            case .pending, .active:
+            case .pending, .active, .stale:
                 return true
-            case .ended, .dismissed, .stale:
+            case .ended, .dismissed:
                 return false
             }
         }

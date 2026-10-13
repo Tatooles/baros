@@ -537,6 +537,43 @@ final class WorkoutLiveActivityTests: XCTestCase {
         XCTAssertFalse(retryState.blocksRequest)
     }
 
+    func testStaleActivityForActiveWorkoutIsKeptNotSuppressed() {
+        let workoutID = UUID()
+        let stale = WorkoutLiveActivityRecord(
+            activityID: "stale",
+            workoutID: workoutID,
+            state: .stale
+        )
+
+        let plan = WorkoutLiveActivityReconciler.plan(
+            activeWorkoutID: workoutID,
+            activities: [stale],
+            successfullyRequestedWorkoutID: workoutID,
+            suppressedWorkoutID: nil
+        )
+
+        XCTAssertEqual(plan.activityIDToKeep, "stale")
+        XCTAssertEqual(plan.activityIDsToEnd, [])
+        XCTAssertFalse(plan.shouldRequest)
+        XCTAssertFalse(plan.shouldSuppress)
+    }
+
+    func testReconciliationPrefersActiveOverStaleDuplicate() {
+        let workoutID = UUID()
+        let plan = WorkoutLiveActivityReconciler.plan(
+            activeWorkoutID: workoutID,
+            activities: [
+                WorkoutLiveActivityRecord(activityID: "stale", workoutID: workoutID, state: .stale),
+                WorkoutLiveActivityRecord(activityID: "active", workoutID: workoutID, state: .active),
+            ],
+            successfullyRequestedWorkoutID: workoutID,
+            suppressedWorkoutID: nil
+        )
+
+        XCTAssertEqual(plan.activityIDToKeep, "active")
+        XCTAssertEqual(plan.activityIDsToEnd, ["stale"])
+    }
+
     func testActivityKitTerminalStatesMapToSuppressedLifecycleStates() {
         XCTAssertEqual(
             WorkoutLiveActivityRecord.State(activityState: .active),
@@ -552,6 +589,13 @@ final class WorkoutLiveActivityTests: XCTestCase {
         )
         XCTAssertFalse(
             WorkoutLiveActivityRecord.State(activityState: .dismissed).canRemainVisible
+        )
+        XCTAssertFalse(
+            WorkoutLiveActivityRecord.State(activityState: .ended).canRemainVisible
+        )
+        // Stale = past the rest-end stale date; the activity can still be updated.
+        XCTAssertTrue(
+            WorkoutLiveActivityRecord.State(activityState: .stale).canRemainVisible
         )
     }
 }

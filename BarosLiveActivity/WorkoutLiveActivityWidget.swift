@@ -226,6 +226,12 @@ private struct WorkoutLiveActivityLockScreenView: View {
 private extension ActivityViewContext where Attributes == WorkoutLiveActivityAttributes {
     var isResting: Bool { state.restEndsAt != nil && !isStale }
 
+    /// Clamped so a backward clock change can't build an inverted range and trap.
+    var restCountdownInterval: ClosedRange<Date>? {
+        guard isResting, let end = state.restEndsAt else { return nil }
+        return min(state.restStartedAt ?? attributes.startedAt, end)...end
+    }
+
     var restInterval: ClosedRange<Date>? {
         guard isResting, let start = state.restStartedAt, let end = state.restEndsAt else { return nil }
         return min(start, end)...end
@@ -236,9 +242,9 @@ private struct WorkoutLiveActivityTimer: View {
     let context: ActivityViewContext<WorkoutLiveActivityAttributes>
 
     var body: some View {
-        if context.isResting, let end = context.state.restEndsAt {
+        if let interval = context.restCountdownInterval {
             Text(
-                timerInterval: (context.state.restStartedAt ?? context.attributes.startedAt)...end,
+                timerInterval: interval,
                 countsDown: true,
                 showsHours: false
             )
@@ -345,8 +351,8 @@ private struct WorkoutLiveActivityProgressDial: View {
 
 private enum WorkoutLiveActivityAccessibility {
     static func value(context: ActivityViewContext<WorkoutLiveActivityAttributes>) -> Text {
-        if context.isResting, let end = context.state.restEndsAt {
-            return Text("\(context.state.title), rest time remaining \(timerInterval: (context.state.restStartedAt ?? context.attributes.startedAt)...end, countsDown: true, showsHours: false), \(context.state.completedSetCount) of \(context.state.totalSetCount) sets complete")
+        if let interval = context.restCountdownInterval {
+            return Text("\(context.state.title), rest time remaining \(timerInterval: interval, countsDown: true, showsHours: false), \(context.state.completedSetCount) of \(context.state.totalSetCount) sets complete")
         }
         return Text("\(context.state.title), elapsed time \(timerInterval: context.attributes.startedAt...Date.distantFuture, countsDown: false, showsHours: true), \(context.state.completedSetCount) of \(context.state.totalSetCount) sets complete")
     }

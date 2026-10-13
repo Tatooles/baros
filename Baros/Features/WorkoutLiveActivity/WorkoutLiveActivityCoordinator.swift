@@ -117,7 +117,7 @@ final class WorkoutLiveActivityCoordinator {
            let activity = activities.first(where: { $0.id == activityID }) {
             observeState(of: activity)
             let contentState = snapshot.contentState
-            if activity.content.state != contentState {
+            if activity.content.state != contentState || activity.activityState == .stale {
                 await activity.update(
                     Self.content(for: snapshot)
                 )
