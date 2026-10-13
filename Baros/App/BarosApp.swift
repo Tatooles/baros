@@ -54,6 +54,7 @@ struct BarosApp: App {
         FirstRunExperienceStore.markSeenForUITestingIfRequested(arguments: arguments)
         ExercisePickerSortPreferenceStore.resetForUITestingIfRequested(arguments: arguments)
         AppAppearancePreferenceStore.resetForUITestingIfRequested(arguments: arguments)
+        HomeRingPeriod.resetForUITestingIfRequested(arguments: arguments)
         SignedOutReminderStore.resetForUITestingIfRequested(arguments: arguments)
         _appAppearanceStore = State(initialValue: AppAppearancePreferenceStore())
 

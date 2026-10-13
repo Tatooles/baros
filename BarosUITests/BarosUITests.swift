@@ -478,7 +478,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(app.buttons["WorkoutTab"].exists)
         XCTAssertTrue(app.staticTexts["HomeTitle"].exists)
         XCTAssertTrue(app.buttons["StartWorkoutButton"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["HomeTrainingCalendar"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["HomeYearRing"].exists)
         XCTAssertFalse(app.buttons["HomeQuickStartButton-0"].exists)
     }
 
@@ -487,10 +487,10 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        let currentWeek = app.descendants(matching: .any)["HomeTrainingCalendarCurrentWeek"]
-        XCTAssertTrue(currentWeek.waitForExistence(timeout: 3))
-        XCTAssertEqual(currentWeek.label, "This week: no workouts.")
-        XCTAssertTrue(app.staticTexts["Each workout you finish adds a check here."].exists)
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertEqual(ring.label, "No workouts yet.")
+        XCTAssertFalse(app.segmentedControls["HomeRingPeriodPicker"].exists)
         XCTAssertFalse(app.buttons["HomeQuickStartButton-0"].exists)
 
         app.buttons["StartWorkoutButton"].tap()
@@ -525,7 +525,7 @@ final class BarosUITests: XCTestCase {
         dismissStartWorkoutFromReview(in: app)
         let quickStart = app.buttons["HomeQuickStartButton-0"]
         XCTAssertTrue(quickStart.waitForExistence(timeout: 3))
-        XCTAssertTrue(quickStart.label.hasPrefix("Past Push, "))
+        XCTAssertTrue(quickStart.label == "Past Push")
         quickStart.tap()
 
         XCTAssertTrue(app.buttons["QuickStartCancelButton"].waitForExistence(timeout: 3))
@@ -550,9 +550,12 @@ final class BarosUITests: XCTestCase {
 
         let startWorkoutButton = app.buttons["StartWorkoutButton"]
         XCTAssertTrue(startWorkoutButton.waitForExistence(timeout: 3))
+        let homeScroll = app.scrollViews["HomeScrollView"]
+        XCTAssertTrue(homeScroll.exists)
+        homeScroll.swipeUp()
         XCTAssertTrue(startWorkoutButton.isHittable)
         XCTAssertGreaterThanOrEqual(startWorkoutButton.frame.height, 96)
-        XCTAssertTrue(app.descendants(matching: .any)["HomeTrainingCalendar"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["HomeYearRing"].exists)
 
         startWorkoutButton.tap()
         XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].waitForExistence(timeout: 3))
@@ -676,55 +679,82 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testTappingACompletedCalendarDayOpensThatWorkoutInHistory() {
-        let app = makeApp()
+    func testHomeRingRecentHistoryHidesToggleAndStartRemainsAvailable() {
+        let app = makeApp(extraArguments: ["--home-ring-fixture", "twoWeeks"])
         app.launch()
-
-        startBlankWorkout(in: app)
-        let workoutTitle = app.textFields["WorkoutTitle"]
-        XCTAssertTrue(workoutTitle.waitForExistence(timeout: 3))
-        replaceText(in: workoutTitle, with: "Calendar Push")
-        openFinishWorkoutSheet(in: app)
-        app.buttons["SaveWorkoutButton"].tap()
-
-        let today = app.buttons["HomeTrainingCalendarToday"]
-        XCTAssertTrue(waitForHittable(today, timeout: 3))
-        XCTAssertTrue(today.label.hasSuffix(": Calendar Push"))
-        today.tap()
-
-        let heading = app.staticTexts["WorkoutHistoryHeading"]
-        XCTAssertTrue(heading.waitForExistence(timeout: 3))
-        XCTAssertTrue(heading.label.hasPrefix("Calendar Push"))
-        XCTAssertTrue(app.tabButton(.history).isSelected)
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertTrue(ring.label.hasPrefix("Last 30 days:"))
+        XCTAssertFalse(app.segmentedControls["HomeRingPeriodPicker"].exists)
+        app.buttons["StartWorkoutButton"].tap()
+        XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].waitForExistence(timeout: 3))
     }
 
     @MainActor
-    func testCalendarDayWithTwoWorkoutsOffersAMenuOfBoth() {
+    func testHomeRingToggleAndTabReturnKeepHistoryAndStartAvailable() {
+        let app = makeApp(extraArguments: ["--home-ring-fixture", "perWeek3"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertTrue(ring.label.hasPrefix("Last 30 days:"))
+        let picker = app.segmentedControls["HomeRingPeriodPicker"]
+        XCTAssertTrue(picker.exists)
+        XCTAssertFalse(app.buttons["HomeRingFixtureSwitcher"].exists)
+        picker.buttons["Year"].tap()
+        XCTAssertTrue(ring.label.hasPrefix("Last 52 weeks: trained in"))
+        app.tabButton(.history).tap()
+        app.tabButton(.home).tap()
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["StartWorkoutButton"].isHittable)
+        XCTAssertTrue(ring.label.hasPrefix("Last 52 weeks: trained in"))
+        picker.buttons["Month"].tap()
+        XCTAssertTrue(ring.label.hasPrefix("Last 30 days:"))
+        app.buttons["StartWorkoutButton"].tap()
+        XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testHomeRingYearSelectionPersistsAcrossRelaunch() {
+        let app = makeApp(extraArguments: ["--home-ring-fixture", "perWeek3"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertTrue(ring.label.hasPrefix("Last 30 days:"))
+        app.segmentedControls["HomeRingPeriodPicker"].buttons["Year"].tap()
+        XCTAssertTrue(ring.label.hasPrefix("Last 52 weeks:"))
+        app.terminate()
+
+        let relaunchedApp = makeApp(extraArguments: ["--home-ring-fixture", "perWeek3"], resetsHomeRingPeriod: false)
+        relaunchedApp.launch()
+        let relaunchedRing = relaunchedApp.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(relaunchedRing.waitForExistence(timeout: 3))
+        XCTAssertTrue(relaunchedRing.label.hasPrefix("Last 52 weeks:"))
+    }
+
+    @MainActor
+    func testHomeRingUpdatesAfterSavingLiveWorkout() {
         let app = makeApp()
         app.launch()
+        startBlankWorkout(in: app)
+        openFinishWorkoutSheet(in: app)
+        app.buttons["SaveWorkoutButton"].tap()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertTrue(ring.label.hasPrefix("Last 30 days: 1 workout. 1 workout since"), ring.label)
+        XCTAssertFalse(app.segmentedControls["HomeRingPeriodPicker"].exists)
+    }
 
-        for title in ["Morning Lift", "Evening Lift"] {
-            startBlankWorkout(in: app)
-            let workoutTitle = app.textFields["WorkoutTitle"]
-            XCTAssertTrue(workoutTitle.waitForExistence(timeout: 3))
-            replaceText(in: workoutTitle, with: title)
-            openFinishWorkoutSheet(in: app)
-            app.buttons["SaveWorkoutButton"].tap()
-            XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
-        }
-
-        let today = app.buttons["HomeTrainingCalendarToday"]
-        XCTAssertTrue(waitForHittable(today, timeout: 3))
-        today.tap()
-
-        let evening = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Evening Lift")).firstMatch
-        XCTAssertTrue(waitForHittable(evening, timeout: 3))
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Morning Lift")).firstMatch.exists)
-        evening.tap()
-
-        let heading = app.staticTexts["WorkoutHistoryHeading"]
-        XCTAssertTrue(heading.waitForExistence(timeout: 3))
-        XCTAssertTrue(heading.label.hasPrefix("Evening Lift"))
+    @MainActor
+    func testHomeRingLiveMultiYearHistoryShowsSummaryToggleAndQuickStart() {
+        let app = makeApp(extraArguments: ["--uitest-seed-home-ring-history"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 10))
+        XCTAssertTrue(ring.label.contains("500 workouts since"), ring.label)
+        XCTAssertTrue(app.segmentedControls["HomeRingPeriodPicker"].exists)
+        app.segmentedControls["HomeRingPeriodPicker"].buttons["Year"].tap()
+        XCTAssertTrue(ring.label.hasPrefix("Last 52 weeks: trained in"))
+        XCTAssertTrue(app.buttons["HomeQuickStartButton-0"].exists)
     }
 
     @MainActor
@@ -4054,7 +4084,8 @@ final class BarosUITests: XCTestCase {
     private func makeApp(
         extraArguments: [String] = [],
         completedBenchWorkoutTitles: [String] = [],
-        resetsSignedOutReminder: Bool = true
+        resetsSignedOutReminder: Bool = true,
+        resetsHomeRingPeriod: Bool = true
     ) -> XCUIApplication {
         let app = XCUIApplication()
         let fixtureArguments = completedBenchWorkoutTitles.flatMap {
@@ -4069,6 +4100,9 @@ final class BarosUITests: XCTestCase {
             "--uitest-reset-exercise-picker-sort",
             "--uitest-reset-app-appearance",
         ] + fixtureArguments + authArguments
+        if resetsHomeRingPeriod {
+            launchArguments.append("--uitest-reset-home-ring-period")
+        }
         if resetsSignedOutReminder {
             launchArguments.append("--uitest-reset-signed-out-reminder")
         }
@@ -4129,6 +4163,7 @@ final class BarosUITests: XCTestCase {
             "--uitest-force-signed-out-auth",
             "--uitest-reset-exercise-picker-sort",
             "--uitest-reset-app-appearance",
+            "--uitest-reset-home-ring-period",
         ]
         if !extraArguments.contains("--uitest-reset-first-run-experience") {
             launchArguments.append("--uitest-skip-first-run-experience")
