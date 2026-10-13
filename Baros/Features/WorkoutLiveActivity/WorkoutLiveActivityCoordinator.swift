@@ -20,6 +20,12 @@ final class WorkoutLiveActivityCoordinator {
         stateStore = WorkoutLiveActivityStateStore(defaults: defaults)
     }
 
+    static func content(
+        for snapshot: WorkoutLiveActivitySnapshot
+    ) -> ActivityContent<WorkoutLiveActivityAttributes.ContentState> {
+        ActivityContent(state: snapshot.contentState, staleDate: snapshot.restEndsAt)
+    }
+
     func synchronize(
         snapshot: WorkoutLiveActivitySnapshot?,
         allowsRequestRetry: Bool = false
@@ -113,7 +119,7 @@ final class WorkoutLiveActivityCoordinator {
             let contentState = snapshot.contentState
             if activity.content.state != contentState {
                 await activity.update(
-                    ActivityContent(state: contentState, staleDate: nil)
+                    Self.content(for: snapshot)
                 )
             }
             return
@@ -128,7 +134,7 @@ final class WorkoutLiveActivityCoordinator {
         do {
             let activity = try Activity.request(
                 attributes: snapshot.attributes,
-                content: ActivityContent(state: snapshot.contentState, staleDate: nil),
+                content: Self.content(for: snapshot),
                 pushType: nil
             )
             stateStore.recordSuccessfulRequest(workoutID: snapshot.workoutID)

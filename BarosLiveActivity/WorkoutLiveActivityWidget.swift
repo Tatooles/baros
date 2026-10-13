@@ -24,16 +24,19 @@ struct WorkoutLiveActivityWidget: Widget {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .layoutPriority(1)
 
-                        Text(
-                            timerInterval: context.attributes.startedAt...Date.distantFuture,
-                            countsDown: false,
-                            showsHours: true
-                        )
-                            .font(.title3.monospacedDigit().weight(.bold))
-                            .foregroundStyle(BarosBrand.brandForeground)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                            .frame(width: 66, alignment: .trailing)
+                        HStack(spacing: 4) {
+                            if context.isResting {
+                                Image(systemName: "hourglass")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(BarosBrand.brandCobalt)
+                            }
+                            WorkoutLiveActivityTimer(context: context)
+                        }
+                        .font(.title3.monospacedDigit().weight(.bold))
+                        .foregroundStyle(BarosBrand.brandForeground)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .frame(width: 66, alignment: .trailing)
 
                         WorkoutLiveActivityProgressDial(
                             completed: context.state.completedSetCount,
@@ -46,21 +49,17 @@ struct WorkoutLiveActivityWidget: Widget {
                     .workoutLiveActivityActionAccessibility(context: context)
                 }
             } compactLeading: {
-                WorkoutLiveActivityMark(size: 22)
+                WorkoutLiveActivityRestMark(context: context)
                     .accessibilityHidden(true)
             } compactTrailing: {
-                Text(
-                    timerInterval: context.attributes.startedAt...Date.distantFuture,
-                    countsDown: false,
-                    showsHours: true
-                )
+                WorkoutLiveActivityTimer(context: context)
                     .font(.caption2.monospacedDigit().weight(.semibold))
                     .foregroundStyle(BarosBrand.brandForeground)
                     .frame(maxWidth: 52)
                     .workoutLiveActivityActionAccessibility(context: context)
             } minimal: {
                 ZStack {
-                    WorkoutLiveActivityMark(size: 22)
+                    WorkoutLiveActivityRestMark(context: context)
                 }
                 .workoutLiveActivityActionAccessibility(context: context)
             }
@@ -132,26 +131,58 @@ private struct WorkoutLiveActivityLockScreenView: View {
                         .foregroundStyle(BarosBrand.brandForeground)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                }
-
-                HStack(alignment: .center, spacing: layoutMetrics.metricSpacing) {
-                    VStack(alignment: .leading, spacing: 3) {
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if context.isResting {
                         Text(
                             timerInterval: context.attributes.startedAt...Date.distantFuture,
                             countsDown: false,
                             showsHours: true
                         )
-                            .font(.system(.title, design: .rounded).monospacedDigit().weight(.bold))
-                            .foregroundStyle(BarosBrand.brandForeground)
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(BarosBrand.brandForeground.opacity(0.62))
                             .lineLimit(1)
-                            .minimumScaleFactor(layoutMetrics.elapsedTimerMinimumScaleFactor)
+                            .minimumScaleFactor(0.7)
+                            .frame(width: 64, alignment: .trailing)
+                    }
+                }
+
+                HStack(alignment: .center, spacing: layoutMetrics.metricSpacing) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 8) {
+                            if context.isResting {
+                                Image(systemName: "hourglass")
+                                    .font(.title3.weight(.semibold))
+                                    .foregroundStyle(BarosBrand.brandCobalt)
+                            }
+                            WorkoutLiveActivityTimer(context: context)
+                        }
+                        .font(.system(.title, design: .rounded).monospacedDigit().weight(.bold))
+                        .foregroundStyle(BarosBrand.brandForeground)
+                        .lineLimit(1)
+                        .minimumScaleFactor(layoutMetrics.elapsedTimerMinimumScaleFactor)
 
                         if layoutMetrics.showsSecondaryCaptions {
-                            Text("ELAPSED TIME")
+                            Text(context.isResting ? "REST" : "ELAPSED TIME")
                                 .font(.system(size: elapsedCaptionFontSize, weight: .bold))
                                 .tracking(1.2)
                                 .foregroundStyle(BarosBrand.brandForeground.opacity(0.62))
                         }
+                        Group {
+                            if let interval = context.restInterval {
+                                ProgressView(timerInterval: interval, countsDown: true) {
+                                    EmptyView()
+                                } currentValueLabel: {
+                                    EmptyView()
+                                }
+                                .progressViewStyle(.linear)
+                                .tint(BarosBrand.brandCobalt)
+                            } else {
+                                Color.clear
+                            }
+                        }
+                        .frame(height: 3)
+                        .padding(.top, 3)
+                        .accessibilityHidden(true)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(1)
@@ -189,6 +220,59 @@ private struct WorkoutLiveActivityLockScreenView: View {
                 .accessibilityHidden(true)
         }
         .workoutLiveActivityActionAccessibility(context: context)
+    }
+}
+
+private extension ActivityViewContext where Attributes == WorkoutLiveActivityAttributes {
+    var isResting: Bool { state.restEndsAt != nil && !isStale }
+
+    var restInterval: ClosedRange<Date>? {
+        guard isResting, let start = state.restStartedAt, let end = state.restEndsAt else { return nil }
+        return min(start, end)...end
+    }
+}
+
+private struct WorkoutLiveActivityTimer: View {
+    let context: ActivityViewContext<WorkoutLiveActivityAttributes>
+
+    var body: some View {
+        if context.isResting, let end = context.state.restEndsAt {
+            Text(
+                timerInterval: (context.state.restStartedAt ?? context.attributes.startedAt)...end,
+                countsDown: true,
+                showsHours: false
+            )
+        } else {
+            Text(
+                timerInterval: context.attributes.startedAt...Date.distantFuture,
+                countsDown: false,
+                showsHours: true
+            )
+        }
+    }
+}
+
+private struct WorkoutLiveActivityRestMark: View {
+    let context: ActivityViewContext<WorkoutLiveActivityAttributes>
+
+    var body: some View {
+        if let interval = context.restInterval {
+            ProgressView(timerInterval: interval, countsDown: true) {
+                EmptyView()
+            } currentValueLabel: {
+                EmptyView()
+            }
+            .progressViewStyle(.circular)
+            .tint(BarosBrand.brandCobalt)
+            .frame(width: 22, height: 22)
+            .overlay {
+                Image(systemName: "hourglass")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(BarosBrand.brandForeground)
+            }
+        } else {
+            WorkoutLiveActivityMark(size: 22)
+        }
     }
 }
 
@@ -261,7 +345,10 @@ private struct WorkoutLiveActivityProgressDial: View {
 
 private enum WorkoutLiveActivityAccessibility {
     static func value(context: ActivityViewContext<WorkoutLiveActivityAttributes>) -> Text {
-        Text("\(context.state.title), elapsed time \(timerInterval: context.attributes.startedAt...Date.distantFuture, countsDown: false, showsHours: true), \(context.state.completedSetCount) of \(context.state.totalSetCount) sets complete")
+        if context.isResting, let end = context.state.restEndsAt {
+            return Text("\(context.state.title), rest time remaining \(timerInterval: (context.state.restStartedAt ?? context.attributes.startedAt)...end, countsDown: true, showsHours: false), \(context.state.completedSetCount) of \(context.state.totalSetCount) sets complete")
+        }
+        return Text("\(context.state.title), elapsed time \(timerInterval: context.attributes.startedAt...Date.distantFuture, countsDown: false, showsHours: true), \(context.state.completedSetCount) of \(context.state.totalSetCount) sets complete")
     }
 }
 

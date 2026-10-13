@@ -2,7 +2,9 @@ import SwiftUI
 
 struct ActiveWorkoutAccessoryView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.tabViewBottomAccessoryPlacement) private var accessoryPlacement
     let session: WorkoutSession
+    let restTimer: RestTimerCoordinator
     let showsReturnAction: Bool
     let returnToActiveWorkout: () -> Void
 
@@ -12,20 +14,37 @@ struct ActiveWorkoutAccessoryView: View {
         ) { timeline in
             let metrics = WorkoutMetrics(session: session, now: timeline.date)
 
+            let restState = ActiveWorkoutAccessoryRestState(
+                period: restTimer.current, sessionID: session.id, now: timeline.date
+            )
+            let restSubtitle = restState?.subtitle
+
             Button(action: returnToActiveWorkout) {
                 Group {
                     if dynamicTypeSize.isAccessibilitySize {
                         Text(
                             "\(session.title) · "
-                                + WorkoutFormatters.elapsedCompactDescription(metrics.durationSeconds)
+                                + (restSubtitle ?? WorkoutFormatters.elapsedCompactDescription(metrics.durationSeconds))
                         )
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(AppTheme.textPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
+                    } else if accessoryPlacement == .inline {
+                        HStack(spacing: 4) {
+                            Text(session.title)
+                                .lineLimit(1)
+                            Text("·")
+                            Text(restSubtitle ?? WorkoutFormatters.elapsedCompactDescription(metrics.durationSeconds))
+                                .foregroundStyle(restState != nil ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
+                                .fixedSize()
+                        }
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         HStack(spacing: 12) {
-                            Image(systemName: "timer")
+                            Image(systemName: restState?.systemImage ?? "timer")
                                 .font(.title3.weight(.semibold))
                                 .foregroundStyle(AppTheme.brandAccentForeground)
                                 .frame(width: 34, height: 34)
@@ -37,9 +56,9 @@ struct ActiveWorkoutAccessoryView: View {
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(AppTheme.textPrimary)
                                     .fixedSize(horizontal: false, vertical: true)
-                                Text(WorkoutFormatters.elapsedDescription(metrics.durationSeconds))
+                                Text(restSubtitle ?? WorkoutFormatters.elapsedDescription(metrics.durationSeconds))
                                     .font(.caption)
-                                    .foregroundStyle(AppTheme.textSecondary)
+                                    .foregroundStyle(restState != nil ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
 
@@ -59,14 +78,14 @@ struct ActiveWorkoutAccessoryView: View {
                 .padding(.horizontal, 16)
                 .frame(
                     maxWidth: .infinity,
-                    minHeight: dynamicTypeSize.isAccessibilitySize ? 96 : 52
+                    minHeight: dynamicTypeSize.isAccessibilitySize ? 96 : accessoryPlacement == .inline ? 44 : 52
                 )
                 .contentShape(Rectangle())
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Return to Workout")
                 .accessibilityValue(
                     "\(session.title), "
-                        + "\(WorkoutFormatters.elapsedAccessibilityDescription(metrics.durationSeconds)), "
+                        + "\(restSubtitle ?? WorkoutFormatters.elapsedAccessibilityDescription(metrics.durationSeconds)), "
                         + "\(metrics.completedSetCount) of \(metrics.totalSetCount) sets completed"
                 )
                 .accessibilityIdentifier("ActiveWorkoutAccessory")
@@ -74,6 +93,32 @@ struct ActiveWorkoutAccessoryView: View {
             }
             .buttonStyle(.plain)
             .allowsHitTesting(showsReturnAction)
+        }
+    }
+}
+
+enum ActiveWorkoutAccessoryRestState: Equatable {
+    case resting(seconds: Int)
+    case finished
+
+    init?(period: RestTimerPeriod?, sessionID: UUID, now: Date) {
+        guard let period, period.rest.sessionID == sessionID, !period.rest.wasSkipped else { return nil }
+        self = period.isFinished ? .finished : .resting(seconds: period.rest.remainingSeconds(at: now))
+    }
+
+    var subtitle: String {
+        switch self {
+        case let .resting(seconds):
+            "Rest " + String(format: "%d:%02d", seconds / 60, seconds % 60)
+        case .finished:
+            "Rest over"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .resting: "hourglass"
+        case .finished: "checkmark"
         }
     }
 }
