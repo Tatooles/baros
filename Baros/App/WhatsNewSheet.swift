@@ -15,6 +15,8 @@ struct WhatsNewSheet: View {
             WhatsNewVersion1_2View(onDismiss: onDismiss)
         case .version1_3:
             WhatsNewVersion1_3View(onDismiss: onDismiss)
+        case .version1_4:
+            WhatsNewVersion1_4View(onDismiss: onDismiss)
         }
     }
 }
