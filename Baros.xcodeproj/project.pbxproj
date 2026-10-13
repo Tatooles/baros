@@ -19,6 +19,9 @@
 		0A26468DAB35148EE53DC05D /* AccountDeletionFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87B573FDF309E99E1D02F1C9 /* AccountDeletionFactory.swift */; };
 		0A8050347DA7689B98870097 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8EB3A48F483C08DC5E65436 /* SettingsView.swift */; };
 		0B28B27745E98C02935138E8 /* HomeContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41C2D910DEE2996C437643E1 /* HomeContent.swift */; };
+		BF2D331A65BA5C3D0066F3D2 /* HomeRingDebugFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = D348ABCD5C7F869B26938040 /* HomeRingDebugFixtures.swift */; };
+		82A40179B13571C6B9C446FC /* HomeRingModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D377BDC55182A684A30F41 /* HomeRingModel.swift */; };
+		385C4F1AF21FB1B725B5E777 /* HomeYearRingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6076A894B94E6680C16125F /* HomeYearRingView.swift */; };
 		0C332CBD89B528BF2308B4B9 /* ClerkAccountDeleter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34A7BF26BF96D523969B77D2 /* ClerkAccountDeleter.swift */; };
 		0E0DE72FAB55EC949FDCF8F9 /* LocalDataResetServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A414FFB58B306C4049EC7CB9 /* LocalDataResetServiceTests.swift */; };
 		0E134259CB3FA6B54D18BD27 /* HistoryPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84EA7E27926EFEAA5C6E5D93 /* HistoryPersistenceTests.swift */; };
@@ -199,6 +202,7 @@
 		E2D4CBE2643DF99C8B9170F7 /* SyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22EC68472E7A9434F132B1D9 /* SyncClient.swift */; };
 		E381D048576C9B3EBF7C1673 /* SettingsAccountRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBF2E6272D6DDBFC618EE68F /* SettingsAccountRow.swift */; };
 		E499381A799D7B68A67869A2 /* HomeContentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24D52BBE61A6093F0FA96C59 /* HomeContentTests.swift */; };
+		6C2B733CE4B8EFD323E1E440 /* HomeRingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBE5665A291D732FD47B1CFE /* HomeRingModelTests.swift */; };
 		E6A0DE6C2B0F1E62B68519EF /* WorkoutHistoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF3E952AAABF0D77BF003D2 /* WorkoutHistoryDetailView.swift */; };
 		EA35DA5903089C90B7AE4BE6 /* ModelContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84BEF1DA56C314B0EF3538CC /* ModelContainerFactory.swift */; };
 		EBF6E997ED97E25E604B3ACF /* WorkoutNumberInputText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AEAF2C53B134A273B45895E /* WorkoutNumberInputText.swift */; };
@@ -296,6 +300,7 @@
 		22EC68472E7A9434F132B1D9 /* SyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncClient.swift; sourceTree = "<group>"; };
 		2339D242D03FBB119D5CFFBF /* SyncOutboxClaimEligibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOutboxClaimEligibility.swift; sourceTree = "<group>"; };
 		24D52BBE61A6093F0FA96C59 /* HomeContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeContentTests.swift; sourceTree = "<group>"; };
+		EBE5665A291D732FD47B1CFE /* HomeRingModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeRingModelTests.swift; sourceTree = "<group>"; };
 		24D93E6500956F3496B2557B /* AppNavigationStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationStateTests.swift; sourceTree = "<group>"; };
 		26E301A1ADE94900178B7D4F /* ReorderExercisesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorderExercisesSheet.swift; sourceTree = "<group>"; };
 		27C5D2BF7D584890C7340F92 /* HomeStartWorkoutSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeStartWorkoutSheet.swift; sourceTree = "<group>"; };
@@ -317,6 +322,9 @@
 		3C1BE6DD7730BBE9292B992F /* SyncConflictResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncConflictResolverTests.swift; sourceTree = "<group>"; };
 		41169F370D3C2961564AF846 /* CompletedWorkoutDateEditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletedWorkoutDateEditTests.swift; sourceTree = "<group>"; };
 		41C2D910DEE2996C437643E1 /* HomeContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeContent.swift; sourceTree = "<group>"; };
+		D348ABCD5C7F869B26938040 /* HomeRingDebugFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeRingDebugFixtures.swift; sourceTree = "<group>"; };
+		82D377BDC55182A684A30F41 /* HomeRingModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeRingModel.swift; sourceTree = "<group>"; };
+		D6076A894B94E6680C16125F /* HomeYearRingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeYearRingView.swift; sourceTree = "<group>"; };
 		4405F3FDFB5966393FCD31C4 /* LaunchExperienceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchExperienceSheet.swift; sourceTree = "<group>"; };
 		441BA0058B43A2A2C1CF0856 /* ConvexClientFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexClientFactory.swift; sourceTree = "<group>"; };
 		44C8EF7413F539FC06139F9B /* ExerciseLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseLibraryView.swift; sourceTree = "<group>"; };
@@ -533,6 +541,9 @@
 			isa = PBXGroup;
 			children = (
 				41C2D910DEE2996C437643E1 /* HomeContent.swift */,
+				D348ABCD5C7F869B26938040 /* HomeRingDebugFixtures.swift */,
+				82D377BDC55182A684A30F41 /* HomeRingModel.swift */,
+				D6076A894B94E6680C16125F /* HomeYearRingView.swift */,
 				6BD656B1F611BE5925B97EB6 /* HomePastWorkoutReviewView.swift */,
 				27C5D2BF7D584890C7340F92 /* HomeStartWorkoutSheet.swift */,
 				FCF15B15837756D447B0803F /* HomeView.swift */,
@@ -718,6 +729,7 @@
 				84EA7E27926EFEAA5C6E5D93 /* HistoryPersistenceTests.swift */,
 				CF62B020E294ECC7B5385EA6 /* HistorySearchTests.swift */,
 				24D52BBE61A6093F0FA96C59 /* HomeContentTests.swift */,
+				EBE5665A291D732FD47B1CFE /* HomeRingModelTests.swift */,
 				34E7B8F0E30270E03AA269C0 /* LaunchExperienceCoordinatorTests.swift */,
 				A414FFB58B306C4049EC7CB9 /* LocalDataResetServiceTests.swift */,
 				CA670AA4478179DE257ECC62 /* ModelPersistenceTests.swift */,
@@ -1231,6 +1243,9 @@
 				03F4DE5F9529981CAF4B7229 /* HistorySetTable.swift in Sources */,
 				91EB3D646631398A9F52C3DB /* HistoryView.swift in Sources */,
 				0B28B27745E98C02935138E8 /* HomeContent.swift in Sources */,
+				BF2D331A65BA5C3D0066F3D2 /* HomeRingDebugFixtures.swift in Sources */,
+				82A40179B13571C6B9C446FC /* HomeRingModel.swift in Sources */,
+				385C4F1AF21FB1B725B5E777 /* HomeYearRingView.swift in Sources */,
 				415B459746BBE028B6F138AA /* HomePastWorkoutReviewView.swift in Sources */,
 				ECF35A9788853245B16A7EBD /* HomeStartWorkoutSheet.swift in Sources */,
 				8D915D827482CBB112214669 /* HomeView.swift in Sources */,
@@ -1347,6 +1362,7 @@
 				0E134259CB3FA6B54D18BD27 /* HistoryPersistenceTests.swift in Sources */,
 				AC22BF9C6E727A4406F6B54B /* HistorySearchTests.swift in Sources */,
 				E499381A799D7B68A67869A2 /* HomeContentTests.swift in Sources */,
+				6C2B733CE4B8EFD323E1E440 /* HomeRingModelTests.swift in Sources */,
 				D7FCF44D5C2139A31A579C85 /* LaunchExperienceCoordinatorTests.swift in Sources */,
 				0E0DE72FAB55EC949FDCF8F9 /* LocalDataResetServiceTests.swift in Sources */,
 				B4B572E6DBFEA414876C7789 /* ModelPersistenceTests.swift in Sources */,
