@@ -1534,7 +1534,10 @@ final class BarosUITests: XCTestCase {
         firstLaunch.terminate()
 
         let secondLaunch = makeDiskBackedApp(
-            extraArguments: ["--uitest-in-memory-store"],
+            extraArguments: [
+                "--uitest-in-memory-store",
+                "-Baros.FirstRunExperience.hasSeenWelcome", "YES",
+            ],
             skipsFirstRunExperience: false
         )
         secondLaunch.launch()
