@@ -36,7 +36,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
     @MainActor
     func testCompletingOnboardingConsumesCurrentReleaseHighlights() throws {
         let store = FirstRunExperienceStore(defaults: defaults)
-        let release = try XCTUnwrap(AppReleaseCatalog.whatsNew(for: "1.2"))
+        let release = try XCTUnwrap(AppReleaseCatalog.whatsNew(for: "1.4"))
 
         store.markOnboardingCompleted(
             currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: release.version))
@@ -46,14 +46,14 @@ final class FirstRunExperienceStoreTests: XCTestCase {
             store.state,
             LaunchExperienceState(
                 hasCompletedOnboarding: true,
-                lastProcessedAppVersion: "1.2",
-                lastSeenWhatsNewVersion: "1.2"
+                lastProcessedAppVersion: "1.4",
+                lastSeenWhatsNewVersion: "1.4"
             )
         )
         XCTAssertNil(
             LaunchExperienceCoordinator.nextPresentation(
                 state: store.state,
-                currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.2"))
+                currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.4"))
             )
         )
     }
@@ -61,7 +61,7 @@ final class FirstRunExperienceStoreTests: XCTestCase {
     @MainActor
     func testSilentOnboardingCompletionForSignedInLaunchShowsNothing() throws {
         let store = FirstRunExperienceStore(defaults: defaults)
-        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.2"))
+        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.4"))
 
         XCTAssertTrue(
             LaunchExperienceCoordinator.shouldCompleteOnboardingSilently(
@@ -89,10 +89,9 @@ final class FirstRunExperienceStoreTests: XCTestCase {
     func testExistingUserSeesNewReleaseHighlightsOnce() throws {
         let store = FirstRunExperienceStore(defaults: defaults)
         store.markOnboardingCompleted(
-            currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.0"))
+            currentRelease: try XCTUnwrap(AppReleaseCatalog.release(for: "1.3"))
         )
-        store.markAppVersionProcessed("1.1")
-        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.2"))
+        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.4"))
         let whatsNew = try XCTUnwrap(release.whatsNew)
 
         XCTAssertEqual(
@@ -104,11 +103,11 @@ final class FirstRunExperienceStoreTests: XCTestCase {
         )
 
         store.markWhatsNewSeen(version: whatsNew.version)
-        store.markAppVersionProcessed("1.2")
+        store.markAppVersionProcessed("1.4")
 
         XCTAssertNil(
             LaunchExperienceCoordinator.nextPresentation(
-                state: store.state,
+                state: FirstRunExperienceStore(defaults: defaults).state,
                 currentRelease: release
             )
         )
