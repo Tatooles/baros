@@ -14,15 +14,6 @@ enum ExercisePickerMode {
         }
     }
 
-    var dismissesAfterCreatingExercise: Bool {
-        switch self {
-        case .add:
-            return true
-        case .swap:
-            return false
-        }
-    }
-
     func isCurrent(_ exercise: Exercise) -> Bool {
         guard case let .swap(currentExerciseID) = self else { return false }
         return currentExerciseID == exercise.id
@@ -206,9 +197,6 @@ private struct ExercisePickerList: View {
         .navigationDestination(isPresented: $isCreatingExercise) {
             ExerciseEditorView(initialName: creationName) { exercise in
                 onSelect(exercise)
-                if mode.dismissesAfterCreatingExercise {
-                    dismiss()
-                }
             }
         }
     }

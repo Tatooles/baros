@@ -37,6 +37,7 @@ struct ReorderExercisesSheet: View {
     @Bindable var engine: ActiveWorkoutEngine
     @State private var draftExercises: [ReorderExerciseDraft] = []
     @State private var editMode: EditMode = .active
+    @State private var showsSaveError = false
 
     var body: some View {
         NavigationStack {
@@ -108,6 +109,11 @@ struct ReorderExercisesSheet: View {
                 }
             }
         }
+        .alert("Couldn't Reorder Exercises", isPresented: $showsSaveError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Your workout's exercise order wasn't changed. Tap Done to retry, or Cancel to keep the original order.")
+        }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .onAppear {
@@ -128,7 +134,7 @@ struct ReorderExercisesSheet: View {
             )
             dismiss()
         } catch {
-            engine.lastErrorMessage = error.localizedDescription
+            showsSaveError = true
         }
     }
 }

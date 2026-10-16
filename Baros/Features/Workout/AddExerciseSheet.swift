@@ -28,6 +28,7 @@ struct AddExerciseSheet: View {
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
     var onAddExercise: (LoggedExercise) -> Void = { _ in }
+    @State private var showsAddError = false
 
     var body: some View {
         NavigationStack {
@@ -42,8 +43,13 @@ struct AddExerciseSheet: View {
                     onAddExercise(loggedExercise)
                     dismiss()
                 } catch {
-                    engine.lastErrorMessage = error.localizedDescription
+                    showsAddError = true
                 }
+            }
+            .alert("Couldn't Add Exercise", isPresented: $showsAddError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("The exercise wasn't added. Select it again to retry, or cancel to return to your workout.")
             }
         }
         .presentationDetents([.large])
