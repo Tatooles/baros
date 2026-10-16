@@ -740,7 +740,7 @@ final class BarosUITests: XCTestCase {
         app.buttons["SaveWorkoutButton"].tap()
         let ring = app.descendants(matching: .any)["HomeYearRing"]
         XCTAssertTrue(ring.waitForExistence(timeout: 3))
-        XCTAssertTrue(ring.label.hasPrefix("Last 30 days: 1 workout. 1 workout since"), ring.label)
+        XCTAssertEqual(ring.label, "1 workout in the past 30 days.")
         XCTAssertFalse(app.segmentedControls["HomeRingPeriodPicker"].exists)
     }
 
@@ -750,10 +750,12 @@ final class BarosUITests: XCTestCase {
         app.launch()
         let ring = app.descendants(matching: .any)["HomeYearRing"]
         XCTAssertTrue(ring.waitForExistence(timeout: 10))
-        XCTAssertTrue(ring.label.contains("500 workouts since"), ring.label)
+        XCTAssertTrue(ring.label.hasSuffix("in the past 30 days."), ring.label)
+        let monthLabel = ring.label
         XCTAssertTrue(app.segmentedControls["HomeRingPeriodPicker"].exists)
         app.segmentedControls["HomeRingPeriodPicker"].buttons["Year"].tap()
-        XCTAssertTrue(ring.label.hasPrefix("Last 52 weeks: trained in"))
+        XCTAssertTrue(ring.label.contains("workouts in the past year. Trained in"), ring.label)
+        XCTAssertNotEqual(ring.label, monthLabel)
         XCTAssertTrue(app.buttons["HomeQuickStartButton-0"].exists)
     }
 

@@ -44,7 +44,7 @@ struct HomeView: View {
                     VStack(spacing: 12) {
                         HomeYearRingView(model: ring, period: effectivePeriod,
                                          diameter: min(geometry.size.width * 0.80, 350),
-                                         now: now, replayID: replayID)
+                                         replayID: replayID)
                         Picker("History period", selection: $periodRaw) {
                             ForEach(HomeRingPeriod.allCases, id: \.rawValue) { period in
                                 Text(period.title).tag(period.rawValue)

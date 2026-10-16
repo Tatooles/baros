@@ -177,13 +177,12 @@ final class HomeRingModelTests: XCTestCase {
         XCTAssertEqual(model.yearWorkoutCount, 1)
     }
 
-    func testEmptyStateHasNoSpokesOrFirstDate() {
+    func testEmptyStateHasNoSpokes() {
         let model = HomeRingModel(workouts: [], now: date(), calendar: calendar)
         XCTAssertEqual(model.totalWorkouts, 0)
-        XCTAssertNil(model.firstWorkoutDate)
         XCTAssertTrue(model.monthSpokes.isEmpty)
         XCTAssertTrue(model.yearSpokes.isEmpty)
-        XCTAssertEqual(model.accessibilitySummary(period: .month, now: date(), calendar: calendar), "No workouts yet.")
+        XCTAssertEqual(model.accessibilitySummary(period: .month), "No workouts yet.")
     }
 
     func testInjectedTimeZoneDeterminesLocalDay() {
@@ -213,12 +212,23 @@ final class HomeRingModelTests: XCTestCase {
         XCTAssertTrue(model.yearSpokes.isEmpty)
     }
 
-    func testSingularCaptionAndEarliestDateAcrossAllLaps() {
-        let first = date(2025, 8, 20)
-        let model = HomeRingModel(workouts: [workout(first, minutes: 60)], now: date(), calendar: calendar)
-        XCTAssertEqual(model.firstWorkoutDate, first)
-        XCTAssertTrue(model.sinceDescription(now: date(), calendar: calendar, abbreviated: true).hasPrefix("workout since "))
-        XCTAssertTrue(model.sinceDescription(now: date(), calendar: calendar, abbreviated: true).contains("2025"))
+    func testCenterCountAndCaptionFollowTheSelectedPeriod() {
+        let workouts = [
+            workout(date(2024, 8, 20), minutes: 60), // Inner lap: lifetime only.
+            workout(date(2026, 6, 1), minutes: 60), // Past year, outside 30 days.
+            workout(date(), minutes: 60),
+        ]
+        let model = HomeRingModel(workouts: workouts, now: date(), calendar: calendar)
+        XCTAssertEqual(model.workoutCount(for: .month), 1)
+        XCTAssertEqual(model.countCaption(for: .month), "workout in the past 30 days")
+        XCTAssertEqual(model.workoutCount(for: .year), 2)
+        XCTAssertEqual(model.countCaption(for: .year), "workouts in the past year")
+    }
+
+    func testCenterCountIsZeroWhenThePeriodHasNoWorkouts() {
+        let model = HomeRingModel(workouts: [workout(date(2026, 6, 1), minutes: 60)], now: date(), calendar: calendar)
+        XCTAssertEqual(model.workoutCount(for: .month), 0)
+        XCTAssertEqual(model.countCaption(for: .month), "workouts in the past 30 days")
     }
 
     func testWeekBucketingRespectsLocaleFirstWeekdayAcrossNewYear() {
@@ -251,15 +261,11 @@ final class HomeRingModelTests: XCTestCase {
         }
     }
 
-    func testAccessibilitySummariesDescribeTheWindowAndLifetimeHistory() {
+    func testAccessibilitySummariesMatchTheCenterCount() {
         let workouts = [workout(date(2025, 8, 20), minutes: 60), workout(date(), minutes: 60)]
         let model = HomeRingModel(workouts: workouts, now: date(), calendar: calendar)
-        XCTAssertTrue(model.accessibilitySummary(period: .month, now: date(), calendar: calendar)
-            .hasPrefix("Last 30 days: 1 workout. 2 workouts since"))
-        XCTAssertTrue(model.accessibilitySummary(period: .year, now: date(), calendar: calendar)
-            .hasPrefix("Last 52 weeks: trained in 1 week. 2 workouts since"))
-        let recent = HomeRingModel(workouts: [workout(date(), minutes: 60)], now: date(), calendar: calendar)
-        XCTAssertTrue(recent.sinceDescription(now: date(), calendar: calendar, abbreviated: true).contains("2026"))
+        XCTAssertEqual(model.accessibilitySummary(period: .month), "1 workout in the past 30 days.")
+        XCTAssertEqual(model.accessibilitySummary(period: .year), "1 workout in the past year. Trained in 1 week.")
     }
 
     func testThreeYear500WorkoutBucketingPerformance() {

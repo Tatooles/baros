@@ -44,7 +44,6 @@ struct HomeRingSpoke: Equatable {
 
 struct HomeRingModel: Equatable {
     let totalWorkouts: Int
-    let firstWorkoutDate: Date?
     let monthWorkoutCount: Int
     let yearWorkoutCount: Int
     let monthSpokes: [HomeRingSpoke]
@@ -60,7 +59,6 @@ struct HomeRingModel: Equatable {
     init(workouts: [RingWorkout], now: Date, calendar: Calendar) {
         let past = workouts.filter { $0.date <= now }
         totalWorkouts = past.count
-        firstWorkoutDate = past.map(\.date).min()
         let today = calendar.startOfDay(for: now)
         let thisWeek = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? today
         let daily = Dictionary(grouping: past, by: { calendar.startOfDay(for: $0.date) })
@@ -107,25 +105,22 @@ struct HomeRingModel: Equatable {
         return (0..<period.slotCount).reversed().filter { !trained.contains($0) }
     }
 
-    func sinceDescription(now: Date, calendar: Calendar, abbreviated: Bool) -> String {
-        guard let firstWorkoutDate else { return "" }
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.locale = .current
-        formatter.setLocalizedDateFormatFromTemplate(abbreviated ? "MMMyyyy" : "MMMMyyyy")
-        return "\(totalWorkouts == 1 ? "workout" : "workouts") since \(formatter.string(from: firstWorkoutDate))"
+    func workoutCount(for period: HomeRingPeriod) -> Int {
+        period == .month ? monthWorkoutCount : yearWorkoutCount
     }
 
-    func accessibilitySummary(period: HomeRingPeriod, now: Date, calendar: Calendar) -> String {
+    /// Caption under the center count; it names the same window the dial draws.
+    func countCaption(for period: HomeRingPeriod) -> String {
+        let noun = workoutCount(for: period) == 1 ? "workout" : "workouts"
+        return "\(noun) in the past \(period == .month ? "30 days" : "year")"
+    }
+
+    func accessibilitySummary(period: HomeRingPeriod) -> String {
         guard totalWorkouts > 0 else { return "No workouts yet." }
-        let window: String
-        if period == .month {
-            window = "Last 30 days: \(monthWorkoutCount) \(monthWorkoutCount == 1 ? "workout" : "workouts")."
-        } else {
-            let weeks = yearSpokes.filter { $0.lap == 0 }.count
-            window = "Last 52 weeks: trained in \(weeks) \(weeks == 1 ? "week" : "weeks")."
-        }
-        return "\(window) \(totalWorkouts) \(sinceDescription(now: now, calendar: calendar, abbreviated: false))."
+        let count = workoutCount(for: period)
+        let summary = "\(count) \(countCaption(for: period))."
+        guard period == .year else { return summary }
+        let weeks = yearSpokes.filter { $0.lap == 0 }.count
+        return summary + " Trained in \(weeks) \(weeks == 1 ? "week" : "weeks")."
     }
 }
