@@ -8,6 +8,65 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testMinimizedAccessoryShowsRestCountdownFinishedWindowThenElapsed() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store", "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience", "--uitest-rest-30-seconds",
+            "--uitest-seed-large-active-workout",
+        ]
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["SetCompletionButton-0-0"].tap()
+        minimizeActiveWorkout(in: app)
+        let accessory = app.buttons["ActiveWorkoutAccessory"]
+        XCTAssertTrue((accessory.value as? String ?? "").contains("Rest 0:"))
+        XCTAssertTrue((accessory.value as? String ?? "").contains("1 of 50 sets completed"))
+        let restingValue = accessory.value as? String
+        let ticking = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in accessory.value as? String != restingValue },
+            object: accessory
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [ticking], timeout: 3), .completed)
+        let finished = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                (accessory.value as? String ?? "").contains("Rest over")
+            }, object: accessory
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 35), .completed)
+        let elapsed = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                (accessory.value as? String ?? "").contains("elapsed")
+            }, object: accessory
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [elapsed], timeout: 6), .completed)
+    }
+
+    @MainActor
+    func testMinimizedRestAccessoryAtAccessibilityTextSizeAndAfterSkip() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--uitest-in-memory-store", "--uitest-force-signed-out-auth",
+            "--uitest-skip-first-run-experience", "--uitest-seed-large-active-workout",
+            "--uitest-accessibility-dynamic-type",
+        ]
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["SetCompletionButton-0-0"].tap()
+        minimizeActiveWorkout(in: app)
+        let accessory = app.buttons["ActiveWorkoutAccessory"]
+        XCTAssertTrue((accessory.value as? String ?? "").contains("Rest "))
+        accessory.tap()
+        let badge = app.buttons["RestTimerBadge"]
+        XCTAssertTrue(badge.waitForExistence(timeout: 3))
+        badge.tap()
+        app.buttons["SkipRestButton"].tap()
+        minimizeActiveWorkout(in: app)
+        XCTAssertTrue((accessory.value as? String ?? "").contains("elapsed"))
+        XCTAssertFalse((accessory.value as? String ?? "").contains("Rest "))
+    }
+
+    @MainActor
     func testCompletingSetStartsRestAndSkipRemovesIt() {
         let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
         app.launch()
@@ -111,6 +170,60 @@ final class BarosUITests: XCTestCase {
         add(notification)
         app.activate()
         XCTAssertTrue(waitForAbsence(app.buttons["RestTimerBadge"], timeout: 6))
+    }
+
+    @MainActor
+    func testTurningRestTimersOffInSettingsEndsRestAndSkipsLaterCompletions() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["SetCompletionButton-0-0"].tap()
+        let skip = app.buttons["SkipRestButton"]
+        let badge = app.buttons["RestTimerBadge"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 2))
+
+        minimizeActiveWorkout(in: app)
+        tapTab(.settings, in: app)
+        let toggle = app.switches["SettingsRestTimerToggle"]
+        let stepper = app.steppers["SettingsRestTimerStepper"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        XCTAssertEqual(toggle.label, "Rest Timer")
+        XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertTrue(stepper.exists)
+        toggle.switches.firstMatch.tap()
+        XCTAssertEqual(toggle.value as? String, "0")
+        XCTAssertTrue(waitForAbsence(stepper, timeout: 3))
+
+        app.buttons["ActiveWorkoutAccessory"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(badge.exists)
+        XCTAssertFalse(skip.exists)
+        XCTAssertFalse(app.buttons["RestTimerHeaderBadge"].exists)
+
+        let checkmarked = app.buttons["SetCompletionButton-0-1"]
+        checkmarked.tap()
+        XCTAssertEqual(checkmarked.label, "Mark set incomplete")
+        let repsField = app.textFields["SetRepsField-0-2"]
+        repsField.tap()
+        XCTAssertTrue(waitForKeyboardFocus(on: repsField))
+        // The fixture's sets already carry RPE 8; choosing it again would clear it.
+        enterRPEViaChips("9", in: app)
+        XCTAssertEqual(app.buttons["SetCompletionButton-0-2"].label, "Mark set incomplete")
+        XCTAssertFalse(badge.waitForExistence(timeout: 2))
+        XCTAssertFalse(skip.exists)
+
+        minimizeActiveWorkout(in: app)
+        tapTab(.settings, in: app)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        toggle.switches.firstMatch.tap()
+        XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertTrue(stepper.waitForExistence(timeout: 3))
+
+        app.buttons["ActiveWorkoutAccessory"].tap()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(badge.exists)
+        app.buttons["SetCompletionButton-0-3"].tap()
+        XCTAssertTrue(skip.waitForExistence(timeout: 2))
     }
 
     @MainActor
@@ -365,7 +478,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(app.buttons["WorkoutTab"].exists)
         XCTAssertTrue(app.staticTexts["HomeTitle"].exists)
         XCTAssertTrue(app.buttons["StartWorkoutButton"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["HomeTrainingCalendar"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["HomeYearRing"].exists)
         XCTAssertFalse(app.buttons["HomeQuickStartButton-0"].exists)
     }
 
@@ -374,10 +487,10 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        let currentWeek = app.descendants(matching: .any)["HomeTrainingCalendarCurrentWeek"]
-        XCTAssertTrue(currentWeek.waitForExistence(timeout: 3))
-        XCTAssertEqual(currentWeek.label, "This week: no workouts.")
-        XCTAssertTrue(app.staticTexts["Each workout you finish adds a check here."].exists)
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertEqual(ring.label, "No workouts yet.")
+        XCTAssertFalse(app.segmentedControls["HomeRingPeriodPicker"].exists)
         XCTAssertFalse(app.buttons["HomeQuickStartButton-0"].exists)
 
         app.buttons["StartWorkoutButton"].tap()
@@ -412,7 +525,7 @@ final class BarosUITests: XCTestCase {
         dismissStartWorkoutFromReview(in: app)
         let quickStart = app.buttons["HomeQuickStartButton-0"]
         XCTAssertTrue(quickStart.waitForExistence(timeout: 3))
-        XCTAssertTrue(quickStart.label.hasPrefix("Past Push, "))
+        XCTAssertTrue(quickStart.label == "Past Push")
         quickStart.tap()
 
         XCTAssertTrue(app.buttons["QuickStartCancelButton"].waitForExistence(timeout: 3))
@@ -437,9 +550,12 @@ final class BarosUITests: XCTestCase {
 
         let startWorkoutButton = app.buttons["StartWorkoutButton"]
         XCTAssertTrue(startWorkoutButton.waitForExistence(timeout: 3))
+        let homeScroll = app.scrollViews["HomeScrollView"]
+        XCTAssertTrue(homeScroll.exists)
+        homeScroll.swipeUp()
         XCTAssertTrue(startWorkoutButton.isHittable)
         XCTAssertGreaterThanOrEqual(startWorkoutButton.frame.height, 96)
-        XCTAssertTrue(app.descendants(matching: .any)["HomeTrainingCalendar"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["HomeYearRing"].exists)
 
         startWorkoutButton.tap()
         XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].waitForExistence(timeout: 3))
@@ -563,55 +679,82 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testTappingACompletedCalendarDayOpensThatWorkoutInHistory() {
-        let app = makeApp()
+    func testHomeRingRecentHistoryHidesToggleAndStartRemainsAvailable() {
+        let app = makeApp(extraArguments: ["--home-ring-fixture", "twoWeeks"])
         app.launch()
-
-        startBlankWorkout(in: app)
-        let workoutTitle = app.textFields["WorkoutTitle"]
-        XCTAssertTrue(workoutTitle.waitForExistence(timeout: 3))
-        replaceText(in: workoutTitle, with: "Calendar Push")
-        openFinishWorkoutSheet(in: app)
-        app.buttons["SaveWorkoutButton"].tap()
-
-        let today = app.buttons["HomeTrainingCalendarToday"]
-        XCTAssertTrue(waitForHittable(today, timeout: 3))
-        XCTAssertTrue(today.label.hasSuffix(": Calendar Push"))
-        today.tap()
-
-        let heading = app.staticTexts["WorkoutHistoryHeading"]
-        XCTAssertTrue(heading.waitForExistence(timeout: 3))
-        XCTAssertTrue(heading.label.hasPrefix("Calendar Push"))
-        XCTAssertTrue(app.tabButton(.history).isSelected)
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertTrue(ring.label.hasPrefix("Last 30 days:"))
+        XCTAssertFalse(app.segmentedControls["HomeRingPeriodPicker"].exists)
+        app.buttons["StartWorkoutButton"].tap()
+        XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].waitForExistence(timeout: 3))
     }
 
     @MainActor
-    func testCalendarDayWithTwoWorkoutsOffersAMenuOfBoth() {
+    func testHomeRingToggleAndTabReturnKeepHistoryAndStartAvailable() {
+        let app = makeApp(extraArguments: ["--home-ring-fixture", "perWeek3"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertTrue(ring.label.hasPrefix("Last 30 days:"))
+        let picker = app.segmentedControls["HomeRingPeriodPicker"]
+        XCTAssertTrue(picker.exists)
+        XCTAssertFalse(app.buttons["HomeRingFixtureSwitcher"].exists)
+        picker.buttons["Year"].tap()
+        XCTAssertTrue(ring.label.hasPrefix("Last 52 weeks: trained in"))
+        app.tabButton(.history).tap()
+        app.tabButton(.home).tap()
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["StartWorkoutButton"].isHittable)
+        XCTAssertTrue(ring.label.hasPrefix("Last 52 weeks: trained in"))
+        picker.buttons["Month"].tap()
+        XCTAssertTrue(ring.label.hasPrefix("Last 30 days:"))
+        app.buttons["StartWorkoutButton"].tap()
+        XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testHomeRingYearSelectionPersistsAcrossRelaunch() {
+        let app = makeApp(extraArguments: ["--home-ring-fixture", "perWeek3"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertTrue(ring.label.hasPrefix("Last 30 days:"))
+        app.segmentedControls["HomeRingPeriodPicker"].buttons["Year"].tap()
+        XCTAssertTrue(ring.label.hasPrefix("Last 52 weeks:"))
+        app.terminate()
+
+        let relaunchedApp = makeApp(extraArguments: ["--home-ring-fixture", "perWeek3"], resetsHomeRingPeriod: false)
+        relaunchedApp.launch()
+        let relaunchedRing = relaunchedApp.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(relaunchedRing.waitForExistence(timeout: 3))
+        XCTAssertTrue(relaunchedRing.label.hasPrefix("Last 52 weeks:"))
+    }
+
+    @MainActor
+    func testHomeRingUpdatesAfterSavingLiveWorkout() {
         let app = makeApp()
         app.launch()
+        startBlankWorkout(in: app)
+        openFinishWorkoutSheet(in: app)
+        app.buttons["SaveWorkoutButton"].tap()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 3))
+        XCTAssertTrue(ring.label.hasPrefix("Last 30 days: 1 workout. 1 workout since"), ring.label)
+        XCTAssertFalse(app.segmentedControls["HomeRingPeriodPicker"].exists)
+    }
 
-        for title in ["Morning Lift", "Evening Lift"] {
-            startBlankWorkout(in: app)
-            let workoutTitle = app.textFields["WorkoutTitle"]
-            XCTAssertTrue(workoutTitle.waitForExistence(timeout: 3))
-            replaceText(in: workoutTitle, with: title)
-            openFinishWorkoutSheet(in: app)
-            app.buttons["SaveWorkoutButton"].tap()
-            XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
-        }
-
-        let today = app.buttons["HomeTrainingCalendarToday"]
-        XCTAssertTrue(waitForHittable(today, timeout: 3))
-        today.tap()
-
-        let evening = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Evening Lift")).firstMatch
-        XCTAssertTrue(waitForHittable(evening, timeout: 3))
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Morning Lift")).firstMatch.exists)
-        evening.tap()
-
-        let heading = app.staticTexts["WorkoutHistoryHeading"]
-        XCTAssertTrue(heading.waitForExistence(timeout: 3))
-        XCTAssertTrue(heading.label.hasPrefix("Evening Lift"))
+    @MainActor
+    func testHomeRingLiveMultiYearHistoryShowsSummaryToggleAndQuickStart() {
+        let app = makeApp(extraArguments: ["--uitest-seed-home-ring-history"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 10))
+        XCTAssertTrue(ring.label.contains("500 workouts since"), ring.label)
+        XCTAssertTrue(app.segmentedControls["HomeRingPeriodPicker"].exists)
+        app.segmentedControls["HomeRingPeriodPicker"].buttons["Year"].tap()
+        XCTAssertTrue(ring.label.hasPrefix("Last 52 weeks: trained in"))
+        XCTAssertTrue(app.buttons["HomeQuickStartButton-0"].exists)
     }
 
     @MainActor
@@ -1205,6 +1348,7 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
         XCTAssertTrue(firstLaunch.staticTexts["Welcome to Baros"].exists)
+        XCTAssertFalse(firstLaunch.staticTexts["What's new in Baros 1.4"].exists)
         XCTAssertTrue(firstLaunch.staticTexts["Log sets in seconds"].exists)
         XCTAssertTrue(firstLaunch.staticTexts["See your progress as you lift"].exists)
         XCTAssertTrue(firstLaunch.staticTexts["No account needed"].exists)
@@ -1371,30 +1515,80 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testOneThreeUpgradeShowsOneFourWhatsNewOnce() {
+        let firstLaunch = makeDiskBackedApp(
+            extraArguments: [
+                "--uitest-in-memory-store",
+                "-Baros.FirstRunExperience.hasSeenWelcome", "YES",
+                "-Baros.FirstRunExperience.lastProcessedAppVersion", "1.3",
+                "-Baros.FirstRunExperience.lastSeenWhatsNewVersion", "1.3",
+            ],
+            skipsFirstRunExperience: false
+        )
+        firstLaunch.launch()
+
+        XCTAssertTrue(firstLaunch.staticTexts["What's new in Baros 1.4"].waitForExistence(timeout: 5))
+        XCTAssertFalse(firstLaunch.staticTexts["Welcome to Baros"].exists)
+        firstLaunch.buttons["LaunchExperiencePrimaryButton"].tap()
+        XCTAssertTrue(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForNonExistence(timeout: 3))
+        firstLaunch.terminate()
+
+        let secondLaunch = makeDiskBackedApp(
+            extraArguments: [
+                "--uitest-in-memory-store",
+                "-Baros.FirstRunExperience.hasSeenWelcome", "YES",
+            ],
+            skipsFirstRunExperience: false
+        )
+        secondLaunch.launch()
+        XCTAssertTrue(secondLaunch.staticTexts["HomeTitle"].waitForExistence(timeout: 5))
+        XCTAssertFalse(secondLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 1))
+    }
+
+    @MainActor
     func testSettingsCanOpenWhatsNew() {
-        let app = makeApp()
-        app.launch()
+        for appearance in ["light", "dark"] {
+            let arguments = ["-Baros.AppAppearance.preference", appearance]
+            let app = makeApp(extraArguments: arguments)
+            app.launch()
 
-        app.tabButton(.settings).tap()
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+            app.tabButton(.settings).tap()
+            XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
 
-        let whatsNewButton = app.buttons["SettingsWhatsNewButton"]
-        for _ in 0..<5 where !whatsNewButton.isHittable {
-            app.swipeUp()
+            let whatsNewButton = app.buttons["SettingsWhatsNewButton"]
+            for _ in 0..<5 where !whatsNewButton.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertTrue(whatsNewButton.exists)
+            XCTAssertTrue(whatsNewButton.isHittable)
+            whatsNewButton.tap()
+
+            XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.staticTexts["What's new in Baros 1.4"].exists)
+            XCTAssertTrue(app.staticTexts["Year Ring Home"].exists)
+            XCTAssertTrue(app.staticTexts["Rest timers"].exists)
+            XCTAssertTrue(app.staticTexts["A dedicated Settings tab"].exists)
+            XCTAssertEqual(app.buttons["LaunchExperiencePrimaryButton"].label, "Continue")
+
+            attachWhatsNewScreenshot("whats-new-1.4-\(appearance)")
+            let continueButton = app.buttons["LaunchExperiencePrimaryButton"]
+            XCTAssertEqual(app.buttons.matching(identifier: "LaunchExperiencePrimaryButton").count, 1)
+            for _ in 0..<8 where !continueButton.isHittable { app.swipeUp() }
+            XCTAssertTrue(continueButton.isHittable)
+            attachWhatsNewScreenshot("whats-new-1.4-\(appearance)-continue")
+            continueButton.tap()
+            XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitForNonExistence(timeout: 3))
+            XCTAssertTrue(app.navigationBars["Settings"].exists)
+            app.terminate()
         }
-        XCTAssertTrue(whatsNewButton.exists)
-        XCTAssertTrue(whatsNewButton.isHittable)
-        whatsNewButton.tap()
+    }
 
-        XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["What's new in Baros 1.3"].exists)
-        XCTAssertTrue(app.staticTexts["Records worth chasing"].exists)
-        XCTAssertTrue(app.staticTexts["Find any workout"].exists)
-        XCTAssertTrue(app.staticTexts["Smarter set logging"].exists)
-        XCTAssertTrue(app.staticTexts["Swap exercises mid-workout"].exists)
-
-        app.buttons["LaunchExperiencePrimaryButton"].tap()
-        XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitForNonExistence(timeout: 3))
+    @MainActor
+    private func attachWhatsNewScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     @MainActor
@@ -3586,6 +3780,27 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testCloudDeletionFailureExplainsUncertaintyAndAllowsRetry() {
+        let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth", "--uitest-fail-cloud-deletion-once"])
+        app.launch()
+        tapTab(.settings, in: app)
+        revealSettingsRow(app.buttons["SettingsDeleteAccountRow"], in: app)
+        app.buttons["SettingsDeleteAccountRow"].tap()
+        enterDeleteConfirmation(in: app)
+        app.buttons["DeleteDataConfirmButton"].tap()
+        let error = app.staticTexts["DeleteDataErrorMessage"]
+        XCTAssertTrue(error.waitForExistence(timeout: 3))
+        XCTAssertTrue(error.label.contains("Some cloud data may already be deleted"))
+        XCTAssertTrue(error.label.contains("Your account has not been deleted"))
+        XCTAssertTrue(error.label.contains("your local copy is still on this iPhone"))
+        XCTAssertTrue(error.label.contains("Try Delete Account again"))
+        XCTAssertTrue(app.buttons["DeleteDataConfirmButton"].isEnabled)
+        app.buttons["DeleteDataConfirmButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.navigationBars["Delete Account"].exists)
+    }
+
+    @MainActor
     func testSignedOutSettingsShowsOptionalAuthAndWorkoutStillWorks() {
         let app = makeApp()
         app.launchArguments.append("--uitest-force-signed-out-auth")
@@ -3970,7 +4185,8 @@ final class BarosUITests: XCTestCase {
     private func makeApp(
         extraArguments: [String] = [],
         completedBenchWorkoutTitles: [String] = [],
-        resetsSignedOutReminder: Bool = true
+        resetsSignedOutReminder: Bool = true,
+        resetsHomeRingPeriod: Bool = true
     ) -> XCUIApplication {
         let app = XCUIApplication()
         let fixtureArguments = completedBenchWorkoutTitles.flatMap {
@@ -3985,6 +4201,9 @@ final class BarosUITests: XCTestCase {
             "--uitest-reset-exercise-picker-sort",
             "--uitest-reset-app-appearance",
         ] + fixtureArguments + authArguments
+        if resetsHomeRingPeriod {
+            launchArguments.append("--uitest-reset-home-ring-period")
+        }
         if resetsSignedOutReminder {
             launchArguments.append("--uitest-reset-signed-out-reminder")
         }
@@ -4045,6 +4264,7 @@ final class BarosUITests: XCTestCase {
             "--uitest-force-signed-out-auth",
             "--uitest-reset-exercise-picker-sort",
             "--uitest-reset-app-appearance",
+            "--uitest-reset-home-ring-period",
         ]
         if !extraArguments.contains("--uitest-reset-first-run-experience") {
             launchArguments.append("--uitest-skip-first-run-experience")

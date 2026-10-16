@@ -42,8 +42,43 @@ final class AccountDeletionCoordinatorTests: XCTestCase {
         XCTAssertEqual(try context.fetch(FetchDescriptor<UserSettings>()).count, 1)
         let outboxEntries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
         XCTAssertEqual(outboxEntries.count, 0)
-        XCTAssertEqual(coordinator.phase, .failed("Cloud data could not be deleted. Your account and data are still intact."))
+        XCTAssertEqual(coordinator.phase, .failed("Cloud deletion could not finish or be confirmed. Some cloud data may already be deleted. Your account has not been deleted, and your local copy is still on this iPhone. Try Delete Account again to finish deletion."))
         XCTAssertFalse(scheduler.isDeletionModeEnabled)
+    }
+
+    func testCloudDeletionRetryReusesAttemptAndKeepsLocalCopyUntilSuccess() async throws {
+        struct CloudError: Error {}
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = WorkoutSession(title: "Local Copy", startedAt: .now, status: .completed,
+                                     source: .blank, syncOwnerTokenIdentifier: "issuer|owner_a")
+        context.insert(session)
+        try context.save()
+        let client = FakeSyncClient()
+        client.deleteAccountDataError = CloudError()
+        let accountDeleter = FakeAccountDeleter()
+        let attemptStore = TestAccountDeletionAttemptStore()
+        let scheduler = SyncScheduler()
+        scheduler.configure(modelContext: context)
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+        let coordinator = AccountDeletionCoordinator(
+            syncClient: client, accountDeleter: accountDeleter, attemptStore: attemptStore,
+            localDataResetService: LocalDataResetService(), syncScheduler: scheduler, modelContext: context
+        )
+
+        await coordinator.deleteAccount()
+        let token = try XCTUnwrap(attemptStore.persistedCancellationToken(for: "issuer|owner_a"))
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutSession>()).map(\.id), [session.id])
+        XCTAssertEqual(accountDeleter.deleteCallCount, 0)
+        XCTAssertEqual(client.cancelAccountDeletionCallCount, 0)
+
+        client.deleteAccountDataError = nil
+        await coordinator.deleteAccount()
+        XCTAssertEqual(client.deleteAccountDataTokens, [token, token])
+        XCTAssertEqual(accountDeleter.deleteCallCount, 1)
+        XCTAssertNil(attemptStore.persistedCancellationToken(for: "issuer|owner_a"))
+        XCTAssertEqual(coordinator.phase, .completed)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutSession>()).isEmpty)
     }
 
     func testAccountDeletionKeepsLocalDataWhenClerkFailsAfterConvexSucceeds() async throws {

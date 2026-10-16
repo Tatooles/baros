@@ -5,6 +5,7 @@ import UIKit
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppAppearancePreferenceStore.self) private var appAppearanceStore
+    @Environment(RestTimerCoordinator.self) private var restTimer
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
@@ -33,10 +34,15 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("WeightUnitPicker")
 
-                Stepper(value: restTimerBinding, in: 30...300, step: 15) {
-                    LabeledContent("Rest Timer", value: "\(settings.defaultRestTimerSeconds) seconds")
+                Toggle("Rest Timer", isOn: restTimerEnabledBinding)
+                    .accessibilityIdentifier("SettingsRestTimerToggle")
+
+                if restTimer.isEnabled {
+                    Stepper(value: restTimerBinding, in: 30...300, step: 15) {
+                        LabeledContent("Rest Duration", value: "\(settings.defaultRestTimerSeconds) seconds")
+                    }
+                    .accessibilityIdentifier("SettingsRestTimerStepper")
                 }
-                .accessibilityIdentifier("SettingsRestTimerStepper")
             }
 
             Section {
@@ -267,6 +273,15 @@ struct SettingsView: View {
         Binding(
             get: { appAppearanceStore.appearance },
             set: { appAppearanceStore.appearance = $0 }
+        )
+    }
+
+    private var restTimerEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { restTimer.isEnabled },
+            set: { enabled in
+                withAnimation { restTimer.setEnabled(enabled) }
+            }
         )
     }
 
