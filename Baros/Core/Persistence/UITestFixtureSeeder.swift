@@ -14,6 +14,7 @@ enum UITestFixtureSeeder {
         "--uitest-seed-matching-exercise-performance-workouts"
     static let largeActiveWorkoutArgument = "--uitest-seed-large-active-workout"
     static let largeActiveWorkoutTitle = "Performance Workout 10x5"
+    static let homeRingHistoryArgument = "--uitest-seed-home-ring-history"
     /// Seeds fixtures for an owner who is no longer signed in, as after an expired session.
     static let signedOutOwnerArgument = "--uitest-seed-signed-out-owner"
 
@@ -45,6 +46,10 @@ enum UITestFixtureSeeder {
         ownerTokenIdentifier: String? = nil,
         context: ModelContext
     ) throws {
+        if arguments.contains(homeRingHistoryArgument) {
+            try seedHomeRingHistory(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
         for title in values(after: completedBenchWorkoutArgument, in: arguments) {
             try seedCompletedBenchWorkout(
                 title: title,
@@ -112,6 +117,37 @@ enum UITestFixtureSeeder {
                 context: context
             )
         }
+    }
+
+    /// Separate from value-only ring fixtures: real, idempotent SwiftData history for live-query QA.
+    static func seedHomeRingHistory(
+        ownerTokenIdentifier: String?, context: ModelContext, now: Date = .now, calendar: Calendar = .current
+    ) throws {
+        let existingIDs = Set(try context.fetch(FetchDescriptor<WorkoutSession>()).map(\.id))
+        let today = calendar.startOfDay(for: now)
+        let names = ["Push Day", "Pull Day", "Leg Day", "Upper"]
+        for index in 0..<500 {
+            let id = stableUUID(String(format: "00000312-0000-4000-8000-%012d", index))
+            guard !existingIDs.contains(id) else { continue }
+            // Calendar arithmetic covers three years, year boundaries and both DST transitions.
+            let daysBack = index * 1095 / 499
+            guard let day = calendar.date(byAdding: .day, value: -daysBack, to: today),
+                  let startedAt = calendar.date(bySettingHour: daysBack == 0 ? 0 : 17,
+                                                minute: 0, second: 0, of: day) else { continue }
+            let duration = Double(20 + (index * 17) % 71) * 60
+            let endedAt = min(now, startedAt.addingTimeInterval(duration))
+            context.insert(WorkoutSession(
+                id: id, title: names[index % names.count], startedAt: startedAt, endedAt: endedAt,
+                durationSeconds: Int(endedAt.timeIntervalSince(startedAt)), status: .completed, source: .blank,
+                syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                loggedExercises: [LoggedExercise(
+                    orderIndex: 0, exerciseSnapshotName: "Bench Press",
+                    exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                    sets: (0..<3).map { LoggedSet(orderIndex: $0, weight: 185, reps: 5, isCompleted: true) }
+                )]
+            ))
+        }
+        try context.save()
     }
 
     /// Six exercise blocks with mixed notes, plus two older Bench Press sessions.

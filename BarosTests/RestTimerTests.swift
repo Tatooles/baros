@@ -90,15 +90,99 @@ final class RestTimerTests: XCTestCase {
         XCTAssertEqual(h.alerts, 1)
     }
 
-    func testBackgroundExpiryDoesNotReplayOnForeground() {
+    func testBackgroundExpiryDoesNotReplayAndClearsDeliveredAlertOnReturn() {
+        // Expiry noticed on return, or by the resumed expiry task first.
+        for taskFiresFirst in [false, true] {
+            let h = Harness()
+            h.timer.start(sessionID: UUID(), setID: UUID(), duration: 90)
+            h.timer.setScenePhase(.background)
+            h.now = h.now.addingTimeInterval(95)
+            if taskFiresFirst { h.timer.expireIfNeeded() }
+            XCTAssertEqual(h.notifications.removals, 0)
+            h.timer.setScenePhase(.foreground)
+            XCTAssertEqual(h.alerts, 0)
+            XCTAssertEqual(h.notifications.removals, 1)
+            XCTAssertNil(h.timer.current)
+            XCTAssertNil(h.persisted)
+            h.timer.setScenePhase(.background)
+            h.timer.setScenePhase(.foreground)
+            XCTAssertEqual(h.notifications.removals, 1)
+        }
+    }
+
+    func testReturningBeforeExpiryKeepsPendingAlert() {
         let h = Harness()
         h.timer.start(sessionID: UUID(), setID: UUID(), duration: 90)
-        h.timer.setAppActive(false)
-        h.now = h.now.addingTimeInterval(95)
-        h.timer.setAppActive(true)
-        XCTAssertEqual(h.alerts, 0)
+        h.timer.setScenePhase(.background)
+        h.now = h.now.addingTimeInterval(30)
+        h.timer.setScenePhase(.foreground)
         XCTAssertEqual(h.notifications.removals, 0)
-        XCTAssertNil(h.timer.current)
+        XCTAssertEqual(h.timer.current?.isFinished, false)
+        h.now = h.now.addingTimeInterval(60)
+        h.timer.expireIfNeeded()
+        XCTAssertEqual(h.alerts, 1)
+        XCTAssertEqual(h.notifications.removals, 1)
+    }
+
+    func testExpiryUnderSystemOverlayAlertsInAppOnce() {
+        XCTAssertEqual(RestTimerScenePhase(.active), .foreground)
+        XCTAssertEqual(RestTimerScenePhase(.background), .background)
+        let h = Harness()
+        h.timer.start(sessionID: UUID(), setID: UUID(), duration: 90)
+        // Control Center, Notification Center, or the permission prompt.
+        h.timer.setScenePhase(RestTimerScenePhase(.inactive))
+        h.now = h.now.addingTimeInterval(90)
+        h.timer.expireIfNeeded()
+        XCTAssertEqual(h.alerts, 1)
+        XCTAssertEqual(h.notifications.removals, 1)
+        h.timer.setScenePhase(RestTimerScenePhase(.active))
+        h.timer.expireIfNeeded()
+        XCTAssertEqual(h.alerts, 1)
+        XCTAssertEqual(h.notifications.removals, 1)
+    }
+
+    func testExpiryDuringFirstAuthorizationPromptAlertsOnceAndWithdrawsTheRequest() {
+        // The prompt is requested by start() and keeps the scene inactive. The
+        // removal supersedes the request still awaiting authorization, so the
+        // OS can't deliver a second, late alert after the prompt closes.
+        let h = Harness()
+        h.timer.start(sessionID: UUID(), setID: UUID(), duration: 90)
+        XCTAssertEqual(h.notifications.authorizationRequests, [true])
+        h.timer.setScenePhase(RestTimerScenePhase(.inactive))
+        h.now = h.now.addingTimeInterval(91)
+        h.timer.expireIfNeeded()
+        XCTAssertEqual(h.alerts, 1)
+        XCTAssertEqual(h.notifications.removals, 1)
+        h.now = h.now.addingTimeInterval(10)
+        h.timer.expireIfNeeded()
+        XCTAssertEqual(h.alerts, 1)
+        XCTAssertEqual(h.notifications.scheduled.count, 1)
+        XCTAssertEqual(h.timer.current?.isFinished, true)
+        XCTAssertNil(h.persisted)
+    }
+
+    func testOnlyPresentedAndShownSlotsStayRetained() throws {
+        let h = Harness()
+        let shown = UUID()
+        let shownSlot = h.timer.slot(for: shown)
+        weak var released: RestTimerSlot?
+        do {
+            let transient = h.timer.slot(for: UUID())
+            released = transient
+        }
+        XCTAssertNil(released)
+        // Rest on a set no view currently shows, e.g. while minimized.
+        let unshown = UUID()
+        h.timer.start(sessionID: UUID(), setID: unshown, duration: 90)
+        let period = try XCTUnwrap(h.timer.current)
+        XCTAssertTrue(h.timer.slot(for: unshown).period === period)
+        XCTAssertEqual(h.timer.liveSlotCount, 2)
+        XCTAssertTrue(h.timer.slot(for: shown) === shownSlot)
+        h.timer.cancel()
+        XCTAssertNil(h.timer.slot(for: unshown).period)
+        h.timer.start(sessionID: UUID(), setID: shown, duration: 90)
+        XCTAssertTrue(shownSlot.period === h.timer.current)
+        XCTAssertEqual(h.timer.liveSlotCount, 1)
     }
 
     func testVoiceOverDoesNotAutoOpenControls() {
@@ -227,6 +311,24 @@ final class RestTimerTests: XCTestCase {
         }
     }
 
+    func testLifecycleStateWithoutRestIgnoresSetChanges() throws {
+        let h = Harness()
+        let (context, engine, session, exercise) = try fixture(timer: h.timer)
+        let before = RestTimerLifecycleState(session: session, rest: nil, ownerState: .localOnly)
+        exercise.sortedSets[0].isCompleted = true
+        XCTAssertEqual(RestTimerLifecycleState(session: session, rest: nil, ownerState: .localOnly), before)
+        XCTAssertNotEqual(
+            RestTimerLifecycleState(session: nil, rest: nil, ownerState: .localOnly), before)
+        exercise.sortedSets[0].isCompleted = false
+        try engine.toggleSetCompletion(exercise.sortedSets[0], context: context)
+        let rest = try XCTUnwrap(h.timer.restForReconciliation)
+        let other = WorkoutSession(title: "Other", startedAt: h.now, status: .active, source: .blank)
+        XCTAssertFalse(
+            RestTimerLifecycleState(session: other, rest: rest, ownerState: .localOnly).starterIsEligible)
+        XCTAssertTrue(
+            RestTimerLifecycleState(session: session, rest: rest, ownerState: .localOnly).starterIsEligible)
+    }
+
     func testCompletionUsesCurrentOwnerSettingsForVisibleUnclaimedWorkout() throws {
         let h = Harness()
         let (context, engine, _, exercise) = try fixture(timer: h.timer)
@@ -255,6 +357,95 @@ final class RestTimerTests: XCTestCase {
         XCTAssertNil(afterSkip.current)
         timer.cancel()
         XCTAssertNil(defaults.data(forKey: "active-workout-rest-v1"))
+    }
+
+    func testDisabledCheckmarkAndRPECompletionSaveWithoutRestOrPermission() throws {
+        let h = Harness()
+        let (context, engine, session, exercise) = try fixture(timer: h.timer)
+        context.insert(UserSettings(defaultRestTimerSeconds: 150))
+        let first = exercise.sortedSets[0]
+        let second = try engine.addSet(to: exercise, context: context)
+        let third = try engine.addSet(to: exercise, context: context)
+        h.timer.setEnabled(false)
+        try engine.toggleSetCompletion(first, context: context)
+        try engine.applyActiveSetRPESelection(
+            second, rpe: 8, preparedValues: .init(weight: 100, reps: 5), context: context)
+        XCTAssertTrue(first.isCompleted)
+        XCTAssertTrue(second.isCompleted)
+        XCTAssertEqual(second.rpe, 8)
+        enum SaveFailure: Error { case expected }
+        XCTAssertThrowsError(
+            try engine.toggleSetCompletion(third, context: context, save: { _ in throw SaveFailure.expected }))
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertTrue(third.isCompleted)
+        XCTAssertNil(h.timer.current)
+        XCTAssertNil(h.timer.restForReconciliation)
+        XCTAssertNil(h.persisted)
+        XCTAssertTrue(h.notifications.scheduled.isEmpty)
+        XCTAssertTrue(h.notifications.authorizationRequests.isEmpty)
+        XCTAssertEqual(h.alerts, 0)
+
+        // Re-enabling never starts rest for a set that is already complete.
+        h.timer.setEnabled(true)
+        XCTAssertNil(h.timer.current)
+        let fourth = try engine.addSet(to: exercise, context: context)
+        try engine.toggleSetCompletion(fourth, context: context)
+        XCTAssertEqual(h.timer.current?.rest.setID, fourth.id)
+        XCTAssertEqual(h.timer.current?.rest.remainingSeconds(at: h.now), 150)
+    }
+
+    func testDisablingDuringRestCancelsPresentationAlertsAndRestorableState() throws {
+        let h = Harness()
+        let (context, engine, session, exercise) = try fixture(timer: h.timer)
+        let set = exercise.sortedSets[0]
+        let slot = h.timer.slot(for: set.id)
+        try engine.toggleSetCompletion(set, context: context)
+        let rest = try XCTUnwrap(h.timer.current?.rest)
+        h.timer.reportInlineVisibility(false, restID: rest.id)
+        XCTAssertTrue(h.timer.showsHeaderFallback)
+        h.timer.setEnabled(false)
+        XCTAssertNil(h.timer.current)
+        XCTAssertNil(slot.period)
+        XCTAssertFalse(h.timer.showsHeaderFallback)
+        XCTAssertNil(h.timer.restForReconciliation)
+        XCTAssertNil(h.persisted)
+        XCTAssertEqual(h.notifications.removals, 1)
+        h.now = rest.endsAt.addingTimeInterval(1)
+        h.timer.expireIfNeeded()
+        h.timer.setScenePhase(.background)
+        h.timer.setScenePhase(.foreground)
+        XCTAssertEqual(h.alerts, 0)
+        let restored = RestTimerCoordinator(
+            restoredRest: rest, isEnabled: false, clock: { h.now }, notifications: h.notifications,
+            schedulesTasks: false)
+        restored.reconcile(with: session, ownerState: .resolving(ownerTokenIdentifier: nil))
+        XCTAssertNil(restored.restForReconciliation)
+        XCTAssertEqual(h.notifications.scheduled.count, 1)
+    }
+
+    func testLiveEnabledPreferenceDefaultsOnPersistsAndDisabledLaunchDropsSavedRest() throws {
+        let suite = "RestTimerTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let notifications = Notifications()
+        let timer = RestTimerCoordinator.live(defaults: defaults, notifications: notifications)
+        XCTAssertTrue(timer.isEnabled)
+        let (context, engine, session, exercise) = try fixture(timer: timer)
+        try engine.toggleSetCompletion(exercise.sortedSets[0], context: context)
+        XCTAssertNotNil(defaults.data(forKey: "active-workout-rest-v1"))
+
+        // A rest saved before timers were turned off elsewhere must not come back.
+        defaults.set(false, forKey: "rest-timers-enabled-v1")
+        let disabledLaunch = RestTimerCoordinator.live(defaults: defaults, notifications: notifications)
+        XCTAssertFalse(disabledLaunch.isEnabled)
+        disabledLaunch.reconcile(with: session)
+        XCTAssertNil(disabledLaunch.current)
+        XCTAssertNil(defaults.data(forKey: "active-workout-rest-v1"))
+
+        disabledLaunch.setEnabled(true)
+        XCTAssertTrue(RestTimerCoordinator.live(defaults: defaults, notifications: notifications).isEnabled)
+        disabledLaunch.setEnabled(false)
+        XCTAssertFalse(RestTimerCoordinator.live(defaults: defaults, notifications: notifications).isEnabled)
     }
 
     func testDurationLookupUsesSettingsWithoutChangingThemWhenAdjusted() throws {

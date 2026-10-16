@@ -29,6 +29,22 @@ workout, lifting, gym, strength, log, tracker, fitness, exercise, sets, reps
 
 App Store Connect "What's New in This Version" text. The highlights must match that release's in-app What's New sheet (`Baros/App/WhatsNewVersion<version>View.swift`), so update both together.
 
+### 1.4
+
+```text
+Baros 1.4 adds the Year Ring Home, rest timers, and a dedicated Settings tab.
+
+• Year Ring Home: Home now shows your training in Month and Year ring views, with Start from pills to repeat a recent workout.
+• Rest timers: completing a set starts a rest countdown, also shown in the Workout Live Activity and minimized workout bar. Rest timers can be turned off in Settings.
+• A dedicated Settings tab: Settings now has its own tab, replacing Profile.
+
+Also in this update:
+• Returning users see a signed-out reminder on Home and in History explaining that their workouts are safe
+• Sync status shows when you're offline, even when no changes are waiting to sync
+• Adding a set no longer opens the keyboard
+• All RPE choices fit without scrolling, and tapping the selected choice clears it
+```
+
 ### 1.3
 
 ```text

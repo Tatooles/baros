@@ -43,11 +43,16 @@ enum WorkoutLiveActivityPendingLink {
 private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
-    let snapshot: WorkoutLiveActivitySnapshot?
+    let session: WorkoutSession?
+    let restTimer: RestTimerCoordinator
     let navigationState: AppNavigationState
     let coordinator: WorkoutLiveActivityCoordinator
     let willHandleWorkoutLiveActivityLink: () -> Void
     @State private var pendingLink: WorkoutLiveActivityPendingLink?
+
+    private var snapshot: WorkoutLiveActivitySnapshot? {
+        session.map { WorkoutLiveActivitySnapshot(session: $0, restPeriod: restTimer.current) }
+    }
 
     func body(content: Content) -> some View {
         content
@@ -115,14 +120,16 @@ private struct WorkoutLiveActivityIntegrationModifier: ViewModifier {
 
 extension View {
     func workoutLiveActivityIntegration(
-        snapshot: WorkoutLiveActivitySnapshot?,
+        session: WorkoutSession?,
+        restTimer: RestTimerCoordinator,
         navigationState: AppNavigationState,
         coordinator: WorkoutLiveActivityCoordinator,
         willHandleWorkoutLiveActivityLink: @escaping () -> Void
     ) -> some View {
         modifier(
             WorkoutLiveActivityIntegrationModifier(
-                snapshot: snapshot,
+                session: session,
+                restTimer: restTimer,
                 navigationState: navigationState,
                 coordinator: coordinator,
                 willHandleWorkoutLiveActivityLink: willHandleWorkoutLiveActivityLink
