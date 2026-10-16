@@ -60,8 +60,8 @@ test("public imagery matches the approved production assets", async () => {
   const approvedAssets = new Map([
     ["assets/baros-app-icon.png", "f6af1bd16254cef7f060a92c2fd12a0132bd97b6716d66ae0a9fd1aad238ce38"],
     ["assets/baros-social-preview.png", "e72cbeb9045c2ffca1342affc7122acb01490bbebfd3e3cdbf2b0d7279fe2069"],
-    ["assets/baros-active-workout.jpg", "7731c5d42ec11034bde2f61d2488f5b5e4ef799c07ceb57a6b922f93eda157f2"],
-    ["assets/baros-workout-history.jpg", "701b04f17e9b396886dfc676dc4a9bd2b20afade004848d60166707568be1636"],
+    ["assets/baros-active-workout.jpg", "881c3d7ab501929db48873ff0f49fd75d79cdd8c04c1c7367390e77b5b2d0e40"],
+    ["assets/baros-workout-history.jpg", "57fe79091d5f4196e461fc4b583a026c27521fa2e80708680387be4de91f112d"],
   ]);
 
   for (const [asset, approvedHash] of approvedAssets) {
