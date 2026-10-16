@@ -750,12 +750,12 @@ final class BarosUITests: XCTestCase {
         app.launch()
         let ring = app.descendants(matching: .any)["HomeYearRing"]
         XCTAssertTrue(ring.waitForExistence(timeout: 10))
-        XCTAssertTrue(ring.label.hasSuffix("in the past 30 days."), ring.label)
-        let monthLabel = ring.label
+        // The seed spaces 500 workouts over three years; 14 fall in the past 30 days.
+        XCTAssertEqual(ring.label, "14 workouts in the past 30 days.")
         XCTAssertTrue(app.segmentedControls["HomeRingPeriodPicker"].exists)
         app.segmentedControls["HomeRingPeriodPicker"].buttons["Year"].tap()
         XCTAssertTrue(ring.label.contains("workouts in the past year. Trained in"), ring.label)
-        XCTAssertNotEqual(ring.label, monthLabel)
+        XCTAssertFalse(ring.label.hasPrefix("500 "), "Year must not show the lifetime count: \(ring.label)")
         XCTAssertTrue(app.buttons["HomeQuickStartButton-0"].exists)
     }
 
