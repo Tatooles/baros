@@ -12,16 +12,10 @@ struct HomeYearRingView: View {
     let model: HomeRingModel
     let period: HomeRingPeriod
     let diameter: CGFloat
-    let now: Date
     let replayID: Int
 
     private var innerLapCount: Int {
         period == .year ? model.yearSpokes.map(\.lap).max() ?? 0 : 0
-    }
-
-    private var centerCaption: String {
-        let caption = model.sinceDescription(now: now, calendar: .current, abbreviated: true)
-        return innerLapCount > 0 ? caption.replacingOccurrences(of: " since ", with: "\nsince ") : caption
     }
 
     var body: some View {
@@ -30,14 +24,16 @@ struct HomeYearRingView: View {
                            period: period, progress: progress, drawsTrack: drawsTrack)
             VStack(spacing: 5) {
                 if model.totalWorkouts > 0 {
-                    Text(model.totalWorkouts.formatted())
+                    Text(model.workoutCount(for: period).formatted())
                         .font(.system(size: min(numberSize, innerLapCount > 0 ? (innerLapCount == 3 ? 48 : 54) : 76), weight: .bold, design: .rounded))
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .tracking(-2)
                         .foregroundStyle(AppTheme.textPrimary)
                         .monospacedDigit()
-                    Text(centerCaption)
+                        .contentTransition(.numericText(value: Double(model.workoutCount(for: period))))
+                        .animation(reduceMotion ? nil : .snappy, value: period)
+                    Text(model.countCaption(for: period).replacingOccurrences(of: " in the ", with: "\nin the "))
                         .font(.system(size: min(captionSize, innerLapCount > 0 ? 15 : 19), weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)
                         .multilineTextAlignment(.center)
@@ -53,7 +49,7 @@ struct HomeYearRingView: View {
         }
         .frame(width: diameter, height: diameter)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(model.accessibilitySummary(period: period, now: now, calendar: .current))
+        .accessibilityLabel(model.accessibilitySummary(period: period))
         .accessibilityIdentifier("HomeYearRing")
         .task(id: SweepTrigger(replayID: replayID, reduceMotion: reduceMotion)) { await sweep() }
     }
