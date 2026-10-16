@@ -258,6 +258,7 @@ private struct CompletedWorkoutEditSetValues: Equatable {
     let rpe: Double?
     let kind: SetKind
     let isCompleted: Bool
+    let completedAt: Date?
     let notes: String
 
     init(set: LoggedSet) {
@@ -266,13 +267,14 @@ private struct CompletedWorkoutEditSetValues: Equatable {
         rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe)
         kind = set.kind
         isCompleted = set.isCompleted
+        completedAt = set.completedAt
         notes = set.notes
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         historyNumbersAreEqual(lhs.weight, rhs.weight) && lhs.reps == rhs.reps &&
             historyNumbersAreEqual(lhs.rpe, rhs.rpe) && lhs.kind == rhs.kind &&
-            lhs.isCompleted == rhs.isCompleted && lhs.notes == rhs.notes
+            lhs.isCompleted == rhs.isCompleted && lhs.completedAt == rhs.completedAt && lhs.notes == rhs.notes
     }
 }
 
