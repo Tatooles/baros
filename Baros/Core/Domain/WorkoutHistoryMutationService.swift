@@ -246,6 +246,11 @@ struct CompletedWorkoutEditSetDraft: Identifiable {
             original: original.rpe, edited: rpe, saved: saved.rpe, areEqual: historyNumbersAreEqual
         )
         merged.kind = try mergedHistoryValue(original: original.kind, edited: kind, saved: saved.kind)
+        if isCompleted != original.isCompleted,
+           saved.isCompleted != isCompleted,
+           saved.completedAt != original.completedAt {
+            throw WorkoutHistoryMutationError.editConflict
+        }
         merged.isCompleted = try mergedHistoryValue(original: original.isCompleted, edited: isCompleted, saved: saved.isCompleted)
         merged.notes = try mergedHistoryValue(original: original.notes, edited: notes, saved: saved.notes)
         return merged

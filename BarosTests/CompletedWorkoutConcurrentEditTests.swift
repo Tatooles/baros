@@ -190,6 +190,65 @@ final class CompletedWorkoutConcurrentEditTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
     }
 
+    func testMarkingARecompletedSetIncompleteRejectsBeforeChangingContextOrOutbox() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let fixture = makeWorkout(context: context)
+        try context.save()
+        var draft = CompletedWorkoutEditDraft(session: fixture.session)
+        draft.notes = "Local note must remain unapplied"
+        draft.exercises[0].notes = "Local exercise note must remain unapplied"
+        draft.exercises[0].sets[0].isCompleted = false
+        draft.exercises[0].sets.append(CompletedWorkoutEditSetDraft(orderIndex: 1, weight: 50, reps: 10))
+
+        // A pull can deliver a later completion after another device saved the
+        // set incomplete, then complete again. Its other values are unchanged.
+        fixture.set.completedAt = remoteTime
+        fixture.set.updatedAt = remoteTime
+        let existingEntry = SyncOutboxEntry(
+            entityKind: .loggedSet, entityID: fixture.set.id, operation: .update,
+            status: .failed, ownerTokenIdentifier: "owner", createdAt: originalTime,
+            updatedAt: remoteTime, lastAttemptAt: remoteTime, attemptCount: 2,
+            lastErrorMessage: "Existing retry must remain unchanged"
+        )
+        context.insert(existingEntry)
+        try context.save()
+        XCTAssertTrue(fixture.set.isCompleted)
+        XCTAssertFalse(context.hasChanges)
+
+        XCTAssertThrowsError(try save(draft, fixture: fixture, context: context)) { error in
+            XCTAssertEqual(error as? WorkoutHistoryMutationError, .editConflict)
+        }
+
+        XCTAssertEqual(fixture.session.notes, "Original workout note")
+        XCTAssertEqual(fixture.session.updatedAt, originalTime)
+        XCTAssertEqual(fixture.exercise.notes, "Original exercise note")
+        XCTAssertEqual(fixture.exercise.updatedAt, originalTime)
+        XCTAssertEqual(fixture.exercise.sortedSets.map(\.id), [fixture.set.id])
+        XCTAssertEqual(try context.fetch(FetchDescriptor<LoggedSet>()).map(\.id), [fixture.set.id])
+        XCTAssertTrue(fixture.set.isCompleted)
+        XCTAssertEqual(fixture.set.completedAt, remoteTime)
+        XCTAssertEqual(fixture.set.updatedAt, remoteTime)
+        XCTAssertNil(fixture.set.deletedAt)
+        XCTAssertEqual(fixture.set.weight, 100)
+        XCTAssertEqual(fixture.set.reps, 5)
+        XCTAssertEqual(fixture.set.rpe, 8)
+        XCTAssertEqual(fixture.set.kind, .working)
+        XCTAssertEqual(fixture.set.notes, "")
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertEqual(entries.map(\.id), [existingEntry.id])
+        XCTAssertEqual(existingEntry.operation, .update)
+        XCTAssertEqual(existingEntry.status, .failed)
+        XCTAssertEqual(existingEntry.createdAt, originalTime)
+        XCTAssertEqual(existingEntry.updatedAt, remoteTime)
+        XCTAssertEqual(existingEntry.lastAttemptAt, remoteTime)
+        XCTAssertEqual(existingEntry.attemptCount, 2)
+        XCTAssertEqual(existingEntry.lastErrorMessage, "Existing retry must remain unchanged")
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertTrue(context.insertedModelsArray.isEmpty)
+        XCTAssertTrue(context.deletedModelsArray.isEmpty)
+    }
+
     func testRemovingASetWithNewerCompletionTimeRejectsBeforeChangingContextOrOutbox() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
