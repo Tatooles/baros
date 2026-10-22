@@ -143,7 +143,8 @@ struct HomeView: View {
     private func actions(content: HomeContent, primaryPresentation: HomePrimaryWorkoutPresentation, hasHistory: Bool) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             if hasHistory, !primaryPresentation.isActive {
-                if !content.quickStartWorkouts.isEmpty { livePills(content: content) }
+                let quickStartWorkouts = content.quickStartWorkouts
+                if !quickStartWorkouts.isEmpty { livePills(quickStartWorkouts) }
             }
             TimelineView(.periodic(from: .now, by: 60)) { timeline in
                 let presentation = HomePrimaryWorkoutPresentation(
@@ -156,9 +157,9 @@ struct HomeView: View {
         }
     }
 
-    private func livePills(content: HomeContent) -> some View {
-        HomeStartFromPills(titles: content.quickStartWorkouts.map(\.title)) { index in
-            quickStartSelection = HomeQuickStartSelection(id: content.quickStartWorkouts[index].id)
+    private func livePills(_ quickStartWorkouts: [HomeQuickStartWorkout]) -> some View {
+        HomeStartFromPills(titles: quickStartWorkouts.map(\.title)) { index in
+            quickStartSelection = HomeQuickStartSelection(id: quickStartWorkouts[index].id)
         }
     }
 

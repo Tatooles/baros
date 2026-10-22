@@ -407,6 +407,48 @@ final class HomeContentTests: XCTestCase {
         XCTAssertEqual(content.quickStartWorkouts.map(\.id), distinct.prefix(5).map(\.id))
     }
 
+    func testQuickStartUsesAnOlderWorkoutWhenTheNewestWithItsTitleHasNoExercises() {
+        let emptyPush = session(title: "Push", startedAt: date(2026, 8, 19, hour: 8))
+        let olderPush = session(title: "Push", startedAt: date(2026, 8, 18, hour: 8), exerciseNames: ["Bench Press"])
+
+        let content = HomeContent(
+            sessions: [olderPush, emptyPush],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12)
+        )
+
+        XCTAssertEqual(content.quickStartWorkouts.map(\.id), [olderPush.id])
+    }
+
+    func testQuickStartOnlyLooksThroughTheMostRecentWorkouts() {
+        let limit = HomeQuickStartWorkout.maximumScannedSessionCount
+        let repeatedPush = (0..<(limit - 1)).map { index in
+            session(
+                title: "Push",
+                startedAt: date(2026, 8, 19, hour: 8).addingTimeInterval(TimeInterval(-index * 86_400)),
+                exerciseNames: ["Bench Press"]
+            )
+        }
+        let lastScanned = session(
+            title: "Pull",
+            startedAt: date(2026, 8, 19, hour: 8).addingTimeInterval(TimeInterval(-limit * 86_400)),
+            exerciseNames: ["Deadlift"]
+        )
+        let beyondLimit = session(
+            title: "Legs",
+            startedAt: date(2026, 8, 19, hour: 8).addingTimeInterval(TimeInterval(-(limit + 1) * 86_400)),
+            exerciseNames: ["Back Squat"]
+        )
+
+        let content = HomeContent(
+            sessions: [beyondLimit, lastScanned] + repeatedPush,
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12)
+        )
+
+        XCTAssertEqual(content.quickStartWorkouts.map(\.title), ["Push", "Pull"])
+    }
+
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
