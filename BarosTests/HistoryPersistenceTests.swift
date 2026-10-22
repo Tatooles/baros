@@ -1095,8 +1095,7 @@ final class HistoryPersistenceTests: XCTestCase {
             state.snapshot(
                 sessions: sessions,
                 exercises: fixture.exercises,
-                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-                syncCompletion: nil
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier
             ).resolvedHistory.summaries.count,
             fixture.exercises.count
         )
@@ -1106,8 +1105,7 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: Date(timeIntervalSince1970: 700)
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
 
         XCTAssertEqual(resolutionCounter.count, 1)
@@ -1129,8 +1127,7 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
 
         let exercise = try XCTUnwrap(fixture.exercises.first)
@@ -1145,8 +1142,7 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
 
         loggedExercise.sets.append(
@@ -1156,8 +1152,7 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
 
         XCTAssertEqual(resolutionCounter.count, 1)
@@ -1170,8 +1165,7 @@ final class HistoryPersistenceTests: XCTestCase {
         let firstSnapshot = state.snapshot(
             sessions: fixture.sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         )
         let initialCompletedSetCount = firstSnapshot.resolvedHistory.summaries
             .reduce(0) { $0 + $1.completedSetCount }
@@ -1182,8 +1176,7 @@ final class HistoryPersistenceTests: XCTestCase {
         let updatedCompletedSetCount = state.snapshot(
             sessions: fixture.sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory.summaries.reduce(0) { $0 + $1.completedSetCount }
 
         XCTAssertEqual(updatedCompletedSetCount, initialCompletedSetCount - 1)
@@ -1200,8 +1193,7 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: fixture.sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
 
         session.title = "Irrelevant completed title edit"
@@ -1210,8 +1202,7 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: fixture.sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
         XCTAssertEqual(resolutionCounter.count, 1)
 
@@ -1219,8 +1210,7 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: fixture.sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
         XCTAssertEqual(resolutionCounter.count, 2)
 
@@ -1228,8 +1218,7 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: fixture.sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
         XCTAssertEqual(resolutionCounter.count, 3)
 
@@ -1238,8 +1227,7 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: fixture.sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
         XCTAssertEqual(
             resolutionCounter.count,
@@ -1251,8 +1239,7 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: fixture.sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
         XCTAssertEqual(resolutionCounter.count, 4)
     }
@@ -1276,6 +1263,9 @@ final class HistoryPersistenceTests: XCTestCase {
         first.session = session
         second.session = session
         session.loggedExercises = [first, second]
+        let context = fixture.container.mainContext
+        try context.save()
+        let saves = HistorySaveNotificationCapture(context: context)
         let resolutionCounter = ExerciseHistoryResolutionCounter()
         let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
 
@@ -1283,25 +1273,143 @@ final class HistoryPersistenceTests: XCTestCase {
             state.snapshot(
                 sessions: [session],
                 exercises: [exercise],
-                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-                syncCompletion: nil
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier
             ).resolvedHistory.summary(for: exercise)
         ).name
 
+        // A synced reorder updates the logged exercises without touching the session.
         first.orderIndex = 1
         second.orderIndex = 0
+        try context.save()
+        XCTAssertEqual(saves.deliver(to: state, in: context), 1)
         let secondName = try XCTUnwrap(
             state.snapshot(
                 sessions: [session],
                 exercises: [exercise],
-                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-                syncCompletion: nil
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier
             ).resolvedHistory.summary(for: exercise)
         ).name
 
         XCTAssertEqual(firstName, "First Snapshot")
         XCTAssertEqual(secondName, "Second Snapshot")
         XCTAssertEqual(resolutionCounter.count, 2)
+    }
+
+    func testExerciseHistoryViewStateRebuildsWhenAnOldWorkoutSetIsUncheckedInHistory() throws {
+        let fixture = try makeHistoryViewPerformanceFixture()
+        let context = fixture.container.mainContext
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+        let oldestSession = try XCTUnwrap(fixture.sessions.min { $0.startedAt < $1.startedAt })
+        let initialCompletedSetCount = completedSetCount(
+            in: state.snapshot(
+                sessions: fixture.sessions,
+                exercises: fixture.exercises,
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier
+            )
+        )
+
+        var draft = CompletedWorkoutEditDraft(session: oldestSession)
+        draft.exercises[0].sets[0].isCompleted = false
+        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+            draft,
+            for: oldestSession,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
+            context: context,
+            now: Date(timeIntervalSince1970: 5_000)
+        )
+
+        // No save is routed here: a History edit reaches the key through its session.
+        let updatedCompletedSetCount = completedSetCount(
+            in: state.snapshot(
+                sessions: fixture.sessions,
+                exercises: fixture.exercises,
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier
+            )
+        )
+        XCTAssertEqual(updatedCompletedSetCount, initialCompletedSetCount - 1)
+        XCTAssertEqual(resolutionCounter.count, 2)
+    }
+
+    func testExerciseHistoryViewStateRebuildsWhenSyncUnchecksAnOldWorkoutSet() async throws {
+        let fixture = try makeSyncedHistoryFixture()
+        let saves = HistorySaveNotificationCapture(context: fixture.context)
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+        XCTAssertEqual(completedSetCount(in: try fixture.snapshot(from: state)), 1)
+
+        try await fixture.pull(loggedSet: fixture.set.id, isCompleted: false)
+
+        XCTAssertFalse(fixture.set.isCompleted)
+        XCTAssertEqual(fixture.session.updatedAt, fixture.savedAt, "Sync applies the set without touching its session")
+        XCTAssertGreaterThan(saves.deliver(to: state, in: fixture.context), 0)
+        XCTAssertEqual(completedSetCount(in: try fixture.snapshot(from: state)), 0)
+        XCTAssertEqual(resolutionCounter.count, 2)
+    }
+
+    func testExerciseHistoryViewStateRebuildsWhenSyncAddsASetToAnOldWorkout() async throws {
+        let fixture = try makeSyncedHistoryFixture()
+        let saves = HistorySaveNotificationCapture(context: fixture.context)
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+        XCTAssertEqual(completedSetCount(in: try fixture.snapshot(from: state)), 1)
+
+        try await fixture.pull(loggedSet: UUID(), isCompleted: true)
+
+        XCTAssertEqual(fixture.loggedExercise.sortedSets.count, 2)
+        XCTAssertEqual(fixture.session.updatedAt, fixture.savedAt, "Sync inserts the set without touching its session")
+        XCTAssertGreaterThan(saves.deliver(to: state, in: fixture.context), 0)
+        XCTAssertEqual(completedSetCount(in: try fixture.snapshot(from: state)), 2)
+        XCTAssertEqual(resolutionCounter.count, 2)
+    }
+
+    func testExerciseHistoryViewStateIgnoresSavesConfinedToAnActiveWorkout() throws {
+        let fixture = try makeHistoryViewPerformanceFixture()
+        let context = fixture.container.mainContext
+        let saves = HistorySaveNotificationCapture(context: context)
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+        let activeSession = WorkoutSession(
+            title: "Active",
+            startedAt: Date(timeIntervalSince1970: 500),
+            status: .active,
+            source: .blank,
+            syncOwnerTokenIdentifier: fixture.ownerTokenIdentifier
+        )
+        let sessions = fixture.sessions + [activeSession]
+        _ = state.snapshot(
+            sessions: sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
+        ).resolvedHistory
+
+        context.insert(activeSession)
+        try context.save()
+        let set = LoggedSet(orderIndex: 0)
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: try XCTUnwrap(fixture.exercises.first),
+            sets: [set]
+        )
+        loggedExercise.session = activeSession
+        activeSession.loggedExercises.append(loggedExercise)
+        activeSession.touch()
+        try context.save()
+        set.weight = 225
+        set.reps = 5
+        set.isCompleted = true
+        set.touchActiveDraft()
+        try context.save()
+        _ = try SyncCursorState.state(for: fixture.ownerTokenIdentifier, context: context)
+        try context.save()
+
+        XCTAssertEqual(saves.deliver(to: state, in: context), 4)
+        _ = state.snapshot(
+            sessions: sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
+        ).resolvedHistory
+        XCTAssertEqual(resolutionCounter.count, 1)
     }
 
     func testExerciseHistoryViewStateRebuildsWhenTiedSessionOrderChangesResolvedMetadata() throws {
@@ -1343,16 +1451,14 @@ final class HistoryPersistenceTests: XCTestCase {
             state.snapshot(
                 sessions: [firstSession, secondSession],
                 exercises: [exercise],
-                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-                syncCompletion: nil
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier
             ).resolvedHistory.summary(for: exercise)
         ).name
         let secondName = try XCTUnwrap(
             state.snapshot(
                 sessions: [secondSession, firstSession],
                 exercises: [exercise],
-                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-                syncCompletion: nil
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier
             ).resolvedHistory.summary(for: exercise)
         ).name
 
@@ -1369,8 +1475,7 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: fixture.sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
 
         let exercise = try XCTUnwrap(fixture.exercises.first)
@@ -1379,14 +1484,12 @@ final class HistoryPersistenceTests: XCTestCase {
         _ = state.snapshot(
             sessions: fixture.sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-            syncCompletion: nil
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
         _ = state.snapshot(
             sessions: fixture.sessions,
             exercises: fixture.exercises,
-            ownerTokenIdentifier: nil,
-            syncCompletion: nil
+            ownerTokenIdentifier: nil
         ).resolvedHistory
 
         XCTAssertEqual(resolutionCounter.count, 3)
@@ -1401,8 +1504,7 @@ final class HistoryPersistenceTests: XCTestCase {
             state.snapshot(
                 sessions: fixture.sessions,
                 exercises: fixture.exercises,
-                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-                syncCompletion: nil
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier
             ).resolvedHistory.summaries.first
         ).performanceCount
         let exercise = try XCTUnwrap(fixture.exercises.first)
@@ -1429,8 +1531,7 @@ final class HistoryPersistenceTests: XCTestCase {
             state.snapshot(
                 sessions: sessions,
                 exercises: fixture.exercises,
-                ownerTokenIdentifier: fixture.ownerTokenIdentifier,
-                syncCompletion: Date(timeIntervalSince1970: 1_100)
+                ownerTokenIdentifier: fixture.ownerTokenIdentifier
             ).resolvedHistory.summary(for: exercise)
         )
 
@@ -1510,6 +1611,147 @@ final class HistoryPersistenceTests: XCTestCase {
 
     private final class ExerciseHistoryResolutionCounter {
         var count = 0
+    }
+
+    private func completedSetCount(in snapshot: ExerciseHistoryViewSnapshot) -> Int {
+        snapshot.resolvedHistory.summaries.reduce(0) { $0 + $1.completedSetCount }
+    }
+
+    /// One completed, owned workout with a single completed set, saved before sync runs.
+    @MainActor
+    private struct SyncedHistoryFixture {
+        let container: ModelContainer
+        let context: ModelContext
+        let owner: String
+        let savedAt: Date
+        let session: WorkoutSession
+        let loggedExercise: LoggedExercise
+        let set: LoggedSet
+
+        func snapshot(from state: ExerciseHistoryViewState) throws -> ExerciseHistoryViewSnapshot {
+            state.snapshot(
+                sessions: try context.fetch(FetchDescriptor<WorkoutSession>()),
+                exercises: [],
+                ownerTokenIdentifier: owner
+            )
+        }
+
+        /// Pulls one remote set record for the fixture's logged exercise.
+        func pull(loggedSet id: UUID, isCompleted: Bool) async throws {
+            let client = FakeSyncClient()
+            client.fetchResponses = [
+                SyncFetchChangesResponse(
+                    userSettings: [],
+                    exercises: [],
+                    workoutSessions: [],
+                    loggedExercises: [],
+                    loggedSets: [
+                        LoggedSetSyncRecord(
+                            clientId: id.uuidString.lowercased(),
+                            createdAt: 10,
+                            updatedAt: 20,
+                            deletedAt: nil,
+                            serverUpdatedAt: 50,
+                            loggedExerciseClientId: loggedExercise.id.uuidString.lowercased(),
+                            orderIndex: id == set.id ? 0 : 1,
+                            weight: 185,
+                            reps: 5,
+                            rpe: nil,
+                            kindRaw: "working",
+                            isCompleted: isCompleted,
+                            completedAt: nil,
+                            notes: "",
+                            healthLinkID: nil,
+                            sourceLoggedSetID: nil
+                        )
+                    ],
+                    cursors: SyncChangeCursors(userSettings: 0, exercises: 0, loggedSets: 50),
+                    hasMore: SyncHasMore(userSettings: false, exercises: false)
+                )
+            ]
+            try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+        }
+    }
+
+    private func makeSyncedHistoryFixture() throws -> SyncedHistoryFixture {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let owner = "issuer|history_sync_owner"
+        let savedAt = Date(timeIntervalSince1970: 10)
+        let set = LoggedSet(
+            orderIndex: 0,
+            weight: 185,
+            reps: 5,
+            isCompleted: true,
+            createdAt: savedAt,
+            updatedAt: savedAt
+        )
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press",
+            createdAt: savedAt,
+            updatedAt: savedAt,
+            sets: [set]
+        )
+        let session = WorkoutSession(
+            title: "Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .completed,
+            source: .blank,
+            createdAt: savedAt,
+            updatedAt: savedAt,
+            syncOwnerTokenIdentifier: owner,
+            loggedExercises: [loggedExercise]
+        )
+        context.insert(session)
+        try context.save()
+        return SyncedHistoryFixture(
+            container: container,
+            context: context,
+            owner: owner,
+            savedAt: savedAt,
+            session: session,
+            loggedExercise: loggedExercise,
+            set: set
+        )
+    }
+
+    /// Collects a context's saves so a test can route them to the state, as
+    /// `HistoryView` does.
+    private final class HistorySaveNotificationCapture: @unchecked Sendable {
+        private let lock = NSLock()
+        private var notifications: [Notification] = []
+        private var observer: NSObjectProtocol?
+
+        init(context: ModelContext) {
+            observer = NotificationCenter.default.addObserver(
+                forName: ModelContext.didSave,
+                object: context,
+                queue: nil
+            ) { [weak self] notification in
+                guard let self else { return }
+                lock.withLock { notifications.append(notification) }
+            }
+        }
+
+        deinit {
+            if let observer {
+                NotificationCenter.default.removeObserver(observer)
+            }
+        }
+
+        /// Returns how many saves were delivered.
+        @MainActor
+        func deliver(to state: ExerciseHistoryViewState, in context: ModelContext) -> Int {
+            let pending = lock.withLock {
+                defer { notifications.removeAll() }
+                return notifications
+            }
+            for notification in pending {
+                state.recordSave(notification, in: context)
+            }
+            return pending.count
+        }
     }
 
     private func makeHistoryViewPerformanceFixture() throws -> (

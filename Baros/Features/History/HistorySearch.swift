@@ -1,17 +1,20 @@
 import Foundation
 
-struct WorkoutHistorySearchIndex {
-    private let searchableFieldsBySessionID: [UUID: [String]]
+/// Built on the first search, not on creation: indexing reads every workout's
+/// logged exercises, and History creates an index on each body update.
+final class WorkoutHistorySearchIndex {
+    private let indexedSessions: [WorkoutSession]
+    private lazy var searchableFieldsBySessionID: [UUID: [String]] = Dictionary(
+        uniqueKeysWithValues: indexedSessions.map { session in
+            (
+                session.id,
+                [session.title] + session.sortedLoggedExercises.map(\.exerciseSnapshotName)
+            )
+        }
+    )
 
     init(sessions: [WorkoutSession]) {
-        searchableFieldsBySessionID = Dictionary(
-            uniqueKeysWithValues: sessions.map { session in
-                (
-                    session.id,
-                    [session.title] + session.sortedLoggedExercises.map(\.exerciseSnapshotName)
-                )
-            }
-        )
+        indexedSessions = sessions
     }
 
     func sessions(
