@@ -44,6 +44,7 @@ Also in this update:
 • Adding a set no longer opens the keyboard
 • All RPE choices fit without scrolling, and tapping the selected choice clears it
 • Reliability fixes for signing out and switching accounts, editing past workouts, and recovering from failed saves
+• Clearer guidance for safely retrying account deletion after a cloud error
 ```
 
 ### 1.3
