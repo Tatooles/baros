@@ -3,8 +3,8 @@ import SwiftData
 import SwiftUI
 
 struct HistoryView: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
-    @Environment(SyncScheduler.self) private var syncScheduler
     @Bindable var navigationState: AppNavigationState
     @State private var exerciseHistoryState = ExerciseHistoryViewState()
     @State private var searchState = HistorySearchState()
@@ -26,17 +26,13 @@ struct HistoryView: View {
 
     var body: some View {
         let ownerTokenIdentifier = currentOwnerCoordinator.localDataOwnerTokenIdentifier
-        // Remote child records do not always touch their parent session. Reading
-        // the sync completion date makes the state boundary re-check its semantic
-        // key after a pull without treating every no-op sync as a history change.
         let exerciseHistorySnapshot = exerciseHistoryState.snapshot(
             sessions: sessions,
             exercises: exercises,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            syncCompletion: syncScheduler.lastSyncedAt
+            ownerTokenIdentifier: ownerTokenIdentifier
         )
         let completedSessions = completedSessions
-        let workoutSearchIndex = WorkoutHistorySearchIndex(sessions: completedSessions)
+        let workoutSearchIndex = exerciseHistoryState.workoutSearchIndex
 
         HistorySearchContent(
             navigationState: navigationState,
@@ -61,6 +57,9 @@ struct HistoryView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
+            exerciseHistoryState.recordSave(notification, in: modelContext)
+        }
     }
 }
 
@@ -68,6 +67,7 @@ struct HistoryView: View {
 @Observable
 private final class HistorySearchState {
     var text = ""
+    var isPresented = false
 }
 
 private struct HistorySearchContent: View {
@@ -117,7 +117,12 @@ private struct HistorySearchContent: View {
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle("History")
-        .searchable(text: $searchState.text, prompt: "Search history")
+        .searchable(text: $searchState.text, isPresented: $searchState.isPresented, prompt: "Search history")
+        .onChange(of: searchState.isPresented) { _, isPresented in
+            if isPresented {
+                workoutSearchIndex.prepare()
+            }
+        }
     }
 
     private var isCurrentModeEmpty: Bool {
@@ -198,11 +203,22 @@ private struct HistorySearchContent: View {
     }
 }
 
+/// Caches the resolved Exercise History between `HistoryView` body updates.
+/// The invalidation key reads only session-level fields: walking every logged
+/// exercise and set on each update faults the whole history in on the main
+/// thread. Changes below the session level still reach the key. Completed-workout
+/// edits touch their session's `updatedAt`, and any save that changes completed
+/// history bumps `savedHistoryChangeCount`. That includes sync, which applies
+/// remote exercises and sets without touching their parent session.
 @MainActor
+@Observable
 final class ExerciseHistoryViewState {
-    private let resolveHistory: ExerciseHistoryViewSnapshot.ResolveHistory
-    private var invalidationKey: ExerciseHistoryInvalidationKey?
-    private var currentSnapshot: ExerciseHistoryViewSnapshot?
+    @ObservationIgnored private let resolveHistory: ExerciseHistoryViewSnapshot.ResolveHistory
+    @ObservationIgnored private var invalidationKey: ExerciseHistoryInvalidationKey?
+    @ObservationIgnored private var currentSnapshot: ExerciseHistoryViewSnapshot?
+    /// Replaced with the snapshot, so a prepared index survives unrelated body updates.
+    @ObservationIgnored private(set) var workoutSearchIndex = WorkoutHistorySearchIndex(sessions: [])
+    private var savedHistoryChangeCount = 0
 
     init(
         resolveHistory: @escaping ExerciseHistoryViewSnapshot.ResolveHistory = ExerciseHistorySummary.makeResolvedHistory
@@ -213,17 +229,22 @@ final class ExerciseHistoryViewState {
     func snapshot(
         sessions: [WorkoutSession],
         exercises: [Exercise],
-        ownerTokenIdentifier: String?,
-        syncCompletion: Date?
+        ownerTokenIdentifier: String?
     ) -> ExerciseHistoryViewSnapshot {
-        _ = syncCompletion
         let nextKey = ExerciseHistoryInvalidationKey(
             sessions: sessions,
             exercises: exercises,
-            ownerTokenIdentifier: ownerTokenIdentifier
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            savedHistoryChangeCount: savedHistoryChangeCount
         )
         if nextKey != invalidationKey || currentSnapshot == nil {
             invalidationKey = nextKey
+            workoutSearchIndex = WorkoutHistorySearchIndex(
+                sessions: WorkoutSession.visibleCompletedSessions(
+                    from: sessions,
+                    ownerTokenIdentifier: ownerTokenIdentifier
+                )
+            )
             currentSnapshot = ExerciseHistoryViewSnapshot(
                 sessions: sessions,
                 exercises: exercises,
@@ -236,22 +257,92 @@ final class ExerciseHistoryViewState {
         }
         return currentSnapshot
     }
+
+    func recordSave(_ notification: Notification, in context: ModelContext) {
+        if let savedContext = notification.object as? ModelContext,
+           savedContext.container !== context.container {
+            return
+        }
+        let changes = PreviousSetsCacheSaveChanges(notification: notification)
+        guard ExerciseHistorySaveChanges(changes).affectsCompletedHistory(in: context) else { return }
+        savedHistoryChangeCount &+= 1
+    }
+}
+
+/// Exercise History reads only sessions, logged exercises, sets, and exercises,
+/// so saves of other models are ignored. Saves confined to an active workout are
+/// ignored too, including discarded sessions, so logging or discarding does not
+/// rebuild completed history.
+///
+/// Inserted models are not classified. When `HistoryView` receives `didSave`,
+/// they may not be registered under their saved identifiers yet, so their
+/// session can't be looked up. They don't need to be: a new session or exercise
+/// changes the History queries, and a new logged exercise or set changes its
+/// parent's relationship, so the parent is saved as updated.
+struct ExerciseHistorySaveChanges {
+    private let changes: PreviousSetsCacheSaveChanges
+
+    init(_ changes: PreviousSetsCacheSaveChanges) {
+        self.changes = changes
+    }
+
+    @MainActor
+    func affectsCompletedHistory(in context: ModelContext) -> Bool {
+        if changes.invalidatedAllIdentifiers {
+            return true
+        }
+        // A deleted model can no longer be traced to its session.
+        if changes.deletedIDs.contains(where: Self.isHistoryInput) {
+            return true
+        }
+        return changes.updatedIDs.contains { identifier in
+            Self.isHistoryInput(identifier)
+                && !Self.belongsToNonCompletedWorkout(identifier, in: context)
+        }
+    }
+
+    private static func isHistoryInput(_ identifier: PersistentIdentifier) -> Bool {
+        switch identifier.entityName {
+        case String(describing: WorkoutSession.self),
+             String(describing: LoggedExercise.self),
+             String(describing: LoggedSet.self),
+             String(describing: Exercise.self):
+            true
+        default:
+            false
+        }
+    }
+
+    @MainActor
+    private static func belongsToNonCompletedWorkout(
+        _ identifier: PersistentIdentifier,
+        in context: ModelContext
+    ) -> Bool {
+        let session: WorkoutSession?
+        switch identifier.entityName {
+        case String(describing: WorkoutSession.self):
+            session = context.registeredModel(for: identifier)
+        case String(describing: LoggedExercise.self):
+            let loggedExercise: LoggedExercise? = context.registeredModel(for: identifier)
+            session = loggedExercise?.session
+        case String(describing: LoggedSet.self):
+            let set: LoggedSet? = context.registeredModel(for: identifier)
+            session = set?.loggedExercise?.session
+        default:
+            session = nil
+        }
+        // Membership changes out of completed history are already in the session
+        // query/key. Active and discarded graphs contribute nothing to the cache.
+        guard let session else { return false }
+        return session.status != .completed
+    }
 }
 
 private struct ExerciseHistoryInvalidationKey: Equatable {
     private struct SessionContribution: Equatable {
         let id: UUID
         let startedAt: Date
-        let exercises: [LoggedExerciseContribution]
-    }
-
-    private struct LoggedExerciseContribution: Equatable {
-        let orderIndex: Int
-        let linkedExerciseID: UUID?
-        let snapshotName: String
-        let snapshotEquipmentRaw: String?
-        let snapshotPrimaryMuscleGroupRaw: String?
-        let completedSetCount: Int
+        let updatedAt: Date
     }
 
     private struct ExerciseDefinition: Equatable {
@@ -261,15 +352,18 @@ private struct ExerciseHistoryInvalidationKey: Equatable {
     }
 
     private let ownerTokenIdentifier: String?
+    private let savedHistoryChangeCount: Int
     private let sessions: [SessionContribution]
     private let exercises: [ExerciseDefinition]
 
     init(
         sessions: [WorkoutSession],
         exercises: [Exercise],
-        ownerTokenIdentifier: String?
+        ownerTokenIdentifier: String?,
+        savedHistoryChangeCount: Int
     ) {
         self.ownerTokenIdentifier = ownerTokenIdentifier
+        self.savedHistoryChangeCount = savedHistoryChangeCount
         self.sessions = WorkoutSession.visibleCompletedSessions(
             from: sessions,
             ownerTokenIdentifier: ownerTokenIdentifier
@@ -277,18 +371,7 @@ private struct ExerciseHistoryInvalidationKey: Equatable {
             SessionContribution(
                 id: session.id,
                 startedAt: session.startedAt,
-                exercises: session.sortedLoggedExercises.compactMap { loggedExercise in
-                    let completedSetCount = loggedExercise.sortedSets.filter(\.isCompleted).count
-                    guard completedSetCount > 0 else { return nil }
-                    return LoggedExerciseContribution(
-                        orderIndex: loggedExercise.orderIndex,
-                        linkedExerciseID: loggedExercise.exercise?.id,
-                        snapshotName: loggedExercise.exerciseSnapshotName,
-                        snapshotEquipmentRaw: loggedExercise.resolvedSnapshotEquipmentRaw,
-                        snapshotPrimaryMuscleGroupRaw: loggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw,
-                        completedSetCount: completedSetCount
-                    )
-                }
+                updatedAt: session.updatedAt
             )
         }
         self.exercises = Exercise.visibleActiveExercises(

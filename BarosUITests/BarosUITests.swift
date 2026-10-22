@@ -2674,10 +2674,14 @@ final class BarosUITests: XCTestCase {
         baselineApp.launch()
         let baseline = measureHistorySearchResponsiveness(in: baselineApp)
 
+        let openOverhead = largeHistory.openMilliseconds - baseline.openMilliseconds
         let typingOverhead = largeHistory.typingMilliseconds - baseline.typingMilliseconds
         let clearOverhead = largeHistory.clearMilliseconds - baseline.clearMilliseconds
         print(
             "HISTORY_SEARCH_RESPONSIVENESS_METRICS "
+                + "baselineOpenMilliseconds=\(baseline.openMilliseconds) "
+                + "largeHistoryOpenMilliseconds=\(largeHistory.openMilliseconds) "
+                + "openOverheadMilliseconds=\(openOverhead) "
                 + "baselineTypingMilliseconds=\(baseline.typingMilliseconds) "
                 + "largeHistoryTypingMilliseconds=\(largeHistory.typingMilliseconds) "
                 + "typingOverheadMilliseconds=\(typingOverhead) "
@@ -4322,11 +4326,14 @@ final class BarosUITests: XCTestCase {
     @MainActor
     private func measureHistorySearchResponsiveness(
         in app: XCUIApplication
-    ) -> (typingMilliseconds: Double, clearMilliseconds: Double) {
+    ) -> (openMilliseconds: Double, typingMilliseconds: Double, clearMilliseconds: Double) {
         app.tabButton(.history).tap()
         let searchField = app.searchFields.firstMatch
         XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+        let openStartedAt = ProcessInfo.processInfo.systemUptime
         searchField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        let openMilliseconds = (ProcessInfo.processInfo.systemUptime - openStartedAt) * 1_000
 
         let typingStartedAt = ProcessInfo.processInfo.systemUptime
         searchField.typeText("!")
@@ -4338,7 +4345,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
         let clearMilliseconds = (ProcessInfo.processInfo.systemUptime - clearStartedAt) * 1_000
 
-        return (typingMilliseconds, clearMilliseconds)
+        return (openMilliseconds, typingMilliseconds, clearMilliseconds)
     }
 
     @MainActor
