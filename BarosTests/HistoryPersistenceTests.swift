@@ -1363,6 +1363,64 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(resolutionCounter.count, 2)
     }
 
+    func testWorkoutSearchIndexSurvivesUnrelatedUpdatesAndRefreshesAfterSavedHistoryChanges() throws {
+        let fixture = try makeSyncedHistoryFixture()
+        let state = makeExerciseHistoryViewState(resolutionCounter: ExerciseHistoryResolutionCounter())
+        _ = try fixture.snapshot(from: state)
+        let originalIndex = state.workoutSearchIndex
+        originalIndex.prepare()
+        let originalName = fixture.loggedExercise.exerciseSnapshotName
+        XCTAssertEqual(originalIndex.sessions(from: [fixture.session], matching: originalName).map(\.id), [fixture.session.id])
+
+        _ = try fixture.snapshot(from: state)
+        XCTAssertTrue(state.workoutSearchIndex === originalIndex, "Unrelated updates keep the prepared index")
+
+        let saves = HistorySaveNotificationCapture(context: fixture.context)
+        fixture.loggedExercise.exerciseSnapshotName = "Renamed Synced Exercise"
+        try fixture.context.save()
+        XCTAssertEqual(saves.deliver(to: state, in: fixture.context), 1)
+        _ = try fixture.snapshot(from: state)
+        XCTAssertFalse(state.workoutSearchIndex === originalIndex)
+        XCTAssertEqual(
+            state.workoutSearchIndex.sessions(from: [fixture.session], matching: "Renamed Synced").map(\.id),
+            [fixture.session.id]
+        )
+        XCTAssertTrue(state.workoutSearchIndex.sessions(from: [fixture.session], matching: originalName).isEmpty)
+
+        _ = state.snapshot(sessions: [fixture.session], exercises: [], ownerTokenIdentifier: "issuer|another_owner")
+        XCTAssertTrue(state.workoutSearchIndex.sessions(from: [fixture.session], matching: "Renamed Synced").isEmpty)
+    }
+
+    func testExerciseHistoryViewStateRebuildsForChildInsertsAndDeletesSavedToDisk() async throws {
+        let storeDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BarosHistorySaveTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: storeDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
+        let fixture = try makeSyncedHistoryFixture(storeURL: storeDirectory.appendingPathComponent("Baros.store"))
+        let resolutionCounter = ExerciseHistoryResolutionCounter()
+        let state = makeExerciseHistoryViewState(resolutionCounter: resolutionCounter)
+        let forwarder = ImmediateHistorySaveForwarder(state: state, context: fixture.context)
+        XCTAssertEqual(completedSetCount(in: try fixture.snapshot(from: state)), 1)
+
+        let insertedSetID = UUID()
+        try await fixture.pull(loggedSet: insertedSetID, isCompleted: true)
+        XCTAssertEqual(fixture.session.updatedAt, fixture.savedAt, "Sync inserts the set without touching its session")
+        XCTAssertEqual(completedSetCount(in: try fixture.snapshot(from: state)), 2, "Set inserted by sync")
+        XCTAssertEqual(resolutionCounter.count, 2)
+
+        try await fixture.pull(loggedSet: fixture.set.id, isCompleted: true, deletedAt: 30)
+        XCTAssertEqual(fixture.session.updatedAt, fixture.savedAt, "Sync deletes the set without touching its session")
+        XCTAssertEqual(completedSetCount(in: try fixture.snapshot(from: state)), 1, "Set deleted by sync")
+        XCTAssertEqual(resolutionCounter.count, 3)
+
+        let insertedSet = try XCTUnwrap(fixture.loggedExercise.sets.first { $0.id == insertedSetID })
+        fixture.context.delete(insertedSet)
+        try fixture.context.save()
+        XCTAssertEqual(completedSetCount(in: try fixture.snapshot(from: state)), 0, "Set removed from the store")
+        XCTAssertEqual(resolutionCounter.count, 4)
+        XCTAssertGreaterThan(forwarder.deliveredCount, 0)
+    }
+
     func testExerciseHistoryViewStateIgnoresSavesConfinedToAnActiveWorkout() throws {
         let fixture = try makeHistoryViewPerformanceFixture()
         let context = fixture.container.mainContext
@@ -1410,6 +1468,15 @@ final class HistoryPersistenceTests: XCTestCase {
             ownerTokenIdentifier: fixture.ownerTokenIdentifier
         ).resolvedHistory
         XCTAssertEqual(resolutionCounter.count, 1)
+
+        try ActiveWorkoutEngine().discardWorkout(activeSession, context: context)
+        XCTAssertEqual(saves.deliver(to: state, in: context), 1)
+        _ = state.snapshot(
+            sessions: sessions,
+            exercises: fixture.exercises,
+            ownerTokenIdentifier: fixture.ownerTokenIdentifier
+        ).resolvedHistory
+        XCTAssertEqual(resolutionCounter.count, 1, "Discarding an active workout does not change completed history")
     }
 
     func testExerciseHistoryViewStateRebuildsWhenTiedSessionOrderChangesResolvedMetadata() throws {
@@ -1637,7 +1704,7 @@ final class HistoryPersistenceTests: XCTestCase {
         }
 
         /// Pulls one remote set record for the fixture's logged exercise.
-        func pull(loggedSet id: UUID, isCompleted: Bool) async throws {
+        func pull(loggedSet id: UUID, isCompleted: Bool, deletedAt: Double? = nil) async throws {
             let client = FakeSyncClient()
             client.fetchResponses = [
                 SyncFetchChangesResponse(
@@ -1650,7 +1717,7 @@ final class HistoryPersistenceTests: XCTestCase {
                             clientId: id.uuidString.lowercased(),
                             createdAt: 10,
                             updatedAt: 20,
-                            deletedAt: nil,
+                            deletedAt: deletedAt,
                             serverUpdatedAt: 50,
                             loggedExerciseClientId: loggedExercise.id.uuidString.lowercased(),
                             orderIndex: id == set.id ? 0 : 1,
@@ -1673,8 +1740,11 @@ final class HistoryPersistenceTests: XCTestCase {
         }
     }
 
-    private func makeSyncedHistoryFixture() throws -> SyncedHistoryFixture {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+    /// With a store URL, the fixture is saved to disk and reopened in a fresh
+    /// container, so History starts from faults as it does after a cold launch.
+    private func makeSyncedHistoryFixture(storeURL: URL? = nil) throws -> SyncedHistoryFixture {
+        let container = try storeURL.map(SwiftDataTestSupport.makeDiskBackedContainer(storeURL:))
+            ?? SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let owner = "issuer|history_sync_owner"
         let savedAt = Date(timeIntervalSince1970: 10)
@@ -1705,15 +1775,64 @@ final class HistoryPersistenceTests: XCTestCase {
         )
         context.insert(session)
         try context.save()
+        guard let storeURL else {
+            return SyncedHistoryFixture(
+                container: container,
+                context: context,
+                owner: owner,
+                savedAt: savedAt,
+                session: session,
+                loggedExercise: loggedExercise,
+                set: set
+            )
+        }
+
+        let sessionID = session.id
+        let reopenedContainer = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: storeURL)
+        let reopenedContext = reopenedContainer.mainContext
+        let reopenedSession = try XCTUnwrap(
+            reopenedContext.fetch(FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.id == sessionID })).first
+        )
+        let reopenedLoggedExercise = try XCTUnwrap(reopenedSession.loggedExercises.first)
         return SyncedHistoryFixture(
-            container: container,
-            context: context,
+            container: reopenedContainer,
+            context: reopenedContext,
             owner: owner,
             savedAt: savedAt,
-            session: session,
-            loggedExercise: loggedExercise,
-            set: set
+            session: reopenedSession,
+            loggedExercise: reopenedLoggedExercise,
+            set: try XCTUnwrap(reopenedLoggedExercise.sets.first)
         )
+    }
+
+    /// Routes each save to the state while it is being posted, as `HistoryView`'s
+    /// `onReceive` does, instead of replaying saves after sync returns.
+    @MainActor
+    private final class ImmediateHistorySaveForwarder {
+        private(set) var deliveredCount = 0
+        nonisolated(unsafe) private var observer: NSObjectProtocol?
+
+        init(state: ExerciseHistoryViewState, context: ModelContext) {
+            nonisolated(unsafe) let context = context
+            observer = NotificationCenter.default.addObserver(
+                forName: ModelContext.didSave,
+                object: nil,
+                queue: nil
+            ) { [weak self] notification in
+                // Production saves post on the main thread, so this runs synchronously.
+                nonisolated(unsafe) let notification = notification
+                MainActor.assumeIsolated {
+                    state.recordSave(notification, in: context)
+                    self?.deliveredCount += 1
+                }
+            }
+        }
+
+        deinit {
+            if let observer {
+                NotificationCenter.default.removeObserver(observer)
+            }
+        }
     }
 
     /// Collects a context's saves so a test can route them to the state, as

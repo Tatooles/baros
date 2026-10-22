@@ -1,7 +1,7 @@
 import Foundation
 
-/// Built on the first search, not on creation: indexing reads every workout's
-/// logged exercises, and History creates an index on each body update.
+/// Built on first use, not on creation: indexing reads every workout's logged
+/// exercises. History prepares it when search opens, before the first keystroke.
 final class WorkoutHistorySearchIndex {
     private let indexedSessions: [WorkoutSession]
     private lazy var searchableFieldsBySessionID: [UUID: [String]] = Dictionary(
@@ -15,6 +15,10 @@ final class WorkoutHistorySearchIndex {
 
     init(sessions: [WorkoutSession]) {
         indexedSessions = sessions
+    }
+
+    func prepare() {
+        _ = searchableFieldsBySessionID
     }
 
     func sessions(

@@ -32,7 +32,7 @@ struct HistoryView: View {
             ownerTokenIdentifier: ownerTokenIdentifier
         )
         let completedSessions = completedSessions
-        let workoutSearchIndex = WorkoutHistorySearchIndex(sessions: completedSessions)
+        let workoutSearchIndex = exerciseHistoryState.workoutSearchIndex
 
         HistorySearchContent(
             navigationState: navigationState,
@@ -67,6 +67,7 @@ struct HistoryView: View {
 @Observable
 private final class HistorySearchState {
     var text = ""
+    var isPresented = false
 }
 
 private struct HistorySearchContent: View {
@@ -116,7 +117,12 @@ private struct HistorySearchContent: View {
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle("History")
-        .searchable(text: $searchState.text, prompt: "Search history")
+        .searchable(text: $searchState.text, isPresented: $searchState.isPresented, prompt: "Search history")
+        .onChange(of: searchState.isPresented) { _, isPresented in
+            if isPresented {
+                workoutSearchIndex.prepare()
+            }
+        }
     }
 
     private var isCurrentModeEmpty: Bool {
@@ -210,6 +216,8 @@ final class ExerciseHistoryViewState {
     @ObservationIgnored private let resolveHistory: ExerciseHistoryViewSnapshot.ResolveHistory
     @ObservationIgnored private var invalidationKey: ExerciseHistoryInvalidationKey?
     @ObservationIgnored private var currentSnapshot: ExerciseHistoryViewSnapshot?
+    /// Replaced with the snapshot, so a prepared index survives unrelated body updates.
+    @ObservationIgnored private(set) var workoutSearchIndex = WorkoutHistorySearchIndex(sessions: [])
     private var savedHistoryChangeCount = 0
 
     init(
@@ -231,6 +239,12 @@ final class ExerciseHistoryViewState {
         )
         if nextKey != invalidationKey || currentSnapshot == nil {
             invalidationKey = nextKey
+            workoutSearchIndex = WorkoutHistorySearchIndex(
+                sessions: WorkoutSession.visibleCompletedSessions(
+                    from: sessions,
+                    ownerTokenIdentifier: ownerTokenIdentifier
+                )
+            )
             currentSnapshot = ExerciseHistoryViewSnapshot(
                 sessions: sessions,
                 exercises: exercises,
@@ -257,7 +271,8 @@ final class ExerciseHistoryViewState {
 
 /// Exercise History reads only sessions, logged exercises, sets, and exercises,
 /// so saves of other models are ignored. Saves confined to an active workout are
-/// ignored too, so logging sets does not rebuild completed history.
+/// ignored too, including discarded sessions, so logging or discarding does not
+/// rebuild completed history.
 ///
 /// Inserted models are not classified. When `HistoryView` receives `didSave`,
 /// they may not be registered under their saved identifiers yet, so their
@@ -282,7 +297,7 @@ struct ExerciseHistorySaveChanges {
         }
         return changes.updatedIDs.contains { identifier in
             Self.isHistoryInput(identifier)
-                && !Self.belongsToActiveWorkout(identifier, in: context)
+                && !Self.belongsToNonCompletedWorkout(identifier, in: context)
         }
     }
 
@@ -299,7 +314,7 @@ struct ExerciseHistorySaveChanges {
     }
 
     @MainActor
-    private static func belongsToActiveWorkout(
+    private static func belongsToNonCompletedWorkout(
         _ identifier: PersistentIdentifier,
         in context: ModelContext
     ) -> Bool {
@@ -316,7 +331,10 @@ struct ExerciseHistorySaveChanges {
         default:
             session = nil
         }
-        return session?.status == .active
+        // Membership changes out of completed history are already in the session
+        // query/key. Active and discarded graphs contribute nothing to the cache.
+        guard let session else { return false }
+        return session.status != .completed
     }
 }
 
