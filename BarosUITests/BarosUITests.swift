@@ -1555,22 +1555,21 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testOneThreeUpgradeShowsOneFourWhatsNewOnce() {
+    func testOneFourUpgradeToUnannouncedReleaseSkipsWhatsNew() {
         let firstLaunch = makeDiskBackedApp(
             extraArguments: [
                 "--uitest-in-memory-store",
                 "-Baros.FirstRunExperience.hasSeenWelcome", "YES",
-                "-Baros.FirstRunExperience.lastProcessedAppVersion", "1.3",
-                "-Baros.FirstRunExperience.lastSeenWhatsNewVersion", "1.3",
+                "-Baros.FirstRunExperience.lastProcessedAppVersion", "1.4",
+                "-Baros.FirstRunExperience.lastSeenWhatsNewVersion", "1.4",
             ],
             skipsFirstRunExperience: false
         )
         firstLaunch.launch()
 
-        XCTAssertTrue(firstLaunch.staticTexts["What's new in Baros 1.4"].waitForExistence(timeout: 5))
+        XCTAssertTrue(firstLaunch.staticTexts["HomeTitle"].waitForExistence(timeout: 5))
+        XCTAssertFalse(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 1))
         XCTAssertFalse(firstLaunch.staticTexts["Welcome to Baros"].exists)
-        firstLaunch.buttons["LaunchExperiencePrimaryButton"].tap()
-        XCTAssertTrue(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForNonExistence(timeout: 3))
         firstLaunch.terminate()
 
         let secondLaunch = makeDiskBackedApp(
