@@ -43,6 +43,9 @@ Also in this update:
 • Sync status shows when you're offline, even when no changes are waiting to sync
 • Adding a set no longer opens the keyboard
 • All RPE choices fit without scrolling, and tapping the selected choice clears it
+• Reliability fixes for signing out and switching accounts, editing past workouts, and recovering from failed saves
+• Clearer guidance for safely retrying account deletion after a cloud error
+• Performance improvements
 ```
 
 ### 1.3
