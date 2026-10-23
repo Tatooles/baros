@@ -490,6 +490,91 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(added.sets.count, 1)
     }
 
+    func testAddingMultipleExercisesKeepsSelectionOrderAndSeedsEachHistoryInOneSave() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let squat = Exercise(name: "Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        context.insert(bench)
+        context.insert(squat)
+        try insertCompletedSession(startedAt: Date(timeIntervalSince1970: 100), exercise: bench,
+                                   sets: [(.warmup, true), (.working, true)], in: context)
+        let session = try engine.startBlankWorkout(context: context)
+        var saveCount = 0
+        let added = try engine.addExercises([squat, bench], to: session, context: context, save: {
+            saveCount += 1
+            try $0.save()
+        })
+
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Squat", "Bench"])
+        XCTAssertEqual(added.map(\.orderIndex), [0, 1])
+        XCTAssertEqual(added[0].sortedSets.map(\.kind), [.working])
+        XCTAssertEqual(added[1].sortedSets.map(\.kind), [.warmup, .working])
+        XCTAssertTrue(added.flatMap(\.sets).allSatisfy { !$0.isCompleted && $0.weight == nil && $0.reps == nil })
+    }
+
+    func testAddingMultipleExercisesSkipsExistingAndRepeatedIDsButAllowsRemovedExercises() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let bench = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let squat = Exercise(name: "Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        context.insert(bench)
+        context.insert(squat)
+        try engine.addExercise(bench, to: session, context: context)
+        let removed = try engine.addExercise(squat, to: session, context: context)
+        try engine.removeLoggedExercise(removed, context: context)
+
+        let added = try engine.addExercises([bench, squat, squat], to: session, context: context)
+        XCTAssertEqual(added.map(\.exerciseSnapshotName), ["Squat"])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Bench", "Squat"])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1])
+        let noAdditions = try engine.addExercises([bench, squat], to: session, context: context, save: { _ in
+            XCTFail("An already-added selection must not save again")
+        })
+        XCTAssertTrue(noAdditions.isEmpty)
+    }
+
+    func testFailedMultiAddRemovesEntireGroupPreservesOtherEditsAndCanRetryOnDisk() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let container = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: directory.appendingPathComponent("test.store"))
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let bench = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let squat = Exercise(name: "Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        context.insert(bench)
+        context.insert(squat)
+        try context.save()
+        let updatedAt = session.updatedAt
+        session.notes = "Keep this unsaved note"
+
+        XCTAssertThrowsError(try engine.addExercises([squat, bench], to: session, context: context, save: { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        }))
+        XCTAssertTrue(session.sortedLoggedExercises.isEmpty)
+        XCTAssertEqual(session.updatedAt, updatedAt)
+        XCTAssertEqual(session.notes, "Keep this unsaved note")
+        try context.save()
+        let freshContext = ModelContext(container)
+        XCTAssertTrue(try freshContext.fetch(FetchDescriptor<LoggedExercise>()).isEmpty)
+        XCTAssertTrue(try freshContext.fetch(FetchDescriptor<LoggedSet>()).isEmpty)
+
+        try engine.addExercises([squat, bench], to: session, context: context)
+        let savedContext = ModelContext(container)
+        let savedSession = try XCTUnwrap(savedContext.fetch(FetchDescriptor<WorkoutSession>()).first)
+        XCTAssertEqual(savedSession.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Squat", "Bench"])
+        XCTAssertEqual(savedSession.notes, "Keep this unsaved note")
+        XCTAssertEqual(try savedContext.fetchCount(FetchDescriptor<LoggedExercise>()), 2)
+        XCTAssertEqual(try savedContext.fetchCount(FetchDescriptor<LoggedSet>()), 2)
+    }
+
     func testAddingSetCopiesKindOnlyAndStartsIncompleteWithBlankValues() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

@@ -32,24 +32,28 @@ struct AddExerciseSheet: View {
 
     var body: some View {
         NavigationStack {
-            ExercisePickerView { exercise in
+            ExercisePickerView(
+                mode: .add(existingExerciseIDs: Set(session.sortedLoggedExercises.compactMap { $0.exercise?.id }))
+            ) { exercises in
                 do {
-                    let loggedExercise = try engine.addExercise(
-                        exercise,
+                    let loggedExercises = try engine.addExercises(
+                        exercises,
                         to: session,
                         ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                         context: modelContext
                     )
-                    onAddExercise(loggedExercise)
+                    if let firstExercise = loggedExercises.first {
+                        onAddExercise(firstExercise)
+                    }
                     dismiss()
                 } catch {
                     showsAddError = true
                 }
             }
-            .alert("Couldn't Add Exercise", isPresented: $showsAddError) {
+            .alert("Couldn't Add Exercises", isPresented: $showsAddError) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("The exercise wasn't added. Select it again to retry, or cancel to return to your workout.")
+                Text("The exercises weren't added. Your selection is still here. Try adding them again, or cancel to return to your workout.")
             }
         }
         .presentationDetents([.large])
@@ -92,8 +96,8 @@ struct SwapExerciseSheet: View {
         NavigationStack {
             ExercisePickerView(
                 mode: .swap(currentExerciseID: loggedExercise.exercise?.id)
-            ) { exercise in
-                pendingReplacement = exercise
+            ) { exercises in
+                pendingReplacement = exercises.first
             }
             .alert("Unable to Swap Exercise", isPresented: isErrorPresented) {
                 Button("OK", role: .cancel) {
