@@ -2,13 +2,13 @@ import SwiftData
 import SwiftUI
 
 enum ExercisePickerMode {
-    case add
+    case add(existingExerciseIDs: Set<UUID>)
     case swap(currentExerciseID: UUID?)
 
     var navigationTitle: String {
         switch self {
         case .add:
-            return "Add Exercise"
+            return "Add Exercises"
         case .swap:
             return "Swap Exercise"
         }
@@ -25,13 +25,13 @@ struct ExercisePickerView: View {
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query private var sessions: [WorkoutSession]
     let mode: ExercisePickerMode
-    let onSelect: (Exercise) -> Void
+    let onSelect: ([Exercise]) -> Void
     private let sortPreferenceStore: ExercisePickerSortPreferenceStore
 
     init(
-        mode: ExercisePickerMode = .add,
+        mode: ExercisePickerMode,
         sortPreferenceStore: ExercisePickerSortPreferenceStore = ExercisePickerSortPreferenceStore(),
-        onSelect: @escaping (Exercise) -> Void
+        onSelect: @escaping ([Exercise]) -> Void
     ) {
         self.mode = mode
         self.sortPreferenceStore = sortPreferenceStore
@@ -56,7 +56,8 @@ private struct ExercisePickerList: View {
     @Environment(\.dismiss) private var dismiss
     let baseRows: [ExercisePickerRowContent]
     let mode: ExercisePickerMode
-    let onSelect: (Exercise) -> Void
+    let onSelect: ([Exercise]) -> Void
+    @State private var selectedExerciseIDs: [UUID] = []
     @State private var searchText = ""
     @State private var isSearchPresented = false
     @State private var isCreatingExercise = false
@@ -68,13 +69,27 @@ private struct ExercisePickerList: View {
         baseRows: [ExercisePickerRowContent],
         mode: ExercisePickerMode,
         sortPreferenceStore: ExercisePickerSortPreferenceStore,
-        onSelect: @escaping (Exercise) -> Void
+        onSelect: @escaping ([Exercise]) -> Void
     ) {
         self.baseRows = baseRows
         self.mode = mode
         self.sortPreferenceStore = sortPreferenceStore
         self.onSelect = onSelect
         _sortOrder = State(initialValue: sortPreferenceStore.sortOrder)
+    }
+
+    private var selectedExercises: [Exercise] {
+        selectedExerciseIDs.compactMap { id in
+            baseRows.first { $0.id == id && !mode.isAlreadyAdded($0.exercise) }?.exercise
+        }
+    }
+
+    private var addButtonTitle: String {
+        switch selectedExercises.count {
+        case 0: "Add Exercises"
+        case 1: "Add 1 Exercise"
+        case let count: "Add \(count) Exercises"
+        }
     }
 
     private var rows: [ExercisePickerRowContent] {
@@ -106,12 +121,25 @@ private struct ExercisePickerList: View {
             Section {
                 ForEach(rows) { row in
                     Button {
-                        onSelect(row.exercise)
+                        if mode.isAddExercise {
+                            toggleSelection(row.exercise)
+                        } else {
+                            onSelect([row.exercise])
+                        }
                     } label: {
                         HStack(spacing: 12) {
                             exerciseRow(row)
 
-                            if mode.isCurrent(row.exercise) {
+                            if mode.isAddExercise {
+                                Image(systemName: selectionSymbol(for: row.exercise))
+                                    .font(.system(size: 24))
+                                    .foregroundStyle(
+                                        isSelected(row.exercise)
+                                            ? AppTheme.brandAccentForeground
+                                            : AppTheme.textTertiary
+                                    )
+                                    .accessibilityHidden(true)
+                            } else if mode.isCurrent(row.exercise) {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(AppTheme.brandAccentForeground)
                                     .accessibilityLabel("Current exercise")
@@ -119,7 +147,8 @@ private struct ExercisePickerList: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .disabled(mode.isCurrent(row.exercise))
+                    .disabled(mode.isCurrent(row.exercise) || mode.isAlreadyAdded(row.exercise))
+                    .accessibilityAddTraits(isSelected(row.exercise) ? .isSelected : [])
                     .accessibilityIdentifier(
                         "ExercisePickerRow-\(row.exercise.name)-\(row.exercise.equipment.displayName)"
                     )
@@ -174,6 +203,7 @@ private struct ExercisePickerList: View {
         .searchable(
             text: $searchText,
             isPresented: $isSearchPresented,
+            placement: mode.isAddExercise ? .navigationBarDrawer(displayMode: .always) : .automatic,
             prompt: "Search exercises"
         )
         .onChange(of: isSearchPresented) { _, isPresented in
@@ -187,18 +217,67 @@ private struct ExercisePickerList: View {
         .onChange(of: sortOrder) { _, newValue in
             sortPreferenceStore.sortOrder = newValue
         }
+        .safeAreaInset(edge: .bottom) {
+            if mode.isAddExercise {
+                Button {
+                    onSelect(selectedExercises)
+                } label: {
+                    Text(addButtonTitle)
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.glassProminent)
+                .tint(AppTheme.brandAccentFill)
+                .disabled(selectedExercises.isEmpty)
+                .accessibilityIdentifier("ExercisePickerAddSelectedButton")
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(AppTheme.canvasBackground)
+            }
+        }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Done") {
-                    dismiss()
+            if mode.isAddExercise {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel", role: .cancel) {
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("ExercisePickerCancelButton")
+                }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
                 }
             }
         }
         .navigationDestination(isPresented: $isCreatingExercise) {
             ExerciseEditorView(initialName: creationName) { exercise in
-                onSelect(exercise)
+                if mode.isAddExercise {
+                    selectedExerciseIDs.append(exercise.id)
+                } else {
+                    onSelect([exercise])
+                }
             }
         }
+    }
+
+    private func isSelected(_ exercise: Exercise) -> Bool {
+        selectedExerciseIDs.contains(exercise.id) && !mode.isAlreadyAdded(exercise)
+    }
+
+    private func toggleSelection(_ exercise: Exercise) {
+        if isSelected(exercise) {
+            selectedExerciseIDs.removeAll { $0 == exercise.id }
+        } else {
+            selectedExerciseIDs.append(exercise.id)
+        }
+    }
+
+    private func selectionSymbol(for exercise: Exercise) -> String {
+        if mode.isAlreadyAdded(exercise) { return "checkmark" }
+        return isSelected(exercise) ? "checkmark.circle.fill" : "circle"
     }
 
     private func exerciseRow(_ row: ExercisePickerRowContent) -> some View {
@@ -209,7 +288,7 @@ private struct ExercisePickerList: View {
             Text(row.exercise.metadataDisplayText)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppTheme.textSecondary)
-            Text(row.performanceSummaryText)
+            Text(mode.isAlreadyAdded(row.exercise) ? "Already added" : row.performanceSummaryText)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppTheme.textTertiary)
         }
@@ -220,6 +299,11 @@ private struct ExercisePickerList: View {
 }
 
 private extension ExercisePickerMode {
+    func isAlreadyAdded(_ exercise: Exercise) -> Bool {
+        guard case let .add(existingExerciseIDs) = self else { return false }
+        return existingExerciseIDs.contains(exercise.id)
+    }
+
     var isAddExercise: Bool {
         if case .add = self { return true }
         return false
