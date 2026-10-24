@@ -39,7 +39,7 @@ struct ReorderExerciseRow: View {
                         .foregroundStyle(AppTheme.onDestructive)
                         .padding(.horizontal, 12)
                         .frame(minHeight: 60)
-                        .background(AppTheme.destructive, in: RoundedRectangle(cornerRadius: 18))
+                        .background(AppTheme.destructiveFill, in: RoundedRectangle(cornerRadius: 18))
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Remove \(exercise.name) from this workout")
