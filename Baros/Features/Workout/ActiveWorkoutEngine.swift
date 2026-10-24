@@ -303,16 +303,47 @@ final class ActiveWorkoutEngine {
         now: Date = .now,
         save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws {
-        let visibleExercises = session.sortedLoggedExercises
-        let visibleIDs = visibleExercises.map(\.id)
+        let visibleIDs = session.sortedLoggedExercises.map(\.id)
         guard orderedIDs.count == visibleIDs.count, Set(orderedIDs) == Set(visibleIDs) else {
             throw ActiveWorkoutEngineError.invalidExerciseReorder
         }
 
+        try applyExerciseListChanges(
+            in: session, orderedIDs: orderedIDs,
+            baseline: WorkoutExerciseListSnapshot(session: session),
+            context: context, now: now, save: save
+        )
+    }
+
+    /// Commits a sheet's removals and order together. Restore only the fields
+    /// touched here on failure, preserving unrelated drafts and outbox work.
+    func applyExerciseListChanges(
+        in session: WorkoutSession,
+        orderedIDs: [UUID],
+        baseline: WorkoutExerciseListSnapshot,
+        context: ModelContext,
+        now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        let remainingIDs = Set(orderedIDs)
+        guard !session.isDeleted, session.status == .active, !hasPendingSetSave,
+              baseline == WorkoutExerciseListSnapshot(session: session),
+              remainingIDs.count == orderedIDs.count,
+              remainingIDs.isSubset(of: Set(baseline.exercises.map(\.id))) else {
+            throw ActiveWorkoutEngineError.invalidExerciseReorder
+        }
+
+        let visibleExercises = session.sortedLoggedExercises
+        let removedExercises = visibleExercises.filter { !remainingIDs.contains($0.id) }
+        let removedSets = removedExercises.flatMap(\.sortedSets)
+
         let exercisesByID = Dictionary(uniqueKeysWithValues: visibleExercises.map { ($0.id, $0) })
         let originalSessionUpdatedAt = session.updatedAt
         let originalExerciseStates = visibleExercises.map {
-            (exercise: $0, orderIndex: $0.orderIndex, updatedAt: $0.updatedAt)
+            (exercise: $0, orderIndex: $0.orderIndex, updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
+        }
+        let originalSetStates = removedSets.map {
+            (set: $0, updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
         }
         var didChangeOrder = false
 
@@ -328,7 +359,9 @@ final class ActiveWorkoutEngine {
             }
         }
 
-        guard didChangeOrder else { return }
+        guard didChangeOrder || !removedExercises.isEmpty else { return }
+        for exercise in removedExercises { exercise.markDeleted(now: now) }
+        for set in removedSets { set.markDeleted(now: now) }
         session.touch(now: now)
         do {
             #if DEBUG
@@ -341,10 +374,16 @@ final class ActiveWorkoutEngine {
             }
             #endif
             try save(context)
+            for set in removedSets { restTimer.cancel(ifStartedBy: set.id) }
         } catch {
             for state in originalExerciseStates {
                 state.exercise.orderIndex = state.orderIndex
                 state.exercise.updatedAt = state.updatedAt
+                state.exercise.deletedAt = state.deletedAt
+            }
+            for state in originalSetStates {
+                state.set.updatedAt = state.updatedAt
+                state.set.deletedAt = state.deletedAt
             }
             session.updatedAt = originalSessionUpdatedAt
             throw error

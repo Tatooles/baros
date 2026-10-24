@@ -2037,6 +2037,102 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testReorderRemovalsAreDraftOnlyAndConfirmUncheckedEnteredValuesTogether() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        app.launch()
+        openReorderSheet(in: app)
+        revealReorderRemoval(named: "Back Squat", in: app)
+        // Revealing another row closes the first; only one destructive action is visible.
+        revealReorderRemoval(named: "Barbell Row", in: app)
+        XCTAssertFalse(reorderRemoval(named: "Back Squat", revealed: true, in: app).exists)
+        reorderRemoval(named: "Barbell Row", revealed: true, in: app).tap()
+        revealReorderRemoval(named: "Back Squat", in: app)
+        reorderRemoval(named: "Back Squat", revealed: true, in: app).tap()
+        app.buttons["DoneReorderExercisesButton"].tap()
+        XCTAssertTrue(app.buttons["Remove and Save"].waitForExistence(timeout: 3))
+        let confirmation = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Back Squat — 5 logged sets")).firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
+        XCTAssertTrue(confirmation.label.contains("Barbell Row — 5 logged sets"))
+        app.buttons["Keep Editing"].tap()
+        XCTAssertFalse(reorderRemoval(named: "Back Squat", revealed: false, in: app).exists)
+        app.buttons["CancelReorderExercisesButton"].tap()
+        // Cancel discards both removals; a new draft sees the original list.
+        openReorderSheet(in: app)
+        XCTAssertTrue(reorderRemoval(named: "Back Squat", revealed: false, in: app).exists)
+        XCTAssertTrue(reorderRemoval(named: "Barbell Row", revealed: false, in: app).exists)
+        revealReorderRemoval(named: "Back Squat", in: app)
+        reorderRemoval(named: "Back Squat", revealed: true, in: app).tap()
+        app.buttons["DoneReorderExercisesButton"].tap()
+        app.buttons["Remove and Save"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHeader-0"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ExerciseHeader-0"].label.contains("Barbell Row"))
+    }
+
+    @MainActor
+    func testReorderCanRemoveAllBlankExercisesAndSaveWithoutAnotherConfirmation() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        addExercise("ExercisePickerRow-Back Squat-Barbell", in: app)
+        dismissKeyboardIfNeeded(in: app)
+        openReorderSheet(in: app)
+        for name in ["Bench Press", "Back Squat"] {
+            revealReorderRemoval(named: name, in: app)
+            reorderRemoval(named: name, revealed: true, in: app).tap()
+        }
+        XCTAssertTrue(app.staticTexts["ReorderExercisesEmptyState"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["DoneReorderExercisesButton"].isEnabled)
+        app.buttons["DoneReorderExercisesButton"].tap()
+        XCTAssertTrue(app.buttons["AddExerciseButton"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["Remove and Save"].exists)
+        XCTAssertFalse(app.buttons["ExerciseHeader-0"].exists)
+    }
+
+    @MainActor
+    func testReorderRemovalSaveFailureRetainsDraftAndRetrySaves() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout", "--uitest-fail-reorder-exercises-save-once"])
+        app.launch()
+        openReorderSheet(in: app)
+        revealReorderRemoval(named: "Back Squat", in: app)
+        reorderRemoval(named: "Back Squat", revealed: true, in: app).tap()
+        app.buttons["DoneReorderExercisesButton"].tap()
+        app.buttons["Remove and Save"].tap()
+        XCTAssertTrue(app.alerts["Couldn't Save Changes"].waitForExistence(timeout: 3))
+        app.alerts.buttons["OK"].tap()
+        XCTAssertFalse(reorderRemoval(named: "Back Squat", revealed: false, in: app).exists)
+        app.buttons["DoneReorderExercisesButton"].tap()
+        app.buttons["Remove and Save"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHeader-0"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ExerciseHeader-0"].label.contains("Barbell Row"))
+    }
+
+    @MainActor
+    private func openReorderSheet(in app: XCUIApplication) {
+        let menu = app.buttons["ExerciseMenuButton-0"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 3))
+        menu.tap()
+        let reorder = app.buttons["ReorderExercisesButton-0"]
+        XCTAssertTrue(reorder.waitForExistence(timeout: 3))
+        reorder.tap()
+        XCTAssertTrue(waitForReorderExercisesList(in: app, timeout: 3))
+    }
+
+    @MainActor
+    private func reorderRemoval(named name: String, revealed: Bool, in app: XCUIApplication) -> XCUIElement {
+        let prefix = revealed ? "ConfirmRemoveExercise-" : "RevealRemoveExercise-"
+        let label = revealed ? "Remove \(name) from this workout" : "Remove \(name)"
+        return app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", prefix, label)).firstMatch
+    }
+
+    @MainActor
+    private func revealReorderRemoval(named name: String, in app: XCUIApplication) {
+        let minus = reorderRemoval(named: name, revealed: false, in: app)
+        XCTAssertTrue(minus.waitForExistence(timeout: 3))
+        minus.tap()
+        XCTAssertTrue(reorderRemoval(named: name, revealed: true, in: app).waitForExistence(timeout: 3))
+    }
+
+    @MainActor
     func testReorderSaveFailureKeepsSheetOpenAndRetrySavesOrder() {
         let app = makeApp(extraArguments: ["--uitest-fail-reorder-exercises-save-once"])
         app.launch()
@@ -2051,7 +2147,7 @@ final class BarosUITests: XCTestCase {
         moveReorderExercise(named: "Bench Press", before: "Back Squat", in: app)
         app.buttons["DoneReorderExercisesButton"].tap()
 
-        XCTAssertTrue(app.alerts["Couldn't Reorder Exercises"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.alerts["Couldn't Save Changes"].waitForExistence(timeout: 3))
         app.alerts.buttons["OK"].tap()
         XCTAssertTrue(waitForReorderExercisesList(in: app, timeout: 3))
         app.buttons["DoneReorderExercisesButton"].tap()
@@ -4362,7 +4458,6 @@ final class BarosUITests: XCTestCase {
             ? []
             : ["--uitest-force-signed-out-auth"]
         var launchArguments = [
-            "--uitest-reset-persistent-store",
             "--uitest-in-memory-store",
             "--uitest-reset-exercise-picker-sort",
             "--uitest-reset-app-appearance",

@@ -1,140 +1,148 @@
 import SwiftData
 import SwiftUI
 
-private struct ReorderExerciseDraft: Identifiable, Equatable {
-    let id: UUID
-    let name: String
-    let metadata: String?
-    let completedSets: Int
-    let totalSets: Int
-
-    init(loggedExercise: LoggedExercise) {
-        let visibleSets = loggedExercise.sortedSets
-        id = loggedExercise.id
-        name = loggedExercise.exerciseSnapshotName
-        metadata = loggedExercise.metadataDisplayText
-        completedSets = visibleSets.filter(\.isCompleted).count
-        totalSets = visibleSets.count
-    }
-
-    var progressText: String {
-        "\(completedSets)/\(totalSets) sets"
-    }
-
-    var accessibilityValue: String {
-        if let metadata {
-            return "\(metadata), \(progressText)"
-        }
-
-        return progressText
-    }
-}
-
 struct ReorderExercisesSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
-    @State private var draftExercises: [ReorderExerciseDraft] = []
+    @State private var draft: WorkoutExerciseListDraft
     @State private var editMode: EditMode = .active
-    @State private var showsSaveError = false
+    @State private var revealedExerciseID: UUID?
+    @State private var showsRemovalConfirmation = false
+    @State private var alert: SaveAlert?
+
+    private enum SaveAlert: String, Identifiable {
+        case failure, conflict
+        var id: Self { self }
+    }
+
+    init(session: WorkoutSession, engine: ActiveWorkoutEngine) {
+        self.session = session
+        self.engine = engine
+        _draft = State(initialValue: WorkoutExerciseListDraft(session: session))
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                ForEach(draftExercises) { exercise in
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(exercise.name)
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(AppTheme.textPrimary)
-                                .lineLimit(1)
-                            if let metadata = exercise.metadata {
-                                Text(metadata)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(AppTheme.textSecondary)
-                                    .lineLimit(1)
+                ForEach(draft.exercises) { exercise in
+                    ReorderExerciseRow(
+                        exercise: exercise,
+                        isRevealed: revealedExerciseID == exercise.id,
+                        reveal: { animate { revealedExerciseID = exercise.id } },
+                        collapse: { animate { revealedExerciseID = nil } },
+                        remove: {
+                            animate {
+                                draft.orderedIDs.removeAll { $0 == exercise.id }
+                                revealedExerciseID = nil
                             }
                         }
-
-                        Spacer(minLength: 12)
-
-                        Text(exercise.progressText)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(AppTheme.textSecondary)
-                            .monospacedDigit()
-                    }
-                    .padding(.horizontal, 18)
-                    .frame(minHeight: 68)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(AppTheme.groupedSurface)
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(AppTheme.subtleBorder)
-                    )
-                    .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(exercise.name)
-                    .accessibilityValue(exercise.accessibilityValue)
-                    .accessibilityIdentifier("ReorderExerciseRow-\(exercise.id.uuidString)")
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 6))
+                    .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 6))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                 }
-                .onMove(perform: moveExercises)
+                .onMove { source, destination in
+                    revealedExerciseID = nil
+                    draft.orderedIDs.move(fromOffsets: source, toOffset: destination)
+                }
             }
+            .contentMargins(.top, 8, for: .scrollContent)
             .scrollContentBackground(.hidden)
             .background(AppTheme.canvasBackground.ignoresSafeArea())
+            .overlay {
+                if draft.orderedIDs.isEmpty {
+                    Text("No exercises")
+                        .font(.body)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .accessibilityIdentifier("ReorderExercisesEmptyState")
+                }
+            }
+            .onTapGesture { animate { revealedExerciseID = nil } }
+            .onScrollPhaseChange { _, phase in
+                if phase == .interacting { animate { revealedExerciseID = nil } }
+            }
             .accessibilityIdentifier("ReorderExercisesList")
             .environment(\.editMode, $editMode)
             .navigationTitle("Reorder Exercises")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .accessibilityIdentifier("CancelReorderExercisesButton")
+                    Button("Cancel") { dismiss() }
+                        .accessibilityIdentifier("CancelReorderExercisesButton")
                 }
-
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        saveOrder()
-                    }
-                    .font(.system(size: 16, weight: .semibold))
-                    .disabled(draftExercises.count < 2)
-                    .accessibilityIdentifier("DoneReorderExercisesButton")
+                    Button("Done", action: prepareToSave)
+                        .font(.system(size: 16, weight: .semibold))
+                        .accessibilityIdentifier("DoneReorderExercisesButton")
                 }
             }
         }
-        .alert("Couldn't Reorder Exercises", isPresented: $showsSaveError) {
-            Button("OK", role: .cancel) {}
+        .confirmationDialog(
+            "Remove Exercises?", isPresented: $showsRemovalConfirmation, titleVisibility: .visible
+        ) {
+            Button("Remove and Save", role: .destructive, action: saveChanges)
+                .accessibilityIdentifier("ConfirmReorderExerciseRemovalsButton")
+            Button("Keep Editing", role: .cancel) {}
         } message: {
-            Text("Your workout's exercise order wasn't changed. Tap Done to retry, or Cancel to keep the original order.")
+            Text(draft.removalMessage)
+        }
+        .alert(item: $alert) { alert in
+            switch alert {
+            case .failure:
+                Alert(
+                    title: Text("Couldn't Save Changes"),
+                    message: Text("Your workout wasn't changed. Tap Done to retry, or Cancel to discard your edits."),
+                    dismissButton: .cancel(Text("OK"))
+                )
+            case .conflict:
+                Alert(
+                    title: Text("Workout Changed"),
+                    message: Text("The current exercises have been reloaded. Review them before making your changes again."),
+                    dismissButton: .cancel(Text("OK"))
+                )
+            }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .onAppear {
-            draftExercises = session.sortedLoggedExercises.map(ReorderExerciseDraft.init)
+    }
+
+    private func animate(_ changes: () -> Void) {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.25), changes)
+    }
+
+    private func prepareToSave() {
+        revealedExerciseID = nil
+        guard validateBaseline() else { return }
+        if draft.needsRemovalConfirmation {
+            showsRemovalConfirmation = true
+        } else {
+            saveChanges()
         }
     }
 
-    private func moveExercises(from source: IndexSet, to destination: Int) {
-        draftExercises.move(fromOffsets: source, toOffset: destination)
+    private func validateBaseline() -> Bool {
+        guard draft.baseline == WorkoutExerciseListSnapshot(session: session) else {
+            draft = WorkoutExerciseListDraft(session: session)
+            alert = .conflict
+            return false
+        }
+        return true
     }
 
-    private func saveOrder() {
+    private func saveChanges() {
+        // Revalidate after the confirmation as sync can arrive while it is open.
+        guard validateBaseline() else { return }
         do {
-            try engine.reorderLoggedExercises(
-                in: session,
-                orderedIDs: draftExercises.map(\.id),
+            try engine.applyExerciseListChanges(
+                in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline,
                 context: modelContext
             )
             dismiss()
         } catch {
-            showsSaveError = true
+            alert = .failure
         }
     }
 }
