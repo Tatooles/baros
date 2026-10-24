@@ -2039,9 +2039,17 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testReorderRemovalsAreDraftOnlyAndConfirmUncheckedEnteredValuesTogether() {
         let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        func capture(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
         app.launch()
         openReorderSheet(in: app)
+        capture("Reorder controls")
         revealReorderRemoval(named: "Back Squat", in: app)
+        capture("Revealed Remove action")
         // Revealing another row closes the first; only one destructive action is visible.
         revealReorderRemoval(named: "Barbell Row", in: app)
         XCTAssertFalse(reorderRemoval(named: "Back Squat", revealed: true, in: app).exists)
@@ -2053,6 +2061,7 @@ final class BarosUITests: XCTestCase {
         let confirmation = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Back Squat — 5 logged sets")).firstMatch
         XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
         XCTAssertTrue(confirmation.label.contains("Barbell Row — 5 logged sets"))
+        capture("Combined removal confirmation")
         app.buttons["Keep Editing"].tap()
         XCTAssertFalse(reorderRemoval(named: "Back Squat", revealed: false, in: app).exists)
         app.buttons["CancelReorderExercisesButton"].tap()
