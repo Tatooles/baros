@@ -1830,7 +1830,14 @@ final class BarosUITests: XCTestCase {
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
         ])
         app.launch()
-        startBlankWorkout(in: app)
+        XCTAssertTrue(app.buttons["StartWorkoutButton"].waitForExistence(timeout: 3))
+        app.buttons["StartWorkoutButton"].tap()
+        let blankWorkout = app.buttons["StartBlankWorkoutButton"]
+        XCTAssertTrue(blankWorkout.waitForExistence(timeout: 3))
+        // The oversized Home-sheet labels can overlap at this text size. Use the
+        // leading icon to reach the picker whose layout this test exercises.
+        blankWorkout.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["AddExerciseButton"].waitForExistence(timeout: 3))
         app.buttons["AddExerciseButton"].tap()
         let add = app.buttons["ExercisePickerAddSelectedButton"]
         XCTAssertTrue(add.waitForExistence(timeout: 3))

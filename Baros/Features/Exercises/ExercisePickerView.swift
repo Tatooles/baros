@@ -196,6 +196,7 @@ private struct ExercisePickerList: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .contentMargins(.top, mode.isAddExercise ? 8 : nil, for: .scrollContent)
         .contentMargins(.bottom, 24, for: .scrollContent)
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle(mode.navigationTitle)
@@ -217,7 +218,7 @@ private struct ExercisePickerList: View {
         .onChange(of: sortOrder) { _, newValue in
             sortPreferenceStore.sortOrder = newValue
         }
-        .safeAreaInset(edge: .bottom) {
+        .safeAreaBar(edge: .bottom, spacing: 0) {
             if mode.isAddExercise {
                 Button {
                     onSelect(selectedExercises)
@@ -233,7 +234,6 @@ private struct ExercisePickerList: View {
                 .accessibilityIdentifier("ExercisePickerAddSelectedButton")
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
-                .background(AppTheme.canvasBackground)
             }
         }
         .toolbar {
