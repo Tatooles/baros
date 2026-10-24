@@ -10,11 +10,10 @@ struct ReorderExercisesSheet: View {
     @State private var draft: WorkoutExerciseListDraft
     @State private var editMode: EditMode = .active
     @State private var revealedExerciseID: UUID?
-    @State private var showsRemovalConfirmation = false
     @State private var alert: SaveAlert?
 
     private enum SaveAlert: String, Identifiable {
-        case failure, conflict
+        case removal, failure, conflict
         var id: Self { self }
     }
 
@@ -52,6 +51,12 @@ struct ReorderExercisesSheet: View {
             .contentMargins(.top, 8, for: .scrollContent)
             .scrollContentBackground(.hidden)
             .background(AppTheme.canvasBackground.ignoresSafeArea())
+            .onTapGesture { animate { revealedExerciseID = nil } }
+            .onScrollPhaseChange { _, phase in
+                if phase == .interacting { animate { revealedExerciseID = nil } }
+            }
+            .accessibilityIdentifier("ReorderExercisesList")
+            .environment(\.editMode, $editMode)
             .overlay {
                 if draft.orderedIDs.isEmpty {
                     Text("No exercises")
@@ -60,12 +65,6 @@ struct ReorderExercisesSheet: View {
                         .accessibilityIdentifier("ReorderExercisesEmptyState")
                 }
             }
-            .onTapGesture { animate { revealedExerciseID = nil } }
-            .onScrollPhaseChange { _, phase in
-                if phase == .interacting { animate { revealedExerciseID = nil } }
-            }
-            .accessibilityIdentifier("ReorderExercisesList")
-            .environment(\.editMode, $editMode)
             .navigationTitle("Reorder Exercises")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -80,17 +79,15 @@ struct ReorderExercisesSheet: View {
                 }
             }
         }
-        .confirmationDialog(
-            "Remove Exercises?", isPresented: $showsRemovalConfirmation, titleVisibility: .visible
-        ) {
-            Button("Remove and Save", role: .destructive, action: saveChanges)
-                .accessibilityIdentifier("ConfirmReorderExerciseRemovalsButton")
-            Button("Keep Editing", role: .cancel) {}
-        } message: {
-            Text(draft.removalMessage)
-        }
         .alert(item: $alert) { alert in
             switch alert {
+            case .removal:
+                Alert(
+                    title: Text("Remove Exercises?"),
+                    message: Text(draft.removalMessage),
+                    primaryButton: .destructive(Text("Remove and Save"), action: saveChanges),
+                    secondaryButton: .cancel(Text("Keep Editing"))
+                )
             case .failure:
                 Alert(
                     title: Text("Couldn't Save Changes"),
@@ -117,7 +114,7 @@ struct ReorderExercisesSheet: View {
         revealedExerciseID = nil
         guard validateBaseline() else { return }
         if draft.needsRemovalConfirmation {
-            showsRemovalConfirmation = true
+            alert = .removal
         } else {
             saveChanges()
         }
