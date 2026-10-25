@@ -2060,6 +2060,40 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(waitForAbsence(action, timeout: 3))
         XCTAssertEqual(grip.frame.minX, gripBefore.minX, accuracy: 1)
         XCTAssertEqual(card.frame.width, cardBefore.width, accuracy: 1)
+
+        // A swipe also reveals Remove, but even a long one never removes the exercise.
+        let swipeStart = card.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
+        swipeStart.press(forDuration: 0.05, thenDragTo: swipeStart.withOffset(CGVector(dx: -320, dy: 0)))
+        XCTAssertTrue(action.waitForExistence(timeout: 3))
+        XCTAssertTrue(card.exists)
+        XCTAssertEqual(card.frame.width, cardBefore.width, accuracy: 1)
+    }
+
+    @MainActor
+    func testReorderRemovalAtAccessibilityTextSize() {
+        let app = makeApp(extraArguments: [
+            "--uitest-seed-long-name-active-workout",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL",
+        ])
+        func capture(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        app.launch()
+        openReorderSheet(in: app)
+        capture("Accessibility size at rest")
+        revealReorderRemoval(named: "Pull-Up", in: app)
+        capture("Accessibility size revealed")
+        reorderRemoval(named: "Pull-Up", revealed: true, in: app).tap()
+        XCTAssertTrue(waitForAbsence(reorderRemoval(named: "Pull-Up", revealed: false, in: app), timeout: 3))
+        app.buttons["DoneReorderExercisesButton"].tap()
+        XCTAssertEqual(reorderRemovalSummary(in: app), ["Pull-Up, 1 logged set"])
+        capture("Accessibility size confirmation")
+        XCTAssertTrue(app.buttons["Remove and Save"].isHittable)
+        app.buttons["Keep Editing"].tap()
+        XCTAssertTrue(waitForAbsence(app.buttons["Remove and Save"], timeout: 3))
     }
 
     @MainActor
@@ -2076,7 +2110,7 @@ final class BarosUITests: XCTestCase {
         capture("Reorder controls")
         revealReorderRemoval(named: "Back Squat", in: app)
         capture("Revealed Remove action")
-        // A tap elsewhere first closes the native reveal; the next minus tap opens that row.
+        // A tap elsewhere first closes the open row; the next minus tap opens that row.
         reorderRemoval(named: "Barbell Row", revealed: false, in: app).tap()
         XCTAssertFalse(reorderRemoval(named: "Back Squat", revealed: true, in: app).exists)
         revealReorderRemoval(named: "Barbell Row", in: app)
@@ -2086,9 +2120,7 @@ final class BarosUITests: XCTestCase {
         reorderRemoval(named: "Back Squat", revealed: true, in: app).tap()
         app.buttons["DoneReorderExercisesButton"].tap()
         XCTAssertTrue(app.buttons["Remove and Save"].waitForExistence(timeout: 3))
-        let confirmation = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Back Squat — 5 logged sets")).firstMatch
-        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
-        XCTAssertTrue(confirmation.label.contains("Barbell Row — 5 logged sets"))
+        XCTAssertEqual(reorderRemovalSummary(in: app), ["Back Squat, 5 logged sets", "Barbell Row, 5 logged sets"])
         capture("Combined removal confirmation")
         app.buttons["Keep Editing"].tap()
         XCTAssertFalse(reorderRemoval(named: "Back Squat", revealed: false, in: app).exists)
@@ -2103,6 +2135,59 @@ final class BarosUITests: XCTestCase {
         app.buttons["Remove and Save"].tap()
         XCTAssertTrue(app.buttons["ExerciseHeader-0"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["ExerciseHeader-0"].label.contains("Barbell Row"))
+    }
+
+    @MainActor
+    func testReorderLongExerciseNamesKeepControlsClearAndConfirmationReadable() {
+        let app = makeApp(extraArguments: ["--uitest-seed-long-name-active-workout"])
+        func capture(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        app.launch()
+        openReorderSheet(in: app)
+        let name = "Slingshot Pause Bench Press"
+        let minus = reorderRemoval(named: name, revealed: false, in: app)
+        let card = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "ReorderExerciseRow-", name)
+        ).firstMatch
+        let grip = app.buttons["Reorder \(name)"].firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 3))
+        // The minus hit target abuts the card; its 22pt glyph is centered within it.
+        XCTAssertGreaterThanOrEqual(card.frame.minX - minus.frame.midX, 19, "The minus must not touch the card")
+        capture("Long names at rest")
+
+        revealReorderRemoval(named: name, in: app)
+        let action = reorderRemoval(named: name, revealed: true, in: app)
+        XCTAssertEqual(action.frame.midY, card.frame.midY, accuracy: 2, "Remove centers on the card")
+        XCTAssertGreaterThan(action.frame.minX, grip.frame.maxX - 1, "Remove stays trailing of the grip")
+        capture("Long name revealed")
+        action.tap()
+        XCTAssertTrue(waitForAbsence(card, timeout: 3))
+
+        revealReorderRemoval(named: "Pull-Up", in: app)
+        reorderRemoval(named: "Pull-Up", revealed: true, in: app).tap()
+        revealReorderRemoval(named: "Cable Overhead Triceps Extension", in: app)
+        reorderRemoval(named: "Cable Overhead Triceps Extension", revealed: true, in: app).tap()
+        capture("Long names after removals")
+
+        app.buttons["DoneReorderExercisesButton"].tap()
+        let save = app.buttons["Remove and Save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 3))
+        XCTAssertEqual(reorderRemovalSummary(in: app), [
+            "\(name), 2 logged sets", "Pull-Up, 1 logged set", "Cable Overhead Triceps Extension, 1 logged set",
+        ])
+        capture("Long name confirmation")
+        app.buttons["Keep Editing"].tap()
+        XCTAssertTrue(waitForAbsence(save, timeout: 3))
+        XCTAssertFalse(reorderRemoval(named: "Pull-Up", revealed: false, in: app).exists)
+        app.buttons["DoneReorderExercisesButton"].tap()
+        XCTAssertTrue(save.waitForExistence(timeout: 3))
+        save.tap()
+        XCTAssertTrue(app.buttons["ExerciseHeader-0"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ExerciseHeader-0"].label.contains("Incline Dumbbell Press"))
     }
 
     @MainActor
@@ -2157,14 +2242,14 @@ final class BarosUITests: XCTestCase {
     @MainActor
     private func reorderRemoval(named name: String, revealed: Bool, in app: XCUIApplication) -> XCUIElement {
         let cell = app.tables["ReorderExercisesList"].cells.matching(NSPredicate(format: "label == %@", name)).firstMatch
-        guard revealed else { return cell.buttons["Remove \(name)"].firstMatch }
-        // UIKit hosts the trailing action beside the cell, rather than inside
-        // its accessibility subtree. Associate it with the row by its bounds.
-        let action = app.tables["ReorderExercisesList"].buttons["Remove"].firstMatch
-        if action.waitForExistence(timeout: 1), cell.exists, cell.frame.intersects(action.frame) {
-            return action
-        }
-        return cell.buttons["Remove"].firstMatch
+        return cell.buttons[revealed ? "Remove" : "Remove \(name)"].firstMatch
+    }
+
+    @MainActor
+    private func reorderRemovalSummary(in app: XCUIApplication) -> [String] {
+        let rows = app.descendants(matching: .any).matching(identifier: "ReorderRemovalSummaryRow")
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 3))
+        return rows.allElementsBoundByIndex.map(\.label)
     }
 
     @MainActor

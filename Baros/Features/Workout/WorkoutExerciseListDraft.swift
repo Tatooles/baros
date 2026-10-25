@@ -53,6 +53,13 @@ struct WorkoutExerciseListSnapshot: Equatable {
         }
 
         var loggedSetCount: Int { sets.filter(\.hasLoggedValues).count }
+        var loggedSetsText: String {
+            switch loggedSetCount {
+            case 0: "No logged sets"
+            case 1: "1 logged set"
+            case let count: "\(count) logged sets"
+            }
+        }
         var progressText: String { "\(sets.filter(\.isCompleted).count)/\(sets.count) sets" }
         var accessibilityValue: String {
             [metadata, progressText].compactMap { $0 }.joined(separator: ", ")
@@ -94,12 +101,4 @@ struct WorkoutExerciseListDraft {
     }
 
     var needsRemovalConfirmation: Bool { removedExercises.contains { $0.loggedSetCount > 0 } }
-
-    var removalMessage: String {
-        let details = removedExercises.map { exercise in
-            let count = exercise.loggedSetCount
-            return "\(exercise.name) — \(count) logged \(count == 1 ? "set" : "sets")"
-        }.joined(separator: "\n")
-        return "These exercises and their sets will be removed from this workout:\n\n\(details)"
-    }
 }

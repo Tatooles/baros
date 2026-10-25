@@ -14,6 +14,7 @@ enum UITestFixtureSeeder {
         "--uitest-seed-matching-exercise-performance-workouts"
     static let largeActiveWorkoutArgument = "--uitest-seed-large-active-workout"
     static let largeActiveWorkoutTitle = "Performance Workout 10x5"
+    static let longNameActiveWorkoutArgument = "--uitest-seed-long-name-active-workout"
     static let homeRingHistoryArgument = "--uitest-seed-home-ring-history"
     /// Seeds fixtures for an owner who is no longer signed in, as after an expired session.
     static let signedOutOwnerArgument = "--uitest-seed-signed-out-owner"
@@ -99,6 +100,10 @@ enum UITestFixtureSeeder {
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context
             )
+        }
+
+        if arguments.contains(longNameActiveWorkoutArgument) {
+            try seedLongNameActiveWorkout(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         }
 
         if arguments.contains("--uitest-rest-30-seconds"),
@@ -560,6 +565,64 @@ enum UITestFixtureSeeder {
             context.insert(completedSession)
         }
 
+        try context.save()
+    }
+
+    /// Real-world exercise names long enough to wrap, with completed, entered-only and blank sets.
+    static func seedLongNameActiveWorkout(ownerTokenIdentifier: String?, context: ModelContext) throws {
+        let id = stableUUID("00000327-0000-4000-8000-000000000001")
+        guard try !context.fetch(FetchDescriptor<WorkoutSession>()).contains(where: { $0.id == id }) else { return }
+        let library = try context.fetch(FetchDescriptor<Exercise>()).filter { $0.isVisible(to: ownerTokenIdentifier) }
+        // (library seed, displayed name, completed sets, entered-but-unchecked sets)
+        let plan: [(String, String, Int, Int)] = [
+            ("bench-press", "Slingshot Pause Bench Press", 2, 0),
+            ("pull-up", "Pull-Up", 0, 1),
+            ("incline-dumbbell-press", "Incline Dumbbell Press", 0, 0),
+            ("dumbbell-row", "Chest Supported Row", 0, 0),
+            ("triceps-pushdown", "Cable Overhead Triceps Extension", 1, 0),
+            ("face-pull", "Single-Arm Cable Lateral Raise", 0, 0),
+        ]
+        let startedAt = Date.now
+        let exercises = plan.enumerated().compactMap { index, entry -> LoggedExercise? in
+            let (seed, name, completed, entered) = entry
+            guard let exercise = library.first(where: { $0.seedIdentifier == seed }) else { return nil }
+            let sets = (0..<3).map { setIndex in
+                let isCompleted = setIndex < completed
+                let hasValues = setIndex < completed + entered
+                return LoggedSet(
+                    id: stableUUID("00000327-set-\(index)-\(setIndex)"),
+                    orderIndex: setIndex,
+                    weight: hasValues ? 135 : nil,
+                    reps: hasValues ? 8 : nil,
+                    isCompleted: isCompleted,
+                    completedAt: isCompleted ? startedAt : nil,
+                    createdAt: startedAt,
+                    updatedAt: startedAt
+                )
+            }
+            return LoggedExercise(
+                id: stableUUID("00000327-exercise-\(index)"),
+                orderIndex: index,
+                exercise: exercise,
+                exerciseSnapshotName: name,
+                exerciseSnapshotEquipmentRaw: exercise.equipmentRaw,
+                exerciseSnapshotPrimaryMuscleGroupRaw: exercise.primaryMuscleGroupRaw,
+                createdAt: startedAt,
+                updatedAt: startedAt,
+                sets: sets
+            )
+        }
+        context.insert(WorkoutSession(
+            id: id,
+            title: "Upper",
+            startedAt: startedAt,
+            status: .active,
+            source: .blank,
+            createdAt: startedAt,
+            updatedAt: startedAt,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier,
+            loggedExercises: exercises
+        ))
         try context.save()
     }
 

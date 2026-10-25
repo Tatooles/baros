@@ -17,7 +17,7 @@ final class WorkoutExerciseListTests: XCTestCase {
         draft.orderedIDs.removeFirst()
         XCTAssertTrue(draft.needsRemovalConfirmation)
         XCTAssertEqual(draft.removedExercises[0].loggedSetCount, 3)
-        XCTAssertTrue(draft.removalMessage.contains("Bench Press — 3 logged sets"))
+        XCTAssertEqual(draft.removedExercises[0].loggedSetsText, "3 logged sets")
         XCTAssertEqual(session.sortedLoggedExercises.count, 3, "A draft cannot mutate the live workout")
 
         draft = WorkoutExerciseListDraft(session: session)
