@@ -2076,7 +2076,9 @@ final class BarosUITests: XCTestCase {
         capture("Reorder controls")
         revealReorderRemoval(named: "Back Squat", in: app)
         capture("Revealed Remove action")
-        // Revealing another row closes the first; only one destructive action is visible.
+        // A tap elsewhere first closes the native reveal; the next minus tap opens that row.
+        reorderRemoval(named: "Barbell Row", revealed: false, in: app).tap()
+        XCTAssertFalse(reorderRemoval(named: "Back Squat", revealed: true, in: app).exists)
         revealReorderRemoval(named: "Barbell Row", in: app)
         XCTAssertFalse(reorderRemoval(named: "Back Squat", revealed: true, in: app).exists)
         reorderRemoval(named: "Barbell Row", revealed: true, in: app).tap()
