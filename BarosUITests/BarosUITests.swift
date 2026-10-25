@@ -2154,10 +2154,7 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     private func reorderRemoval(named name: String, revealed: Bool, in app: XCUIApplication) -> XCUIElement {
-        let card = app.descendants(matching: .any).matching(
-            NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "ReorderExerciseRow-", name)
-        ).firstMatch
-        let cell = app.tables["ReorderExercisesList"].cells.containing(.any, identifier: card.identifier).firstMatch
+        let cell = app.tables["ReorderExercisesList"].cells.matching(NSPredicate(format: "label == %@", name)).firstMatch
         guard revealed else { return cell.buttons["Remove \(name)"].firstMatch }
         // UIKit hosts the trailing action beside the cell, rather than inside
         // its accessibility subtree. Associate it with the row by its bounds.
