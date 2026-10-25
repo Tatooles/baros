@@ -30,7 +30,6 @@ struct WorkoutSessionView: View {
     @State private var isAddExercisePresented = false
     @State private var swappingLoggedExercise: LoggedExercise?
     @State private var selectedHistoryExercise: LoggedExercise?
-    @State private var pendingFocusedField: WorkoutField?
     @State private var pendingScrollTarget: UUID?
     @State private var recentlyAddedExerciseID: UUID?
     @State private var collapsedExerciseIDs: Set<UUID> = []
@@ -283,7 +282,6 @@ struct WorkoutSessionView: View {
         .sheet(isPresented: $isAddExercisePresented) {
             AddExerciseSheet(session: session, engine: engine) { loggedExercise in
                 pendingScrollTarget = loggedExercise.id
-                pendingFocusedField = loggedExercise.sortedSets.first.map { .setWeight($0.id) }
             }
         }
         .sheet(item: $swappingLoggedExercise) { loggedExercise in
@@ -372,13 +370,11 @@ struct WorkoutSessionView: View {
 
     private func completeExerciseSelection(scrollProxy: ScrollViewProxy) {
         let scrollTarget = pendingScrollTarget
-        let focusedField = pendingFocusedField
         pendingScrollTarget = nil
-        pendingFocusedField = nil
         recentlyAddedExerciseID = scrollTarget
 
         focusTransitionCoordinator.transition(
-            to: focusedField,
+            to: nil,
             commit: setInputRegistry.commit,
             assign: { self.focusedField = $0 }
         )

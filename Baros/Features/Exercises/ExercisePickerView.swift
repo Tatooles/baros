@@ -254,6 +254,8 @@ private struct ExercisePickerList: View {
         }
         .navigationDestination(isPresented: $isCreatingExercise) {
             ExerciseEditorView(initialName: creationName) { exercise in
+                searchText = ""
+                isSearchPresented = false
                 if mode.isAddExercise {
                     selectedExerciseIDs.append(exercise.id)
                 } else {

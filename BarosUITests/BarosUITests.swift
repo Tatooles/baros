@@ -1715,7 +1715,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testAddingExerciseFocusesFirstSetButAddingSetLeavesFocusAlone() {
+    func testAddingExerciseLeavesKeyboardClosedUntilUserStartsEditing() {
         let app = makeApp()
         app.launch()
 
@@ -1731,10 +1731,7 @@ final class BarosUITests: XCTestCase {
 
         let firstWeightField = app.textFields["SetWeightField-0-0"]
         XCTAssertTrue(firstWeightField.waitForExistence(timeout: 3))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
-
-        app.buttons["DismissKeyboardButton"].tap()
-        XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
+        XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
 
         // Tap inside the visible rounded field, but outside its centered text.
         // The entire field surface should focus the input, not just the glyphs.
@@ -1796,7 +1793,12 @@ final class BarosUITests: XCTestCase {
         self.add(searchScreenshot)
         XCTAssertLessThanOrEqual(add.frame.maxY, app.keyboards.firstMatch.frame.minY)
         add.tap()
-        dismissKeyboardIfNeeded(in: app)
+        XCTAssertTrue(app.buttons["ExerciseHeader-0"].waitForExistence(timeout: 3))
+        XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
+        let addedScreenshot = XCTAttachment(screenshot: app.screenshot())
+        addedScreenshot.name = "Added exercises without automatic keyboard"
+        addedScreenshot.lifetime = .keepAlways
+        self.add(addedScreenshot)
         assertActiveWorkoutExerciseOrder(["Back Squat", "Bench Press", "Overhead Press"], in: app)
     }
 
@@ -1857,17 +1859,25 @@ final class BarosUITests: XCTestCase {
         app.buttons["ExercisePickerRow-Bench Press-Barbell"].tap()
         let search = app.searchFields.firstMatch
         search.tap()
-        search.typeText("New Selection Press")
+        search.typeText("A New Selection Press")
         app.buttons["ExercisePickerCreateExerciseFromSearchButton"].tap()
         app.buttons["ExerciseEditorSaveButton"].tap()
-        let created = app.buttons["ExercisePickerRow-New Selection Press-Barbell"]
+        let created = app.buttons["ExercisePickerRow-A New Selection Press-Barbell"]
         XCTAssertTrue(created.waitForExistence(timeout: 3))
         XCTAssertTrue(created.isSelected)
+        XCTAssertNotEqual(search.value as? String, "A New Selection Press")
+        XCTAssertTrue(app.buttons["ExercisePickerRow-Back Squat-Barbell"].exists)
+        XCTAssertTrue(app.buttons["ExercisePickerRow-Bench Press-Barbell"].isSelected)
+        XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
+        let clearedSearchScreenshot = XCTAttachment(screenshot: app.screenshot())
+        clearedSearchScreenshot.name = "Creation clears search and preserves picks"
+        clearedSearchScreenshot.lifetime = .keepAlways
+        self.add(clearedSearchScreenshot)
         let add = app.buttons["ExercisePickerAddSelectedButton"]
         XCTAssertEqual(add.label, "Add 2 Exercises")
         add.tap()
-        dismissKeyboardIfNeeded(in: app)
-        assertActiveWorkoutExerciseOrder(["Bench Press", "New Selection Press"], in: app)
+        XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
+        assertActiveWorkoutExerciseOrder(["Bench Press", "A New Selection Press"], in: app)
     }
 
     @MainActor
@@ -1972,7 +1982,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testAddingExerciseScrollsNewExerciseToTopWhileEditing() {
+    func testAddingExerciseRevealsNewExerciseWithoutOpeningKeyboard() {
         let app = makeApp()
         app.launch()
 
@@ -1982,15 +1992,9 @@ final class BarosUITests: XCTestCase {
         addExercise("ExercisePickerRow-Back Squat-Barbell", in: app)
         dismissKeyboardIfNeeded(in: app)
         addExercise("ExercisePickerRow-Bench Press-Barbell", in: app)
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
         let addedExerciseHeader = app.buttons["ExerciseHeader-1"]
         XCTAssertTrue(addedExerciseHeader.waitForExistence(timeout: 3))
-        XCTAssertTrue(
-            waitForElement(addedExerciseHeader, maxYOrigin: 150, timeout: 3),
-            "Expected ExerciseHeader-1 to scroll near the top, got minY \(addedExerciseHeader.frame.minY)"
-        )
-
-        dismissKeyboardIfNeeded(in: app)
         XCTAssertTrue(addedExerciseHeader.isHittable)
     }
 
@@ -2151,6 +2155,8 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(app.alerts["Couldn't Add Exercises"].waitForExistence(timeout: 3))
         app.alerts.buttons["OK"].tap()
+        search.tap()
+        search.typeText("Created Recovery Press")
         let created = app.buttons["ExercisePickerRow-Created Recovery Press-Barbell"]
         XCTAssertTrue(created.waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["ExerciseEditorSaveButton"].exists)
