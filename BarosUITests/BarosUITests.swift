@@ -2037,6 +2037,32 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testReorderRevealMovesGripWithCardWithoutResizing() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        app.launch()
+        openReorderSheet(in: app)
+        let card = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "ReorderExerciseRow-", "Back Squat")
+        ).firstMatch
+        let grip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@", "Reorder", "Back Squat")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 3))
+        XCTAssertTrue(grip.waitForExistence(timeout: 3))
+        let cardBefore = card.frame
+        let gripBefore = grip.frame
+        revealReorderRemoval(named: "Back Squat", in: app)
+        let action = reorderRemoval(named: "Back Squat", revealed: true, in: app)
+        XCTAssertLessThan(grip.frame.minX, gripBefore.minX - 40, "The grip must slide with the exercise")
+        XCTAssertEqual(card.frame.minX - cardBefore.minX, grip.frame.minX - gripBefore.minX, accuracy: 1)
+        XCTAssertEqual(card.frame.width, cardBefore.width, accuracy: 1, "Reveal translates the row rather than squeezing it")
+        XCTAssertEqual(card.frame.height, cardBefore.height, accuracy: 1, "The row must not reflow during reveal")
+        XCTAssertGreaterThan(action.frame.maxX, grip.frame.maxX, "Remove belongs at the far trailing edge")
+        card.tap()
+        XCTAssertTrue(waitForAbsence(action, timeout: 3))
+        XCTAssertEqual(grip.frame.minX, gripBefore.minX, accuracy: 1)
+        XCTAssertEqual(card.frame.width, cardBefore.width, accuracy: 1)
+    }
+
+    @MainActor
     func testReorderRemovalsAreDraftOnlyAndConfirmUncheckedEnteredValuesTogether() {
         let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
         func capture(_ name: String) {
@@ -2128,15 +2154,24 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     private func reorderRemoval(named name: String, revealed: Bool, in app: XCUIApplication) -> XCUIElement {
-        let prefix = revealed ? "ConfirmRemoveExercise-" : "RevealRemoveExercise-"
-        let label = revealed ? "Remove \(name) from this workout" : "Remove \(name)"
-        return app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", prefix, label)).firstMatch
+        let card = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "ReorderExerciseRow-", name)
+        ).firstMatch
+        let cell = app.tables["ReorderExercisesList"].cells.containing(.any, identifier: card.identifier).firstMatch
+        guard revealed else { return cell.buttons["Remove \(name)"].firstMatch }
+        // UIKit hosts the trailing action beside the cell, rather than inside
+        // its accessibility subtree. Associate it with the row by its bounds.
+        let action = app.tables["ReorderExercisesList"].buttons["Remove"].firstMatch
+        if action.waitForExistence(timeout: 1), cell.exists, cell.frame.intersects(action.frame) {
+            return action
+        }
+        return cell.buttons["Remove"].firstMatch
     }
 
     @MainActor
     private func revealReorderRemoval(named name: String, in app: XCUIApplication) {
         let minus = reorderRemoval(named: name, revealed: false, in: app)
-        XCTAssertTrue(minus.waitForExistence(timeout: 3))
+        XCTAssertTrue(minus.waitForExistence(timeout: 3), app.tables["ReorderExercisesList"].debugDescription)
         minus.tap()
         XCTAssertTrue(reorderRemoval(named: name, revealed: true, in: app).waitForExistence(timeout: 3))
     }

@@ -4,12 +4,9 @@ import SwiftUI
 struct ReorderExercisesSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
     @State private var draft: WorkoutExerciseListDraft
-    @State private var editMode: EditMode = .active
-    @State private var revealedExerciseID: UUID?
     @State private var alert: SaveAlert?
 
     private enum SaveAlert: String, Identifiable {
@@ -25,38 +22,12 @@ struct ReorderExercisesSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(draft.exercises) { exercise in
-                    ReorderExerciseRow(
-                        exercise: exercise,
-                        isRevealed: revealedExerciseID == exercise.id,
-                        reveal: { animate { revealedExerciseID = exercise.id } },
-                        collapse: { animate { revealedExerciseID = nil } },
-                        remove: {
-                            animate {
-                                draft.orderedIDs.removeAll { $0 == exercise.id }
-                                revealedExerciseID = nil
-                            }
-                        }
-                    )
-                    .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 6))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                }
-                .onMove { source, destination in
-                    revealedExerciseID = nil
-                    draft.orderedIDs.move(fromOffsets: source, toOffset: destination)
-                }
-            }
-            .contentMargins(.top, 8, for: .scrollContent)
-            .scrollContentBackground(.hidden)
+            ReorderExercisesList(
+                exercises: draft.exercises,
+                reorder: { draft.orderedIDs = $0 },
+                remove: { id in draft.orderedIDs.removeAll { $0 == id } }
+            )
             .background(AppTheme.canvasBackground.ignoresSafeArea())
-            .onTapGesture { animate { revealedExerciseID = nil } }
-            .onScrollPhaseChange { _, phase in
-                if phase == .interacting { animate { revealedExerciseID = nil } }
-            }
-            .accessibilityIdentifier("ReorderExercisesList")
-            .environment(\.editMode, $editMode)
             .overlay {
                 if draft.orderedIDs.isEmpty {
                     Text("No exercises")
@@ -106,12 +77,7 @@ struct ReorderExercisesSheet: View {
         .presentationDragIndicator(.visible)
     }
 
-    private func animate(_ changes: () -> Void) {
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.25), changes)
-    }
-
     private func prepareToSave() {
-        revealedExerciseID = nil
         guard validateBaseline() else { return }
         if draft.needsRemovalConfirmation {
             alert = .removal
