@@ -207,6 +207,8 @@ private struct ExercisePickerList: View {
             placement: mode.isAddExercise ? .navigationBarDrawer(displayMode: .always) : .automatic,
             prompt: "Search exercises"
         )
+        // Keep search dismissal from changing navigation height during the editor's return transition.
+        .searchPresentationToolbarBehavior(mode.isAddExercise ? .avoidHidingContent : .automatic)
         .onChange(of: isSearchPresented) { _, isPresented in
             guard mode.isAddExercise else { return }
             UIHangContextObservability.shared.exerciseSearchEditingChanged(isEditing: isPresented)
