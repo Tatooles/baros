@@ -103,7 +103,7 @@ struct ExerciseCardView: View {
 
                         if canReorder {
                             Button(action: onReorderExercises) {
-                                Label("Reorder Exercises", systemImage: "arrow.up.arrow.down")
+                                Label("Edit Workout", systemImage: "slider.horizontal.3")
                             }
                             .accessibilityIdentifier("ReorderExercisesButton-\(exerciseIndex)")
                         }

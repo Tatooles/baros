@@ -6,6 +6,7 @@ struct ReorderExercisesList: View {
     let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
     let reorder: ([UUID]) -> Void
     let remove: (Set<UUID>) -> Void
+    var add: () -> Void = {}
 
     var body: some View {
         List {
@@ -28,6 +29,20 @@ struct ReorderExercisesList: View {
             .onDelete { offsets in
                 remove(Set(offsets.map { exercises[$0].id }))
             }
+            Button(action: add) {
+                Label("Add Exercises", systemImage: "plus")
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(AppTheme.brandAccentMuted, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("EditWorkoutAddExercisesButton")
+            .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 12, trailing: 20))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .moveDisabled(true)
+            .deleteDisabled(true)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)

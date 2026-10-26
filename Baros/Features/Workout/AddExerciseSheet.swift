@@ -29,16 +29,64 @@ struct AddExerciseSheet: View {
     @Bindable var engine: ActiveWorkoutEngine
     var onAddExercise: (LoggedExercise) -> Void = { _ in }
     @State private var showsAddError = false
+    @State private var insertionIndex: Int
+
+    init(session: WorkoutSession, engine: ActiveWorkoutEngine, onAddExercise: @escaping (LoggedExercise) -> Void = { _ in }) {
+        self.session = session
+        self.engine = engine
+        self.onAddExercise = onAddExercise
+        _insertionIndex = State(initialValue: defaultExerciseInsertionIndex(in: WorkoutExerciseListSnapshot(session: session).exercises))
+    }
+
+    private var placementLine: some View {
+        Menu {
+            Text("Add to workout")
+            Picker("Add to workout", selection: $insertionIndex) {
+                Text("At the start").tag(0)
+                ForEach(Array(session.sortedLoggedExercises.dropLast().enumerated()), id: \.element.id) { index, exercise in
+                    Text("After \(exercise.exerciseSnapshotName)").tag(index + 1)
+                }
+                Text("At the end").tag(session.sortedLoggedExercises.count)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                if insertionIndex == 0 {
+                    Text("Adds at the start")
+                } else if insertionIndex >= session.sortedLoggedExercises.count {
+                    Text("Adds at the end")
+                } else {
+                    Text("Adds after")
+                    Text(session.sortedLoggedExercises[insertionIndex - 1].exerciseSnapshotName)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .lineLimit(1)
+                }
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+            }
+            .font(.subheadline)
+            .foregroundStyle(AppTheme.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(AppTheme.groupedSurface, in: Capsule())
+        }
+        .menuOrder(.fixed)
+        .accessibilityLabel("Add to workout")
+        .accessibilityIdentifier("ExerciseInsertionMenu")
+    }
 
     var body: some View {
         NavigationStack {
             ExercisePickerView(
-                mode: .add(existingExerciseIDs: Set(session.sortedLoggedExercises.compactMap { $0.exercise?.id }))
+                mode: .add(existingExerciseIDs: Set(session.sortedLoggedExercises.compactMap { $0.exercise?.id })),
+                placementAccessory: session.sortedLoggedExercises.isEmpty ? nil : AnyView(placementLine)
             ) { exercises in
                 do {
                     let loggedExercises = try engine.addExercises(
                         exercises,
                         to: session,
+                        insertionIndex: insertionIndex,
                         ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                         context: modelContext
                     )

@@ -40,6 +40,7 @@ struct WorkoutExerciseListSnapshot: Equatable {
         let referenceNotes: String?
         let updatedAt: Date
         let sets: [SetState]
+        var isNew = false
 
         init(_ exercise: LoggedExercise) {
             id = exercise.id
@@ -50,6 +51,18 @@ struct WorkoutExerciseListSnapshot: Equatable {
             referenceNotes = exercise.referenceNotes
             updatedAt = exercise.updatedAt
             sets = exercise.sortedSets.map(SetState.init)
+        }
+
+        init(addition: WorkoutExerciseListDraft.Addition) {
+            id = addition.id
+            name = addition.exercise.name
+            metadata = addition.exercise.equipment.displayName
+            orderIndex = 0
+            notes = ""
+            referenceNotes = nil
+            updatedAt = .distantPast
+            sets = []
+            isNew = true
         }
 
         var loggedSetCount: Int { sets.filter(\.hasLoggedValues).count }
@@ -81,7 +94,14 @@ struct WorkoutExerciseListSnapshot: Equatable {
     }
 }
 
+/// Throwaway insertion prototype: pending additions never enter SwiftData before Done.
 struct WorkoutExerciseListDraft {
+    struct Addition {
+        let id = UUID()
+        let exercise: Exercise
+    }
+    var additions: [Addition] = []
+
     let baseline: WorkoutExerciseListSnapshot
     var orderedIDs: [UUID]
 
@@ -91,7 +111,8 @@ struct WorkoutExerciseListDraft {
     }
 
     var exercises: [WorkoutExerciseListSnapshot.ExerciseState] {
-        let byID = Dictionary(uniqueKeysWithValues: baseline.exercises.map { ($0.id, $0) })
+        let pending = additions.map(WorkoutExerciseListSnapshot.ExerciseState.init(addition:))
+        let byID = Dictionary(uniqueKeysWithValues: (baseline.exercises + pending).map { ($0.id, $0) })
         return orderedIDs.compactMap { byID[$0] }
     }
 
@@ -101,4 +122,12 @@ struct WorkoutExerciseListDraft {
     }
 
     var needsRemovalConfirmation: Bool { removedExercises.contains { $0.loggedSetCount > 0 } }
+}
+
+/// The most recently touched logged set chooses the insertion anchor.
+func defaultExerciseInsertionIndex(in exercises: [WorkoutExerciseListSnapshot.ExerciseState]) -> Int {
+    let latest = exercises.enumerated().flatMap { index, exercise in
+        exercise.sets.filter(\.hasLoggedValues).map { (index: index, date: $0.completedAt ?? $0.updatedAt) }
+    }.max { $0.date < $1.date }
+    return latest.map { $0.index + 1 } ?? exercises.count
 }

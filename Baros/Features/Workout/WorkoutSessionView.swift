@@ -60,7 +60,7 @@ struct WorkoutSessionView: View {
 
     var body: some View {
         let sortedLoggedExercises = cachedSortedLoggedExercises ?? session.sortedLoggedExercises
-        let canReorderExercises = sortedLoggedExercises.count >= 2
+        let canReorderExercises = sortedLoggedExercises.count >= 1
 
         ScrollViewReader { scrollProxy in
             ScrollView(showsIndicators: false) {

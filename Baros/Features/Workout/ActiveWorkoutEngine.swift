@@ -172,11 +172,12 @@ final class ActiveWorkoutEngine {
         )[0]
     }
 
-    /// Appends a picker selection in tap order, saving the whole group together.
+    /// Inserts a picker selection in tap order, saving the whole group together.
     @discardableResult
     func addExercises(
         _ exercises: [Exercise],
         to session: WorkoutSession,
+        insertionIndex: Int? = nil,
         ownerTokenIdentifier: String? = nil,
         context: ModelContext,
         save: (ModelContext) throws -> Void = { try $0.save() }
@@ -185,7 +186,7 @@ final class ActiveWorkoutEngine {
         let additions = exercises.filter { seen.insert($0.id).inserted }
         guard !additions.isEmpty else { return [] }
         return try insertExercises(
-            additions, to: session, ownerTokenIdentifier: ownerTokenIdentifier,
+            additions, to: session, insertionIndex: insertionIndex, ownerTokenIdentifier: ownerTokenIdentifier,
             context: context, save: save
         )
     }
@@ -193,17 +194,25 @@ final class ActiveWorkoutEngine {
     private func insertExercises(
         _ exercises: [Exercise],
         to session: WorkoutSession,
+        insertionIndex: Int? = nil,
         ownerTokenIdentifier: String?,
         context: ModelContext,
         save: (ModelContext) throws -> Void
     ) throws -> [LoggedExercise] {
+        guard !exercises.isEmpty else { return [] }
         // Resolve history before inserting anything, so a fetch failure cannot leave a partial group.
         let history = try context.fetch(FetchDescriptor<WorkoutSession>())
         let setKinds = exercises.map {
             initialSetKinds(for: $0, ownerTokenIdentifier: ownerTokenIdentifier, sessions: history)
         }
         let originalSessionUpdatedAt = session.updatedAt
-        let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
+        let existing = session.sortedLoggedExercises
+        let originalOrders = existing.map { (exercise: $0, index: $0.orderIndex, updatedAt: $0.updatedAt) }
+        let nextIndex = min(max(insertionIndex ?? existing.count, 0), existing.count)
+        for (index, exercise) in existing.enumerated() where index >= nextIndex {
+            exercise.orderIndex = index + exercises.count
+            exercise.touch()
+        }
         var additions: [LoggedExercise] = []
         for (offset, exercise) in exercises.enumerated() {
             let loggedExercise = LoggedExercise(orderIndex: nextIndex + offset, exercise: exercise)
@@ -239,6 +248,10 @@ final class ActiveWorkoutEngine {
                     context.delete(set)
                 }
                 context.delete(loggedExercise)
+            }
+            for state in originalOrders {
+                state.exercise.orderIndex = state.index
+                state.exercise.updatedAt = state.updatedAt
             }
             session.updatedAt = originalSessionUpdatedAt
             throw error
@@ -358,6 +371,8 @@ final class ActiveWorkoutEngine {
         in session: WorkoutSession,
         orderedIDs: [UUID],
         baseline: WorkoutExerciseListSnapshot,
+        additions: [WorkoutExerciseListDraft.Addition] = [],
+        ownerTokenIdentifier: String? = nil,
         context: ModelContext,
         now: Date = .now,
         save: (ModelContext) throws -> Void = { try $0.save() }
@@ -366,7 +381,7 @@ final class ActiveWorkoutEngine {
         guard !session.isDeleted, session.status == .active, !hasPendingSetSave,
               baseline == WorkoutExerciseListSnapshot(session: session),
               remainingIDs.count == orderedIDs.count,
-              remainingIDs.isSubset(of: Set(baseline.exercises.map(\.id))) else {
+              remainingIDs.isSubset(of: Set(baseline.exercises.map(\.id) + additions.map(\.id))) else {
             throw ActiveWorkoutEngineError.invalidExerciseReorder
         }
 
@@ -374,7 +389,6 @@ final class ActiveWorkoutEngine {
         let removedExercises = visibleExercises.filter { !remainingIDs.contains($0.id) }
         let removedSets = removedExercises.flatMap(\.sortedSets)
 
-        let exercisesByID = Dictionary(uniqueKeysWithValues: visibleExercises.map { ($0.id, $0) })
         let originalSessionUpdatedAt = session.updatedAt
         let originalExerciseStates = visibleExercises.map {
             (exercise: $0, orderIndex: $0.orderIndex, updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
@@ -382,6 +396,14 @@ final class ActiveWorkoutEngine {
         let originalSetStates = removedSets.map {
             (set: $0, updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
         }
+        let pending = additions.filter { remainingIDs.contains($0.id) }
+        let inserted = try insertExercises(
+            pending.map(\.exercise), to: session, ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context, save: { _ in }
+        )
+        let exercisesByID = Dictionary(uniqueKeysWithValues:
+            visibleExercises.map { ($0.id, $0) } + zip(pending, inserted).map { ($0.0.id, $0.1) }
+        )
         var didChangeOrder = false
 
         for (index, id) in orderedIDs.enumerated() {
@@ -396,7 +418,7 @@ final class ActiveWorkoutEngine {
             }
         }
 
-        guard didChangeOrder || !removedExercises.isEmpty else { return }
+        guard didChangeOrder || !removedExercises.isEmpty || !inserted.isEmpty else { return }
         for exercise in removedExercises { exercise.markDeleted(now: now) }
         for set in removedSets { set.markDeleted(now: now) }
         session.touch(now: now)
@@ -413,6 +435,12 @@ final class ActiveWorkoutEngine {
             try save(context)
             for set in removedSets { restTimer.cancel(ifStartedBy: set.id) }
         } catch {
+            let insertedIDs = Set(inserted.map(\.id))
+            session.loggedExercises.removeAll { insertedIDs.contains($0.id) }
+            for exercise in inserted {
+                for set in exercise.sets { context.delete(set) }
+                context.delete(exercise)
+            }
             for state in originalExerciseStates {
                 state.exercise.orderIndex = state.orderIndex
                 state.exercise.updatedAt = state.updatedAt

@@ -4,9 +4,12 @@ import SwiftUI
 struct ReorderExercisesSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
     @State private var draft: WorkoutExerciseListDraft
+    @State private var showsPicker = false
+    @State private var detent: PresentationDetent = .medium
     @State private var alert: SaveAlert?
     @State private var removalConfirmation: RemovalConfirmation?
     /// Shown once the removal confirmation has finished dismissing.
@@ -34,7 +37,11 @@ struct ReorderExercisesSheet: View {
             ReorderExercisesList(
                 exercises: draft.exercises,
                 reorder: { draft.orderedIDs = $0 },
-                remove: { ids in draft.orderedIDs.removeAll(where: ids.contains) }
+                remove: { ids in draft.orderedIDs.removeAll(where: ids.contains) },
+                add: {
+                    detent = .large
+                    showsPicker = true
+                }
             )
             .background(AppTheme.canvasBackground.ignoresSafeArea())
             .overlay {
@@ -45,7 +52,16 @@ struct ReorderExercisesSheet: View {
                         .accessibilityIdentifier("ReorderExercisesEmptyState")
                 }
             }
-            .navigationTitle("Reorder Exercises")
+            .navigationDestination(isPresented: $showsPicker) {
+                ExercisePickerView(mode: .add(existingExerciseIDs: existingExerciseIDs), showsCancel: false) { exercises in
+                    let additions = exercises.map { WorkoutExerciseListDraft.Addition(exercise: $0) }
+                    let index = defaultExerciseInsertionIndex(in: draft.exercises)
+                    draft.additions.append(contentsOf: additions)
+                    draft.orderedIDs.insert(contentsOf: additions.map(\.id), at: index)
+                    showsPicker = false
+                }
+            }
+            .navigationTitle("Edit Workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -85,8 +101,14 @@ struct ReorderExercisesSheet: View {
                 )
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
+    }
+
+    private var existingExerciseIDs: Set<UUID> {
+        let remaining = Set(draft.orderedIDs)
+        return Set(session.sortedLoggedExercises.filter { remaining.contains($0.id) }.compactMap { $0.exercise?.id }
+            + draft.additions.filter { remaining.contains($0.id) }.map { $0.exercise.id })
     }
 
     private func prepareToSave() {
@@ -113,6 +135,8 @@ struct ReorderExercisesSheet: View {
         do {
             try engine.applyExerciseListChanges(
                 in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline,
+                additions: draft.additions,
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                 context: modelContext
             )
             dismiss()

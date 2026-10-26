@@ -8,6 +8,120 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testInsertPrototypeWalkthrough() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-insert-prototype"]
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        for index in 0..<4 {
+            let header = app.buttons["ExerciseHeader-\(index)"]
+            if !header.isHittable { app.swipeUp() }
+            header.tap()
+        }
+        let add = app.buttons["AddExerciseButton"]
+        if !add.isHittable { app.swipeUp() }
+        add.tap()
+        let first = app.buttons["ExercisePickerRow-Back Squat-Barbell"]
+        XCTAssertTrue(first.waitForExistence(timeout: 4))
+        first.tap()
+        app.buttons["ExercisePickerRow-Biceps Curl-Dumbbell"].tap()
+        prototypeCapture("1a-closed")
+        app.buttons["ExerciseInsertionMenu"].tap()
+        prototypeCapture("1a-menu")
+        app.buttons["After Bench Press"].tap()
+        app.buttons["ExercisePickerAddSelectedButton"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHeader-1"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["ExerciseHeader-1"].label.contains("Back Squat"))
+        XCTAssertTrue(app.buttons["ExerciseHeader-2"].label.contains("Biceps Curl"))
+        app.buttons["ExerciseHeader-1"].tap()
+        app.buttons["ExerciseHeader-2"].tap()
+        app.swipeDown()
+        prototypeCapture("1a-result")
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        app.buttons["ExerciseMenuButton-0"].tap()
+        app.buttons["ReorderExercisesButton-0"].tap()
+        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 4))
+        // Show the full draft and its footer before pushing the picker.
+        app.swipeUp()
+        prototypeCapture("2-edit")
+        app.buttons["EditWorkoutAddExercisesButton"].tap()
+        XCTAssertTrue(app.navigationBars["Add Exercises"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.buttons["ExerciseInsertionMenu"].exists)
+        prototypeCapture("2-picker")
+        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        app.buttons["ExercisePickerRow-Biceps Curl-Dumbbell"].tap()
+        app.buttons["ExercisePickerAddSelectedButton"].tap()
+        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 4))
+        prototypeCapture("2-new-rows")
+        app.buttons["DoneReorderExercisesButton"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHeader-1"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["ExerciseHeader-1"].label.contains("Back Squat"))
+        XCTAssertTrue(app.buttons["ExerciseHeader-2"].label.contains("Biceps Curl"))
+        // Compact cards make the insertion position visible in a single image.
+        for index in 0..<6 {
+            let header = app.buttons["ExerciseHeader-\(index)"]
+            if !header.isHittable { app.swipeUp() }
+            header.tap()
+        }
+        app.swipeDown()
+        prototypeCapture("2-result")
+    }
+
+    @MainActor
+    func testInsertPrototypeDraftCancelRemoveDragAndRetry() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-insert-prototype", "--uitest-fail-reorder-exercises-save-once"]
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        openReorderSheet(in: app)
+        app.tables["ReorderExercisesList"].swipeUp()
+        app.buttons["EditWorkoutAddExercisesButton"].tap()
+        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        app.buttons["ExercisePickerAddSelectedButton"].tap()
+        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 3))
+        // Pending additions disable the library row on a second visit.
+        app.buttons["EditWorkoutAddExercisesButton"].tap()
+        XCTAssertFalse(app.buttons["ExercisePickerRow-Back Squat-Barbell"].isEnabled)
+        app.navigationBars["Add Exercises"].buttons.element(boundBy: 0).tap()
+        let minus = reorderRemoval(named: "Back Squat", revealed: false, in: app)
+        XCTAssertTrue(minus.exists)
+        minus.tap()
+        XCTAssertFalse(app.tables["ReorderExercisesList"].cells.matching(NSPredicate(format: "label == %@", "Back Squat")).firstMatch.exists)
+        app.buttons["EditWorkoutAddExercisesButton"].tap()
+        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        app.buttons["ExercisePickerAddSelectedButton"].tap()
+        app.buttons["CancelReorderExercisesButton"].tap()
+        openReorderSheet(in: app)
+        XCTAssertEqual(app.tables["ReorderExercisesList"].cells.count, 4)
+        app.tables["ReorderExercisesList"].swipeUp()
+        app.buttons["EditWorkoutAddExercisesButton"].tap()
+        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        app.buttons["ExercisePickerAddSelectedButton"].tap()
+        app.buttons["Reorder Back Squat"].press(forDuration: 0.5, thenDragTo: app.buttons["Reorder Chest Supported Row"])
+        app.buttons["DoneReorderExercisesButton"].tap()
+        XCTAssertTrue(app.alerts["Couldn't Save Changes"].waitForExistence(timeout: 3))
+        app.alerts.buttons["OK"].tap()
+        XCTAssertEqual(app.tables["ReorderExercisesList"].cells.count, 5)
+        app.buttons["DoneReorderExercisesButton"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHeader-4"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ExerciseHeader-4"].label.contains("Back Squat"))
+    }
+
+    @MainActor
+    private func prototypeCapture(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        print("INSERT_PROTOTYPE_CAPTURE: \(name)")
+        // Gives the external simctl capture script a stable checkpoint.
+        Thread.sleep(forTimeInterval: 5)
+    }
+
+    @MainActor
     func testMinimizedAccessoryShowsRestCountdownFinishedWindowThenElapsed() {
         let app = XCUIApplication()
         app.launchArguments = [

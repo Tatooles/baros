@@ -157,6 +157,62 @@ final class WorkoutExerciseListTests: XCTestCase {
         )
     }
 
+    func testInsertionDefaultUsesLatestLoggedSetAndIgnoresBlankTouches() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let session = try fixture(in: container.mainContext)
+        let exercises = session.sortedLoggedExercises
+        XCTAssertEqual(defaultExerciseInsertionIndex(in: WorkoutExerciseListSnapshot(session: session).exercises), 3)
+        exercises[0].sets[0].isCompleted = true
+        exercises[0].sets[0].completedAt = Date(timeIntervalSince1970: 20)
+        exercises[0].sets[0].updatedAt = Date(timeIntervalSince1970: 100)
+        exercises[1].sets[0].weight = 0
+        exercises[1].sets[0].updatedAt = Date(timeIntervalSince1970: 30)
+        exercises[2].sets[0].updatedAt = Date(timeIntervalSince1970: 200)
+        XCTAssertEqual(defaultExerciseInsertionIndex(in: WorkoutExerciseListSnapshot(session: session).exercises), 2)
+        exercises[0].sets[0].completedAt = Date(timeIntervalSince1970: 40)
+        XCTAssertEqual(defaultExerciseInsertionIndex(in: WorkoutExerciseListSnapshot(session: session).exercises), 1)
+        XCTAssertEqual(defaultExerciseInsertionIndex(in: []), 0)
+    }
+
+    func testMiddleBatchFailureRestoresShiftedOrdersAndRetryPreservesTapOrder() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try fixture(in: context)
+        let baseline = WorkoutExerciseListSnapshot(session: session)
+        let additions = ["Curl", "Fly"].map { Exercise(name: $0, category: .strength, equipment: .dumbbell, primaryMuscleGroup: .chest) }
+        additions.forEach { context.insert($0) }
+        let engine = ActiveWorkoutEngine()
+        XCTAssertThrowsError(try engine.addExercises(additions, to: session, insertionIndex: 1, context: context, save: { _ in throw CocoaError(.fileWriteUnknown) }))
+        XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), baseline)
+        try engine.addExercises(additions, to: session, insertionIndex: 1, context: context)
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Bench Press", "Curl", "Fly", "Barbell Row", "Back Squat"])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2, 3, 4])
+    }
+
+    func testDraftAddRemoveAndReorderSaveOnceAndKeepDraftForRetry() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try fixture(in: context)
+        let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        context.insert(library)
+        try context.save()
+        let baseline = WorkoutExerciseListSnapshot(session: session)
+        var draft = WorkoutExerciseListDraft(session: session)
+        let addition = WorkoutExerciseListDraft.Addition(exercise: library)
+        draft.additions.append(addition)
+        draft.orderedIDs = [baseline.exercises[2].id, addition.id, baseline.exercises[0].id]
+        XCTAssertTrue(draft.exercises[1].isNew)
+        XCTAssertEqual(session.sortedLoggedExercises.count, 3)
+        let engine = ActiveWorkoutEngine()
+        XCTAssertThrowsError(try engine.applyExerciseListChanges(in: session, orderedIDs: draft.orderedIDs, baseline: baseline, additions: draft.additions, context: context, save: { _ in throw CocoaError(.fileWriteUnknown) }))
+        XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), baseline)
+        var saves = 0
+        try engine.applyExerciseListChanges(in: session, orderedIDs: draft.orderedIDs, baseline: baseline, additions: draft.additions, context: context, save: { saves += 1; try $0.save() })
+        XCTAssertEqual(saves, 1)
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Back Squat", "Curl", "Bench Press"])
+        XCTAssertFalse(session.sortedLoggedExercises[1].sortedSets.isEmpty)
+    }
+
     private func fixture(in context: ModelContext) throws -> WorkoutSession {
         let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
         for (index, name) in ["Bench Press", "Barbell Row", "Back Squat"].enumerated() {
