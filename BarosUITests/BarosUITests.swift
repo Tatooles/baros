@@ -2185,11 +2185,17 @@ final class BarosUITests: XCTestCase {
         openReorderSheet(in: app)
         let cell = reorderExerciseRow(named: "Back Squat", in: app)
         let grip = cell.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Reorder")).firstMatch
+        let card = cell.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "ReorderExerciseRow-")
+        ).firstMatch
         XCTAssertTrue(grip.waitForExistence(timeout: 3))
+        XCTAssertTrue(card.exists)
         let gripBefore = grip.frame
+        let cardBefore = card.frame
         revealReorderRemoval(named: "Back Squat", in: app)
         let delete = reorderRemoval(named: "Back Squat", revealed: true, in: app)
         XCTAssertLessThan(grip.frame.minX, gripBefore.minX - 40, "The grip slides with the card")
+        XCTAssertEqual(card.frame.minX - cardBefore.minX, grip.frame.minX - gripBefore.minX, accuracy: 1)
         XCTAssertGreaterThan(delete.frame.minX, grip.frame.maxX - 1, "Delete sits trailing of the grip")
         XCTAssertEqual(delete.frame.midY, cell.frame.midY, accuracy: 12)
 
@@ -2197,6 +2203,7 @@ final class BarosUITests: XCTestCase {
         cell.tap()
         XCTAssertTrue(waitForAbsence(delete, timeout: 3))
         XCTAssertEqual(grip.frame.minX, gripBefore.minX, accuracy: 1)
+        XCTAssertEqual(card.frame.minX, cardBefore.minX, accuracy: 1)
         XCTAssertTrue(cell.exists)
     }
 
@@ -2366,15 +2373,32 @@ final class BarosUITests: XCTestCase {
 
     /// The system minus while at rest, or the Delete it reveals. The list shows one Delete
     /// at a time outside the cell, so it only counts as this row's when it lines up with it.
+    /// The match is checked when called; use `waitForRevealedReorderRemoval` to wait for it.
     @MainActor
     private func reorderRemoval(named name: String, revealed: Bool, in app: XCUIApplication) -> XCUIElement {
         let row = reorderExerciseRow(named: name, in: app)
         guard revealed else { return row.images["minus.circle.fill"].firstMatch }
         let delete = reorderExercisesList(in: app).buttons["Delete"].firstMatch
-        if delete.exists, row.exists, abs(delete.frame.midY - row.frame.midY) > row.frame.height / 2 {
-            return reorderExercisesList(in: app).buttons["ReorderDeleteNotShownFor-\(name)"]
-        }
-        return delete
+        if delete.exists, row.exists, isReorderDelete(delete, alignedWith: row) { return delete }
+        return reorderExercisesList(in: app).buttons["ReorderDeleteNotShownFor-\(name)"]
+    }
+
+    @MainActor
+    private func isReorderDelete(_ delete: XCUIElement, alignedWith row: XCUIElement) -> Bool {
+        abs(delete.frame.midY - row.frame.midY) <= row.frame.height / 2
+    }
+
+    /// Rechecks the row, its Delete, and their alignment together until they agree.
+    @MainActor
+    private func waitForRevealedReorderRemoval(named name: String, timeout: TimeInterval, in app: XCUIApplication) -> Bool {
+        let row = reorderExerciseRow(named: name, in: app)
+        let delete = reorderExercisesList(in: app).buttons["Delete"].firstMatch
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if row.exists, delete.exists, isReorderDelete(delete, alignedWith: row) { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+        return false
     }
 
     @MainActor
@@ -2391,7 +2415,7 @@ final class BarosUITests: XCTestCase {
         // While another row is revealed, the first tap only closes it.
         for _ in 0..<2 {
             minus.tap()
-            if reorderRemoval(named: name, revealed: true, in: app).waitForExistence(timeout: 1.5) { return }
+            if waitForRevealedReorderRemoval(named: name, timeout: 1.5, in: app) { return }
         }
         XCTFail("Delete did not appear for \(name)")
     }
