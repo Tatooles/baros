@@ -2129,6 +2129,61 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testReorderBackToBackFullSwipesAndGripDragWhileOpenLeaveRowsAtRest() {
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        func capture(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        app.launch()
+        openReorderSheet(in: app)
+        let list = app.tables["ReorderExercisesList"]
+        let cards = list.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "ReorderExerciseRow-")
+        )
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 3))
+        let names = cards.allElementsBoundByIndex.map(\.label)
+        XCTAssertGreaterThanOrEqual(names.count, 5)
+        let restingMinX = cards.firstMatch.frame.minX
+
+        // Two full swipes in quick succession, the second without waiting for a slow drag.
+        for name in names.prefix(2) {
+            let start = reorderCard(named: name, in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
+            start.press(
+                forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: -app.frame.width * 0.75, dy: 0)),
+                withVelocity: .fast, thenHoldForDuration: 0
+            )
+        }
+        XCTAssertTrue(waitForAbsence(reorderCard(named: names[0], in: app), timeout: 3))
+        XCTAssertTrue(waitForAbsence(reorderCard(named: names[1], in: app), timeout: 3))
+
+        // Scrolling recycles the rows that slid out; every row comes back at rest.
+        list.swipeUp()
+        list.swipeDown()
+        XCTAssertFalse(list.buttons["ReorderRemoveAction"].exists, "No row may come back showing its trash")
+        for card in cards.allElementsBoundByIndex where card.isHittable {
+            XCTAssertEqual(card.frame.minX, restingMinX, accuracy: 1, "\(card.label) came back offset")
+        }
+        capture("Rows at rest after full swipes and scrolling")
+
+        // Dragging another row's grip right after opening a trash reorders and closes the trash.
+        revealReorderRemoval(named: names[2], in: app)
+        moveReorderExercise(named: names[4], before: names[3], in: app)
+        XCTAssertTrue(waitForAbsence(reorderRemoval(named: names[2], revealed: true, in: app), timeout: 3))
+        XCTAssertEqual(reorderCard(named: names[2], in: app).frame.minX, restingMinX, accuracy: 1)
+        let shown = cards.allElementsBoundByIndex.filter(\.isHittable).sorted { $0.frame.minY < $1.frame.minY }.map(\.label)
+        XCTAssertGreaterThanOrEqual(shown.count, 3)
+        capture("Grip drag while a trash was open")
+
+        app.buttons["DoneReorderExercisesButton"].tap()
+        XCTAssertEqual(reorderRemovalSummary(in: app).count, 2)
+        app.buttons["Remove and Save"].tap()
+        assertActiveWorkoutExerciseOrder(Array(shown.prefix(3)), in: app)
+    }
+
+    @MainActor
     private func reorderCard(named name: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "ReorderExerciseRow-", name)

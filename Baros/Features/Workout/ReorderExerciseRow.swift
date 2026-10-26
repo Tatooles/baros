@@ -195,6 +195,8 @@ final class ReorderExerciseCell: UITableViewCell {
     private var actionX: CGFloat = 0
     private var revealDistance: CGFloat = 0
     private var panStartOffset: CGFloat = 0
+    /// Lets a newer reveal, drag, or reuse retire an older animation's completion.
+    private var motionGeneration = 0
     private lazy var pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan))
     private let panDelegate = PanDelegate()
     private lazy var armFeedback = UIImpactFeedbackGenerator(style: .medium, view: self)
@@ -237,6 +239,7 @@ final class ReorderExerciseCell: UITableViewCell {
         super.prepareForReuse()
         isRemoving = false
         isArmed = false
+        stopMotion()
         setRevealed(false, animated: false)
     }
 
@@ -318,10 +321,12 @@ final class ReorderExerciseCell: UITableViewCell {
 
     func setRevealed(_ revealed: Bool, animated: Bool) {
         isRevealed = revealed
+        motionGeneration += 1
+        let generation = motionGeneration
         removeButton.isHidden = false
         removeButton.isAccessibilityElement = revealed
         let finish = { [weak self] in
-            guard let self, isRevealed == revealed else { return }
+            guard let self, motionGeneration == generation else { return }
             removeButton.isHidden = !revealed
         }
         let target = revealed ? revealDistance : 0
@@ -345,6 +350,22 @@ final class ReorderExerciseCell: UITableViewCell {
         }
     }
 
+    /// Holds the row where it shows on screen and drops any settle, arm, or fade
+    /// still running, so a drag or a reused row never inherits one.
+    private func stopMotion() {
+        motionGeneration += 1
+        let onScreen = layer.presentation()?.bounds.origin.x ?? bounds.origin.x
+        for key in layer.animationKeys() ?? [] {
+            let animation = layer.animation(forKey: key)
+            if animation is CATransition || (animation as? CAPropertyAnimation)?.keyPath == "bounds.origin" {
+                layer.removeAnimation(forKey: key)
+            }
+        }
+        removeButton.layer.removeAllAnimations()
+        glyph.layer.removeAllAnimations()
+        setOffset(onScreen)
+    }
+
     override func accessibilityPerformEscape() -> Bool {
         guard isRevealed else { return false }
         setRevealed(false, animated: true)
@@ -356,6 +377,7 @@ final class ReorderExerciseCell: UITableViewCell {
         switch pan.state {
         case .began:
             onPanBegan?()
+            stopMotion()
             panStartOffset = bounds.origin.x
             removeButton.isHidden = false
             armFeedback.prepare()
