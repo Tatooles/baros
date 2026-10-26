@@ -34,7 +34,7 @@ struct ReorderExercisesSheet: View {
             ReorderExercisesList(
                 exercises: draft.exercises,
                 reorder: { draft.orderedIDs = $0 },
-                remove: { id in draft.orderedIDs.removeAll { $0 == id } }
+                remove: { ids in draft.orderedIDs.removeAll(where: ids.contains) }
             )
             .background(AppTheme.canvasBackground.ignoresSafeArea())
             .overlay {
