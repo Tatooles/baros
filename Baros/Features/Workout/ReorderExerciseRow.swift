@@ -2,8 +2,8 @@ import SwiftUI
 import UIKit
 
 /// Keeps UIKit's reorder grip, which SwiftUI List places outside a hosted row,
-/// while the cell owns its minus and Remove reveal. Sliding the whole cell
-/// moves the card, grip, and Remove together with deliberate spacing, and a
+/// while the cell owns its minus and trash reveal. Sliding the whole cell
+/// moves the card, grip, and trash together with deliberate spacing, and a
 /// removed row fades out without leaving a collapsing system action behind.
 struct ReorderExercisesList: UIViewRepresentable {
     @Environment(\.colorScheme) private var colorScheme
@@ -49,7 +49,7 @@ struct ReorderExercisesList: UIViewRepresentable {
         var exercises: [WorkoutExerciseListSnapshot.ExerciseState]
         weak var table: UITableView?
         weak var dismissTap: UITapGestureRecognizer?
-        /// One row at most shows Remove.
+        /// One row at most shows its trash.
         var revealedID: UUID?
 
         init(_ parent: ReorderExercisesList) {
@@ -82,7 +82,9 @@ struct ReorderExercisesList: UIViewRepresentable {
                     revealedID = nil
                 }
             }
-            cell.onRemove = { [weak self] in self?.remove(exercise.id) }
+            cell.removeButton.accessibilityLabel = String(localized: "Remove \(exercise.name)")
+            cell.onRemove = { [weak self] in self?.remove(exercise.id, fullSwipe: false) }
+            cell.onFullSwipe = { [weak self] in self?.remove(exercise.id, fullSwipe: true) }
             cell.setRevealed(revealedID == exercise.id, animated: false)
             return cell
         }
@@ -135,11 +137,12 @@ struct ReorderExercisesList: UIViewRepresentable {
             cell(for: revealedID)?.setRevealed(false, animated: true)
         }
 
-        private func remove(_ id: UUID) {
+        /// Only stages the removal; the sheet's Done saves it.
+        private func remove(_ id: UUID, fullSwipe: Bool) {
             guard let row = exercises.firstIndex(where: { $0.id == id }) else { return }
             revealedID = nil
             exercises.remove(at: row)
-            cell(for: id)?.fadeOutAction()
+            if fullSwipe { cell(for: id)?.slideOut() } else { cell(for: id)?.fadeOutAction() }
             table?.deleteRows(
                 at: [IndexPath(row: row, section: 0)],
                 with: UIAccessibility.isReduceMotionEnabled ? .none : .fade
@@ -153,7 +156,7 @@ struct ReorderExercisesList: UIViewRepresentable {
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
             guard gestureRecognizer === dismissTap, let revealedID else { return false }
-            // The open row's Remove takes its own tap; any other tap only collapses it.
+            // The open row's trash takes its own tap; any other tap only collapses it.
             guard let action = cell(for: revealedID)?.removeButton, let view = touch.view else { return true }
             return !view.isDescendant(of: action)
         }
@@ -168,23 +171,33 @@ struct ReorderExercisesList: UIViewRepresentable {
     }
 }
 
-/// Slides its bounds so the minus, card, grip, and Remove move as one piece.
+/// Slides its bounds so the minus, card, grip, and trash move as one piece.
+/// Dragging on past the revealed trash stretches it toward the row, and a
+/// release past the full-swipe threshold removes the exercise from the draft.
 final class ReorderExerciseCell: UITableViewCell {
     static let verticalInset: CGFloat = 6
     private static let actionSpacing: CGFloat = 12
     private static let trailingInset: CGFloat = 16
+    /// Dragging past this fraction of the row width arms the full swipe, like `SwipeToDeleteRow`.
+    private static let fullSwipeFraction: CGFloat = 0.5
 
     let removeButton = UIButton(type: .system)
+    private let glyph = UIImageView()
     var exerciseID: UUID?
     var onPanBegan: (() -> Void)?
     var onRevealChanged: ((Bool) -> Void)?
     var onRemove: (() -> Void)?
+    var onFullSwipe: (() -> Void)?
     private(set) var isRevealed = false
     private var isRemoving = false
+    private var isArmed = false
+    private var diameter: CGFloat = 50
+    private var actionX: CGFloat = 0
     private var revealDistance: CGFloat = 0
     private var panStartOffset: CGFloat = 0
     private lazy var pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan))
     private let panDelegate = PanDelegate()
+    private lazy var armFeedback = UIImpactFeedbackGenerator(style: .medium, view: self)
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -193,23 +206,24 @@ final class ReorderExerciseCell: UITableViewCell {
         showsReorderControl = true
 
         var configuration = UIButton.Configuration.filled()
-        configuration.title = String(localized: "Remove")
-        configuration.baseBackgroundColor = UIColor(AppTheme.destructiveFill)
-        configuration.baseForegroundColor = UIColor(AppTheme.onDestructive)
-        configuration.cornerStyle = .fixed
-        configuration.background.cornerRadius = ReorderExerciseRow.cornerRadius
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 14, bottom: 0, trailing: 14)
-        configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
-            var attributes = attributes
-            attributes.font = UIFontMetrics(forTextStyle: .subheadline)
-                .scaledFont(for: .systemFont(ofSize: 15, weight: .semibold))
-            return attributes
-        }
+        configuration.baseBackgroundColor = UIColor(AppTheme.destructive)
+        configuration.cornerStyle = .capsule
         removeButton.configuration = configuration
+        removeButton.accessibilityIdentifier = "ReorderRemoveAction"
         removeButton.addAction(UIAction { [weak self] _ in self?.onRemove?() }, for: .primaryActionTriggered)
         removeButton.isHidden = true
         removeButton.alpha = 0
         addSubview(removeButton)
+
+        glyph.image = UIImage(systemName: "trash")
+        glyph.preferredSymbolConfiguration = UIImage.SymbolConfiguration(
+            font: UIFontMetrics(forTextStyle: .body)
+                .scaledFont(for: .systemFont(ofSize: 20, weight: .semibold), maximumPointSize: 28)
+        )
+        glyph.tintColor = UIColor(AppTheme.onDestructive)
+        glyph.contentMode = .center
+        glyph.isUserInteractionEnabled = false
+        removeButton.addSubview(glyph)
 
         panDelegate.cell = self
         pan.delegate = panDelegate
@@ -222,17 +236,20 @@ final class ReorderExerciseCell: UITableViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         isRemoving = false
+        isArmed = false
         setRevealed(false, animated: false)
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         let height = max(bounds.height - 2 * Self.verticalInset, 0)
-        let width = max(removeButton.sizeThatFits(CGSize(width: .greatestFiniteMagnitude, height: height)).width, height)
-        // Remove sits a fixed gap past the grip and ends at the trailing inset once revealed.
-        removeButton.frame = CGRect(x: gripMaxX + Self.actionSpacing, y: Self.verticalInset, width: width, height: height)
-        revealDistance = max(removeButton.frame.maxX - (bounds.width - Self.trailingInset), 0)
-        if isRevealed, pan.state != .changed { setOffset(revealDistance) }
+        // Grows with text size, but stops before it shoves accessibility-size cards off screen.
+        diameter = min(UIFontMetrics(forTextStyle: .body).scaledValue(for: 50), 66, height)
+        // The trash sits a fixed gap past the grip and ends at the trailing inset once revealed.
+        actionX = gripMaxX + Self.actionSpacing
+        revealDistance = max(actionX + diameter - (bounds.width - Self.trailingInset), 0)
+        guard !isRemoving else { return }
+        setOffset(pan.state == .began || pan.state == .changed ? bounds.origin.x : isRevealed ? revealDistance : 0)
     }
 
     /// Trailing edge of the visible grip glyph, which UIKit insets within its control.
@@ -249,15 +266,54 @@ final class ReorderExerciseCell: UITableViewCell {
         }
     }
 
+    private var fullSwipeOffset: CGFloat {
+        max(bounds.width * Self.fullSwipeFraction, revealDistance + 44)
+    }
+
+    /// Past the reveal the trash stretches into a capsule whose trailing end stays put.
     private func setOffset(_ offset: CGFloat) {
         bounds.origin.x = offset
-        removeButton.alpha = isRemoving || revealDistance <= 0 ? 0 : min(max(offset / revealDistance, 0), 1)
+        let stretch = max(offset - revealDistance, 0)
+        removeButton.frame = CGRect(
+            x: actionX, y: (bounds.height - diameter) / 2, width: diameter + stretch, height: diameter
+        )
+        layoutGlyph()
+        guard !isRemoving else { return }
+        removeButton.alpha = revealDistance <= 0 ? 0 : min(max(offset / revealDistance, 0), 1)
+    }
+
+    /// An armed glyph leads the capsule so it travels with the row.
+    private func layoutGlyph() {
+        let size = removeButton.bounds.size
+        glyph.bounds.size = CGSize(width: diameter, height: diameter)
+        glyph.center = CGPoint(x: isArmed ? diameter / 2 : size.width - diameter / 2, y: size.height / 2)
+    }
+
+    private func setArmed(_ armed: Bool) {
+        guard armed != isArmed else { return }
+        isArmed = armed
+        if armed { armFeedback.impactOccurred() }
+        if UIAccessibility.isReduceMotionEnabled {
+            UIView.transition(with: glyph, duration: 0.15, options: .transitionCrossDissolve) { self.layoutGlyph() }
+        } else {
+            UIView.animate(springDuration: 0.3, bounce: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+                self.layoutGlyph()
+            }
+        }
     }
 
     /// The action leaves first so it never lingers beside the row sliding up.
     func fadeOutAction() {
         isRemoving = true
         UIView.animate(withDuration: 0.12) { self.removeButton.alpha = 0 }
+    }
+
+    /// Carries the row off to the leading edge while its action fades.
+    func slideOut() {
+        isRemoving = true
+        UIView.animate(withDuration: 0.12) { self.removeButton.alpha = 0 }
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        UIView.animate(springDuration: 0.3, bounce: 0) { self.setOffset(self.bounds.width) }
     }
 
     func setRevealed(_ revealed: Bool, animated: Bool) {
@@ -270,14 +326,17 @@ final class ReorderExerciseCell: UITableViewCell {
         }
         let target = revealed ? revealDistance : 0
         if !animated || window == nil {
+            isArmed = false
             setOffset(target)
             finish()
         } else if UIAccessibility.isReduceMotionEnabled {
             UIView.transition(with: self, duration: 0.2, options: .transitionCrossDissolve) {
+                self.isArmed = false
                 self.setOffset(target)
             } completion: { _ in finish() }
         } else {
             UIView.animate(springDuration: 0.35, bounce: 0, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+                self.isArmed = false
                 self.setOffset(target)
             } completion: { _ in finish() }
         }
@@ -299,19 +358,29 @@ final class ReorderExerciseCell: UITableViewCell {
             onPanBegan?()
             panStartOffset = bounds.origin.x
             removeButton.isHidden = false
+            armFeedback.prepare()
         case .changed:
-            var offset = max(panStartOffset - pan.translation(in: self).x, 0)
-            // Resist past the action; a long swipe never removes on its own.
-            if offset > revealDistance { offset = revealDistance + (offset - revealDistance) * 0.2 }
+            let offset = min(max(panStartOffset - pan.translation(in: self).x, 0), bounds.width)
             setOffset(offset)
-        case .ended, .cancelled, .failed:
+            setArmed(offset > fullSwipeOffset)
+        case .ended:
+            // Distance arms the full swipe; a flick back toward the row cancels it.
             let velocity = pan.velocity(in: self).x
-            let revealed = velocity < -300 || (velocity < 300 && bounds.origin.x > revealDistance / 2)
-            setRevealed(revealed, animated: true)
-            onRevealChanged?(revealed)
+            if isArmed, velocity < 300 {
+                onFullSwipe?()
+            } else {
+                settle(revealed: velocity < -300 || (velocity < 300 && bounds.origin.x > revealDistance / 2))
+            }
+        case .cancelled, .failed:
+            settle(revealed: bounds.origin.x > revealDistance / 2)
         default:
             break
         }
+    }
+
+    private func settle(revealed: Bool) {
+        setRevealed(revealed, animated: true)
+        onRevealChanged?(revealed)
     }
 
     /// UITableViewCell declares, but does not implement, these delegate methods.
@@ -319,6 +388,7 @@ final class ReorderExerciseCell: UITableViewCell {
         weak var cell: ReorderExerciseCell?
 
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let cell, !cell.isRemoving else { return false }
             guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
             let velocity = pan.velocity(in: cell)
             return abs(velocity.x) > abs(velocity.y) * 1.2
@@ -332,7 +402,7 @@ final class ReorderExerciseCell: UITableViewCell {
     }
 }
 
-/// Its content never switches layout when the row reveals Remove.
+/// Its content never switches layout when the row reveals its trash.
 struct ReorderExerciseRow: View {
     static let cornerRadius: CGFloat = 20
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
