@@ -205,6 +205,8 @@ struct WorkoutExerciseHeaderContent: View {
     let metadata: String?
     let progress: WorkoutExerciseProgress
     var isCollapsed: Bool?
+    /// Width kept clear at the end of the title for a control overlaid on the header.
+    var titleTrailingInset: CGFloat = 0
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -216,32 +218,37 @@ struct WorkoutExerciseHeaderContent: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(WorkoutFormatters.exerciseHeaderTitle(title))
                     .font(.title3.weight(.bold))
                     .foregroundStyle(AppTheme.textPrimary)
                     .lineLimit(isCollapsed == true ? 1 : nil)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.trailing, titleTrailingInset)
 
-                if let metadata {
-                    Text(metadata)
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .lineLimit(1)
+                // The progress pill shares the metadata row so the title can use the full width.
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if let metadata {
+                        Text(metadata)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Text("\(progress.completed)/\(progress.total)")
+                        .font(.footnote.weight(.bold).monospacedDigit())
+                        .foregroundStyle(progress.isComplete ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            progress.isComplete ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(AppTheme.recessedSurface),
+                            in: Capsule()
+                        )
                 }
             }
-
-            Spacer()
-
-            Text("\(progress.completed)/\(progress.total)")
-                .font(.footnote.weight(.bold).monospacedDigit())
-                .foregroundStyle(progress.isComplete ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    progress.isComplete ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(AppTheme.recessedSurface),
-                    in: Capsule()
-                )
         }
     }
 }

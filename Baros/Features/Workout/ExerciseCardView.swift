@@ -54,31 +54,34 @@ struct ExerciseCardView: View {
         self.onEditRPE = onEditRPE
     }
 
+    private static let menuButtonSize: CGFloat = 44
+    private static let menuButtonTrailingOverhang: CGFloat = 12
+
     var body: some View {
         let sortedSets = cachedSortedSets ?? loggedExercise.sortedSets
         let focusedFieldValue = focusedField.wrappedValue
 
         SurfaceCard(role: .focus, padding: 0) {
             VStack(spacing: 0) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Button {
-                        withAnimation(.snappy(duration: 0.3, extraBounce: 0)) {
-                            isCollapsed.toggle()
-                        }
-                    } label: {
-                        HStack(spacing: 12) {
-                            WorkoutExerciseHeaderContent(
-                                title: loggedExercise.exerciseSnapshotName,
-                                metadata: loggedExercise.metadataDisplayText,
-                                progress: Self.setProgress(for: sortedSets),
-                                isCollapsed: isCollapsed
-                            )
-                        }
-                        .contentShape(Rectangle())
+                Button {
+                    withAnimation(.snappy(duration: 0.3, extraBounce: 0)) {
+                        isCollapsed.toggle()
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("ExerciseHeader-\(exerciseIndex)")
-
+                } label: {
+                    WorkoutExerciseHeaderContent(
+                        title: loggedExercise.exerciseSnapshotName,
+                        metadata: loggedExercise.metadataDisplayText,
+                        progress: Self.setProgress(for: sortedSets),
+                        isCollapsed: isCollapsed,
+                        titleTrailingInset: Self.menuButtonSize - Self.menuButtonTrailingOverhang
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("ExerciseHeader-\(exerciseIndex)")
+                // The menu overlays the header so the metadata row and its progress pill
+                // can run underneath it, leaving the title the full width.
+                .overlay(alignment: Alignment(horizontal: .trailing, vertical: .firstTextBaseline)) {
                     Menu {
                         Button(action: viewHistory) {
                             Label("View History", systemImage: "clock.arrow.circlepath")
@@ -111,7 +114,7 @@ struct ExerciseCardView: View {
                         Image(systemName: "ellipsis")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(AppTheme.textSecondary)
-                            .frame(width: 44, height: 44)
+                            .frame(width: Self.menuButtonSize, height: Self.menuButtonSize)
                             .alignmentGuide(.firstTextBaseline) { dimensions in
                                 dimensions[VerticalAlignment.center] + 6
                             }
@@ -120,6 +123,8 @@ struct ExerciseCardView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(loggedExercise.exerciseSnapshotName) options")
                     .accessibilityIdentifier("ExerciseMenuButton-\(exerciseIndex)")
+                    // Lines the ellipsis up with the progress pill's trailing edge.
+                    .padding(.trailing, -Self.menuButtonTrailingOverhang)
                 }
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)

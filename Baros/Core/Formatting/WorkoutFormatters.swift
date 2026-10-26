@@ -59,6 +59,15 @@ enum WorkoutFormatters {
         "\(count) \(count == 1 ? "set" : "sets")"
     }
 
+    // Binds a spaced dash to the word before it so a wrapped name like
+    // "Lying Leg Curl - Cap" never starts a line with the dash.
+    static func exerciseHeaderTitle(_ name: String) -> String {
+        name
+            .replacingOccurrences(of: " - ", with: "\u{00A0}– ")
+            .replacingOccurrences(of: " – ", with: "\u{00A0}– ")
+            .replacingOccurrences(of: " — ", with: "\u{00A0}— ")
+    }
+
     static func date(_ date: Date) -> String {
         date.formatted(.dateTime.weekday(.wide).month(.wide).day())
     }
