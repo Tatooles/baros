@@ -39,7 +39,7 @@ struct ExercisePickerView: View {
     }
 
     var body: some View {
-        ExercisePickerList(
+        SearchableExercisePicker(
             baseRows: ExercisePickerContent.makeBaseRows(
                 exercises: exercises,
                 sessions: sessions,
@@ -52,16 +52,41 @@ struct ExercisePickerView: View {
     }
 }
 
+// Search actions must be read below the searchable modifier.
+private struct SearchableExercisePicker: View {
+    let baseRows: [ExercisePickerRowContent]
+    let mode: ExercisePickerMode
+    let sortPreferenceStore: ExercisePickerSortPreferenceStore
+    let onSelect: ([Exercise]) -> Void
+    @State private var searchText = ""
+
+    var body: some View {
+        ExercisePickerList(
+            baseRows: baseRows,
+            mode: mode,
+            sortPreferenceStore: sortPreferenceStore,
+            searchText: $searchText,
+            onSelect: onSelect
+        )
+        .searchable(
+            text: $searchText,
+            placement: mode.isAddExercise ? .navigationBarDrawer(displayMode: .always) : .automatic,
+            prompt: "Search exercises"
+        )
+    }
+}
+
 private struct ExercisePickerList: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismissSearch) private var dismissSearch
+    @Environment(\.isSearching) private var isSearching
     let baseRows: [ExercisePickerRowContent]
     let mode: ExercisePickerMode
     let onSelect: ([Exercise]) -> Void
     @State private var selectedExerciseIDs: [UUID] = []
-    @State private var searchText = ""
-    @State private var isSearchPresented = false
-    @State private var isCreatingExercise = false
-    @State private var creationName = ""
+    @Binding private var searchText: String
+    @State private var creationRequest: ExerciseCreationRequest?
+    @State private var createdSwapExercise: Exercise?
     @State private var sortOrder: ExercisePickerSortOrder
     private let sortPreferenceStore: ExercisePickerSortPreferenceStore
 
@@ -69,11 +94,13 @@ private struct ExercisePickerList: View {
         baseRows: [ExercisePickerRowContent],
         mode: ExercisePickerMode,
         sortPreferenceStore: ExercisePickerSortPreferenceStore,
+        searchText: Binding<String>,
         onSelect: @escaping ([Exercise]) -> Void
     ) {
         self.baseRows = baseRows
         self.mode = mode
         self.sortPreferenceStore = sortPreferenceStore
+        _searchText = searchText
         self.onSelect = onSelect
         _sortOrder = State(initialValue: sortPreferenceStore.sortOrder)
     }
@@ -108,8 +135,7 @@ private struct ExercisePickerList: View {
         List {
             Section {
                 Button {
-                    creationName = ""
-                    isCreatingExercise = true
+                    creationRequest = ExerciseCreationRequest(name: "")
                 } label: {
                     Label("Create Exercise", systemImage: "plus.circle")
                         .font(.system(size: 17, weight: .semibold))
@@ -156,8 +182,7 @@ private struct ExercisePickerList: View {
 
                 if let creationSuggestion {
                     Button {
-                        creationName = creationSuggestion.name
-                        isCreatingExercise = true
+                        creationRequest = ExerciseCreationRequest(name: creationSuggestion.name)
                     } label: {
                         Label(creationSuggestion.title, systemImage: "plus.circle")
                             .font(.system(size: 17, weight: .semibold))
@@ -201,17 +226,9 @@ private struct ExercisePickerList: View {
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle(mode.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(
-            text: $searchText,
-            isPresented: $isSearchPresented,
-            placement: mode.isAddExercise ? .navigationBarDrawer(displayMode: .always) : .automatic,
-            prompt: "Search exercises"
-        )
-        // Keep search dismissal from changing navigation height during the editor's return transition.
-        .searchPresentationToolbarBehavior(mode.isAddExercise ? .avoidHidingContent : .automatic)
-        .onChange(of: isSearchPresented) { _, isPresented in
+        .onChange(of: isSearching) { _, isSearching in
             guard mode.isAddExercise else { return }
-            UIHangContextObservability.shared.exerciseSearchEditingChanged(isEditing: isPresented)
+            UIHangContextObservability.shared.exerciseSearchEditingChanged(isEditing: isSearching)
         }
         .onDisappear {
             guard mode.isAddExercise else { return }
@@ -254,17 +271,23 @@ private struct ExercisePickerList: View {
                 }
             }
         }
-        .navigationDestination(isPresented: $isCreatingExercise) {
-            ExerciseEditorView(initialName: creationName) { exercise in
-                searchText = ""
-                isSearchPresented = false
+        .sheet(item: $creationRequest, onDismiss: completeCreatedSwap) { request in
+            ExerciseCreationSheet(initialName: request.name) { exercise in
+                dismissSearch()
                 if mode.isAddExercise {
                     selectedExerciseIDs.append(exercise.id)
                 } else {
-                    onSelect([exercise])
+                    createdSwapExercise = exercise
                 }
             }
         }
+    }
+
+    private func completeCreatedSwap() {
+        // Present confirmation after the creation sheet has finished dismissing.
+        guard let exercise = createdSwapExercise else { return }
+        createdSwapExercise = nil
+        onSelect([exercise])
     }
 
     private func isSelected(_ exercise: Exercise) -> Bool {
@@ -299,6 +322,30 @@ private struct ExercisePickerList: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+}
+
+private struct ExerciseCreationRequest: Identifiable {
+    let id = UUID()
+    let name: String
+}
+
+private struct ExerciseCreationSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let initialName: String
+    let onSave: (Exercise) -> Void
+
+    var body: some View {
+        NavigationStack {
+            ExerciseEditorView(initialName: initialName, onSave: onSave)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel", role: .cancel) { dismiss() }
+                            .accessibilityIdentifier("ExerciseCreationCancelButton")
+                    }
+                }
+        }
+        .presentationDetents([.large])
     }
 }
 
