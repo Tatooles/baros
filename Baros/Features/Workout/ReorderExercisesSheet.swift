@@ -1,140 +1,205 @@
 import SwiftData
 import SwiftUI
 
-private struct ReorderExerciseDraft: Identifiable, Equatable {
-    let id: UUID
-    let name: String
-    let metadata: String?
-    let completedSets: Int
-    let totalSets: Int
-
-    init(loggedExercise: LoggedExercise) {
-        let visibleSets = loggedExercise.sortedSets
-        id = loggedExercise.id
-        name = loggedExercise.exerciseSnapshotName
-        metadata = loggedExercise.metadataDisplayText
-        completedSets = visibleSets.filter(\.isCompleted).count
-        totalSets = visibleSets.count
-    }
-
-    var progressText: String {
-        "\(completedSets)/\(totalSets) sets"
-    }
-
-    var accessibilityValue: String {
-        if let metadata {
-            return "\(metadata), \(progressText)"
-        }
-
-        return progressText
-    }
-}
-
 struct ReorderExercisesSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
-    @State private var draftExercises: [ReorderExerciseDraft] = []
-    @State private var editMode: EditMode = .active
-    @State private var showsSaveError = false
+    @State private var draft: WorkoutExerciseListDraft
+    @State private var alert: SaveAlert?
+    @State private var removalConfirmation: RemovalConfirmation?
+    /// Shown once the removal confirmation has finished dismissing.
+    @State private var alertAfterConfirmation: SaveAlert?
+
+    private enum SaveAlert: String, Identifiable {
+        case failure, conflict
+        var id: Self { self }
+    }
+
+    /// Carries its exercises so a reloaded draft cannot change it while it dismisses.
+    private struct RemovalConfirmation: Identifiable {
+        let id = UUID()
+        let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
+    }
+
+    init(session: WorkoutSession, engine: ActiveWorkoutEngine) {
+        self.session = session
+        self.engine = engine
+        _draft = State(initialValue: WorkoutExerciseListDraft(session: session))
+    }
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(draftExercises) { exercise in
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(exercise.name)
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(AppTheme.textPrimary)
-                                .lineLimit(1)
-                            if let metadata = exercise.metadata {
-                                Text(metadata)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(AppTheme.textSecondary)
-                                    .lineLimit(1)
-                            }
-                        }
-
-                        Spacer(minLength: 12)
-
-                        Text(exercise.progressText)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(AppTheme.textSecondary)
-                            .monospacedDigit()
-                    }
-                    .padding(.horizontal, 18)
-                    .frame(minHeight: 68)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(AppTheme.groupedSurface)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(AppTheme.subtleBorder)
-                    )
-                    .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(exercise.name)
-                    .accessibilityValue(exercise.accessibilityValue)
-                    .accessibilityIdentifier("ReorderExerciseRow-\(exercise.id.uuidString)")
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 6))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                }
-                .onMove(perform: moveExercises)
-            }
-            .scrollContentBackground(.hidden)
+            ReorderExercisesList(
+                exercises: draft.exercises,
+                reorder: { draft.orderedIDs = $0 },
+                remove: { id in draft.orderedIDs.removeAll { $0 == id } }
+            )
             .background(AppTheme.canvasBackground.ignoresSafeArea())
-            .accessibilityIdentifier("ReorderExercisesList")
-            .environment(\.editMode, $editMode)
+            .overlay {
+                if draft.orderedIDs.isEmpty {
+                    Text("No exercises")
+                        .font(.body)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .accessibilityIdentifier("ReorderExercisesEmptyState")
+                }
+            }
             .navigationTitle("Reorder Exercises")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .accessibilityIdentifier("CancelReorderExercisesButton")
+                    Button("Cancel") { dismiss() }
+                        .accessibilityIdentifier("CancelReorderExercisesButton")
                 }
-
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        saveOrder()
-                    }
-                    .font(.system(size: 16, weight: .semibold))
-                    .disabled(draftExercises.count < 2)
-                    .accessibilityIdentifier("DoneReorderExercisesButton")
+                    Button("Done", action: prepareToSave)
+                        .font(.system(size: 16, weight: .semibold))
+                        .accessibilityIdentifier("DoneReorderExercisesButton")
                 }
             }
         }
-        .alert("Couldn't Reorder Exercises", isPresented: $showsSaveError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Your workout's exercise order wasn't changed. Tap Done to retry, or Cancel to keep the original order.")
+        .sheet(item: $removalConfirmation, onDismiss: {
+            alert = alertAfterConfirmation
+            alertAfterConfirmation = nil
+        }) { confirmation in
+            ReorderRemovalConfirmation(
+                exercises: confirmation.exercises,
+                confirm: confirmRemoval,
+                keepEditing: { removalConfirmation = nil }
+            )
+        }
+        .alert(item: $alert) { alert in
+            switch alert {
+            case .failure:
+                Alert(
+                    title: Text("Couldn't Save Changes"),
+                    message: Text("Your workout wasn't changed. Tap Done to retry, or Cancel to discard your edits."),
+                    dismissButton: .cancel(Text("OK"))
+                )
+            case .conflict:
+                Alert(
+                    title: Text("Workout Changed"),
+                    message: Text("The current exercises have been reloaded. Review them before making your changes again."),
+                    dismissButton: .cancel(Text("OK"))
+                )
+            }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .onAppear {
-            draftExercises = session.sortedLoggedExercises.map(ReorderExerciseDraft.init)
+    }
+
+    private func prepareToSave() {
+        if draft.needsRemovalConfirmation, draft.baseline == WorkoutExerciseListSnapshot(session: session) {
+            removalConfirmation = RemovalConfirmation(exercises: draft.removedExercises)
+        } else if let failure = saveChanges() {
+            alert = failure
         }
     }
 
-    private func moveExercises(from source: IndexSet, to destination: Int) {
-        draftExercises.move(fromOffsets: source, toOffset: destination)
+    private func confirmRemoval() {
+        // Success dismisses this sheet with its confirmation; otherwise the alert follows it.
+        alertAfterConfirmation = saveChanges()
+        if alertAfterConfirmation != nil { removalConfirmation = nil }
     }
 
-    private func saveOrder() {
+    /// Returns the alert to show when the draft could not be saved.
+    private func saveChanges() -> SaveAlert? {
+        // Revalidate after the confirmation as sync can arrive while it is open.
+        guard draft.baseline == WorkoutExerciseListSnapshot(session: session) else {
+            draft = WorkoutExerciseListDraft(session: session)
+            return .conflict
+        }
         do {
-            try engine.reorderLoggedExercises(
-                in: session,
-                orderedIDs: draftExercises.map(\.id),
+            try engine.applyExerciseListChanges(
+                in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline,
                 context: modelContext
             )
             dismiss()
+            return nil
         } catch {
-            showsSaveError = true
+            return .failure
         }
+    }
+}
+
+/// Lists each removed exercise on its own row so long names stay readable.
+private struct ReorderRemovalConfirmation: View {
+    let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
+    let confirm: () -> Void
+    let keepEditing: () -> Void
+    @State private var contentHeight: CGFloat = 420
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                let isSingle = exercises.count == 1
+                VStack(spacing: 6) {
+                    Text(isSingle ? "Remove Exercise?" : "Remove \(exercises.count) Exercises?")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Text(isSingle ? "Its sets will be removed from this workout." : "Their sets will be removed from this workout.")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+                .multilineTextAlignment(.center)
+                .padding(.top, 28)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(exercises.enumerated()), id: \.element.id) { index, exercise in
+                        if index > 0 { Divider().padding(.leading, 16) }
+                        row(exercise)
+                    }
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous)
+                        .fill(AppTheme.groupedSurface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous)
+                        .stroke(AppTheme.subtleBorder)
+                )
+
+                VStack(spacing: 14) {
+                    Button(action: confirm) {
+                        Text("Remove and Save")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(AppTheme.destructiveFill)
+
+                    Button("Keep Editing", action: keepEditing)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+                .padding(.bottom, 8)
+            }
+            .padding(.horizontal, 20)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
+        .presentationDetents([.height(contentHeight)])
+        .presentationCornerRadius(36)
+        .presentationDragIndicator(.visible)
+    }
+
+    private func row(_ exercise: WorkoutExerciseListSnapshot.ExerciseState) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(exercise.name)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(AppTheme.textPrimary)
+            Text(exercise.loggedSetsText)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(AppTheme.textSecondary)
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("ReorderRemovalSummaryRow")
     }
 }

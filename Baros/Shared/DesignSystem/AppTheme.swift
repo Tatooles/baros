@@ -52,6 +52,11 @@ enum AppTheme {
     static let brandFocus = brandAccentForeground
     static let brandAccentGlow = BarosBrand.brandAccentGlow
     static let destructive = Color(.systemRed)
+    /// Destructive button fill with at least 4.5:1 contrast against white labels.
+    static let destructiveFill = BarosAdaptiveColor.dynamic(
+        light: 0xB42318,
+        dark: 0xC9342B
+    )
     static let destructiveForeground = BarosAdaptiveColor.dynamic(
         light: 0xB42318,
         dark: 0xFF6961
