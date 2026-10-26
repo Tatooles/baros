@@ -135,7 +135,7 @@ private struct ExercisePickerList: View {
         List {
             Section {
                 Button {
-                    creationRequest = ExerciseCreationRequest(name: "")
+                    beginCreation(name: "")
                 } label: {
                     Label("Create Exercise", systemImage: "plus.circle")
                         .font(.system(size: 17, weight: .semibold))
@@ -182,7 +182,7 @@ private struct ExercisePickerList: View {
 
                 if let creationSuggestion {
                     Button {
-                        creationRequest = ExerciseCreationRequest(name: creationSuggestion.name)
+                        beginCreation(name: creationSuggestion.name)
                     } label: {
                         Label(creationSuggestion.title, systemImage: "plus.circle")
                             .font(.system(size: 17, weight: .semibold))
@@ -273,7 +273,6 @@ private struct ExercisePickerList: View {
         }
         .sheet(item: $creationRequest, onDismiss: completeCreatedSwap) { request in
             ExerciseCreationSheet(initialName: request.name) { exercise in
-                dismissSearch()
                 if mode.isAddExercise {
                     selectedExerciseIDs.append(exercise.id)
                 } else {
@@ -281,6 +280,12 @@ private struct ExercisePickerList: View {
                 }
             }
         }
+    }
+
+    private func beginCreation(name: String) {
+        let request = ExerciseCreationRequest(name: name)
+        dismissSearch()
+        creationRequest = request
     }
 
     private func completeCreatedSwap() {

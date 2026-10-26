@@ -1862,6 +1862,7 @@ final class BarosUITests: XCTestCase {
         search.typeText("A New Selection Press")
         app.buttons["ExercisePickerCreateExerciseFromSearchButton"].tap()
         XCTAssertEqual(app.textFields["ExerciseNameField"].value as? String, "A New Selection Press")
+        XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
         app.buttons["ExerciseEditorSaveButton"].tap()
         let created = app.buttons["ExercisePickerRow-A New Selection Press-Barbell"]
         XCTAssertTrue(created.waitForExistence(timeout: 3))
@@ -1902,7 +1903,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testExercisePickerPrefillsCreationFromSearchAndPreservesSearchOnCancel() {
+    func testExercisePickerCreationEndsSearchAndCancelPreservesPicks() {
         let app = makeApp()
         app.launch()
 
@@ -1929,13 +1930,23 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["Create Exercise"].waitForExistence(timeout: 3))
         XCTAssertEqual(app.textFields["ExerciseNameField"].value as? String, "Press")
+        XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
 
         app.buttons["ExerciseCreationCancelButton"].tap()
-        XCTAssertTrue(creationButton.waitForExistence(timeout: 3))
-        XCTAssertEqual(app.searchFields.firstMatch.value as? String, "Press")
+        XCTAssertTrue(waitForAbsence(app.buttons["ExerciseEditorSaveButton"], timeout: 3))
+        XCTAssertEqual(searchField.value as? String, searchField.placeholderValue)
+        XCTAssertTrue(app.buttons["ExercisePickerRow-Back Squat-Barbell"].exists)
+        XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
         XCTAssertTrue(matchingRow.isSelected)
         XCTAssertEqual(app.buttons["ExercisePickerAddSelectedButton"].label, "Add 1 Exercise")
+        let cancelledScreenshot = XCTAttachment(screenshot: app.screenshot())
+        cancelledScreenshot.name = "Cancel returns to the full picker with previous picks"
+        cancelledScreenshot.lifetime = .keepAlways
+        self.add(cancelledScreenshot)
 
+        searchField.tap()
+        searchField.typeText("Press")
+        XCTAssertTrue(creationButton.waitForExistence(timeout: 3))
         creationButton.tap()
         XCTAssertTrue(app.navigationBars["Create Exercise"].waitForExistence(timeout: 3))
         app.buttons["ExerciseEditorSaveButton"].tap()
