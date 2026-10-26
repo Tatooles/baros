@@ -166,24 +166,58 @@ final class ActiveWorkoutEngine {
         context: ModelContext,
         save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws -> LoggedExercise {
-        let setKinds = try initialSetKinds(
-            for: exercise,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context
+        try insertExercises(
+            [exercise], to: session, ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context, save: save
+        )[0]
+    }
+
+    /// Appends a picker selection in tap order, saving the whole group together.
+    @discardableResult
+    func addExercises(
+        _ exercises: [Exercise],
+        to session: WorkoutSession,
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws -> [LoggedExercise] {
+        var seen = Set(session.sortedLoggedExercises.compactMap { $0.exercise?.id })
+        let additions = exercises.filter { seen.insert($0.id).inserted }
+        guard !additions.isEmpty else { return [] }
+        return try insertExercises(
+            additions, to: session, ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context, save: save
         )
+    }
+
+    private func insertExercises(
+        _ exercises: [Exercise],
+        to session: WorkoutSession,
+        ownerTokenIdentifier: String?,
+        context: ModelContext,
+        save: (ModelContext) throws -> Void
+    ) throws -> [LoggedExercise] {
+        // Resolve history before inserting anything, so a fetch failure cannot leave a partial group.
+        let history = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let setKinds = exercises.map {
+            initialSetKinds(for: $0, ownerTokenIdentifier: ownerTokenIdentifier, sessions: history)
+        }
         let originalSessionUpdatedAt = session.updatedAt
         let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
-        let loggedExercise = LoggedExercise(orderIndex: nextIndex, exercise: exercise)
-        loggedExercise.session = session
-        context.insert(loggedExercise)
-
-        for (index, kind) in setKinds.enumerated() {
-            let set = LoggedSet(orderIndex: index, kind: kind)
-            set.loggedExercise = loggedExercise
-            context.insert(set)
-            loggedExercise.sets.append(set)
+        var additions: [LoggedExercise] = []
+        for (offset, exercise) in exercises.enumerated() {
+            let loggedExercise = LoggedExercise(orderIndex: nextIndex + offset, exercise: exercise)
+            loggedExercise.session = session
+            context.insert(loggedExercise)
+            for (index, kind) in setKinds[offset].enumerated() {
+                let set = LoggedSet(orderIndex: index, kind: kind)
+                set.loggedExercise = loggedExercise
+                context.insert(set)
+                loggedExercise.sets.append(set)
+            }
+            session.loggedExercises.append(loggedExercise)
+            additions.append(loggedExercise)
         }
-        session.loggedExercises.append(loggedExercise)
         session.touch()
         do {
             #if DEBUG
@@ -196,13 +230,16 @@ final class ActiveWorkoutEngine {
             }
             #endif
             try save(context)
-            return loggedExercise
+            return additions
         } catch {
-            session.loggedExercises.removeAll { $0.id == loggedExercise.id }
-            for set in loggedExercise.sets {
-                context.delete(set)
+            let addedIDs = Set(additions.map(\.id))
+            session.loggedExercises.removeAll { addedIDs.contains($0.id) }
+            for loggedExercise in additions {
+                for set in loggedExercise.sets {
+                    context.delete(set)
+                }
+                context.delete(loggedExercise)
             }
-            context.delete(loggedExercise)
             session.updatedAt = originalSessionUpdatedAt
             throw error
         }
@@ -741,7 +778,17 @@ final class ActiveWorkoutEngine {
         ownerTokenIdentifier: String?,
         context: ModelContext
     ) throws -> [SetKind] {
-        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        initialSetKinds(
+            for: exercise, ownerTokenIdentifier: ownerTokenIdentifier,
+            sessions: try context.fetch(FetchDescriptor<WorkoutSession>())
+        )
+    }
+
+    private func initialSetKinds(
+        for exercise: Exercise,
+        ownerTokenIdentifier: String?,
+        sessions: [WorkoutSession]
+    ) -> [SetKind] {
         let route = ExerciseHistoryRoute(
             exerciseID: exercise.id,
             name: exercise.name,
