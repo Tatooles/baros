@@ -104,7 +104,10 @@ struct WorkoutSessionView: View {
                     }
                     .padding(.horizontal, 4)
 
-                    ForEach(Array(sortedLoggedExercises.enumerated()), id: \.element.id) { exerciseIndex, loggedExercise in
+                    // PROTOTYPE: superset looks. Groups are in-memory only.
+                    let supersetPrototype = SupersetPrototype.shared
+                    ForEach(supersetPrototype.blocks(for: sortedLoggedExercises)) { block in
+                      SupersetPrototypeBlockView(variant: supersetPrototype.variant, block: block) { exerciseIndex, loggedExercise in
                         ExerciseCardView(
                             loggedExercise: loggedExercise,
                             exerciseIndex: exerciseIndex,
@@ -134,6 +137,7 @@ struct WorkoutSessionView: View {
                             }
                         )
                         .id(loggedExercise.id)
+                      }
                     }
 
                     Button {
@@ -155,6 +159,7 @@ struct WorkoutSessionView: View {
                 .padding(.bottom, contentBottomPadding)
             }
             .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 0) {
                 ActiveWorkoutMetricsHeader(session: session, restTimer: engine.restTimer) {
                     // Flush any in-progress field edit through the commit path
                     // before the finish sheet reads the model.
@@ -162,6 +167,9 @@ struct WorkoutSessionView: View {
                     isFinishSheetPresented = true
                 }
                 .equatable()
+                SupersetPrototypeSwitcher() // PROTOTYPE: superset looks
+                    .padding(.bottom, 6)
+                }
             }
             .onScrollPhaseChange { _, phase in
                 if phase != .idle { engine.restTimer.collapseControls() }
@@ -266,6 +274,14 @@ struct WorkoutSessionView: View {
         }
         .onChange(of: loggedExerciseStructureKey, initial: true) { _, _ in
             cachedSortedLoggedExercises = session.sortedLoggedExercises
+            SupersetPrototype.shared.updateOrder(session.sortedLoggedExercises.map(\.id))
+            if ProcessInfo.processInfo.arguments.contains("--superset-prototype-collapsed"), collapsedExerciseIDs.isEmpty {
+                collapsedExerciseIDs = Set(session.sortedLoggedExercises.map(\.id))
+            }
+            if ProcessInfo.processInfo.arguments.contains("--superset-prototype-collapse-first"),
+               collapsedExerciseIDs.isEmpty, let first = session.sortedLoggedExercises.first {
+                collapsedExerciseIDs = [first.id]
+            }
             updateUIHangWorkoutContext(becameCurrent: false)
         }
         .onDisappear {
@@ -793,6 +809,361 @@ enum RPEEditingFocusPolicy {
             return focusedSetID != editingSetID
         case .workoutTitle, .workoutNotes, .exerciseNotes, nil:
             return true
+        }
+    }
+}
+
+// MARK: - PROTOTYPE: superset looks (throwaway, never merge)
+//
+// Four looks for superset grouping on the real Active Workout screen,
+// switchable from the yellow pill under the header. Grouping lives in memory
+// only; nothing here touches the model or sync. Launch with
+// `--uitest-seed-long-name-active-workout` to get a single, a pair and a trio.
+
+@MainActor @Observable
+final class SupersetPrototype {
+    static let shared = SupersetPrototype()
+
+    enum Variant: String, CaseIterable {
+        case tintedBox = "A"
+        case rail = "B"
+        case oneCard = "C"
+        case tintedCards = "D"
+
+        var name: String {
+            switch self {
+            case .tintedBox: "Tinted box"
+            case .rail: "Side rail"
+            case .oneCard: "One card"
+            case .tintedCards: "Tinted cards"
+            }
+        }
+    }
+
+    enum CardChrome {
+        case standard
+        case bare
+        case tinted
+    }
+
+    struct Member {
+        let index: Int
+        let exercise: LoggedExercise
+    }
+
+    struct Block: Identifiable {
+        let id: UUID
+        let members: [Member]
+    }
+
+    private static let variantKey = "SupersetPrototype.variant"
+
+    var variant: Variant {
+        didSet { UserDefaults.standard.set(variant.rawValue, forKey: Self.variantKey) }
+    }
+    private(set) var groupIDs: [UUID: UUID] = [:]
+    private var order: [UUID] = []
+    private var didSeed = false
+
+    private init() {
+        variant = UserDefaults.standard.string(forKey: Self.variantKey)
+            .flatMap(Variant.init(rawValue:)) ?? .tintedBox
+    }
+
+    func cycle(_ step: Int) {
+        let all = Variant.allCases
+        let index = all.firstIndex(of: variant) ?? 0
+        variant = all[(index + step + all.count) % all.count]
+    }
+
+    func updateOrder(_ ids: [UUID]) {
+        order = ids
+        if !didSeed, ids.count >= 6 {
+            // Exercise 1 alone, 2–3 as a pair, 4–6 as a giant set.
+            didSeed = true
+            let pair = UUID(), trio = UUID()
+            groupIDs[ids[1]] = pair
+            groupIDs[ids[2]] = pair
+            for id in ids[3...5] { groupIDs[id] = trio }
+        }
+        normalize()
+    }
+
+    func blocks(for exercises: [LoggedExercise]) -> [Block] {
+        var blocks: [Block] = []
+        var index = 0
+        while index < exercises.count {
+            var end = index
+            if let group = groupIDs[exercises[index].id] {
+                while end + 1 < exercises.count, groupIDs[exercises[end + 1].id] == group { end += 1 }
+            }
+            blocks.append(Block(
+                id: exercises[index].id,
+                members: (index...end).map { Member(index: $0, exercise: exercises[$0]) }
+            ))
+            index = end + 1
+        }
+        return blocks
+    }
+
+    func canStartWithNext(_ id: UUID) -> Bool {
+        guard let index = order.firstIndex(of: id), index + 1 < order.count else { return false }
+        return groupIDs[id] == nil && groupIDs[order[index + 1]] == nil
+    }
+
+    func canJoinPrevious(_ id: UUID) -> Bool {
+        guard let index = order.firstIndex(of: id) else { return false }
+        return index > 0 && groupIDs[id] == nil
+    }
+
+    func isGrouped(_ id: UUID) -> Bool { groupIDs[id] != nil }
+
+    func startWithNext(_ id: UUID) {
+        guard let index = order.firstIndex(of: id), index + 1 < order.count else { return }
+        let group = UUID()
+        groupIDs[id] = group
+        groupIDs[order[index + 1]] = group
+        normalize()
+    }
+
+    func joinPrevious(_ id: UUID) {
+        guard let index = order.firstIndex(of: id), index > 0 else { return }
+        let previous = order[index - 1]
+        let group = groupIDs[previous] ?? UUID()
+        groupIDs[previous] = group
+        groupIDs[id] = group
+        normalize()
+    }
+
+    func remove(_ id: UUID) {
+        groupIDs[id] = nil
+        normalize()
+    }
+
+    /// Splits a group broken into separate runs and drops runs of one.
+    private func normalize() {
+        var seen: Set<UUID> = []
+        var index = 0
+        while index < order.count {
+            guard let group = groupIDs[order[index]] else { index += 1; continue }
+            var end = index
+            while end + 1 < order.count, groupIDs[order[end + 1]] == group { end += 1 }
+            if end == index {
+                groupIDs[order[index]] = nil
+            } else if seen.contains(group) {
+                let fresh = UUID()
+                for i in index...end { groupIDs[order[i]] = fresh }
+            } else {
+                seen.insert(group)
+            }
+            index = end + 1
+        }
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var supersetPrototypeChrome: SupersetPrototype.CardChrome = .standard
+}
+
+struct SupersetPrototypeSwitcher: View {
+    var body: some View {
+        let prototype = SupersetPrototype.shared
+        HStack(spacing: 14) {
+            Button { withAnimation(.snappy) { prototype.cycle(-1) } } label: {
+                Image(systemName: "chevron.left")
+            }
+            Text("\(prototype.variant.rawValue) · \(prototype.variant.name)")
+                .monospacedDigit()
+            Button { withAnimation(.snappy) { prototype.cycle(1) } } label: {
+                Image(systemName: "chevron.right")
+            }
+        }
+        .font(.footnote.weight(.bold))
+        .foregroundStyle(.black)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(Color.yellow, in: Capsule())
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("SupersetPrototypeSwitcher")
+    }
+}
+
+struct SupersetPrototypeMenuItems: View {
+    let exerciseID: UUID
+
+    var body: some View {
+        let prototype = SupersetPrototype.shared
+        if prototype.canStartWithNext(exerciseID) {
+            Button { withAnimation(.snappy) { prototype.startWithNext(exerciseID) } } label: {
+                Label("Superset with Next", systemImage: "link")
+            }
+        }
+        if prototype.canJoinPrevious(exerciseID) {
+            Button { withAnimation(.snappy) { prototype.joinPrevious(exerciseID) } } label: {
+                Label("Join Previous Superset", systemImage: "link")
+            }
+        }
+        if prototype.isGrouped(exerciseID) {
+            Button { withAnimation(.snappy) { prototype.remove(exerciseID) } } label: {
+                Label("Remove from Superset", systemImage: "minus.circle")
+            }
+        }
+    }
+}
+
+struct SupersetPrototypeCardChrome<Content: View>: View {
+    let chrome: SupersetPrototype.CardChrome
+    @ViewBuilder var content: Content
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius, style: .continuous)
+    }
+
+    var body: some View {
+        switch chrome {
+        case .standard:
+            SurfaceCard(role: .focus, padding: 0) { content }
+        case .bare:
+            content.frame(maxWidth: .infinity, alignment: .leading)
+        case .tinted:
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    ZStack {
+                        shape.fill(AppTheme.focusSurface)
+                        shape.fill(AppTheme.brandAccentMuted)
+                    }
+                }
+                .clipShape(shape)
+                .overlay(shape.strokeBorder(AppTheme.brandAccentForeground.opacity(0.45), lineWidth: 1))
+                .shadow(color: AppTheme.surfaceShadow, radius: 14, y: 5)
+                .containerShape(shape)
+        }
+    }
+}
+
+private struct SupersetPrototypeLabel: View {
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "link")
+            Text("SUPERSET")
+                .tracking(1.2)
+            Text("· \(count)")
+                .foregroundStyle(AppTheme.brandAccentForeground.opacity(0.7))
+        }
+        .font(.caption2.weight(.bold))
+        .foregroundStyle(AppTheme.brandAccentForeground)
+    }
+}
+
+struct SupersetPrototypeBlockView<Card: View>: View {
+    let variant: SupersetPrototype.Variant
+    let block: SupersetPrototype.Block
+    @ViewBuilder let card: (Int, LoggedExercise) -> Card
+
+    var body: some View {
+        if block.members.count < 2 {
+            ForEach(block.members, id: \.exercise.id) { member in
+                card(member.index, member.exercise)
+            }
+        } else {
+            switch variant {
+            case .tintedBox: tintedBox
+            case .rail: rail
+            case .oneCard: oneCard
+            case .tintedCards: tintedCards
+            }
+        }
+    }
+
+    private var members: some View {
+        ForEach(block.members, id: \.exercise.id) { member in
+            card(member.index, member.exercise)
+        }
+    }
+
+    /// A: the old web app's look. One tinted, dashed box holds the group's cards.
+    private var tintedBox: some View {
+        let shape = RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius + 7, style: .continuous)
+        return VStack(alignment: .leading, spacing: 8) {
+            SupersetPrototypeLabel(count: block.members.count)
+                .padding(.horizontal, 14)
+                .padding(.top, 4)
+            members
+        }
+        .padding(7)
+        .background(AppTheme.brandAccentMuted, in: shape)
+        .overlay(
+            shape.strokeBorder(
+                AppTheme.brandAccentForeground.opacity(0.4),
+                style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+            )
+        )
+        // Let the box run into the page margin so the cards keep their width.
+        .padding(.horizontal, -7)
+    }
+
+    /// B: an accent rail in the page margin spans the group's cards.
+    private var rail: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SupersetPrototypeLabel(count: block.members.count)
+                .padding(.leading, 12)
+            HStack(spacing: 6) {
+                Capsule()
+                    .fill(AppTheme.brandAccentForeground)
+                    .frame(width: 4)
+                VStack(spacing: 8) { members }
+            }
+        }
+        .padding(.leading, -10)
+    }
+
+    /// C: the group's exercises fuse into one card under a tinted header band.
+    private var oneCard: some View {
+        let shape = RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius, style: .continuous)
+        return VStack(spacing: 0) {
+            SupersetPrototypeLabel(count: block.members.count)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(AppTheme.brandAccentMuted)
+            ForEach(Array(block.members.enumerated()), id: \.element.exercise.id) { offset, member in
+                if offset > 0 {
+                    Rectangle()
+                        .fill(AppTheme.brandAccentForeground.opacity(0.35))
+                        .frame(height: 1)
+                }
+                card(member.index, member.exercise)
+                    .environment(\.supersetPrototypeChrome, .bare)
+            }
+        }
+        .background(AppTheme.focusSurface, in: shape)
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(AppTheme.brandAccentForeground.opacity(0.45), lineWidth: 1))
+        .shadow(color: AppTheme.surfaceShadow, radius: 14, y: 5)
+    }
+
+    /// D: each card takes the tint, and link chips bridge the gaps between them.
+    private var tintedCards: some View {
+        VStack(spacing: 8) {
+            ForEach(Array(block.members.enumerated()), id: \.element.exercise.id) { offset, member in
+                card(member.index, member.exercise)
+                    .environment(\.supersetPrototypeChrome, .tinted)
+                    .overlay(alignment: .bottom) {
+                        if offset < block.members.count - 1 {
+                            Image(systemName: "link")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(AppTheme.onBrandAccent)
+                                .frame(width: 26, height: 26)
+                                .background(AppTheme.brandAccentFill, in: Circle())
+                                .overlay(Circle().strokeBorder(AppTheme.canvasBackground, lineWidth: 2))
+                                .offset(y: 17)
+                        }
+                    }
+                    .zIndex(Double(block.members.count - offset))
+            }
         }
     }
 }

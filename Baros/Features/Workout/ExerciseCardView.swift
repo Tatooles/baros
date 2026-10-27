@@ -4,6 +4,7 @@ import SwiftUI
 struct ExerciseCardView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.supersetPrototypeChrome) private var supersetPrototypeChrome // PROTOTYPE
     let loggedExercise: LoggedExercise
     let exerciseIndex: Int
     @Bindable var engine: ActiveWorkoutEngine
@@ -69,7 +70,7 @@ struct ExerciseCardView: View {
         let sortedSets = cachedSortedSets ?? loggedExercise.sortedSets
         let focusedFieldValue = focusedField.wrappedValue
 
-        SurfaceCard(role: .focus, padding: 0) {
+        SupersetPrototypeCardChrome(chrome: supersetPrototypeChrome) { // PROTOTYPE: was SurfaceCard(role: .focus, padding: 0)
             VStack(spacing: 0) {
                 Button {
                     withAnimation(.snappy(duration: 0.3, extraBounce: 0)) {
@@ -107,6 +108,8 @@ struct ExerciseCardView: View {
                             }
                             .accessibilityIdentifier("ReorderExercisesButton-\(exerciseIndex)")
                         }
+
+                        SupersetPrototypeMenuItems(exerciseID: loggedExercise.id) // PROTOTYPE
 
                         Button(role: .destructive) {
                             setInputRegistry.commit(focusedField.wrappedValue)
