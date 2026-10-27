@@ -8,66 +8,79 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testInsertPrototypeWalkthrough() {
+    func testEditPencilPresentationAndRestTimer() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-insert-prototype"]
+        app.launch()
+        let pencil = app.buttons["EditWorkoutButton"]
+        XCTAssertTrue(pencil.waitForExistence(timeout: 8))
+        pencil.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 4), app.debugDescription)
+        app.buttons["DoneReorderExercisesButton"].tap()
+        app.buttons["SetCompletionButton-0-2"].tap()
+        prototypeCapture("10-rest-inline")
+        app.swipeUp()
+        app.swipeUp()
+        prototypeCapture("11-rest-header")
+    }
+
+    @MainActor
+    func testEditPencilPrototypeWalkthrough() {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-insert-prototype"]
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
-        for index in 0..<4 {
-            let header = app.buttons["ExerciseHeader-\(index)"]
-            if !header.isHittable { app.swipeUp() }
-            header.tap()
-        }
-        let add = app.buttons["AddExerciseButton"]
-        if !add.isHittable { app.swipeUp() }
-        add.tap()
-        let first = app.buttons["ExercisePickerRow-Back Squat-Barbell"]
-        XCTAssertTrue(first.waitForExistence(timeout: 4))
-        first.tap()
-        app.buttons["ExercisePickerRow-Biceps Curl-Dumbbell"].tap()
-        prototypeCapture("1a-closed")
-        app.buttons["ExerciseInsertionMenu"].tap()
-        prototypeCapture("1a-menu")
-        app.buttons["After Bench Press"].tap()
-        app.buttons["ExercisePickerAddSelectedButton"].tap()
-        XCTAssertTrue(app.buttons["ExerciseHeader-1"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.buttons["ExerciseHeader-1"].label.contains("Back Squat"))
-        XCTAssertTrue(app.buttons["ExerciseHeader-2"].label.contains("Biceps Curl"))
-        app.buttons["ExerciseHeader-1"].tap()
-        app.buttons["ExerciseHeader-2"].tap()
-        app.swipeDown()
-        prototypeCapture("1a-result")
-
-        app.terminate()
-        app.launch()
-        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
-        app.buttons["ExerciseMenuButton-0"].tap()
-        app.buttons["ReorderExercisesButton-0"].tap()
-        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 4))
-        // Show the full draft and its footer before pushing the picker.
         app.swipeUp()
-        prototypeCapture("2-edit")
+        XCTAssertTrue(app.buttons["EditWorkoutButton"].isHittable)
+        prototypeCapture("01-workout-mid")
+        app.swipeUp()
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["AddExerciseButton"].isHittable)
+        prototypeCapture("02-workout-bottom")
+        app.swipeDown()
+        app.swipeDown()
+        app.swipeDown()
+        app.buttons["ExerciseMenuButton-0"].tap()
+        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ReorderExercisesButton-0"].exists)
+        prototypeCapture("03-card-menu")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.26)).tap()
+        let field = app.textFields["SetWeightField-0-0"]
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        XCTAssertTrue(app.buttons["DismissKeyboardButton"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["EditWorkoutButton"].isHittable)
+        prototypeCapture("04-keyboard")
+        app.buttons["DismissKeyboardButton"].tap()
+        XCTAssertTrue(app.buttons["EditWorkoutButton"].waitForExistence(timeout: 3))
+        prototypeCapture("record-start")
+        let pencil = app.buttons["EditWorkoutButton"]
+        pencil.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 4), app.debugDescription)
+        XCTAssertTrue(app.buttons["EditWorkoutAddExercisesButton"].isHittable)
+        prototypeCapture("05-edit-sheet")
         app.buttons["EditWorkoutAddExercisesButton"].tap()
-        XCTAssertTrue(app.navigationBars["Add Exercises"].waitForExistence(timeout: 4))
-        XCTAssertFalse(app.buttons["ExerciseInsertionMenu"].exists)
-        prototypeCapture("2-picker")
         app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
         app.buttons["ExercisePickerRow-Biceps Curl-Dumbbell"].tap()
+        XCTAssertFalse(app.buttons["ExerciseInsertionMenu"].exists)
+        prototypeCapture("06-picker")
         app.buttons["ExercisePickerAddSelectedButton"].tap()
-        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 4))
-        prototypeCapture("2-new-rows")
+        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 3))
+        prototypeCapture("07-new-rows")
+        app.buttons["Reorder Back Squat"].press(forDuration: 0.6, thenDragTo: app.buttons["Reorder Chest Supported Row"])
+        prototypeCapture("08-dragged")
         app.buttons["DoneReorderExercisesButton"].tap()
-        XCTAssertTrue(app.buttons["ExerciseHeader-1"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.buttons["ExerciseHeader-1"].label.contains("Back Squat"))
-        XCTAssertTrue(app.buttons["ExerciseHeader-2"].label.contains("Biceps Curl"))
-        // Compact cards make the insertion position visible in a single image.
+        XCTAssertTrue(app.buttons["EditWorkoutButton"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ExerciseHeader-3"].label.contains("Back Squat"))
         for index in 0..<6 {
             let header = app.buttons["ExerciseHeader-\(index)"]
             if !header.isHittable { app.swipeUp() }
             header.tap()
         }
         app.swipeDown()
-        prototypeCapture("2-result")
+        app.swipeDown()
+        prototypeCapture("09-after-done")
+        prototypeCapture("record-stop")
     }
 
     @MainActor
@@ -107,7 +120,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(app.tables["ReorderExercisesList"].cells.count, 5)
         app.buttons["DoneReorderExercisesButton"].tap()
         XCTAssertTrue(app.buttons["ExerciseHeader-4"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["ExerciseHeader-4"].label.contains("Back Squat"))
+        XCTAssertTrue(app.buttons["ExerciseHeader-3"].label.contains("Back Squat"))
     }
 
     @MainActor
@@ -1130,7 +1143,7 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Workout Unavailable"].waitForExistence(timeout: 3))
         XCTAssertFalse(heading.exists)
-        XCTAssertFalse(app.buttons["EditWorkoutButton"].exists)
+        XCTAssertFalse(app.buttons["EditWorkoutButton"].isHittable)
 
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(historyRow.waitForNonExistence(timeout: 3))
@@ -2476,10 +2489,7 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     private func openReorderSheet(in app: XCUIApplication) {
-        let menu = app.buttons["ExerciseMenuButton-0"]
-        XCTAssertTrue(menu.waitForExistence(timeout: 3))
-        menu.tap()
-        let reorder = app.buttons["ReorderExercisesButton-0"]
+        let reorder = app.buttons["EditWorkoutButton"]
         XCTAssertTrue(reorder.waitForExistence(timeout: 3))
         reorder.tap()
         XCTAssertTrue(waitForReorderExercisesList(in: app, timeout: 3))
@@ -2543,8 +2553,7 @@ final class BarosUITests: XCTestCase {
         dismissKeyboardIfNeeded(in: app)
         addExercise("ExercisePickerRow-Bench Press-Barbell", in: app)
         dismissKeyboardIfNeeded(in: app)
-        app.buttons["ExerciseMenuButton-0"].tap()
-        app.buttons["ReorderExercisesButton-0"].tap()
+        app.buttons["EditWorkoutButton"].tap()
         XCTAssertTrue(waitForReorderExercisesList(in: app, timeout: 3))
         moveReorderExercise(named: "Bench Press", before: "Back Squat", in: app)
         app.buttons["DoneReorderExercisesButton"].tap()
@@ -2582,8 +2591,7 @@ final class BarosUITests: XCTestCase {
             in: app
         )
 
-        app.buttons["ExerciseMenuButton-0"].tap()
-        let reorderButton = app.buttons["ReorderExercisesButton-0"]
+        let reorderButton = app.buttons["EditWorkoutButton"]
         XCTAssertTrue(reorderButton.waitForExistence(timeout: 3))
         reorderButton.tap()
 
@@ -3010,7 +3018,7 @@ final class BarosUITests: XCTestCase {
         openUnavailableWorkout.tap()
 
         XCTAssertTrue(app.staticTexts["Workout Unavailable"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.buttons["EditWorkoutButton"].exists)
+        XCTAssertFalse(app.buttons["EditWorkoutButton"].isHittable)
         XCTAssertFalse(app.staticTexts["Previous workout narrative"].exists)
     }
 

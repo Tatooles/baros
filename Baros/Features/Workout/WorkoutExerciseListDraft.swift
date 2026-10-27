@@ -56,7 +56,7 @@ struct WorkoutExerciseListSnapshot: Equatable {
         init(addition: WorkoutExerciseListDraft.Addition) {
             id = addition.id
             name = addition.exercise.name
-            metadata = addition.exercise.equipment.displayName
+            metadata = addition.exercise.metadataDisplayText
             orderIndex = 0
             notes = ""
             referenceNotes = nil
@@ -121,13 +121,11 @@ struct WorkoutExerciseListDraft {
         return baseline.exercises.filter { !remaining.contains($0.id) }
     }
 
-    var needsRemovalConfirmation: Bool { removedExercises.contains { $0.loggedSetCount > 0 } }
-}
+    mutating func append(_ exercises: [Exercise]) {
+        let pending = exercises.map { Addition(exercise: $0) }
+        additions.append(contentsOf: pending)
+        orderedIDs.append(contentsOf: pending.map(\.id))
+    }
 
-/// The most recently touched logged set chooses the insertion anchor.
-func defaultExerciseInsertionIndex(in exercises: [WorkoutExerciseListSnapshot.ExerciseState]) -> Int {
-    let latest = exercises.enumerated().flatMap { index, exercise in
-        exercise.sets.filter(\.hasLoggedValues).map { (index: index, date: $0.completedAt ?? $0.updatedAt) }
-    }.max { $0.date < $1.date }
-    return latest.map { $0.index + 1 } ?? exercises.count
+    var needsRemovalConfirmation: Bool { removedExercises.contains { $0.loggedSetCount > 0 } }
 }

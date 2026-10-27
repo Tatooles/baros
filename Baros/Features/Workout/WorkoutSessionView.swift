@@ -44,11 +44,8 @@ struct WorkoutSessionView: View {
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
 
     private var contentBottomPadding: CGFloat {
-        // Extra room only for positioning a newly added exercise near the top
-        // of the viewport. Padding that collapses on dismissal clamps the
-        // scroll offset (a visible jump), so it is otherwise the minimum; the
-        // keyboard bar's safe-area inset already gives focused fields room.
-        recentlyAddedExerciseID != nil ? 120 : 24
+        // Keep the last set and the fast Add path fully above the floating editor.
+        recentlyAddedExerciseID != nil ? 120 : 90
     }
 
     private var weightUnit: MeasurementUnit {
@@ -60,7 +57,6 @@ struct WorkoutSessionView: View {
 
     var body: some View {
         let sortedLoggedExercises = cachedSortedLoggedExercises ?? session.sortedLoggedExercises
-        let canReorderExercises = sortedLoggedExercises.count >= 1
 
         ScrollViewReader { scrollProxy in
             ScrollView(showsIndicators: false) {
@@ -115,7 +111,6 @@ struct WorkoutSessionView: View {
                             focusedField: $focusedField,
                             weightUnit: weightUnit,
                             previousSets: cachedPreviousSets[loggedExercise.id] ?? [],
-                            canReorder: canReorderExercises,
                             viewHistory: {
                                 guard prepareForPresentation() else { return }
                                 selectedHistoryExercise = loggedExercise
@@ -123,10 +118,6 @@ struct WorkoutSessionView: View {
                             onSwapExercise: {
                                 guard prepareForPresentation() else { return }
                                 swappingLoggedExercise = loggedExercise
-                            },
-                            onReorderExercises: {
-                                guard prepareForPresentation() else { return }
-                                isReorderExercisesPresented = true
                             },
                             onEditRPE: { set in
                                 focusedField = .setReps(set.id)
@@ -222,6 +213,30 @@ struct WorkoutSessionView: View {
                 }
                 .frame(width: 0, height: 0)
             }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            // A separate glass container prevents transitions from morphing
+            // out of the Finish button in the header.
+            GlassEffectContainer {
+                Button {
+                    guard prepareForPresentation() else { return }
+                    isReorderExercisesPresented = true
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 21, weight: .medium))
+                        .frame(width: 50, height: 50)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: Circle())
+                .accessibilityLabel("Edit Workout")
+                .accessibilityIdentifier("EditWorkoutButton")
+                .accessibilityHidden(!showsEditWorkoutButton)
+            }
+            .opacity(showsEditWorkoutButton ? 1 : 0)
+            .allowsHitTesting(showsEditWorkoutButton)
+            .padding(.trailing, AppTheme.shellPadding)
+            .padding(.bottom, 8)
         }
         .disabled(engine.hasPendingSetSave)
         .alert("Couldn't save this edit", isPresented: $showsSetSaveFailure) {
@@ -358,6 +373,11 @@ struct WorkoutSessionView: View {
         if value != nil || engine.hasPendingSetSave {
             resignFocus()
         }
+    }
+
+    private var showsEditWorkoutButton: Bool {
+        !(cachedSortedLoggedExercises ?? session.sortedLoggedExercises).isEmpty
+            && focusedField == nil && !isChildPresentationActive
     }
 
     private var isChildPresentationActive: Bool {

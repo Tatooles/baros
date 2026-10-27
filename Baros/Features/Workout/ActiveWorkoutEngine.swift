@@ -177,7 +177,6 @@ final class ActiveWorkoutEngine {
     func addExercises(
         _ exercises: [Exercise],
         to session: WorkoutSession,
-        insertionIndex: Int? = nil,
         ownerTokenIdentifier: String? = nil,
         context: ModelContext,
         save: (ModelContext) throws -> Void = { try $0.save() }
@@ -186,7 +185,7 @@ final class ActiveWorkoutEngine {
         let additions = exercises.filter { seen.insert($0.id).inserted }
         guard !additions.isEmpty else { return [] }
         return try insertExercises(
-            additions, to: session, insertionIndex: insertionIndex, ownerTokenIdentifier: ownerTokenIdentifier,
+            additions, to: session, ownerTokenIdentifier: ownerTokenIdentifier,
             context: context, save: save
         )
     }
@@ -194,7 +193,6 @@ final class ActiveWorkoutEngine {
     private func insertExercises(
         _ exercises: [Exercise],
         to session: WorkoutSession,
-        insertionIndex: Int? = nil,
         ownerTokenIdentifier: String?,
         context: ModelContext,
         save: (ModelContext) throws -> Void
@@ -206,13 +204,7 @@ final class ActiveWorkoutEngine {
             initialSetKinds(for: $0, ownerTokenIdentifier: ownerTokenIdentifier, sessions: history)
         }
         let originalSessionUpdatedAt = session.updatedAt
-        let existing = session.sortedLoggedExercises
-        let originalOrders = existing.map { (exercise: $0, index: $0.orderIndex, updatedAt: $0.updatedAt) }
-        let nextIndex = min(max(insertionIndex ?? existing.count, 0), existing.count)
-        for (index, exercise) in existing.enumerated() where index >= nextIndex {
-            exercise.orderIndex = index + exercises.count
-            exercise.touch()
-        }
+        let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
         var additions: [LoggedExercise] = []
         for (offset, exercise) in exercises.enumerated() {
             let loggedExercise = LoggedExercise(orderIndex: nextIndex + offset, exercise: exercise)
@@ -248,10 +240,6 @@ final class ActiveWorkoutEngine {
                     context.delete(set)
                 }
                 context.delete(loggedExercise)
-            }
-            for state in originalOrders {
-                state.exercise.orderIndex = state.index
-                state.exercise.updatedAt = state.updatedAt
             }
             session.updatedAt = originalSessionUpdatedAt
             throw error

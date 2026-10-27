@@ -9,7 +9,7 @@ struct ReorderExercisesSheet: View {
     @Bindable var engine: ActiveWorkoutEngine
     @State private var draft: WorkoutExerciseListDraft
     @State private var showsPicker = false
-    @State private var detent: PresentationDetent = .medium
+    @State private var detent: PresentationDetent = .large
     @State private var alert: SaveAlert?
     @State private var removalConfirmation: RemovalConfirmation?
     /// Shown once the removal confirmation has finished dismissing.
@@ -54,10 +54,7 @@ struct ReorderExercisesSheet: View {
             }
             .navigationDestination(isPresented: $showsPicker) {
                 ExercisePickerView(mode: .add(existingExerciseIDs: existingExerciseIDs), showsCancel: false) { exercises in
-                    let additions = exercises.map { WorkoutExerciseListDraft.Addition(exercise: $0) }
-                    let index = defaultExerciseInsertionIndex(in: draft.exercises)
-                    draft.additions.append(contentsOf: additions)
-                    draft.orderedIDs.insert(contentsOf: additions.map(\.id), at: index)
+                    draft.append(exercises)
                     showsPicker = false
                 }
             }

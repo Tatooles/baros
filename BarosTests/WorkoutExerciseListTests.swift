@@ -157,24 +157,7 @@ final class WorkoutExerciseListTests: XCTestCase {
         )
     }
 
-    func testInsertionDefaultUsesLatestLoggedSetAndIgnoresBlankTouches() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let session = try fixture(in: container.mainContext)
-        let exercises = session.sortedLoggedExercises
-        XCTAssertEqual(defaultExerciseInsertionIndex(in: WorkoutExerciseListSnapshot(session: session).exercises), 3)
-        exercises[0].sets[0].isCompleted = true
-        exercises[0].sets[0].completedAt = Date(timeIntervalSince1970: 20)
-        exercises[0].sets[0].updatedAt = Date(timeIntervalSince1970: 100)
-        exercises[1].sets[0].weight = 0
-        exercises[1].sets[0].updatedAt = Date(timeIntervalSince1970: 30)
-        exercises[2].sets[0].updatedAt = Date(timeIntervalSince1970: 200)
-        XCTAssertEqual(defaultExerciseInsertionIndex(in: WorkoutExerciseListSnapshot(session: session).exercises), 2)
-        exercises[0].sets[0].completedAt = Date(timeIntervalSince1970: 40)
-        XCTAssertEqual(defaultExerciseInsertionIndex(in: WorkoutExerciseListSnapshot(session: session).exercises), 1)
-        XCTAssertEqual(defaultExerciseInsertionIndex(in: []), 0)
-    }
-
-    func testMiddleBatchFailureRestoresShiftedOrdersAndRetryPreservesTapOrder() throws {
+    func testAppendBatchFailureRestoresWorkoutAndRetryPreservesTapOrder() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let session = try fixture(in: context)
@@ -182,11 +165,23 @@ final class WorkoutExerciseListTests: XCTestCase {
         let additions = ["Curl", "Fly"].map { Exercise(name: $0, category: .strength, equipment: .dumbbell, primaryMuscleGroup: .chest) }
         additions.forEach { context.insert($0) }
         let engine = ActiveWorkoutEngine()
-        XCTAssertThrowsError(try engine.addExercises(additions, to: session, insertionIndex: 1, context: context, save: { _ in throw CocoaError(.fileWriteUnknown) }))
+        XCTAssertThrowsError(try engine.addExercises(additions, to: session, context: context, save: { _ in throw CocoaError(.fileWriteUnknown) }))
         XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), baseline)
-        try engine.addExercises(additions, to: session, insertionIndex: 1, context: context)
-        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Bench Press", "Curl", "Fly", "Barbell Row", "Back Squat"])
+        try engine.addExercises(additions, to: session, context: context)
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Bench Press", "Barbell Row", "Back Squat", "Curl", "Fly"])
         XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2, 3, 4])
+    }
+
+    func testDraftAppendsInTapOrderEvenWithLoggedSets() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let session = try fixture(in: container.mainContext)
+        session.sortedLoggedExercises[0].sets[0].isCompleted = true
+        var draft = WorkoutExerciseListDraft(session: session)
+        let picks = ["Curl", "Fly"].map { Exercise(name: $0, category: .strength, equipment: .dumbbell, primaryMuscleGroup: .chest) }
+        draft.append(picks)
+        XCTAssertEqual(draft.exercises.map(\.name), ["Bench Press", "Barbell Row", "Back Squat", "Curl", "Fly"])
+        XCTAssertTrue(draft.exercises.suffix(2).allSatisfy(\.isNew))
+        XCTAssertEqual(session.sortedLoggedExercises.count, 3)
     }
 
     func testDraftAddRemoveAndReorderSaveOnceAndKeepDraftForRetry() throws {
