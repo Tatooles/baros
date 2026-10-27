@@ -207,6 +207,10 @@ struct WorkoutExerciseHeaderContent: View {
     var isCollapsed: Bool?
     /// Width kept clear at the end of the title for a control overlaid on the header.
     var titleTrailingInset: CGFloat = 0
+    /// A shared minimum aligns ordinary set counts without scaling the fixed padding.
+    static let progressPillContentMinWidth: CGFloat = 28
+    static let progressPillHorizontalPadding: CGFloat = 12
+    @ScaledMetric(relativeTo: .footnote) private var progressPillContentMinWidth = Self.progressPillContentMinWidth
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -241,7 +245,8 @@ struct WorkoutExerciseHeaderContent: View {
                     Text("\(progress.completed)/\(progress.total)")
                         .font(.footnote.weight(.bold).monospacedDigit())
                         .foregroundStyle(progress.isComplete ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
-                        .padding(.horizontal, 12)
+                        .frame(minWidth: progressPillContentMinWidth)
+                        .padding(.horizontal, Self.progressPillHorizontalPadding)
                         .padding(.vertical, 6)
                         .background(
                             progress.isComplete ? AnyShapeStyle(AppTheme.brandAccentMuted) : AnyShapeStyle(AppTheme.recessedSurface),

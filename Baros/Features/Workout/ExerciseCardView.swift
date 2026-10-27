@@ -55,7 +55,15 @@ struct ExerciseCardView: View {
     }
 
     private static let menuButtonSize: CGFloat = 44
-    private static let menuButtonTrailingOverhang: CGFloat = 12
+    // Let the title use a little of the menu's empty leading margin.
+    private var titleMenuSpacingAllowance: CGFloat { dynamicTypeSize.isAccessibilitySize ? 0 : 5 }
+    @ScaledMetric(relativeTo: .footnote) private var progressPillContentMinWidth = WorkoutExerciseHeaderContent.progressPillContentMinWidth
+
+    /// Insets the menu so its ellipsis is centered over the progress pill below it.
+    private var menuButtonTrailingInset: CGFloat {
+        let pillWidth = progressPillContentMinWidth + 2 * WorkoutExerciseHeaderContent.progressPillHorizontalPadding
+        return max(0, (pillWidth - Self.menuButtonSize) / 2)
+    }
 
     var body: some View {
         let sortedSets = cachedSortedSets ?? loggedExercise.sortedSets
@@ -73,7 +81,7 @@ struct ExerciseCardView: View {
                         metadata: loggedExercise.metadataDisplayText,
                         progress: Self.setProgress(for: sortedSets),
                         isCollapsed: isCollapsed,
-                        titleTrailingInset: Self.menuButtonSize - Self.menuButtonTrailingOverhang
+                        titleTrailingInset: menuButtonTrailingInset + Self.menuButtonSize - titleMenuSpacingAllowance
                     )
                     .contentShape(Rectangle())
                 }
@@ -123,8 +131,7 @@ struct ExerciseCardView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(loggedExercise.exerciseSnapshotName) options")
                     .accessibilityIdentifier("ExerciseMenuButton-\(exerciseIndex)")
-                    // Lines the ellipsis up with the progress pill's trailing edge.
-                    .padding(.trailing, -Self.menuButtonTrailingOverhang)
+                    .padding(.trailing, menuButtonTrailingInset)
                 }
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)
