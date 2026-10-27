@@ -54,31 +54,42 @@ struct ExerciseCardView: View {
         self.onEditRPE = onEditRPE
     }
 
+    private static let menuButtonSize: CGFloat = 44
+    // Let the title use a little of the menu's empty leading margin.
+    private var titleMenuSpacingAllowance: CGFloat { dynamicTypeSize.isAccessibilitySize ? 0 : 5 }
+    @ScaledMetric(relativeTo: .footnote) private var progressPillContentMinWidth = WorkoutExerciseHeaderContent.progressPillContentMinWidth
+
+    /// Insets the menu so its ellipsis is centered over the progress pill below it.
+    private var menuButtonTrailingInset: CGFloat {
+        let pillWidth = progressPillContentMinWidth + 2 * WorkoutExerciseHeaderContent.progressPillHorizontalPadding
+        return max(0, (pillWidth - Self.menuButtonSize) / 2)
+    }
+
     var body: some View {
         let sortedSets = cachedSortedSets ?? loggedExercise.sortedSets
         let focusedFieldValue = focusedField.wrappedValue
 
         SurfaceCard(role: .focus, padding: 0) {
             VStack(spacing: 0) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Button {
-                        withAnimation(.snappy(duration: 0.3, extraBounce: 0)) {
-                            isCollapsed.toggle()
-                        }
-                    } label: {
-                        HStack(spacing: 12) {
-                            WorkoutExerciseHeaderContent(
-                                title: loggedExercise.exerciseSnapshotName,
-                                metadata: loggedExercise.metadataDisplayText,
-                                progress: Self.setProgress(for: sortedSets),
-                                isCollapsed: isCollapsed
-                            )
-                        }
-                        .contentShape(Rectangle())
+                Button {
+                    withAnimation(.snappy(duration: 0.3, extraBounce: 0)) {
+                        isCollapsed.toggle()
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("ExerciseHeader-\(exerciseIndex)")
-
+                } label: {
+                    WorkoutExerciseHeaderContent(
+                        title: loggedExercise.exerciseSnapshotName,
+                        metadata: loggedExercise.metadataDisplayText,
+                        progress: Self.setProgress(for: sortedSets),
+                        isCollapsed: isCollapsed,
+                        titleTrailingInset: menuButtonTrailingInset + Self.menuButtonSize - titleMenuSpacingAllowance
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("ExerciseHeader-\(exerciseIndex)")
+                // The menu overlays the header so the metadata row and its progress pill
+                // can run underneath it, leaving the title the full width.
+                .overlay(alignment: Alignment(horizontal: .trailing, vertical: .firstTextBaseline)) {
                     Menu {
                         Button(action: viewHistory) {
                             Label("View History", systemImage: "clock.arrow.circlepath")
@@ -111,7 +122,7 @@ struct ExerciseCardView: View {
                         Image(systemName: "ellipsis")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(AppTheme.textSecondary)
-                            .frame(width: 44, height: 44)
+                            .frame(width: Self.menuButtonSize, height: Self.menuButtonSize)
                             .alignmentGuide(.firstTextBaseline) { dimensions in
                                 dimensions[VerticalAlignment.center] + 6
                             }
@@ -120,6 +131,7 @@ struct ExerciseCardView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(loggedExercise.exerciseSnapshotName) options")
                     .accessibilityIdentifier("ExerciseMenuButton-\(exerciseIndex)")
+                    .padding(.trailing, menuButtonTrailingInset)
                 }
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)

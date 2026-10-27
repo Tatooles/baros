@@ -3,6 +3,13 @@ import XCTest
 @testable import Baros
 
 final class FormattingTests: XCTestCase {
+    func testExerciseHeaderTitleBindsSpacedDashesToThePrecedingWord() {
+        XCTAssertEqual(WorkoutFormatters.exerciseHeaderTitle("Lying Leg Curl - Cap"), "Lying Leg Curl\u{00A0}– Cap")
+        XCTAssertEqual(WorkoutFormatters.exerciseHeaderTitle("Row – Wide"), "Row\u{00A0}– Wide")
+        XCTAssertEqual(WorkoutFormatters.exerciseHeaderTitle("Row — Wide"), "Row\u{00A0}— Wide")
+        XCTAssertEqual(WorkoutFormatters.exerciseHeaderTitle("Single-Arm Row"), "Single-Arm Row")
+    }
+
     func testDurationFormatterUsesHourStyleWhenNeeded() {
         XCTAssertEqual(AppTheme.formatDuration(3674), "1:01:14")
     }
