@@ -88,6 +88,7 @@ struct AppShellView: View {
 
     var body: some View {
         tabShell
+            .modifier(AppUpdatePrompt(isIdle: isIdleForAppUpdate))
             .background {
                 RestTimerLifecycleObserver(session: activeSession, timer: activeWorkoutEngine.restTimer,
                     ownerState: currentOwnerCoordinator.state)
@@ -224,6 +225,13 @@ struct AppShellView: View {
                 )
             }
             .accessibilityDynamicTypeForUITesting()
+    }
+
+    private var isIdleForAppUpdate: Bool {
+        if case .resolving = currentOwnerCoordinator.state { return false }
+        return hasMadeLaunchExperienceDecision && launchPresentation == nil
+            && firstRunStore.state.hasCompletedOnboarding
+            && activeSession == nil && !navigationState.isActiveWorkoutPresented
     }
 
     private struct UIHangShellState: Equatable {
