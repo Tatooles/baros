@@ -867,7 +867,7 @@ final class SupersetPrototype {
 
     private init() {
         variant = UserDefaults.standard.string(forKey: Self.variantKey)
-            .flatMap(Variant.init(rawValue:)) ?? .tintedBox
+            .flatMap(Variant.init(rawValue:)) ?? .rail
     }
 
     func cycle(_ step: Int) {
@@ -878,7 +878,8 @@ final class SupersetPrototype {
 
     func updateOrder(_ ids: [UUID]) {
         order = ids
-        if !didSeed, ids.count >= 6 {
+        if !didSeed, ids.count >= 6,
+           ProcessInfo.processInfo.arguments.contains("--uitest-seed-long-name-active-workout") {
             // Exercise 1 alone, 2–3 as a pair, 4–6 as a giant set.
             didSeed = true
             let pair = UUID(), trio = UUID()
@@ -906,32 +907,42 @@ final class SupersetPrototype {
         return blocks
     }
 
+    /// Shown whenever the neighbor isn't already in this exercise's group:
+    /// pairs two singles, adds a single to a neighboring group, or merges groups.
     func canStartWithNext(_ id: UUID) -> Bool {
         guard let index = order.firstIndex(of: id), index + 1 < order.count else { return false }
-        return groupIDs[id] == nil && groupIDs[order[index + 1]] == nil
+        return !sameGroup(id, order[index + 1])
     }
 
     func canJoinPrevious(_ id: UUID) -> Bool {
-        guard let index = order.firstIndex(of: id) else { return false }
-        return index > 0 && groupIDs[id] == nil
+        guard let index = order.firstIndex(of: id), index > 0 else { return false }
+        return !sameGroup(id, order[index - 1])
     }
 
     func isGrouped(_ id: UUID) -> Bool { groupIDs[id] != nil }
 
     func startWithNext(_ id: UUID) {
         guard let index = order.firstIndex(of: id), index + 1 < order.count else { return }
-        let group = UUID()
-        groupIDs[id] = group
-        groupIDs[order[index + 1]] = group
-        normalize()
+        link(id, order[index + 1])
     }
 
     func joinPrevious(_ id: UUID) {
         guard let index = order.firstIndex(of: id), index > 0 else { return }
-        let previous = order[index - 1]
-        let group = groupIDs[previous] ?? UUID()
-        groupIDs[previous] = group
-        groupIDs[id] = group
+        link(order[index - 1], id)
+    }
+
+    private func sameGroup(_ a: UUID, _ b: UUID) -> Bool {
+        guard let group = groupIDs[a] else { return false }
+        return groupIDs[b] == group
+    }
+
+    private func link(_ a: UUID, _ b: UUID) {
+        let group = groupIDs[a] ?? groupIDs[b] ?? UUID()
+        if let absorbed = groupIDs[b], absorbed != group {
+            for (id, existing) in groupIDs where existing == absorbed { groupIDs[id] = group }
+        }
+        groupIDs[a] = group
+        groupIDs[b] = group
         normalize()
     }
 
