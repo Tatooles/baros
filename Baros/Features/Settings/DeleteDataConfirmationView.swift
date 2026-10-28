@@ -80,26 +80,19 @@ struct DeleteDataConfirmationView: View {
             }
 
             Section {
-                Button(role: .destructive) {
-                    Task {
-                        switch mode {
-                        case .account:
-                            await coordinator.deleteAccount()
-                        case .localData:
-                            await coordinator.deleteLocalData()
-                        }
+                if mode == .account {
+                    AccountTransitionButton(destination: .deleteAccount, role: .destructive) {
+                        await coordinator.deleteAccount()
                     }
-                } label: {
-                    HStack {
-                        Text(buttonText)
-                        if coordinator.phase.isRunning {
-                            Spacer()
-                            ProgressView()
-                        }
+                    .disabled(confirmationText != "DELETE" || coordinator.phase.isRunning)
+                    .accessibilityIdentifier("DeleteDataConfirmButton")
+                } else {
+                    Button(buttonText, role: .destructive) {
+                        Task { await coordinator.deleteLocalData() }
                     }
+                    .disabled(confirmationText != "DELETE" || coordinator.phase.isRunning)
+                    .accessibilityIdentifier("DeleteDataConfirmButton")
                 }
-                .disabled(confirmationText != "DELETE" || coordinator.phase.isRunning)
-                .accessibilityIdentifier("DeleteDataConfirmButton")
             }
         }
         .scrollContentBackground(.hidden)

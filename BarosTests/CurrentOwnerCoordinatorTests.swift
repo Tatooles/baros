@@ -7,6 +7,48 @@ private let ownerB = "issuer|owner_b"
 
 @MainActor
 final class CurrentOwnerCoordinatorTests: XCTestCase {
+    func testConfirmedLossHidesButPreservesActiveWorkoutAndBlocksAnotherStart() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        defer { harness.finish() }
+        let engine = ActiveWorkoutEngine()
+        let workout = try engine.startBlankWorkout(ownerTokenIdentifier: ownerA, context: harness.context)
+        harness.coordinator.start()
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == ownerA }
+        try await waitUntil {
+            harness.authenticationClient.loginFromCacheCallCount > 0 && !harness.coordinator.isRecoveringAuthentication
+        }
+        let delivered = harness.authenticationClient.deliveredStateCount
+        harness.setClerkOwner(nil)
+        harness.authenticationClient.sendAuthenticationState(.unauthenticated)
+        try await waitUntil {
+            harness.coordinator.state == .localOnly && harness.authenticationClient.deliveredStateCount > delivered
+        }
+        XCTAssertEqual(workout.status, .active)
+        XCTAssertTrue(WorkoutSession.visibleActiveSessions(from: [workout]).isEmpty)
+        XCTAssertThrowsError(try engine.startBlankWorkout(context: harness.context))
+    }
+
+    func testTemporaryAuthenticationLossPreservesAndKeepsActiveWorkoutAccessible() async throws {
+        let harness = try CurrentOwnerCoordinatorHarness()
+        defer { harness.finish() }
+        let engine = ActiveWorkoutEngine()
+        let workout = try engine.startBlankWorkout(ownerTokenIdentifier: ownerA, context: harness.context)
+        harness.coordinator.start()
+        try await waitUntil { harness.coordinator.localDataOwnerTokenIdentifier == ownerA }
+        try await waitUntil {
+            harness.authenticationClient.loginFromCacheCallCount > 0 && !harness.coordinator.isRecoveringAuthentication
+        }
+        harness.syncScheduler.updateNetworkAvailability(.unavailable)
+        let delivered = harness.authenticationClient.deliveredStateCount
+        harness.authenticationClient.sendAuthenticationState(.unauthenticated)
+        try await waitUntil { harness.authenticationClient.deliveredStateCount > delivered }
+        XCTAssertEqual(harness.coordinator.state, .resolving(ownerTokenIdentifier: ownerA))
+        XCTAssertEqual(workout.status, .active)
+        XCTAssertEqual(WorkoutSession.visibleActiveSessions(from: [workout],
+            ownerTokenIdentifier: harness.coordinator.localDataOwnerTokenIdentifier).map(\.id), [workout.id])
+        XCTAssertEqual(try engine.startBlankWorkout(ownerTokenIdentifier: ownerA, context: harness.context).id, workout.id)
+    }
+
     func testStartWithoutActiveClerkSessionEntersLocalOnlyMode() async throws {
         let harness = try CurrentOwnerCoordinatorHarness(
             clerkOwner: nil,

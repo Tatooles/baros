@@ -37,6 +37,8 @@ struct SettingsAccountSection: View {
         Section {
             SettingsAccountRow()
 
+            WorkoutRecoveryNotice()
+
             syncStatusRow
 
             #if DEBUG

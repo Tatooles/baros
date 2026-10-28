@@ -233,6 +233,11 @@
 		FDB5585A9B107F9DD9C63B70 /* ExerciseHistoryRecordsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45A640E8DEFC5A40AD554FD6 /* ExerciseHistoryRecordsCard.swift */; };
 		FF2C2372AAE61B0B690AD23E /* WorkoutEditingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899D04423C1918B8B8546277 /* WorkoutEditingComponents.swift */; };
 		FFA861796C9D50E403A56C5F /* EmptyHistoryStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0806162D8B4D60C712F43690 /* EmptyHistoryStateView.swift */; };
+		21066674B18CC7CBCD2DFB8B /* AccountTransitionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E361D78D62270A78767AAF /* AccountTransitionButton.swift */; };
+		670F8D764CC6483AEFA78520 /* WorkoutRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A05788A71C4C0E1BF9C8E7 /* WorkoutRecovery.swift */; };
+		9C48CDEEAE041FC54E2134A4 /* WorkoutRecoveryNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9A8AE470D90811B40DEA33F /* WorkoutRecoveryNotice.swift */; };
+		C2D60C73352ACBEF20074C6B /* WorkoutAccountTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DAF146A9EDDB0C56C5D1EE9 /* WorkoutAccountTransitionTests.swift */; };
+		FF36EACD6D2CA1FBC14ED277 /* WorkoutAccountTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = B342B16692C52E3DCA17539E /* WorkoutAccountTransition.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -497,6 +502,11 @@
 		FE0EC921FAAF05ACAD357154 /* PrivacySupportConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySupportConfigurationTests.swift; sourceTree = "<group>"; };
 		FE6EF104C212C2C4623FBD9C /* PrivacySupportConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySupportConfiguration.swift; sourceTree = "<group>"; };
 		FF537838C1348DCD7A236196 /* CompletedWorkoutConcurrentEditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletedWorkoutConcurrentEditTests.swift; sourceTree = "<group>"; };
+		89A05788A71C4C0E1BF9C8E7 /* WorkoutRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutRecovery.swift; sourceTree = "<group>"; };
+		9DAF146A9EDDB0C56C5D1EE9 /* WorkoutAccountTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutAccountTransitionTests.swift; sourceTree = "<group>"; };
+		B342B16692C52E3DCA17539E /* WorkoutAccountTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutAccountTransition.swift; sourceTree = "<group>"; };
+		D0E361D78D62270A78767AAF /* AccountTransitionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountTransitionButton.swift; sourceTree = "<group>"; };
+		F9A8AE470D90811B40DEA33F /* WorkoutRecoveryNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutRecoveryNotice.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -774,6 +784,7 @@
 				FB86D1EF7DB4A2478549754C /* WorkoutExportFileWriterTests.swift */,
 				ED6FD1AFCBF39F0871519249 /* WorkoutFocusTransitionCoordinatorTests.swift */,
 				8C47B6DD51B01ED88DCD3D3D /* WorkoutLiveActivityTests.swift */,
+				9DAF146A9EDDB0C56C5D1EE9 /* WorkoutAccountTransitionTests.swift */,
 			);
 			path = BarosTests;
 			sourceTree = "<group>";
@@ -894,6 +905,7 @@
 				04F932F5660BD563C6315FED /* Persistence */,
 				13F3512284EC900FD8D20A0A /* Privacy */,
 				727C5ADBAB3221909693D016 /* Sync */,
+				E7AD26E588B747C86FFE063F /* AccountTransition */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -982,6 +994,17 @@
 				DCF0AAACFE6DEE697191BFBA /* UIHangContextObservability.swift */,
 			);
 			path = Observability;
+			sourceTree = "<group>";
+		};
+		E7AD26E588B747C86FFE063F /* AccountTransition */ = {
+			isa = PBXGroup;
+			children = (
+				D0E361D78D62270A78767AAF /* AccountTransitionButton.swift */,
+				B342B16692C52E3DCA17539E /* WorkoutAccountTransition.swift */,
+				89A05788A71C4C0E1BF9C8E7 /* WorkoutRecovery.swift */,
+				F9A8AE470D90811B40DEA33F /* WorkoutRecoveryNotice.swift */,
+			);
+			path = AccountTransition;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1351,6 +1374,10 @@
 				F0CE978782A4DF4A4A6AA034 /* WorkoutSessionView.swift in Sources */,
 				8931EE5E9411ADE7FAF539B4 /* WorkoutSource.swift in Sources */,
 				9A75ADC7C7E657913D77DA7B /* WorkoutTemplate.swift in Sources */,
+				21066674B18CC7CBCD2DFB8B /* AccountTransitionButton.swift in Sources */,
+				FF36EACD6D2CA1FBC14ED277 /* WorkoutAccountTransition.swift in Sources */,
+				670F8D764CC6483AEFA78520 /* WorkoutRecovery.swift in Sources */,
+				9C48CDEEAE041FC54E2134A4 /* WorkoutRecoveryNotice.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1416,6 +1443,7 @@
 				D4960AD096F7BAD94039176A /* WorkoutExportFileWriterTests.swift in Sources */,
 				F92459A105A618D122230D51 /* WorkoutFocusTransitionCoordinatorTests.swift in Sources */,
 				B64A05C6FD184B841E18C861 /* WorkoutLiveActivityTests.swift in Sources */,
+				C2D60C73352ACBEF20074C6B /* WorkoutAccountTransitionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
