@@ -172,7 +172,7 @@ final class ActiveWorkoutEngine {
         )[0]
     }
 
-    /// Inserts a picker selection in tap order, saving the whole group together.
+    /// Appends a picker selection in tap order, saving the whole group together.
     @discardableResult
     func addExercises(
         _ exercises: [Exercise],
@@ -195,13 +195,19 @@ final class ActiveWorkoutEngine {
         to session: WorkoutSession,
         ownerTokenIdentifier: String?,
         context: ModelContext,
-        save: (ModelContext) throws -> Void
+        save: (ModelContext) throws -> Void,
+        plannedSetKinds: [[SetKind]]? = nil
     ) throws -> [LoggedExercise] {
         guard !exercises.isEmpty else { return [] }
-        // Resolve history before inserting anything, so a fetch failure cannot leave a partial group.
-        let history = try context.fetch(FetchDescriptor<WorkoutSession>())
-        let setKinds = exercises.map {
-            initialSetKinds(for: $0, ownerTokenIdentifier: ownerTokenIdentifier, sessions: history)
+        let setKinds: [[SetKind]]
+        if let plannedSetKinds {
+            setKinds = plannedSetKinds
+        } else {
+            // Resolve history before inserting anything, so a fetch failure leaves no partial group.
+            let history = try context.fetch(FetchDescriptor<WorkoutSession>())
+            setKinds = exercises.map {
+                initialSetKinds(for: $0, ownerTokenIdentifier: ownerTokenIdentifier, sessions: history)
+            }
         }
         let originalSessionUpdatedAt = session.updatedAt
         let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
@@ -385,32 +391,36 @@ final class ActiveWorkoutEngine {
             (set: $0, updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
         }
         let pending = additions.filter { remainingIDs.contains($0.id) }
+        guard pending.allSatisfy({ !$0.exercise.isArchived && !$0.exercise.isDeleted
+            && $0.exercise.isVisible(to: ownerTokenIdentifier) }) else {
+            throw ActiveWorkoutEngineError.invalidExerciseReorder
+        }
         let inserted = try insertExercises(
             pending.map(\.exercise), to: session, ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context, save: { _ in }
+            context: context, save: { _ in }, plannedSetKinds: pending.map(\.initialSetKinds)
         )
         let exercisesByID = Dictionary(uniqueKeysWithValues:
             visibleExercises.map { ($0.id, $0) } + zip(pending, inserted).map { ($0.0.id, $0.1) }
         )
-        var didChangeOrder = false
-
-        for (index, id) in orderedIDs.enumerated() {
-            guard let loggedExercise = exercisesByID[id] else {
-                throw ActiveWorkoutEngineError.invalidExerciseReorder
-            }
-
-            if loggedExercise.orderIndex != index {
-                loggedExercise.orderIndex = index
-                loggedExercise.touch(now: now)
-                didChangeOrder = true
-            }
-        }
-
-        guard didChangeOrder || !removedExercises.isEmpty || !inserted.isEmpty else { return }
-        for exercise in removedExercises { exercise.markDeleted(now: now) }
-        for set in removedSets { set.markDeleted(now: now) }
-        session.touch(now: now)
         do {
+            var didChangeOrder = false
+
+            for (index, id) in orderedIDs.enumerated() {
+                guard let loggedExercise = exercisesByID[id] else {
+                    throw ActiveWorkoutEngineError.invalidExerciseReorder
+                }
+
+                if loggedExercise.orderIndex != index {
+                    loggedExercise.orderIndex = index
+                    loggedExercise.touch(now: now)
+                    didChangeOrder = true
+                }
+            }
+
+            guard didChangeOrder || !removedExercises.isEmpty || !inserted.isEmpty else { return }
+            for exercise in removedExercises { exercise.markDeleted(now: now) }
+            for set in removedSets { set.markDeleted(now: now) }
+            session.touch(now: now)
             #if DEBUG
             let arguments = ProcessInfo.processInfo.arguments
             if arguments.contains("--uitest-in-memory-store"),
@@ -839,7 +849,7 @@ final class ActiveWorkoutEngine {
         )
     }
 
-    private func initialSetKinds(
+    func initialSetKinds(
         for exercise: Exercise,
         ownerTokenIdentifier: String?,
         sessions: [WorkoutSession]

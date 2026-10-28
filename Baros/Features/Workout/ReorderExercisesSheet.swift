@@ -7,6 +7,7 @@ struct ReorderExercisesSheet: View {
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
+    @Query private var sessions: [WorkoutSession]
     @State private var draft: WorkoutExerciseListDraft
     @State private var showsPicker = false
     @State private var detent: PresentationDetent = .large
@@ -54,7 +55,11 @@ struct ReorderExercisesSheet: View {
             }
             .navigationDestination(isPresented: $showsPicker) {
                 ExercisePickerView(mode: .add(existingExerciseIDs: existingExerciseIDs), showsCancel: false) { exercises in
-                    draft.append(exercises)
+                    draft.append(exercises) {
+                        engine.initialSetKinds(for: $0,
+                            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
+                            sessions: sessions)
+                    }
                     showsPicker = false
                 }
             }
@@ -138,6 +143,9 @@ struct ReorderExercisesSheet: View {
             )
             dismiss()
             return nil
+        } catch ActiveWorkoutEngineError.invalidExerciseReorder {
+            draft = WorkoutExerciseListDraft(session: session)
+            return .conflict
         } catch {
             return .failure
         }

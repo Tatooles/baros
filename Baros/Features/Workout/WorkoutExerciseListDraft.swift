@@ -41,6 +41,7 @@ struct WorkoutExerciseListSnapshot: Equatable {
         let updatedAt: Date
         let sets: [SetState]
         var isNew = false
+        private var plannedSetCount: Int?
 
         init(_ exercise: LoggedExercise) {
             id = exercise.id
@@ -63,6 +64,7 @@ struct WorkoutExerciseListSnapshot: Equatable {
             updatedAt = .distantPast
             sets = []
             isNew = true
+            plannedSetCount = addition.initialSetKinds.count
         }
 
         var loggedSetCount: Int { sets.filter(\.hasLoggedValues).count }
@@ -73,9 +75,9 @@ struct WorkoutExerciseListSnapshot: Equatable {
             case let count: "\(count) logged sets"
             }
         }
-        var progressText: String { "\(sets.filter(\.isCompleted).count)/\(sets.count) sets" }
+        var progressText: String { "\(sets.filter(\.isCompleted).count)/\(plannedSetCount ?? sets.count) sets" }
         var accessibilityValue: String {
-            [metadata, isNew ? "New, 0 sets" : progressText].compactMap { $0 }.joined(separator: ", ")
+            [metadata, isNew ? "New" : nil, progressText].compactMap { $0 }.joined(separator: ", ")
         }
     }
 
@@ -99,6 +101,7 @@ struct WorkoutExerciseListDraft {
     struct Addition {
         let id = UUID()
         let exercise: Exercise
+        var initialSetKinds: [SetKind] = [.working]
     }
     var additions: [Addition] = []
 
@@ -121,8 +124,8 @@ struct WorkoutExerciseListDraft {
         return baseline.exercises.filter { !remaining.contains($0.id) }
     }
 
-    mutating func append(_ exercises: [Exercise]) {
-        let pending = exercises.map { Addition(exercise: $0) }
+    mutating func append(_ exercises: [Exercise], initialSetKinds: (Exercise) -> [SetKind] = { _ in [.working] }) {
+        let pending = exercises.map { Addition(exercise: $0, initialSetKinds: initialSetKinds($0)) }
         additions.append(contentsOf: pending)
         orderedIDs.append(contentsOf: pending.map(\.id))
     }

@@ -19,6 +19,7 @@ extension Animation {
 struct WorkoutSessionView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
@@ -121,7 +122,10 @@ struct WorkoutSessionView: View {
                         .id(loggedExercise.id)
                     }
 
-                    HStack(spacing: 10) {
+                    let actionLayout = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+                        : AnyLayout(HStackLayout(spacing: 10))
+                    actionLayout {
                         if !sortedLoggedExercises.isEmpty {
                             // Sits beside Add Exercise, but while that row is
                             // below the fold it pins to the bottom of the
@@ -201,7 +205,6 @@ struct WorkoutSessionView: View {
                 if RPEEditingFocusPolicy.shouldReset(editingSetID: rpeEditingSetID, newFocusedField: newField) {
                     rpeEditingSetID = nil
                 }
-
 
             }
             // Replaces a `.keyboard` toolbar, whose full-width strip swallows taps
@@ -292,7 +295,7 @@ struct WorkoutSessionView: View {
         }
     }
 
-    private static let editPillWidth: CGFloat = 108
+    @ScaledMetric(relativeTo: .headline) private var editPillHeight: CGFloat = 50
 
     /// Lifts the pill from its slot to the bottom of the visible list, held
     /// off the edge by the same 8pt the list ends with. When the slot is on
@@ -316,7 +319,9 @@ struct WorkoutSessionView: View {
             Label("Edit", systemImage: "pencil")
                 .font(.headline)
                 .foregroundStyle(AppTheme.brandAccentForeground)
-                .frame(width: Self.editPillWidth, height: 50)
+                .fixedSize()
+                .padding(.horizontal, 20)
+                .frame(minWidth: 108, minHeight: editPillHeight)
                 .background(AppTheme.groupedSurface, in: Capsule())
                 .overlay {
                     Capsule().strokeBorder(AppTheme.subtleBorder, lineWidth: 1)
@@ -325,7 +330,7 @@ struct WorkoutSessionView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Edit Workout")
-        .accessibilityIdentifier("EditWorkoutButton")
+        .accessibilityIdentifier("ActiveWorkoutEditButton")
     }
 
     private var keyboardAccessory: some View {
@@ -499,7 +504,6 @@ struct WorkoutSessionView: View {
             }
         )
     }
-
 
 }
 

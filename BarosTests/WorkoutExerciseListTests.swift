@@ -208,6 +208,55 @@ final class WorkoutExerciseListTests: XCTestCase {
         XCTAssertFalse(session.sortedLoggedExercises[1].sortedSets.isEmpty)
     }
 
+    func testDraftPreviewAndSavedSetsUseTheSameHistoryPlan() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try fixture(in: context)
+        let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        let kinds: [SetKind] = [.warmup, .working, .working]
+        let logged = LoggedExercise(orderIndex: 0, exercise: library,
+                                    sets: kinds.enumerated().map { LoggedSet(orderIndex: $0.offset, kind: $0.element, isCompleted: true) })
+        let history = WorkoutSession(title: "Past", startedAt: .now.addingTimeInterval(-3600),
+                                     status: .completed, source: .blank, loggedExercises: [logged])
+        context.insert(history)
+        try context.save()
+        let engine = ActiveWorkoutEngine()
+        var draft = WorkoutExerciseListDraft(session: session)
+        draft.append([library]) { engine.initialSetKinds(for: $0, ownerTokenIdentifier: nil, sessions: [history]) }
+        XCTAssertEqual(draft.exercises.last?.progressText, "0/3 sets")
+        XCTAssertTrue(draft.exercises.last?.accessibilityValue.contains("New") == true)
+        // The initial rows promised in the draft remain stable if history changes before Done.
+        logged.sets.forEach { $0.isCompleted = false }
+        try context.save()
+        try engine.applyExerciseListChanges(in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline,
+                                             additions: draft.additions, context: context)
+        XCTAssertEqual(session.sortedLoggedExercises.last?.sortedSets.map(\.kind), kinds)
+    }
+
+    func testDraftRejectsLibraryAdditionsThatAreNoLongerVisible() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try fixture(in: context)
+        let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        context.insert(library)
+        try context.save()
+        let engine = ActiveWorkoutEngine()
+        var draft = WorkoutExerciseListDraft(session: session)
+        draft.append([library])
+        XCTAssertEqual(draft.exercises.last?.progressText, "0/1 sets")
+        for state in 0..<3 {
+            library.isArchived = state == 0
+            library.deletedAt = state == 1 ? .now : nil
+            library.syncOwnerTokenIdentifier = state == 2 ? "another-owner" : nil
+            try context.save()
+            var saves = 0
+            XCTAssertThrowsError(try engine.applyExerciseListChanges(in: session, orderedIDs: draft.orderedIDs,
+                baseline: draft.baseline, additions: draft.additions, context: context, save: { _ in saves += 1 }))
+            XCTAssertEqual(saves, 0)
+            XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), draft.baseline)
+        }
+    }
+
     private func fixture(in context: ModelContext) throws -> WorkoutSession {
         let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
         for (index, name) in ["Bench Press", "Barbell Row", "Back Squat"].enumerated() {

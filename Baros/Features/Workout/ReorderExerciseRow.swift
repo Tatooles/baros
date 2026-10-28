@@ -100,7 +100,7 @@ struct ReorderExerciseRow: View {
     }
 
     private var progress: some View {
-        detail(exercise.isNew ? "New · 0 sets" : exercise.progressText)
+        detail(exercise.isNew ? "New · \(exercise.progressText)" : exercise.progressText)
             .monospacedDigit()
             .fixedSize(horizontal: true, vertical: false)
     }
