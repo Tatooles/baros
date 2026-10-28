@@ -248,20 +248,18 @@ private struct ExercisePickerList: View {
         }
         .safeAreaBar(edge: .bottom, spacing: 0) {
             if mode.isAddExercise {
-                VStack(spacing: 8) {
-                    Button {
-                        onSelect(selectedExercises)
-                    } label: {
-                        Text(addButtonTitle)
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(AppTheme.brandAccentFill)
-                    .disabled(selectedExercises.isEmpty)
-                    .accessibilityIdentifier("ExercisePickerAddSelectedButton")
+                Button {
+                    onSelect(selectedExercises)
+                } label: {
+                    Text(addButtonTitle)
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
                 }
+                .buttonStyle(.glassProminent)
+                .tint(AppTheme.brandAccentFill)
+                .disabled(selectedExercises.isEmpty)
+                .accessibilityIdentifier("ExercisePickerAddSelectedButton")
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
             }

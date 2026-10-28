@@ -82,10 +82,10 @@ struct ReorderExerciseRow: View {
         .padding(.vertical, 10)
         .frame(minHeight: 68)
         .background(
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).fill(AppTheme.groupedSurface)
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).fill(exercise.isNew ? AppTheme.brandAccentMuted : AppTheme.groupedSurface)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).stroke(AppTheme.subtleBorder)
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).stroke(exercise.isNew ? AppTheme.brandAccentForeground : AppTheme.subtleBorder)
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(exercise.name)
@@ -100,7 +100,7 @@ struct ReorderExerciseRow: View {
     }
 
     private var progress: some View {
-        detail(exercise.progressText)
+        detail(exercise.isNew ? "New · 0 sets" : exercise.progressText)
             .monospacedDigit()
             .fixedSize(horizontal: true, vertical: false)
     }

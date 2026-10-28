@@ -29,6 +29,7 @@ struct AddExerciseSheet: View {
     @Bindable var engine: ActiveWorkoutEngine
     var onAddExercise: (LoggedExercise) -> Void = { _ in }
     @State private var showsAddError = false
+
     var body: some View {
         NavigationStack {
             ExercisePickerView(

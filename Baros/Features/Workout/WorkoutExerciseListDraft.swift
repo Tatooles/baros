@@ -75,7 +75,7 @@ struct WorkoutExerciseListSnapshot: Equatable {
         }
         var progressText: String { "\(sets.filter(\.isCompleted).count)/\(sets.count) sets" }
         var accessibilityValue: String {
-            [metadata, progressText].compactMap { $0 }.joined(separator: ", ")
+            [metadata, isNew ? "New, 0 sets" : progressText].compactMap { $0 }.joined(separator: ", ")
         }
     }
 
@@ -94,7 +94,7 @@ struct WorkoutExerciseListSnapshot: Equatable {
     }
 }
 
-/// Throwaway insertion prototype: pending additions never enter SwiftData before Done.
+/// Draft workout membership; pending additions enter SwiftData only when Done saves.
 struct WorkoutExerciseListDraft {
     struct Addition {
         let id = UUID()
