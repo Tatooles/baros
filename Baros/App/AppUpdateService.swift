@@ -145,11 +145,16 @@ final class AppUpdateService {
         return region
     }
 
+    #if DEBUG
+    private static var didResetVisualFixture = false
+    #endif
+
     static func live() -> AppUpdateService {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--uitest-update-available") {
             let defaults = UserDefaults(suiteName: "appUpdate.visualFixture")!
-            if ProcessInfo.processInfo.arguments.contains("--uitest-update-reset") {
+            if ProcessInfo.processInfo.arguments.contains("--uitest-update-reset"), !didResetVisualFixture {
+                didResetVisualFixture = true
                 defaults.removePersistentDomain(forName: "appUpdate.visualFixture")
             }
             return AppUpdateService(defaults: defaults, installedVersion: "1.5", osVersion: "26.4.1",

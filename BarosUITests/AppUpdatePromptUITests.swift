@@ -37,6 +37,19 @@ final class AppUpdatePromptUITests: XCTestCase {
         XCTAssertFalse(app.alerts["Update available"].waitForExistence(timeout: 2))
     }
 
+    func testBackgroundedPromptCanBeOfferedAgainWithoutRecordingLater() {
+        let app = app(extra: ["--uitest-update-reset"])
+        app.launch()
+        let alert = app.alerts["Update available"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+        app.activate()
+        XCTAssertTrue(alert.waitForExistence(timeout: 8))
+        alert.buttons["Later"].tap()
+        XCTAssertFalse(alert.exists)
+    }
+
     func testModalDefersOfferUntilDismissal() {
         let app = app(extra: ["--uitest-update-reset", "--uitest-update-delayed"])
         app.launch()

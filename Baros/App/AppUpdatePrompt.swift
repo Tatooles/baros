@@ -17,6 +17,15 @@ struct AppUpdatePrompt: ViewModifier {
             .task(id: scenePhase) {
                 if scenePhase == .active { await service.check() }
             }
+            .onChange(of: isIdle) { _, idle in
+                if !idle { presentedOffer = nil }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background { presentedOffer = nil }
+            }
+            .onChange(of: service.offer) { _, offer in
+                if offer == nil { presentedOffer = nil }
+            }
             .task(id: canOffer) {
                 guard canOffer else { return }
                 // Give launch/navigation/dismissal transitions time to settle. Poll only
