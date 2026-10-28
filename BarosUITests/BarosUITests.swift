@@ -8,6 +8,29 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testAddingExerciseDoesNotLeaveBottomGap() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-insert-prototype"]
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        for _ in 0..<4 { app.swipeUp() }
+        let add = app.buttons["AddExerciseButton"]
+        XCTAssertTrue(add.isHittable)
+        add.tap()
+        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        app.buttons["ExercisePickerAddSelectedButton"].tap()
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        for _ in 0..<5 { app.swipeUp() }
+        XCTAssertTrue(add.isHittable)
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "bottom-after-adding-exercise"
+        screenshot.lifetime = .keepAlways
+        self.add(screenshot)
+        XCTAssertLessThanOrEqual(app.frame.maxY - add.frame.maxY, 72,
+                                 "Adding an exercise must not leave a persistent blank scroll tail")
+    }
+
+    @MainActor
     func testEditPencilPresentationAndRestTimer() {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-insert-prototype"]

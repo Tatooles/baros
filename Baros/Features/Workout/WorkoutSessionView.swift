@@ -31,7 +31,6 @@ struct WorkoutSessionView: View {
     @State private var swappingLoggedExercise: LoggedExercise?
     @State private var selectedHistoryExercise: LoggedExercise?
     @State private var pendingScrollTarget: UUID?
-    @State private var recentlyAddedExerciseID: UUID?
     @State private var collapsedExerciseIDs: Set<UUID> = []
     @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var isWorkoutNoteRevealed = false
@@ -42,11 +41,6 @@ struct WorkoutSessionView: View {
     @State private var focusTransitionCoordinator = WorkoutFocusTransitionCoordinator()
     @FocusState private var focusedField: WorkoutField?
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
-
-    private var contentBottomPadding: CGFloat {
-        // Keep the last set and the fast Add path fully above the floating editor.
-        recentlyAddedExerciseID != nil ? 120 : 90
-    }
 
     private var weightUnit: MeasurementUnit {
         UserSettings.visibleSettingsRecords(
@@ -127,23 +121,40 @@ struct WorkoutSessionView: View {
                         .id(loggedExercise.id)
                     }
 
-                    Button {
-                        guard prepareForPresentation() else { return }
-                        isAddExercisePresented = true
-                    } label: {
-                        Label("Add Exercise", systemImage: "plus")
-                            .font(.headline)
-                            .foregroundStyle(AppTheme.brandAccentForeground)
-                            .frame(maxWidth: .infinity, minHeight: 50)
-                            .background(AppTheme.brandAccentMuted, in: Capsule())
-                            .contentShape(Capsule())
+                    HStack(spacing: 10) {
+                        if !sortedLoggedExercises.isEmpty {
+                            // Sits beside Add Exercise, but while that row is
+                            // below the fold it pins to the bottom of the
+                            // screen. Left-aligned so it floats over set
+                            // numbers rather than completion checkmarks.
+                            let pins = focusedField == nil && !isChildPresentationActive
+                            editWorkoutPill
+                                .visualEffect { [pins] content, proxy in
+                                    content.offset(y: Self.editPillPinOffset(
+                                        pins: pins,
+                                        proxy: proxy
+                                    ))
+                                }
+                        }
+
+                        Button {
+                            guard prepareForPresentation() else { return }
+                            isAddExercisePresented = true
+                        } label: {
+                            Label("Add Exercise", systemImage: "plus")
+                                .font(.headline)
+                                .foregroundStyle(AppTheme.brandAccentForeground)
+                                .frame(maxWidth: .infinity, minHeight: 50)
+                                .background(AppTheme.brandAccentMuted, in: Capsule())
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("AddExerciseButton")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("AddExerciseButton")
                 }
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
-                .padding(.bottom, contentBottomPadding)
+                .padding(.bottom, 8)
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 ActiveWorkoutMetricsHeader(session: session, restTimer: engine.restTimer) {
@@ -191,13 +202,7 @@ struct WorkoutSessionView: View {
                     rpeEditingSetID = nil
                 }
 
-                let shouldRetainNewExerciseReveal = recentlyAddedExerciseID != nil && Self.isSetField(newField)
-                if !shouldRetainNewExerciseReveal {
-                    // The temporary reveal extent is only needed while moving
-                    // between set fields. Clear it before revealing any other
-                    // field or dismissing focus.
-                    recentlyAddedExerciseID = nil
-                }
+
             }
             // Replaces a `.keyboard` toolbar, whose full-width strip swallows taps
             // between its buttons. As a safe-area inset, the system's keyboard
@@ -213,30 +218,6 @@ struct WorkoutSessionView: View {
                 }
                 .frame(width: 0, height: 0)
             }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            // A separate glass container prevents transitions from morphing
-            // out of the Finish button in the header.
-            GlassEffectContainer {
-                Button {
-                    guard prepareForPresentation() else { return }
-                    isReorderExercisesPresented = true
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 21, weight: .medium))
-                        .frame(width: 50, height: 50)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: Circle())
-                .accessibilityLabel("Edit Workout")
-                .accessibilityIdentifier("EditWorkoutButton")
-                .accessibilityHidden(!showsEditWorkoutButton)
-            }
-            .opacity(showsEditWorkoutButton ? 1 : 0)
-            .allowsHitTesting(showsEditWorkoutButton)
-            .padding(.trailing, AppTheme.shellPadding)
-            .padding(.bottom, 8)
         }
         .disabled(engine.hasPendingSetSave)
         .alert("Couldn't save this edit", isPresented: $showsSetSaveFailure) {
@@ -311,6 +292,42 @@ struct WorkoutSessionView: View {
         }
     }
 
+    private static let editPillWidth: CGFloat = 108
+
+    /// Lifts the pill from its slot to the bottom of the visible list, held
+    /// off the edge by the same 8pt the list ends with. When the slot is on
+    /// screen the pill stays in it.
+    nonisolated private static func editPillPinOffset(
+        pins: Bool,
+        proxy: GeometryProxy
+    ) -> CGFloat {
+        guard pins, let viewport = proxy.bounds(of: .scrollView) else { return 0 }
+        // The scroll-view bounds already exclude the bottom safe area.
+        let pinnedMaxY = viewport.maxY - 8
+        return min(0, pinnedMaxY - proxy.size.height)
+    }
+
+    /// An opaque surface keeps the floating action readable over exercise content.
+    private var editWorkoutPill: some View {
+        Button {
+            guard prepareForPresentation() else { return }
+            isReorderExercisesPresented = true
+        } label: {
+            Label("Edit", systemImage: "pencil")
+                .font(.headline)
+                .foregroundStyle(AppTheme.brandAccentForeground)
+                .frame(width: Self.editPillWidth, height: 50)
+                .background(AppTheme.groupedSurface, in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(AppTheme.subtleBorder, lineWidth: 1)
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit Workout")
+        .accessibilityIdentifier("EditWorkoutButton")
+    }
+
     private var keyboardAccessory: some View {
         HStack(spacing: 8) {
             if rpeEditingSetID != nil {
@@ -375,11 +392,6 @@ struct WorkoutSessionView: View {
         }
     }
 
-    private var showsEditWorkoutButton: Bool {
-        !(cachedSortedLoggedExercises ?? session.sortedLoggedExercises).isEmpty
-            && focusedField == nil && !isChildPresentationActive
-    }
-
     private var isChildPresentationActive: Bool {
         isFinishSheetPresented
             || isReorderExercisesPresented
@@ -391,7 +403,6 @@ struct WorkoutSessionView: View {
     private func completeExerciseSelection(scrollProxy: ScrollViewProxy) {
         let scrollTarget = pendingScrollTarget
         pendingScrollTarget = nil
-        recentlyAddedExerciseID = scrollTarget
 
         focusTransitionCoordinator.transition(
             to: nil,
@@ -489,14 +500,7 @@ struct WorkoutSessionView: View {
         )
     }
 
-    private static func isSetField(_ field: WorkoutField?) -> Bool {
-        switch field {
-        case .setWeight, .setReps:
-            return true
-        case .workoutTitle, .workoutNotes, .exerciseNotes, nil:
-            return false
-        }
-    }
+
 }
 
 private struct LoggedExerciseStructureValue: Hashable {
