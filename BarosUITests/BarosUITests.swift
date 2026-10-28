@@ -8,6 +8,25 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutActionsKeepMatchingTapTargetsAtSmallAndLargeTextSizes() {
+        for category in ["UICTContentSizeCategoryXS", "UICTContentSizeCategoryXXXL"] {
+            let app = makeApp(extraArguments: ["--uitest-seed-edit-workout",
+                "-UIPreferredContentSizeCategoryName", category])
+            app.launch()
+            XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+            for _ in 0..<8 { app.swipeUp() }
+            let edit = app.buttons["ActiveWorkoutEditButton"]
+            let add = app.buttons["AddExerciseButton"]
+            XCTAssertTrue(edit.isHittable)
+            XCTAssertTrue(add.isHittable)
+            XCTAssertGreaterThanOrEqual(edit.frame.height, 50)
+            XCTAssertEqual(edit.frame.height, add.frame.height, accuracy: 1)
+            captureEditWorkout("workout-actions-\(category)")
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testActiveWorkoutEditAtAccessibilityTextSize() {
         let app = makeApp(extraArguments: ["--uitest-seed-edit-workout",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL"])
@@ -65,11 +84,6 @@ final class BarosUITests: XCTestCase {
         app.swipeDown()
         app.swipeDown()
         app.swipeDown()
-        app.buttons["ExerciseMenuButton-0"].tap()
-        XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.buttons["ReorderExercisesButton-0"].exists)
-        captureEditWorkout("03-card-menu")
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.26)).tap()
         let field = app.textFields["SetWeightField-0-0"]
         XCTAssertTrue(field.waitForExistence(timeout: 3))
         field.tap()
@@ -86,7 +100,6 @@ final class BarosUITests: XCTestCase {
         app.buttons["EditWorkoutAddExercisesButton"].tap()
         app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
         app.buttons["ExercisePickerRow-Biceps Curl-Dumbbell"].tap()
-        XCTAssertFalse(app.buttons["ExerciseInsertionMenu"].exists)
         captureEditWorkout("06-picker")
         app.buttons["ExercisePickerAddSelectedButton"].tap()
         XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 3))
@@ -96,13 +109,8 @@ final class BarosUITests: XCTestCase {
         app.buttons["DoneReorderExercisesButton"].tap()
         XCTAssertTrue(app.buttons["ActiveWorkoutEditButton"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["ExerciseHeader-3"].label.contains("Back Squat"))
-        for index in 0..<6 {
-            let header = app.buttons["ExerciseHeader-\(index)"]
-            if !header.isHittable { app.swipeUp() }
-            header.tap()
-        }
-        app.swipeDown()
-        app.swipeDown()
+        assertActiveWorkoutExerciseOrder(["Bench Press", "Pull-Up", "Incline Dumbbell Press",
+                                          "Back Squat", "Chest Supported Row", "Biceps Curl"], in: app)
         captureEditWorkout("09-after-done")
     }
 

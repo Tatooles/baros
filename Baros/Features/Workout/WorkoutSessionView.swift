@@ -148,7 +148,7 @@ struct WorkoutSessionView: View {
                             Label("Add Exercise", systemImage: "plus")
                                 .font(.headline)
                                 .foregroundStyle(AppTheme.brandAccentForeground)
-                                .frame(maxWidth: .infinity, minHeight: 50)
+                                .frame(maxWidth: .infinity, minHeight: actionMinHeight)
                                 .background(AppTheme.brandAccentMuted, in: Capsule())
                                 .contentShape(Capsule())
                         }
@@ -295,7 +295,9 @@ struct WorkoutSessionView: View {
         }
     }
 
-    @ScaledMetric(relativeTo: .headline) private var editPillHeight: CGFloat = 50
+    @ScaledMetric(relativeTo: .headline) private var scaledActionHeight: CGFloat = 50
+
+    private var actionMinHeight: CGFloat { max(50, scaledActionHeight) }
 
     /// Lifts the pill from its slot to the bottom of the visible list, held
     /// off the edge by the same 8pt the list ends with. When the slot is on
@@ -321,7 +323,7 @@ struct WorkoutSessionView: View {
                 .foregroundStyle(AppTheme.brandAccentForeground)
                 .fixedSize()
                 .padding(.horizontal, 20)
-                .frame(minWidth: 108, minHeight: editPillHeight)
+                .frame(minWidth: 108, minHeight: actionMinHeight)
                 .background(AppTheme.groupedSurface, in: Capsule())
                 .overlay {
                     Capsule().strokeBorder(AppTheme.subtleBorder, lineWidth: 1)
