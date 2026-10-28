@@ -1004,14 +1004,14 @@ struct SupersetPrototypeMenuItems: View {
 
     var body: some View {
         let prototype = SupersetPrototype.shared
-        if prototype.canStartWithNext(exerciseID) {
-            Button { withAnimation(.snappy) { prototype.startWithNext(exerciseID) } } label: {
-                Label("Superset with Next", systemImage: "link")
-            }
-        }
         if prototype.canJoinPrevious(exerciseID) {
             Button { withAnimation(.snappy) { prototype.joinPrevious(exerciseID) } } label: {
                 Label("Join Previous Superset", systemImage: "link")
+            }
+        }
+        if prototype.canStartWithNext(exerciseID) {
+            Button { withAnimation(.snappy) { prototype.startWithNext(exerciseID) } } label: {
+                Label("Superset with Next", systemImage: "link")
             }
         }
         if prototype.isGrouped(exerciseID) {
