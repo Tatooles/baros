@@ -22,8 +22,8 @@ receipt refresh/authentication UI is requested. TestFlight's sandbox environment
 is intentionally excluded.
 
 `AppShellView` supplies idle eligibility to `AppUpdatePrompt`: resolved ownership,
-completed launch/onboarding decisions, and no visible active workout (including a
-minimized one). The presentation anchor checks the actual window/controller tree
+completed launch/onboarding decisions, and no nondeleted active workout across any owner (including a
+minimized or hidden outgoing-owner workout retained for recovery/discard by #188). The presentation anchor checks the actual window/controller tree
 for any presented controller or transition, covering nested feature/Clerk modals.
 While an offer is pending it rechecks once per second, allowing dismissal to
 settle before presenting a SwiftUI alert. It does no polling without an offer or
@@ -40,6 +40,9 @@ Without reset, Later persists across fixture relaunches. The fixture advertises
 1.10 over 1.5 and never hits the network. `--uitest-update-delayed` delays the
 fixture response four seconds for modal deferral tests. These branches are
 compiled only in Debug and use a separate preferences suite.
+`--uitest-update-hidden-active-workout` seeds a minimal outgoing-owner active
+record only in an in-memory test store. `--uitest-update-hidden-workout-deleted`
+marks that fixture deleted, verifying tombstones do not suppress discovery.
 
 ## Apple primary documentation checked 2026-10-27
 

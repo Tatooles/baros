@@ -37,6 +37,28 @@ final class AppUpdatePromptUITests: XCTestCase {
         XCTAssertFalse(app.alerts["Update available"].waitForExistence(timeout: 2))
     }
 
+    func testHiddenOutgoingOwnerWorkoutDefersPrompt() {
+        let app = app(extra: [
+            "--uitest-update-reset", "--uitest-update-hidden-active-workout",
+        ])
+        app.launch()
+        XCTAssertTrue(app.buttons["StartWorkoutButton"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
+        XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
+        XCTAssertFalse(app.alerts["Update available"].waitForExistence(timeout: 5))
+    }
+
+    func testDeletedHiddenWorkoutDoesNotDeferPrompt() {
+        let app = app(extra: [
+            "--uitest-update-reset", "--uitest-update-hidden-active-workout",
+            "--uitest-update-hidden-workout-deleted",
+        ])
+        app.launch()
+        let alert = app.alerts["Update available"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        alert.buttons["Later"].tap()
+    }
+
     func testBackgroundedPromptCanBeOfferedAgainWithoutRecordingLater() {
         let app = app(extra: ["--uitest-update-reset"])
         app.launch()
