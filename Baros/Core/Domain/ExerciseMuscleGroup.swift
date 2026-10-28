@@ -49,6 +49,27 @@ enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    struct PickerSection: Identifiable {
+        let title: String
+        let groups: [ExerciseMuscleGroup]
+
+        var id: String { title }
+    }
+
+    /// Every group exactly once, ordered top to bottom within each area.
+    static let pickerSections: [PickerSection] = [
+        PickerSection(
+            title: "Torso",
+            groups: [.neck, .traps, .shoulders, .chest, .upperBack, .lats, .core, .lowerBack]
+        ),
+        PickerSection(title: "Arms", groups: [.biceps, .triceps, .forearms]),
+        PickerSection(
+            title: "Legs",
+            groups: [.glutes, .abductors, .adductors, .quads, .hamstrings, .calves]
+        ),
+        PickerSection(title: "General", groups: [.fullBody, .cardio, .other]),
+    ]
+
     static func legacyGroup(for rawValue: String) -> ExerciseMuscleGroup {
         let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 

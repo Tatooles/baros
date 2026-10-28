@@ -2188,6 +2188,57 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testTappingBodyFigureSetsTargetAreaOfCreatedExercise() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkout(in: app)
+        app.buttons["AddExerciseButton"].tap()
+        app.buttons["ExercisePickerRow-Bench Press-Barbell"].tap()
+        let search = app.searchFields.firstMatch
+        search.tap()
+        search.typeText("A Figure Row")
+        app.buttons["ExercisePickerCreateExerciseFromSearchButton"].tap()
+
+        let figure = app.descendants(matching: .any)["ExerciseMuscleFigure"]
+        XCTAssertTrue(figure.waitForExistence(timeout: 3))
+        XCTAssertEqual(figure.value as? String, "Chest highlighted")
+        let targetArea = app.buttons["ExercisePrimaryMuscleGroupPicker"]
+        XCTAssertTrue(targetArea.label.hasSuffix("Chest"))
+
+        let sides = app.segmentedControls["ExerciseMuscleFigureSidePicker"]
+        XCTAssertTrue(sides.buttons["Front"].isSelected)
+
+        tapBodyFigure(figure, atArtworkPoint: CGPoint(x: 274, y: 800), side: .front)
+        XCTAssertEqual(figure.value as? String, "Quads highlighted")
+        XCTAssertTrue(targetArea.label.hasSuffix("Quads"))
+
+        // Choosing a back muscle from the list turns the figure around.
+        targetArea.tap()
+        app.buttons["Lats"].tap()
+        XCTAssertEqual(figure.value as? String, "Lats highlighted")
+        XCTAssertTrue(waitForSelection(sides.buttons["Back"], timeout: 3))
+
+        tapBodyFigure(figure, atArtworkPoint: CGPoint(x: 304, y: 705), side: .back)
+        XCTAssertEqual(figure.value as? String, "Glutes highlighted")
+        XCTAssertTrue(targetArea.label.hasSuffix("Glutes"))
+        let figureScreenshot = XCTAttachment(screenshot: app.screenshot())
+        figureScreenshot.name = "Tapping the back figure selects Glutes"
+        figureScreenshot.lifetime = .keepAlways
+        add(figureScreenshot)
+
+        app.buttons["ExerciseEditorSaveButton"].tap()
+        let created = app.buttons["ExercisePickerRow-A Figure Row-Barbell"]
+        XCTAssertTrue(created.waitForExistence(timeout: 3))
+        XCTAssertTrue(created.isSelected)
+        XCTAssertTrue(created.label.contains("Barbell • Glutes"))
+        XCTAssertTrue(app.buttons["ExercisePickerRow-Bench Press-Barbell"].isSelected)
+        let add = app.buttons["ExercisePickerAddSelectedButton"]
+        XCTAssertEqual(add.label, "Add 2 Exercises")
+        add.tap()
+        assertActiveWorkoutExerciseOrder(["Bench Press", "A Figure Row"], in: app)
+    }
+
+    @MainActor
     func testExercisePickerShowsPerformanceSummaryAndInlineSortMenu() {
         let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
         app.launch()
@@ -5728,6 +5779,48 @@ final class BarosUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         } while Date() < deadline
         return element.exists && element.isHittable
+    }
+
+    private enum BodyFigureSide {
+        case front
+        case back
+
+        /// The artwork bounds in `BodyFigureArtwork.swift`.
+        var artworkBounds: CGRect {
+            switch self {
+            case .front: return CGRect(x: 52.8, y: 96.3, width: 622.7, height: 1_244.4)
+            case .back: return CGRect(x: 48.5, y: 96.2, width: 622.1, height: 1_246.5)
+            }
+        }
+    }
+
+    /// Taps a point given in body artwork coordinates. The figure aspect-fits
+    /// the artwork, centered in its frame.
+    @MainActor
+    private func tapBodyFigure(_ figure: XCUIElement, atArtworkPoint point: CGPoint, side: BodyFigureSide) {
+        let bounds = side.artworkBounds
+        let frame = figure.frame
+        let scale = min(frame.width / bounds.width, frame.height / bounds.height)
+        let originX = (frame.width - bounds.width * scale) / 2
+        let originY = (frame.height - bounds.height * scale) / 2
+        figure.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(
+                dx: originX + (point.x - bounds.minX) * scale,
+                dy: originY + (point.y - bounds.minY) * scale
+            ))
+            .tap()
+    }
+
+    @MainActor
+    private func waitForSelection(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if element.exists && element.isSelected {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+        return element.exists && element.isSelected
     }
 
     @MainActor
