@@ -103,6 +103,38 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testWrongAccountCanSignOutToRecoverPreservedWorkout() {
+        let app = makeApp(extraArguments: ["--uitest-sync-owner", "issuer|ui_owner",
+            "--uitest-clerk-session-control", "--uitest-seed-large-active-workout"])
+        app.launch()
+        minimizeAccountWorkout(in: app)
+        app.buttons["UITestClerkAccountSwitchButton"].tap()
+        let signOut = app.buttons["WorkoutRecoverySignOutButton"]
+        XCTAssertTrue(signOut.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
+        attachAccountEvidence("Wrong-account recovery offers safe sign-out", app: app)
+        signOut.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["WorkoutRecoveryAuthView"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
+    }
+
+    @MainActor
+    func testAccountDeletionKeepsProgressDuringCloudRequest() {
+        let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth",
+            "--uitest-fail-cloud-deletion-once", "--uitest-delay-cloud-deletion"])
+        app.launch()
+        tapTab(.settings, in: app)
+        revealSettingsRow(app.buttons["SettingsDeleteAccountRow"], in: app)
+        app.buttons["SettingsDeleteAccountRow"].tap()
+        enterDeleteConfirmation(in: app)
+        app.buttons["DeleteDataConfirmButton"].tap()
+        XCTAssertTrue(app.staticTexts["Deleting Cloud Data..."].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.activityIndicators.firstMatch.exists)
+        attachAccountEvidence("Account deletion shows network progress", app: app)
+        XCTAssertTrue(app.staticTexts["DeleteDataErrorMessage"].waitForExistence(timeout: 6))
+    }
+
+    @MainActor
     private func minimizeAccountWorkout(in app: XCUIApplication) {
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
         let grabber = app.buttons["Sheet Grabber"]
@@ -1048,14 +1080,9 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
-        let returnToWorkoutButton = app.buttons["ReturnToActiveWorkoutButton"]
-        XCTAssertTrue(returnToWorkoutButton.waitForExistence(timeout: 3))
-        XCTAssertFalse(app.buttons["StartBlankWorkoutButton"].exists)
-        XCTAssertFalse(app.buttons["UsePastWorkoutButton"].exists)
-
-        returnToWorkoutButton.tap()
-
-        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ReturnToActiveWorkoutButton"].exists)
+        XCTAssertTrue(app.buttons["WorkoutRecoveryDiscardButton"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
     }
 
     @MainActor

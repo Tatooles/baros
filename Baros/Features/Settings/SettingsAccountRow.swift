@@ -16,6 +16,7 @@ enum UITestAuthOverride {
 struct SettingsAccountRow: View {
     @Environment(ActiveWorkoutEngine.self) private var engine
     @Environment(CurrentOwnerCoordinator.self) private var currentOwner
+    @Environment(\.accountSignOutAction) private var signOut
     @Environment(Clerk.self) private var clerk
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query private var workouts: [WorkoutSession]
@@ -123,13 +124,7 @@ struct SettingsAccountRow: View {
                             }
                             .accessibilityIdentifier("AccountManageProfileButton")
                             AccountTransitionButton(destination: .signOut, role: .destructive) {
-                                #if DEBUG
-                                if UITestAuthOverride.isForcedSignedIn {
-                                    presentedSheet = nil
-                                    return
-                                }
-                                #endif
-                                try await clerk.auth.signOut(sessionId: clerk.session?.id)
+                                try await signOut()
                                 presentedSheet = nil
                             }
                             .accessibilityIdentifier("AccountSignOutButton")
@@ -147,6 +142,11 @@ struct SettingsAccountRow: View {
         }
         .onChange(of: currentOwner.localDataOwnerTokenIdentifier) { _, _ in
             presentedSheet = nil
+        }
+        .onChange(of: clerk.session?.id) { _, _ in
+            // A native switch can reveal a previously hidden active workout.
+            // Close the ungated profile as soon as Clerk replaces its session.
+            if presentedSheet == .userProfile || presentedSheet == .account { presentedSheet = nil }
         }
         .onChange(of: clerk.user) { _, user in
             // Signing out from the profile sheet leaves nothing to show there.

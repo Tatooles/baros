@@ -15,8 +15,12 @@ Temporary Convex authentication loss, offline operation, and Current Owner
 resolving do not terminalize workouts. Recovery UI waits through unknown-owner
 startup resolution. Nothing adds a paused/draft state or Active Workout sync.
 
-User-initiated account actions must successfully finish or discard all existing
-active workouts before calling Clerk. Cancel preserves the workout and account.
+User-initiated sign-out/switch must successfully finish or discard the outgoing
+owner's accessible active workouts before calling Clerk. Another owner's hidden
+record is preserved and continues blocking new starts; it must not trap a different
+account in a signed-in session. Delete Account still blocks hidden active records,
+because its existing local-data reset would erase them. Multiple outgoing workouts
+are finalized in one transaction, with timer/sync effects deferred until it saves. Cancel preserves the workout and account.
 Confirmation captures the owner and workout IDs; changed inputs invalidate it.
 If Clerk fails after successful workout persistence, keep the saved terminal
 workout and report the account-action error rather than resurrecting it.
@@ -40,7 +44,9 @@ The pinned Clerk iOS 1.1.3 revision is
   Add Account, Security/session revocation, and account deletion. Its customization
   interface adds rows/destinations; it cannot replace/remove built-ins or intercept
   their account mutations.
-- Baros therefore resolves active workouts before presenting this profile. While
+- Baros therefore resolves outgoing-owner active workouts before presenting this profile.
+  It dismisses the profile on a Clerk session replacement, including a switch that
+  reveals a preserved active workout. While
   that screen is open, the engine blocks workout starts, including another window.
 - With an active workout, Settings exposes Baros's direct gated Sign Out and
   gated Manage Account. Without one, the existing Clerk profile opens normally.

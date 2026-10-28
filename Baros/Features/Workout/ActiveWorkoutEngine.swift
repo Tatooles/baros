@@ -728,7 +728,6 @@ final class ActiveWorkoutEngine {
         try context.save()
     }
 
-    @MainActor
     func finishWorkout(
         _ session: WorkoutSession,
         ownerTokenIdentifier: String? = nil,
@@ -737,76 +736,103 @@ final class ActiveWorkoutEngine {
         now: Date = .now,
         save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws {
-        let baseline = (title: session.title, owner: session.syncOwnerTokenIdentifier,
-                        status: session.status, endedAt: session.endedAt,
-                        duration: session.durationSeconds, updatedAt: session.updatedAt)
-        let effectiveOwnerTokenIdentifier = session.syncOwnerTokenIdentifier ?? ownerTokenIdentifier
-        applyFinalWorkoutTitle(to: session)
-        session.syncOwnerTokenIdentifier = effectiveOwnerTokenIdentifier
-        session.status = .completed
-        session.endedAt = now
-        session.durationSeconds = max(0, Int(now.timeIntervalSince(session.startedAt)))
-        session.touch(now: now)
-        do {
-            let recorder = SyncOutboxRecorder()
+        try finishWorkouts([session], ownerTokenIdentifier: ownerTokenIdentifier,
+            syncScheduler: syncScheduler, context: context, now: now, save: save)
+    }
+
+    /// Account transitions may resolve legacy records together. Stage every
+    /// graph in the same transaction; timer and sync effects follow the save.
+    func finishWorkouts(
+        _ sessions: [WorkoutSession],
+        ownerTokenIdentifier: String? = nil,
+        syncScheduler: SyncScheduler? = nil,
+        context: ModelContext,
+        now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        try persistWorkoutFinalization(sessions, context: context, save: save) { session in
+            let effectiveOwner = session.syncOwnerTokenIdentifier ?? ownerTokenIdentifier
+            applyFinalWorkoutTitle(to: session)
+            session.syncOwnerTokenIdentifier = effectiveOwner
+            session.status = .completed
+            session.endedAt = now
+            session.durationSeconds = max(0, Int(now.timeIntervalSince(session.startedAt)))
+            session.touch(now: now)
             var records = [SyncOutboxRecorder.CreateRecord(entityKind: .workoutSession, entityID: session.id)]
-            for loggedExercise in session.sortedLoggedExercises {
-                records.append(.init(
-                    entityKind: .loggedExercise,
-                    entityID: loggedExercise.id
-                ))
-                for set in loggedExercise.sortedSets {
-                    records.append(.init(
-                        entityKind: .loggedSet,
-                        entityID: set.id
-                    ))
-                }
+            for exercise in session.sortedLoggedExercises {
+                records.append(.init(entityKind: .loggedExercise, entityID: exercise.id))
+                records += exercise.sortedSets.map { .init(entityKind: .loggedSet, entityID: $0.id) }
             }
-            try recorder.recordCreates(
-                records,
-                ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
-                context: context,
-                now: now
-            )
-            try save(context)
-        } catch {
-            context.rollback()
-            // SwiftData rollback may leave already-observed model instances at
-            // their attempted values. Restore the exact fields this action touched.
-            session.title = baseline.title
-            session.syncOwnerTokenIdentifier = baseline.owner
-            session.status = baseline.status
-            session.endedAt = baseline.endedAt
-            session.durationSeconds = baseline.duration
-            session.updatedAt = baseline.updatedAt
-            throw error
+            try SyncOutboxRecorder().recordCreates(records,
+                ownerTokenIdentifier: effectiveOwner, context: context, now: now)
         }
-        restTimer.cancel(sessionID: session.id)
-        if activeSessionID == session.id {
-            activeSessionID = nil
-        }
-        if syncScheduler?.currentOwnerTokenIdentifier == effectiveOwnerTokenIdentifier,
-           effectiveOwnerTokenIdentifier != nil {
+        if let owner = syncScheduler?.currentOwnerTokenIdentifier,
+           sessions.contains(where: { $0.syncOwnerTokenIdentifier == owner }) {
             syncScheduler?.requestSync()
         }
     }
 
     func discardWorkout(_ session: WorkoutSession, context: ModelContext,
                         save: (ModelContext) throws -> Void = { try $0.save() }) throws {
-        let baseline = (status: session.status, updatedAt: session.updatedAt)
-        session.status = .discarded
-        session.touch()
+        try discardWorkouts([session], context: context, save: save)
+    }
+
+    func discardWorkouts(_ sessions: [WorkoutSession], context: ModelContext,
+                         save: (ModelContext) throws -> Void = { try $0.save() }) throws {
+        let now = Date.now
+        try persistWorkoutFinalization(sessions, context: context, save: save) { session in
+            session.status = .discarded
+            session.touch(now: now)
+        }
+    }
+
+    private func persistWorkoutFinalization(
+        _ sessions: [WorkoutSession], context: ModelContext,
+        save: (ModelContext) throws -> Void,
+        mutate: (WorkoutSession) throws -> Void
+    ) throws {
+        guard !sessions.isEmpty else { return }
+        let baselines = sessions.map(WorkoutFinalizationSnapshot.init)
         do {
+            for session in sessions { try mutate(session) }
             try save(context)
         } catch {
             context.rollback()
-            session.status = baseline.status
-            session.updatedAt = baseline.updatedAt
+            // Rollback alone may leave observed model instances at attempted
+            // values. Restore every captured workout, including earlier ones.
+            for (session, baseline) in zip(sessions, baselines) { baseline.restore(session) }
             throw error
         }
-        restTimer.cancel(sessionID: session.id)
-        if activeSessionID == session.id {
-            activeSessionID = nil
+        for session in sessions {
+            restTimer.cancel(sessionID: session.id)
+            if activeSessionID == session.id { activeSessionID = nil }
+        }
+    }
+
+    private struct WorkoutFinalizationSnapshot {
+        let title: String
+        let owner: String?
+        let status: WorkoutSessionStatus
+        let endedAt: Date?
+        let duration: Int
+        let updatedAt: Date
+
+        init(_ session: WorkoutSession) {
+            title = session.title
+            owner = session.syncOwnerTokenIdentifier
+            status = session.status
+            endedAt = session.endedAt
+            duration = session.durationSeconds
+            updatedAt = session.updatedAt
+        }
+
+        func restore(_ session: WorkoutSession) {
+            session.title = title
+            session.syncOwnerTokenIdentifier = owner
+            session.status = status
+            session.endedAt = endedAt
+            session.durationSeconds = duration
+            session.updatedAt = updatedAt
         }
     }
 

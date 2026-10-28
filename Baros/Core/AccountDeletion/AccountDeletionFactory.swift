@@ -57,6 +57,9 @@ private final class CloudDeletionUITestClient: SyncClient, @unchecked Sendable {
     private enum FixtureError: Error { case cloudDeletionUnconfirmed, unexpectedSync }
 
     func deleteAccountData(cancellationToken: UUID) async throws -> AccountDataDeletionResult {
+        if ProcessInfo.processInfo.arguments.contains("--uitest-delay-cloud-deletion") {
+            try await Task.sleep(for: .seconds(4))
+        }
         let shouldFail = lock.withLock {
             if hasFailed { return false }
             hasFailed = true

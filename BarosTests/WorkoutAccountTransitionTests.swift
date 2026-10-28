@@ -88,15 +88,101 @@ final class WorkoutAccountTransitionTests: XCTestCase {
         }
     }
 
-    func testHiddenWorkoutCannotBeFinishedByAnotherOwnersAccountAction() async throws {
+    func testAnotherOwnerCanSignOutAndManageAccountWithoutDiscardingHiddenWorkout() async throws {
+        for destination in [WorkoutAccountTransition.Destination.signOut, .manageAccount] {
+            let h = try Harness()
+            let session = try h.start()
+            h.owner = "issuer|b"
+            await h.gate.request(destination: destination) { h.owner = nil; h.calls += 1 }
+            XCTAssertFalse(h.gate.needsResolution)
+            XCTAssertNil(h.gate.errorMessage)
+            XCTAssertEqual(session.status, .active)
+            XCTAssertEqual(session.syncOwnerTokenIdentifier, "issuer|a")
+            XCTAssertEqual(h.calls, 1)
+            XCTAssertThrowsError(try h.engine.startBlankWorkout(context: h.context))
+            XCTAssertEqual(try h.engine.startBlankWorkout(ownerTokenIdentifier: "issuer|a", context: h.context).id, session.id)
+        }
+    }
+
+    func testDeleteAccountStillBlocksHiddenWorkoutBecauseResetWouldEraseIt() async throws {
         let h = try Harness()
         let session = try h.start()
         h.owner = "issuer|b"
-        await h.request()
-        XCTAssertFalse(h.gate.needsResolution)
+        await h.gate.request(destination: .deleteAccount) { h.calls += 1 }
         XCTAssertNotNil(h.gate.errorMessage)
-        XCTAssertEqual(session.status, .active)
+        XCTAssertFalse(h.gate.needsResolution)
         XCTAssertEqual(h.calls, 0)
+        XCTAssertEqual(session.status, .active)
+    }
+
+    func testOutgoingWorkoutIsResolvedWithoutChangingAnotherOwnersHiddenRecord() async throws {
+        let h = try Harness()
+        let hidden = try h.start()
+        let outgoing = WorkoutSession(title: "B workout", startedAt: .now, status: .active,
+            source: .blank, syncOwnerTokenIdentifier: "issuer|b")
+        h.context.insert(outgoing)
+        try h.context.save()
+        h.owner = "issuer|b"
+        await h.gate.request { h.owner = nil; h.calls += 1 }
+        XCTAssertTrue(h.gate.needsResolution)
+        await h.gate.resolve(.finish)
+        XCTAssertEqual(h.calls, 1)
+        XCTAssertEqual(outgoing.status, .completed)
+        XCTAssertEqual(hidden.status, .active)
+        XCTAssertThrowsError(try h.engine.startBlankWorkout(context: h.context))
+    }
+
+    func testLegacyBatchFinalizationUsesOneSaveAndRestoresEveryWorkoutOnFailure() async throws {
+        for resolution in [WorkoutAccountTransition.Resolution.finish, .discard] {
+            for failsSave in [false, true] {
+                let h = try Harness()
+                let first = try h.start()
+                first.title = "  First draft  "
+                let second = WorkoutSession(title: "  Second draft  ", startedAt: .now,
+                    status: .active, source: .blank, syncOwnerTokenIdentifier: h.owner)
+                h.context.insert(second)
+                try h.context.save()
+                let baselineDates = [first.updatedAt, second.updatedAt]
+                h.engine.restTimer.start(sessionID: first.id, setID: UUID(), duration: 120)
+                var saveCalls = 0
+                let gate = WorkoutAccountTransition(context: h.context, engine: h.engine,
+                    save: { context in
+                        saveCalls += 1
+                        // Both records must be staged before the only save.
+                        XCTAssertEqual(first.status, resolution == .finish ? .completed : .discarded)
+                        XCTAssertEqual(second.status, first.status)
+                        XCTAssertEqual(h.engine.activeSessionID, first.id)
+                        XCTAssertNotNil(h.engine.restTimer.current)
+                        if failsSave { throw Failure.expected }
+                        try context.save()
+                    }, owner: { h.owner })
+                await gate.request { h.calls += 1 }
+                await gate.resolve(resolution)
+                XCTAssertEqual(saveCalls, 1)
+                if failsSave {
+                    XCTAssertEqual(h.calls, 0)
+                    XCTAssertEqual(first.status, .active)
+                    XCTAssertEqual(second.status, .active)
+                    XCTAssertEqual(first.title, "  First draft  ")
+                    XCTAssertEqual(second.title, "  Second draft  ")
+                    XCTAssertEqual([first.updatedAt, second.updatedAt], baselineDates)
+                    XCTAssertNil(first.endedAt)
+                    XCTAssertNil(second.endedAt)
+                    XCTAssertNotNil(h.engine.restTimer.current)
+                    XCTAssertEqual(h.engine.activeSessionID, first.id)
+                    XCTAssertTrue(try h.context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+                    let reopened = ModelContext(h.container)
+                    XCTAssertTrue(try reopened.fetch(FetchDescriptor<WorkoutSession>()).allSatisfy { $0.status == .active })
+                } else {
+                    XCTAssertEqual(h.calls, 1)
+                    XCTAssertEqual(first.status, resolution == .finish ? .completed : .discarded)
+                    XCTAssertEqual(second.status, first.status)
+                    XCTAssertNil(h.engine.activeSessionID)
+                    XCTAssertNil(h.engine.restTimer.current)
+                }
+                h.engine.restTimer.cancel()
+            }
+        }
     }
 
     func testAccountActionFailureDoesNotUndoSuccessfulWorkoutFinalization() async throws {

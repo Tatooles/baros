@@ -27,6 +27,7 @@ final class WorkoutAccountTransition {
     private let engine: ActiveWorkoutEngine
     private let owner: () -> String?
     private let syncScheduler: SyncScheduler?
+    private var destination = Destination.signOut
     private var expectedOwner: String?
     private var sessionIDs: [UUID] = []
     private var action: (() async throws -> Void)?
@@ -48,16 +49,14 @@ final class WorkoutAccountTransition {
         self.owner = owner
     }
 
-    func request(_ action: @escaping () async throws -> Void) async {
+    func request(destination: Destination = .signOut, _ action: @escaping () async throws -> Void) async {
         guard !isRunning, !engine.isAccountTransitionInProgress else { return }
         cancel()
+        self.destination = destination
         expectedOwner = owner()
         self.action = action
         do {
-            let sessions = try activeSessions()
-            guard sessions.allSatisfy({ $0.allowsHistoryMutation(ownerTokenIdentifier: expectedOwner) }) else {
-                throw TransitionError.hiddenWorkout
-            }
+            let sessions = try outgoingActiveSessions()
             sessionIDs = sessions.map(\.id)
             if sessions.isEmpty {
                 isRunning = true
@@ -74,20 +73,18 @@ final class WorkoutAccountTransition {
         defer { isRunning = false }
         do {
             guard owner() == expectedOwner else { throw TransitionError.ownerChanged }
-            let sessions = try activeSessions()
+            let sessions = try outgoingActiveSessions()
             guard sessions.map(\.id) == sessionIDs,
                   sessions.allSatisfy({ $0.allowsHistoryMutation(ownerTokenIdentifier: expectedOwner) }) else {
                 throw TransitionError.workoutsChanged
             }
             guard !engine.hasPendingSetSave else { throw TransitionError.pendingSetSave }
-            for session in sessions {
-                switch resolution {
-                case .finish:
-                    try engine.finishWorkout(session, ownerTokenIdentifier: expectedOwner,
-                        syncScheduler: syncScheduler, context: context, save: save)
-                case .discard:
-                    try engine.discardWorkout(session, context: context, save: save)
-                }
+            switch resolution {
+            case .finish:
+                try engine.finishWorkouts(sessions, ownerTokenIdentifier: expectedOwner,
+                    syncScheduler: syncScheduler, context: context, save: save)
+            case .discard:
+                try engine.discardWorkouts(sessions, context: context, save: save)
             }
             needsResolution = false
             await performAction()
@@ -110,7 +107,7 @@ final class WorkoutAccountTransition {
     private func performAction() async {
         do {
             guard owner() == expectedOwner else { throw TransitionError.ownerChanged }
-            guard try activeSessions().isEmpty else { throw TransitionError.workoutsChanged }
+            guard try outgoingActiveSessions().isEmpty else { throw TransitionError.workoutsChanged }
             guard let action else { return }
             self.action = nil
             engine.isAccountTransitionInProgress = true
@@ -119,9 +116,16 @@ final class WorkoutAccountTransition {
         } catch { fail(error) }
     }
 
-    private func activeSessions() throws -> [WorkoutSession] {
-        try context.fetch(FetchDescriptor<WorkoutSession>()).filter { $0.status == .active && !$0.isDeleted }
+    private func outgoingActiveSessions() throws -> [WorkoutSession] {
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>()).filter { $0.status == .active && !$0.isDeleted }
             .sorted { $0.id.uuidString < $1.id.uuidString }
+        // Sign-out/switch must leave other owners' records untouched. Account
+        // deletion is different: its existing reset wipes the entire store.
+        if destination == .deleteAccount,
+           sessions.contains(where: { !$0.allowsHistoryMutation(ownerTokenIdentifier: expectedOwner) }) {
+            throw TransitionError.hiddenWorkout
+        }
+        return sessions.filter { $0.allowsHistoryMutation(ownerTokenIdentifier: expectedOwner) }
     }
 
     private func fail(_ error: Error) {

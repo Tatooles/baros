@@ -83,13 +83,13 @@ struct DeleteDataConfirmationView: View {
                 if mode == .account {
                     AccountTransitionButton(destination: .deleteAccount, role: .destructive) {
                         await coordinator.deleteAccount()
-                    }
+                    } label: { progressLabel }
                     .disabled(confirmationText != "DELETE" || coordinator.phase.isRunning)
                     .accessibilityIdentifier("DeleteDataConfirmButton")
                 } else {
-                    Button(buttonText, role: .destructive) {
+                    Button(role: .destructive) {
                         Task { await coordinator.deleteLocalData() }
-                    }
+                    } label: { progressLabel }
                     .disabled(confirmationText != "DELETE" || coordinator.phase.isRunning)
                     .accessibilityIdentifier("DeleteDataConfirmButton")
                 }
@@ -104,6 +104,16 @@ struct DeleteDataConfirmationView: View {
             if phase == .completed {
                 onCompleted()
                 dismiss()
+            }
+        }
+    }
+
+    private var progressLabel: some View {
+        HStack {
+            Text(buttonText)
+            if coordinator.phase.isRunning {
+                Spacer()
+                ProgressView()
             }
         }
     }

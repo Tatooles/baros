@@ -152,17 +152,9 @@ struct AppShellView: View {
                             #if DEBUG
                             if ProcessInfo.processInfo.arguments.contains("--uitest-active-workout-current-owner-change-control") {
                                 Button("Simulate Current Owner Change") {
-                                    let ownerTokenIdentifier = currentOwnerCoordinator.localDataOwnerTokenIdentifier
                                     activeSession.syncOwnerTokenIdentifier = "issuer|uitest_replacement_owner"
                                     activeSession.touch()
                                     try? modelContext.save()
-                                    Task { @MainActor in
-                                        try? await Task.sleep(for: .milliseconds(500))
-                                        _ = try? activeWorkoutEngine.startBlankWorkout(
-                                            ownerTokenIdentifier: ownerTokenIdentifier,
-                                            context: modelContext
-                                        )
-                                    }
                                 }
                                 .font(.caption2)
                                 .accessibilityIdentifier("UITestActiveWorkoutCurrentOwnerChangeButton")
