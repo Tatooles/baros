@@ -168,6 +168,7 @@ enum ConvexSyncArgumentMapper {
             "notes": record.notes,
             "referenceNotes": record.referenceNotes,
             "sourceLoggedExerciseID": record.sourceLoggedExerciseID,
+            "supersetGroupID": record.supersetGroupID,
         ]
     }
 

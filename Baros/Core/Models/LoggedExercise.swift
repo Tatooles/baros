@@ -12,6 +12,8 @@ final class LoggedExercise: Identifiable {
     var notes: String
     var referenceNotes: String?
     var sourceLoggedExerciseID: UUID?
+    /// Shared by neighboring exercises in a superset. See `SupersetGrouping`.
+    var supersetGroupID: UUID?
     var createdAt: Date
     var updatedAt: Date
     var deletedAt: Date?
@@ -29,6 +31,7 @@ final class LoggedExercise: Identifiable {
         notes: String = "",
         referenceNotes: String? = nil,
         sourceLoggedExerciseID: UUID? = nil,
+        supersetGroupID: UUID? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         deletedAt: Date? = nil,
@@ -44,6 +47,7 @@ final class LoggedExercise: Identifiable {
         self.notes = notes
         self.referenceNotes = referenceNotes
         self.sourceLoggedExerciseID = sourceLoggedExerciseID
+        self.supersetGroupID = supersetGroupID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

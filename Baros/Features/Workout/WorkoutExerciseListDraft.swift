@@ -38,6 +38,7 @@ struct WorkoutExerciseListSnapshot: Equatable {
         let orderIndex: Int
         let notes: String
         let referenceNotes: String?
+        let supersetGroupID: UUID?
         let updatedAt: Date
         let sets: [SetState]
         var isNew = false
@@ -50,6 +51,7 @@ struct WorkoutExerciseListSnapshot: Equatable {
             orderIndex = exercise.orderIndex
             notes = exercise.notes
             referenceNotes = exercise.referenceNotes
+            supersetGroupID = exercise.supersetGroupID
             updatedAt = exercise.updatedAt
             sets = exercise.sortedSets.map(SetState.init)
         }
@@ -61,6 +63,7 @@ struct WorkoutExerciseListSnapshot: Equatable {
             orderIndex = 0
             notes = ""
             referenceNotes = nil
+            supersetGroupID = nil
             updatedAt = .distantPast
             sets = []
             isNew = true

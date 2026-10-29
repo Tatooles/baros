@@ -26,6 +26,7 @@ struct WorkoutSessionView: View {
     @Bindable var navigationState: AppNavigationState
     let onMinimizePreparationChanged: ((() -> Void)?) -> Void
     @State private var showsSetSaveFailure = false
+    @State private var showsSupersetSaveFailure = false
     @State private var isFinishSheetPresented = false
     @State private var isReorderExercisesPresented = false
     @State private var isAddExercisePresented = false
@@ -95,31 +96,22 @@ struct WorkoutSessionView: View {
                     }
                     .padding(.horizontal, 4)
 
-                    ForEach(Array(sortedLoggedExercises.enumerated()), id: \.element.id) { exerciseIndex, loggedExercise in
-                        ExerciseCardView(
-                            loggedExercise: loggedExercise,
-                            exerciseIndex: exerciseIndex,
-                            engine: engine,
-                            isCollapsed: isCollapsedBinding(for: loggedExercise),
-                            isNoteRevealed: isNoteRevealedBinding(for: loggedExercise),
-                            setInputRegistry: setInputRegistry,
-                            focusedField: $focusedField,
-                            weightUnit: weightUnit,
-                            previousSets: cachedPreviousSets[loggedExercise.id] ?? [],
-                            viewHistory: {
-                                guard prepareForPresentation() else { return }
-                                selectedHistoryExercise = loggedExercise
-                            },
-                            onSwapExercise: {
-                                guard prepareForPresentation() else { return }
-                                swappingLoggedExercise = loggedExercise
-                            },
-                            onEditRPE: { set in
-                                focusedField = .setReps(set.id)
-                                rpeEditingSetID = set.id
+                    let supersetGroupIDs = sortedLoggedExercises.map(\.supersetGroupID)
+                    let exerciseIndexes = Dictionary(
+                        uniqueKeysWithValues: sortedLoggedExercises.enumerated().map { ($1.id, $0) }
+                    )
+                    ForEach(SupersetGrouping.blocks(sortedLoggedExercises, groupID: \.supersetGroupID)) { block in
+                        if block.isSuperset {
+                            SupersetRail(count: block.members.count) {
+                                ForEach(block.members) { loggedExercise in
+                                    exerciseCard(loggedExercise, index: exerciseIndexes[loggedExercise.id] ?? 0,
+                                                 supersetGroupIDs: supersetGroupIDs)
+                                }
                             }
-                        )
-                        .id(loggedExercise.id)
+                        } else {
+                            exerciseCard(block.members[0], index: exerciseIndexes[block.id] ?? 0,
+                                         supersetGroupIDs: supersetGroupIDs)
+                        }
                     }
 
                     let actionLayout = dynamicTypeSize.isAccessibilitySize
@@ -218,6 +210,7 @@ struct WorkoutSessionView: View {
             .background {
                 PreviousSetsCacheLoader(session: session) {
                     cachedPreviousSets = $0
+                    engine.previousSetsByLoggedExerciseID = $0
                 }
                 .frame(width: 0, height: 0)
             }
@@ -237,6 +230,11 @@ struct WorkoutSessionView: View {
             }
         } message: {
             Text("Retry saving, or discard this edit to continue. Your previously saved sets will remain.")
+        }
+        .alert("Couldn't Change Superset", isPresented: $showsSupersetSaveFailure) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Your workout wasn't changed. Try again from the exercise menu.")
         }
         .onChange(of: engine.pendingSetSaveID, initial: true) { _, failureID in
             if failureID != nil { resignFocus() }
@@ -490,6 +488,67 @@ struct WorkoutSessionView: View {
                 }
             }
         )
+    }
+
+    private func exerciseCard(
+        _ loggedExercise: LoggedExercise,
+        index exerciseIndex: Int,
+        supersetGroupIDs: [UUID?]
+    ) -> some View {
+        ExerciseCardView(
+            loggedExercise: loggedExercise,
+            exerciseIndex: exerciseIndex,
+            engine: engine,
+            isCollapsed: isCollapsedBinding(for: loggedExercise),
+            isNoteRevealed: isNoteRevealedBinding(for: loggedExercise),
+            setInputRegistry: setInputRegistry,
+            focusedField: $focusedField,
+            weightUnit: weightUnit,
+            previousSets: cachedPreviousSets[loggedExercise.id] ?? [],
+            supersetActions: supersetActions(for: loggedExercise, at: exerciseIndex, groupIDs: supersetGroupIDs),
+            viewHistory: {
+                guard prepareForPresentation() else { return }
+                selectedHistoryExercise = loggedExercise
+            },
+            onSwapExercise: {
+                guard prepareForPresentation() else { return }
+                swappingLoggedExercise = loggedExercise
+            },
+            onEditRPE: { set in
+                focusedField = .setReps(set.id)
+                rpeEditingSetID = set.id
+            }
+        )
+        .id(loggedExercise.id)
+    }
+
+    /// Each link action shows unless that neighbor is already in this exercise's superset.
+    private func supersetActions(
+        for loggedExercise: LoggedExercise,
+        at index: Int,
+        groupIDs: [UUID?]
+    ) -> ExerciseCardView.SupersetActions {
+        func action(_ change: ActiveWorkoutEngine.SupersetChange) -> () -> Void {
+            { changeSuperset(change, for: loggedExercise) }
+        }
+        return ExerciseCardView.SupersetActions(
+            joinPrevious: index > 0 && !SupersetGrouping.areGrouped(groupIDs, index, index - 1)
+                ? action(.joinPrevious) : nil,
+            joinNext: index + 1 < groupIDs.count && !SupersetGrouping.areGrouped(groupIDs, index, index + 1)
+                ? action(.joinNext) : nil,
+            remove: SupersetGrouping.isGrouped(groupIDs, at: index) ? action(.remove) : nil
+        )
+    }
+
+    private func changeSuperset(_ change: ActiveWorkoutEngine.SupersetChange, for loggedExercise: LoggedExercise) {
+        guard prepareForPresentation() else { return }
+        do {
+            try withAnimation(.snappy) {
+                try engine.changeSuperset(change, for: loggedExercise, context: modelContext)
+            }
+        } catch {
+            showsSupersetSaveFailure = true
+        }
     }
 
     private func prepareForPresentation() -> Bool {

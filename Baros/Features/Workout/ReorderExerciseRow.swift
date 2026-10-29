@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// A stock edit-mode List, so the system owns the minus, Delete, and reorder
-/// grip along with their motion and accessibility.
+/// grip along with their motion and accessibility. A superset is one row, so
+/// it moves as a block; its members keep their own remove buttons.
 struct ReorderExercisesList: View {
     let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
     let reorder: ([UUID]) -> Void
@@ -9,25 +10,33 @@ struct ReorderExercisesList: View {
     var add: () -> Void = {}
 
     var body: some View {
+        let blocks = SupersetGrouping.blocks(exercises, groupID: \.supersetGroupID)
         List {
-            ForEach(exercises) { exercise in
-                ReorderExerciseRow(exercise: exercise)
-                    // Lifts only the card while dragging, not the whole row rectangle.
-                    .contentShape(
-                        .dragPreview,
-                        RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous)
-                    )
-                    .listRowInsets(EdgeInsets(top: 6, leading: 4, bottom: 6, trailing: 8))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
+            ForEach(blocks) { block in
+                Group {
+                    if block.isSuperset {
+                        ReorderSupersetRow(exercises: block.members, remove: { remove([$0]) })
+                    } else {
+                        ReorderExerciseRow(exercise: block.members[0])
+                            // Lifts only the card while dragging, not the whole row rectangle.
+                            .contentShape(
+                                .dragPreview,
+                                RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous)
+                            )
+                    }
+                }
+                .listRowInsets(EdgeInsets(top: 6, leading: 4, bottom: 6, trailing: 8))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .deleteDisabled(block.isSuperset)
             }
             .onMove { source, destination in
-                var ids = exercises.map(\.id)
-                ids.move(fromOffsets: source, toOffset: destination)
-                reorder(ids)
+                var reordered = blocks
+                reordered.move(fromOffsets: source, toOffset: destination)
+                reorder(reordered.flatMap { $0.members.map(\.id) })
             }
             .onDelete { offsets in
-                remove(Set(offsets.map { exercises[$0].id }))
+                remove(Set(offsets.flatMap { blocks[$0].members.map(\.id) }))
             }
             Button(action: add) {
                 Label("Add Exercises", systemImage: "plus")
@@ -103,5 +112,41 @@ struct ReorderExerciseRow: View {
         detail(exercise.isNew ? "New · \(exercise.progressText)" : exercise.progressText)
             .monospacedDigit()
             .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+/// A superset's members beside the rail. The system has no delete control for
+/// part of a row, so each member gets its own minus button, sized so the cards
+/// line up with single exercises.
+private struct ReorderSupersetRow: View {
+    /// Scales like the system minus, so members stay in line with single exercises.
+    @ScaledMetric(relativeTo: .title2) private var removeColumnWidth = 28
+    let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
+    let remove: (UUID) -> Void
+
+    var body: some View {
+        SupersetRail(count: exercises.count, spacing: 12, reachesIntoMargin: false) {
+            ForEach(exercises) { exercise in
+                HStack(spacing: 2) {
+                    Button {
+                        remove(exercise.id)
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.title2)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, .red)
+                            .frame(width: removeColumnWidth)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Remove \(exercise.name)")
+                    .accessibilityIdentifier("ReorderRemoveSupersetMember-\(exercise.id.uuidString)")
+
+                    ReorderExerciseRow(exercise: exercise)
+                }
+            }
+        }
+        .contentShape(.dragPreview, Rectangle())
     }
 }

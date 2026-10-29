@@ -21,7 +21,8 @@ final class WorkoutDataExportServiceTests: XCTestCase {
         "completed_at",
         "workout_id",
         "logged_exercise_id",
-        "set_id"
+        "set_id",
+        "superset"
     ]
 
     func testCSVIncludesHeaderCompletedWorkoutSetRowsSortingAndStableIDs() throws {
@@ -157,7 +158,8 @@ final class WorkoutDataExportServiceTests: XCTestCase {
             "",
             olderSessionID.uuidString,
             benchExerciseID.uuidString,
-            incompleteSetID.uuidString
+            incompleteSetID.uuidString,
+            ""
         ])
         XCTAssertEqual(rows[2], [
             "1970-01-01T00:00:00Z",
@@ -177,7 +179,8 @@ final class WorkoutDataExportServiceTests: XCTestCase {
             "1970-01-01T00:01:00Z",
             olderSessionID.uuidString,
             benchExerciseID.uuidString,
-            completedSetID.uuidString
+            completedSetID.uuidString,
+            ""
         ])
         XCTAssertEqual(rows[3], [
             "1970-01-01T00:00:00Z",
@@ -197,14 +200,15 @@ final class WorkoutDataExportServiceTests: XCTestCase {
             "1970-01-01T00:01:30Z",
             olderSessionID.uuidString,
             curlExerciseID.uuidString,
-            curlSetID.uuidString
+            curlSetID.uuidString,
+            ""
         ])
-        XCTAssertEqual(rows[4].suffix(3), [
+        XCTAssertEqual(rows[4][15...17], [
             tieASessionID.uuidString,
             tieAExerciseID.uuidString,
             tieASetID.uuidString
         ])
-        XCTAssertEqual(rows[5].suffix(3), [
+        XCTAssertEqual(rows[5][15...17], [
             tieBSessionID.uuidString,
             tieBExerciseID.uuidString,
             tieBSetID.uuidString
@@ -510,6 +514,25 @@ final class WorkoutDataExportServiceTests: XCTestCase {
         XCTAssertEqual(rows[1][4], "'－HYPERLINK(\"https://example.com\")")
         XCTAssertEqual(rows[1][5], "'＠metadata")
         XCTAssertEqual(rows[1][13], "'\n＝cmd")
+    }
+
+    func testCSVNumbersEachWorkoutsSupersets() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let group = UUID(), other = UUID()
+        let session = WorkoutSession(title: "Upper", startedAt: Date(timeIntervalSince1970: 0), status: .completed, source: .blank)
+        container.mainContext.insert(session)
+        // A lone stored id is not a superset.
+        for (index, id) in [group, group, nil, other, other, UUID()].enumerated() {
+            let exercise = LoggedExercise(orderIndex: index, exerciseSnapshotName: "E\(index)", supersetGroupID: id)
+            container.mainContext.insert(exercise)
+            exercise.session = session
+            let set = LoggedSet(orderIndex: 0)
+            container.mainContext.insert(set)
+            set.loggedExercise = exercise
+        }
+        try container.mainContext.save()
+        let rows = try parseCSV(WorkoutDataExportService().csv(for: [session], unit: .pounds))
+        XCTAssertEqual(rows.dropFirst().map(\.last), ["1", "1", "", "2", "2", ""])
     }
 
     private func completedSession(

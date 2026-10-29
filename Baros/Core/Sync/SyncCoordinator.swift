@@ -1273,6 +1273,7 @@ final class SyncCoordinator {
                     notes: record.notes,
                     referenceNotes: record.referenceNotes,
                     sourceLoggedExerciseID: record.sourceLoggedExerciseID.flatMap(UUID.init(uuidString:)),
+                    supersetGroupID: record.supersetGroupID.flatMap(UUID.init(uuidString:)),
                     createdAt: Date(timeIntervalSince1970: record.createdAt),
                     updatedAt: incomingUpdatedAt,
                     deletedAt: incomingDeletedAt
@@ -1307,6 +1308,7 @@ final class SyncCoordinator {
         loggedExercise.notes = record.notes
         loggedExercise.referenceNotes = record.referenceNotes
         loggedExercise.sourceLoggedExerciseID = record.sourceLoggedExerciseID.flatMap(UUID.init(uuidString:))
+        loggedExercise.supersetGroupID = record.supersetGroupID.flatMap(UUID.init(uuidString:))
         loggedExercise.createdAt = Date(timeIntervalSince1970: record.createdAt)
         loggedExercise.updatedAt = Date(timeIntervalSince1970: record.updatedAt)
         loggedExercise.deletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))

@@ -15,6 +15,8 @@ enum UITestFixtureSeeder {
     static let largeActiveWorkoutArgument = "--uitest-seed-large-active-workout"
     static let largeActiveWorkoutTitle = "Performance Workout 10x5"
     static let longNameActiveWorkoutArgument = "--uitest-seed-long-name-active-workout"
+    /// With the long-name workout: exercise 1 alone, 2–3 as a pair and 4–6 as a giant set.
+    static let supersetsArgument = "--uitest-seed-supersets"
     static let homeRingHistoryArgument = "--uitest-seed-home-ring-history"
     /// Seeds fixtures for an owner who is no longer signed in, as after an expired session.
     static let signedOutOwnerArgument = "--uitest-seed-signed-out-owner"
@@ -141,6 +143,9 @@ enum UITestFixtureSeeder {
 
         if arguments.contains(longNameActiveWorkoutArgument) {
             try seedLongNameActiveWorkout(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            if arguments.contains(supersetsArgument) {
+                try groupLongNameActiveWorkout(context: context)
+            }
         }
 
         if arguments.contains("--uitest-rest-30-seconds"),
@@ -660,6 +665,17 @@ enum UITestFixtureSeeder {
             syncOwnerTokenIdentifier: ownerTokenIdentifier,
             loggedExercises: exercises
         ))
+        try context.save()
+    }
+
+    private static func groupLongNameActiveWorkout(context: ModelContext) throws {
+        let id = stableUUID("00000327-0000-4000-8000-000000000001")
+        guard let session = try context.fetch(FetchDescriptor<WorkoutSession>()).first(where: { $0.id == id }) else { return }
+        let exercises = session.sortedLoggedExercises
+        guard exercises.count >= 6 else { return }
+        let pair = stableUUID("00000101-pair"), trio = stableUUID("00000101-trio")
+        for exercise in exercises[1...2] { exercise.supersetGroupID = pair }
+        for exercise in exercises[3...5] { exercise.supersetGroupID = trio }
         try context.save()
     }
 

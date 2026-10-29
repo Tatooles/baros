@@ -34,6 +34,7 @@ struct HomePastWorkoutReviewPresentation: Equatable {
         let name: String
         let equipment: String?
         let copiedSetCount: Int
+        var supersetGroupID: UUID?
 
         var copiedSetDescription: String {
             "\(copiedSetCount) \(copiedSetCount == 1 ? "set" : "sets")"
@@ -57,7 +58,8 @@ struct HomePastWorkoutReviewPresentation: Equatable {
                 id: loggedExercise.id,
                 name: loggedExercise.exerciseSnapshotName,
                 equipment: loggedExercise.snapshotEquipment?.displayName,
-                copiedSetCount: loggedExercise.sortedSets.count
+                copiedSetCount: loggedExercise.sortedSets.count,
+                supersetGroupID: loggedExercise.supersetGroupID
             )
         }
         copiedSetCount = exercises.reduce(0) { $0 + $1.copiedSetCount }

@@ -8,6 +8,7 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
     case anotherOwnerHasActiveWorkout
     case invalidExerciseReorder
     case invalidExerciseSwap
+    case invalidSupersetChange
     case pastWorkoutUnavailable
 
     var errorDescription: String? {
@@ -22,6 +23,8 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
             return "Workout exercises changed. Review the current order and try again."
         case .invalidExerciseSwap:
             return "That exercise can no longer be swapped. Review the workout and try again."
+        case .invalidSupersetChange:
+            return "Workout exercises changed. Review the superset and try again."
         case .pastWorkoutUnavailable:
             return "That past workout is no longer available. Choose another workout and try again."
         }
@@ -53,6 +56,9 @@ final class ActiveWorkoutEngine {
     @ObservationIgnored private var injectedReorderExercisesSaveFailureCount = 0
     #endif
     var hasPendingSetSave: Bool { pendingSetSave != nil }
+    /// The Previous column's values, keyed by logged exercise. A linked round
+    /// fills each partner's empty fields from them, as that partner's own check would.
+    @ObservationIgnored var previousSetsByLoggedExerciseID: [UUID: [PreviousSetPerformance]] = [:]
     var pendingSetSaveID: UUID? { pendingSetSave?.id }
 
     func loadActiveSession(ownerTokenIdentifier: String? = nil, context: ModelContext) {
@@ -131,7 +137,9 @@ final class ActiveWorkoutEngine {
         )
         context.insert(session)
 
-        for pastLoggedExercise in pastSession.sortedLoggedExercises {
+        let pastLoggedExercises = pastSession.sortedLoggedExercises
+        let copiedGroupIDs = SupersetGrouping.copied(pastLoggedExercises.map(\.supersetGroupID))
+        for (pastLoggedExercise, supersetGroupID) in zip(pastLoggedExercises, copiedGroupIDs) {
             let resolvedEquipmentRaw = pastLoggedExercise.resolvedSnapshotEquipmentRaw
             let resolvedPrimaryMuscleGroupRaw = pastLoggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw
             let loggedExercise = LoggedExercise(
@@ -141,6 +149,7 @@ final class ActiveWorkoutEngine {
                 exerciseSnapshotEquipmentRaw: resolvedEquipmentRaw,
                 exerciseSnapshotPrimaryMuscleGroupRaw: resolvedPrimaryMuscleGroupRaw,
                 sourceLoggedExerciseID: pastLoggedExercise.id,
+                supersetGroupID: supersetGroupID,
                 createdAt: now,
                 updatedAt: now
             )
@@ -273,6 +282,7 @@ final class ActiveWorkoutEngine {
         }
         if let session {
             reindexLoggedExercises(for: session, now: now)
+            normalizeSupersets(session.sortedLoggedExercises, now: now)
             session.touch(now: now)
         }
         try context.save()
@@ -306,9 +316,11 @@ final class ActiveWorkoutEngine {
         let originalSetStates = loggedExercise.sets.map { set in
             (set: set, updatedAt: set.updatedAt, deletedAt: set.deletedAt)
         }
+        // The replacement takes the slot, including its place in a superset.
         let replacement = LoggedExercise(
             orderIndex: loggedExercise.orderIndex,
             exercise: exercise,
+            supersetGroupID: loggedExercise.supersetGroupID,
             createdAt: now,
             updatedAt: now
         )
@@ -398,7 +410,8 @@ final class ActiveWorkoutEngine {
 
         let originalSessionUpdatedAt = session.updatedAt
         let originalExerciseStates = visibleExercises.map {
-            (exercise: $0, orderIndex: $0.orderIndex, updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
+            (exercise: $0, orderIndex: $0.orderIndex, supersetGroupID: $0.supersetGroupID,
+             updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
         }
         let originalSetStates = removedSets.map {
             (set: $0, updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
@@ -430,7 +443,10 @@ final class ActiveWorkoutEngine {
                 }
             }
 
-            guard didChangeOrder || !removedExercises.isEmpty || !inserted.isEmpty else { return }
+            // The sheet moves supersets as blocks. Removals can still leave one
+            // exercise alone, and other callers may split a run.
+            let didChangeGrouping = normalizeSupersets(orderedIDs.compactMap { exercisesByID[$0] }, now: now)
+            guard didChangeOrder || didChangeGrouping || !removedExercises.isEmpty || !inserted.isEmpty else { return }
             for exercise in removedExercises { exercise.markDeleted(now: now) }
             for set in removedSets { set.markDeleted(now: now) }
             session.touch(now: now)
@@ -454,12 +470,77 @@ final class ActiveWorkoutEngine {
             }
             for state in originalExerciseStates {
                 state.exercise.orderIndex = state.orderIndex
+                state.exercise.supersetGroupID = state.supersetGroupID
                 state.exercise.updatedAt = state.updatedAt
                 state.exercise.deletedAt = state.deletedAt
             }
             for state in originalSetStates {
                 state.set.updatedAt = state.updatedAt
                 state.set.deletedAt = state.deletedAt
+            }
+            session.updatedAt = originalSessionUpdatedAt
+            throw error
+        }
+    }
+
+    enum SupersetChange {
+        case joinPrevious
+        case joinNext
+        case remove
+    }
+
+    /// Applies one exercise-menu superset action as a single save.
+    func changeSuperset(
+        _ change: SupersetChange,
+        for loggedExercise: LoggedExercise,
+        context: ModelContext,
+        now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        guard let session = loggedExercise.session, !session.isDeleted, session.status == .active,
+              !hasPendingSetSave else {
+            throw ActiveWorkoutEngineError.invalidSupersetChange
+        }
+        let exercises = session.sortedLoggedExercises
+        guard let index = exercises.firstIndex(where: { $0.id == loggedExercise.id }) else {
+            throw ActiveWorkoutEngineError.invalidSupersetChange
+        }
+        let groupIDs = exercises.map(\.supersetGroupID)
+        let neighbor: Int? = switch change {
+        case .joinPrevious: index - 1
+        case .joinNext: index + 1
+        case .remove: nil
+        }
+        let updated: [UUID?]
+        if let neighbor {
+            guard exercises.indices.contains(neighbor),
+                  !SupersetGrouping.areGrouped(groupIDs, index, neighbor) else {
+                throw ActiveWorkoutEngineError.invalidSupersetChange
+            }
+            updated = SupersetGrouping.linking(groupIDs, index, with: neighbor)
+        } else {
+            guard SupersetGrouping.isGrouped(groupIDs, at: index) else {
+                throw ActiveWorkoutEngineError.invalidSupersetChange
+            }
+            updated = SupersetGrouping.removing(groupIDs, at: index)
+        }
+
+        let originalSessionUpdatedAt = session.updatedAt
+        let changed = zip(exercises, updated).filter { $0.0.supersetGroupID != $0.1 }
+        let originalStates = changed.map {
+            (exercise: $0.0, supersetGroupID: $0.0.supersetGroupID, updatedAt: $0.0.updatedAt)
+        }
+        guard !changed.isEmpty else { return }
+        for (exercise, group) in changed {
+            exercise.supersetGroupID = group
+            exercise.touch(now: now)
+        }
+        do {
+            try save(context)
+        } catch {
+            for state in originalStates {
+                state.exercise.supersetGroupID = state.supersetGroupID
+                state.exercise.updatedAt = state.updatedAt
             }
             session.updatedAt = originalSessionUpdatedAt
             throw error
@@ -658,6 +739,7 @@ final class ActiveWorkoutEngine {
             set.completedAt = isCompleted ? now : nil
             set.touch(now: now)
         }
+        let roundPartners = !before.isCompleted && set.isCompleted ? completeSupersetRound(of: set, now: now) : []
         do {
             #if DEBUG
             let arguments = ProcessInfo.processInfo.arguments
@@ -683,6 +765,7 @@ final class ActiveWorkoutEngine {
                 }
             }
         } catch {
+            for (partner, snapshot) in roundPartners.reversed() { snapshot.restore(partner) }
             before.restore(set)
             pendingSetSave = PendingSetSave(set: set, action: action, date: now,
                 sessionID: set.loggedExercise?.session?.id,
@@ -692,6 +775,41 @@ final class ActiveWorkoutEngine {
             }
             throw error
         }
+    }
+
+    /// Checking set N in a superset checks set N on its partners. Each fills
+    /// empty fields the way its own check would: from the sets above it, then
+    /// from last time. Returns the partners changed, for restoring on failure.
+    private func completeSupersetRound(of set: LoggedSet, now: Date) -> [(LoggedSet, SetSaveSnapshot)] {
+        guard let exercise = set.loggedExercise, let session = exercise.session, session.status == .active,
+              let position = exercise.sortedSets.firstIndex(where: { $0.id == set.id }),
+              let block = SupersetGrouping.blocks(session.sortedLoggedExercises, groupID: \.supersetGroupID)
+                .first(where: { $0.members.contains { $0.id == exercise.id } }),
+              block.isSuperset else { return [] }
+
+        var partners: [(LoggedSet, SetSaveSnapshot)] = []
+        for partnerExercise in block.members where partnerExercise.id != exercise.id {
+            let sets = partnerExercise.sortedSets
+            // An exercise with fewer sets sits out the extra rounds.
+            guard sets.indices.contains(position), !sets[position].isCompleted else { continue }
+            let partner = sets[position]
+            let snapshot = SetSaveSnapshot(partner)
+            let above = ActiveWorkoutSetSuggestions.resolve(for: sets.map { .init(weight: $0.weight, reps: $0.reps) })[position]
+            let previous = previousSetsByLoggedExerciseID[partnerExercise.id].flatMap {
+                $0.indices.contains(position) ? $0[position] : nil
+            }
+            partner.weight = WorkoutNumericInputPolicy.validatedWeight(partner.weight)
+                ?? WorkoutNumericInputPolicy.validatedWeight(above.weight)
+                ?? WorkoutNumericInputPolicy.validatedWeight(previous?.weight)
+            partner.reps = WorkoutNumericInputPolicy.validatedReps(partner.reps)
+                ?? WorkoutNumericInputPolicy.validatedReps(above.reps)
+                ?? WorkoutNumericInputPolicy.validatedReps(previous?.reps)
+            partner.isCompleted = true
+            partner.completedAt = now
+            partner.touch(now: now)
+            partners.append((partner, snapshot))
+        }
+        return partners
     }
 
     /// Only the fields changed by a set edit, never the whole model context.
@@ -937,6 +1055,19 @@ final class ActiveWorkoutEngine {
             loggedExercise.orderIndex = index
             loggedExercise.touch(now: now)
         }
+    }
+
+    /// Keeps stored grouping in the shape readers trust after a structure change.
+    @discardableResult
+    private func normalizeSupersets(_ orderedExercises: [LoggedExercise], now: Date) -> Bool {
+        let normalized = SupersetGrouping.normalized(orderedExercises.map(\.supersetGroupID))
+        var didChange = false
+        for (exercise, group) in zip(orderedExercises, normalized) where exercise.supersetGroupID != group {
+            exercise.supersetGroupID = group
+            exercise.touch(now: now)
+            didChange = true
+        }
+        return didChange
     }
 
     private func reindexSets(for loggedExercise: LoggedExercise, now: Date = .now) {

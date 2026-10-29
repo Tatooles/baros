@@ -2,6 +2,13 @@ import SwiftData
 import SwiftUI
 
 struct ExerciseCardView: View {
+    /// The superset menu items that apply to this exercise; nil hides one.
+    struct SupersetActions {
+        var joinPrevious: (() -> Void)?
+        var joinNext: (() -> Void)?
+        var remove: (() -> Void)?
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let loggedExercise: LoggedExercise
@@ -13,6 +20,7 @@ struct ExerciseCardView: View {
     var focusedField: FocusState<WorkoutField?>.Binding
     let weightUnit: MeasurementUnit
     let previousSets: [PreviousSetPerformance]
+    let supersetActions: SupersetActions
     let viewHistory: () -> Void
     let onSwapExercise: () -> Void
     let onEditRPE: (LoggedSet) -> Void
@@ -30,6 +38,7 @@ struct ExerciseCardView: View {
         focusedField: FocusState<WorkoutField?>.Binding,
         weightUnit: MeasurementUnit,
         previousSets: [PreviousSetPerformance],
+        supersetActions: SupersetActions,
         viewHistory: @escaping () -> Void,
         onSwapExercise: @escaping () -> Void,
         onEditRPE: @escaping (LoggedSet) -> Void
@@ -43,6 +52,7 @@ struct ExerciseCardView: View {
         self.focusedField = focusedField
         self.weightUnit = weightUnit
         self.previousSets = previousSets
+        self.supersetActions = supersetActions
         self.viewHistory = viewHistory
         self.onSwapExercise = onSwapExercise
         self.onEditRPE = onEditRPE
@@ -94,6 +104,28 @@ struct ExerciseCardView: View {
                             Label("Swap Exercise", systemImage: "arrow.triangle.2.circlepath")
                         }
                         .accessibilityIdentifier("SwapExerciseButton-\(exerciseIndex)")
+
+                        // Join Previous comes first: the superset it joins is above.
+                        if let joinPrevious = supersetActions.joinPrevious {
+                            Button(action: joinPrevious) {
+                                Label("Join Previous Superset", systemImage: "link")
+                            }
+                            .accessibilityIdentifier("JoinPreviousSupersetButton-\(exerciseIndex)")
+                        }
+
+                        if let joinNext = supersetActions.joinNext {
+                            Button(action: joinNext) {
+                                Label("Superset with Next", systemImage: "link")
+                            }
+                            .accessibilityIdentifier("SupersetWithNextButton-\(exerciseIndex)")
+                        }
+
+                        if let remove = supersetActions.remove {
+                            Button(action: remove) {
+                                Label("Remove from Superset", systemImage: "minus.circle")
+                            }
+                            .accessibilityIdentifier("RemoveFromSupersetButton-\(exerciseIndex)")
+                        }
 
                         Button(role: .destructive) {
                             setInputRegistry.commit(focusedField.wrappedValue)
