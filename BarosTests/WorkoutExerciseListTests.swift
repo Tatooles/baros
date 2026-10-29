@@ -157,6 +157,106 @@ final class WorkoutExerciseListTests: XCTestCase {
         )
     }
 
+    func testAppendBatchFailureRestoresWorkoutAndRetryPreservesTapOrder() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try fixture(in: context)
+        let baseline = WorkoutExerciseListSnapshot(session: session)
+        let additions = ["Curl", "Fly"].map { Exercise(name: $0, category: .strength, equipment: .dumbbell, primaryMuscleGroup: .chest) }
+        additions.forEach { context.insert($0) }
+        let engine = ActiveWorkoutEngine()
+        XCTAssertThrowsError(try engine.addExercises(additions, to: session, context: context, save: { _ in throw CocoaError(.fileWriteUnknown) }))
+        XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), baseline)
+        try engine.addExercises(additions, to: session, context: context)
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Bench Press", "Barbell Row", "Back Squat", "Curl", "Fly"])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2, 3, 4])
+    }
+
+    func testDraftAppendsInTapOrderEvenWithLoggedSets() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let session = try fixture(in: container.mainContext)
+        session.sortedLoggedExercises[0].sets[0].isCompleted = true
+        var draft = WorkoutExerciseListDraft(session: session)
+        let picks = ["Curl", "Fly"].map { Exercise(name: $0, category: .strength, equipment: .dumbbell, primaryMuscleGroup: .chest) }
+        draft.append(picks)
+        XCTAssertEqual(draft.exercises.map(\.name), ["Bench Press", "Barbell Row", "Back Squat", "Curl", "Fly"])
+        XCTAssertTrue(draft.exercises.suffix(2).allSatisfy(\.isNew))
+        XCTAssertEqual(session.sortedLoggedExercises.count, 3)
+    }
+
+    func testDraftAddRemoveAndReorderSaveOnceAndKeepDraftForRetry() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try fixture(in: context)
+        let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        context.insert(library)
+        try context.save()
+        let baseline = WorkoutExerciseListSnapshot(session: session)
+        var draft = WorkoutExerciseListDraft(session: session)
+        let addition = WorkoutExerciseListDraft.Addition(exercise: library)
+        draft.additions.append(addition)
+        draft.orderedIDs = [baseline.exercises[2].id, addition.id, baseline.exercises[0].id]
+        XCTAssertTrue(draft.exercises[1].isNew)
+        XCTAssertEqual(session.sortedLoggedExercises.count, 3)
+        let engine = ActiveWorkoutEngine()
+        XCTAssertThrowsError(try engine.applyExerciseListChanges(in: session, orderedIDs: draft.orderedIDs, baseline: baseline, additions: draft.additions, context: context, save: { _ in throw CocoaError(.fileWriteUnknown) }))
+        XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), baseline)
+        var saves = 0
+        try engine.applyExerciseListChanges(in: session, orderedIDs: draft.orderedIDs, baseline: baseline, additions: draft.additions, context: context, save: { saves += 1; try $0.save() })
+        XCTAssertEqual(saves, 1)
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Back Squat", "Curl", "Bench Press"])
+        XCTAssertFalse(session.sortedLoggedExercises[1].sortedSets.isEmpty)
+    }
+
+    func testDraftPreviewAndSavedSetsUseTheSameHistoryPlan() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try fixture(in: context)
+        let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        let kinds: [SetKind] = [.warmup, .working, .working]
+        let logged = LoggedExercise(orderIndex: 0, exercise: library,
+                                    sets: kinds.enumerated().map { LoggedSet(orderIndex: $0.offset, kind: $0.element, isCompleted: true) })
+        let history = WorkoutSession(title: "Past", startedAt: .now.addingTimeInterval(-3600),
+                                     status: .completed, source: .blank, loggedExercises: [logged])
+        context.insert(history)
+        try context.save()
+        let engine = ActiveWorkoutEngine()
+        var draft = WorkoutExerciseListDraft(session: session)
+        draft.append([library]) { engine.initialSetKinds(for: $0, ownerTokenIdentifier: nil, sessions: [history]) }
+        XCTAssertEqual(draft.exercises.last?.progressText, "0/3 sets")
+        XCTAssertTrue(draft.exercises.last?.accessibilityValue.contains("New") == true)
+        // The initial rows promised in the draft remain stable if history changes before Done.
+        logged.sets.forEach { $0.isCompleted = false }
+        try context.save()
+        try engine.applyExerciseListChanges(in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline,
+                                             additions: draft.additions, context: context)
+        XCTAssertEqual(session.sortedLoggedExercises.last?.sortedSets.map(\.kind), kinds)
+    }
+
+    func testDraftRejectsLibraryAdditionsThatAreNoLongerVisible() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try fixture(in: context)
+        let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        context.insert(library)
+        try context.save()
+        let engine = ActiveWorkoutEngine()
+        var draft = WorkoutExerciseListDraft(session: session)
+        draft.append([library])
+        XCTAssertEqual(draft.exercises.last?.progressText, "0/1 sets")
+        for state in 0..<3 {
+            library.isArchived = state == 0
+            library.deletedAt = state == 1 ? .now : nil
+            library.syncOwnerTokenIdentifier = state == 2 ? "another-owner" : nil
+            try context.save()
+            var saves = 0
+            XCTAssertThrowsError(try engine.applyExerciseListChanges(in: session, orderedIDs: draft.orderedIDs,
+                baseline: draft.baseline, additions: draft.additions, context: context, save: { _ in saves += 1 }))
+            XCTAssertEqual(saves, 0)
+            XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), draft.baseline)
+        }
+    }
+
     private func fixture(in context: ModelContext) throws -> WorkoutSession {
         let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
         for (index, name) in ["Bench Press", "Barbell Row", "Back Squat"].enumerated() {

@@ -13,10 +13,8 @@ struct ExerciseCardView: View {
     var focusedField: FocusState<WorkoutField?>.Binding
     let weightUnit: MeasurementUnit
     let previousSets: [PreviousSetPerformance]
-    let canReorder: Bool
     let viewHistory: () -> Void
     let onSwapExercise: () -> Void
-    let onReorderExercises: () -> Void
     let onEditRPE: (LoggedSet) -> Void
     @State private var showsRemoveConfirmation = false
     @State private var cachedSortedSets: [LoggedSet]?
@@ -32,10 +30,8 @@ struct ExerciseCardView: View {
         focusedField: FocusState<WorkoutField?>.Binding,
         weightUnit: MeasurementUnit,
         previousSets: [PreviousSetPerformance],
-        canReorder: Bool,
         viewHistory: @escaping () -> Void,
         onSwapExercise: @escaping () -> Void,
-        onReorderExercises: @escaping () -> Void,
         onEditRPE: @escaping (LoggedSet) -> Void
     ) {
         self.loggedExercise = loggedExercise
@@ -47,10 +43,8 @@ struct ExerciseCardView: View {
         self.focusedField = focusedField
         self.weightUnit = weightUnit
         self.previousSets = previousSets
-        self.canReorder = canReorder
         self.viewHistory = viewHistory
         self.onSwapExercise = onSwapExercise
-        self.onReorderExercises = onReorderExercises
         self.onEditRPE = onEditRPE
     }
 
@@ -100,13 +94,6 @@ struct ExerciseCardView: View {
                             Label("Swap Exercise", systemImage: "arrow.triangle.2.circlepath")
                         }
                         .accessibilityIdentifier("SwapExerciseButton-\(exerciseIndex)")
-
-                        if canReorder {
-                            Button(action: onReorderExercises) {
-                                Label("Reorder Exercises", systemImage: "arrow.up.arrow.down")
-                            }
-                            .accessibilityIdentifier("ReorderExercisesButton-\(exerciseIndex)")
-                        }
 
                         Button(role: .destructive) {
                             setInputRegistry.commit(focusedField.wrappedValue)

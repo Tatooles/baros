@@ -6,6 +6,7 @@ struct ReorderExercisesList: View {
     let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
     let reorder: ([UUID]) -> Void
     let remove: (Set<UUID>) -> Void
+    var add: () -> Void = {}
 
     var body: some View {
         List {
@@ -28,6 +29,20 @@ struct ReorderExercisesList: View {
             .onDelete { offsets in
                 remove(Set(offsets.map { exercises[$0].id }))
             }
+            Button(action: add) {
+                Label("Add Exercises", systemImage: "plus")
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(AppTheme.brandAccentMuted, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("EditWorkoutAddExercisesButton")
+            .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 12, trailing: 20))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .moveDisabled(true)
+            .deleteDisabled(true)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -67,10 +82,10 @@ struct ReorderExerciseRow: View {
         .padding(.vertical, 10)
         .frame(minHeight: 68)
         .background(
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).fill(AppTheme.groupedSurface)
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).fill(exercise.isNew ? AppTheme.brandAccentMuted : AppTheme.groupedSurface)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).stroke(AppTheme.subtleBorder)
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).stroke(exercise.isNew ? AppTheme.brandAccentForeground : AppTheme.subtleBorder)
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(exercise.name)
@@ -85,7 +100,7 @@ struct ReorderExerciseRow: View {
     }
 
     private var progress: some View {
-        detail(exercise.progressText)
+        detail(exercise.isNew ? "New · \(exercise.progressText)" : exercise.progressText)
             .monospacedDigit()
             .fixedSize(horizontal: true, vertical: false)
     }

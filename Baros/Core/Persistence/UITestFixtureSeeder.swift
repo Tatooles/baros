@@ -102,6 +102,25 @@ enum UITestFixtureSeeder {
             )
         }
 
+        if arguments.contains("--uitest-seed-edit-workout") {
+            try seedLongNameActiveWorkout(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            if let session = try context.fetch(FetchDescriptor<WorkoutSession>()).first(where: { $0.status == .active }) {
+                session.title = "Edit Workout"
+                for exercise in session.sortedLoggedExercises.dropFirst(4) {
+                    for set in exercise.sets { context.delete(set) }
+                    session.loggedExercises.removeAll { $0.id == exercise.id }
+                    context.delete(exercise)
+                }
+                if let first = session.sortedLoggedExercises.first {
+                    first.exerciseSnapshotName = "Bench Press"
+                    for set in first.sortedSets where set.isCompleted {
+                        set.completedAt = .now
+                    }
+                }
+                try context.save()
+            }
+        }
+
         if arguments.contains(longNameActiveWorkoutArgument) {
             try seedLongNameActiveWorkout(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         }

@@ -25,15 +25,18 @@ struct ExercisePickerView: View {
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query private var sessions: [WorkoutSession]
     let mode: ExercisePickerMode
+    var showsCancel = true
     let onSelect: ([Exercise]) -> Void
     private let sortPreferenceStore: ExercisePickerSortPreferenceStore
 
     init(
         mode: ExercisePickerMode,
+        showsCancel: Bool = true,
         sortPreferenceStore: ExercisePickerSortPreferenceStore = ExercisePickerSortPreferenceStore(),
         onSelect: @escaping ([Exercise]) -> Void
     ) {
         self.mode = mode
+        self.showsCancel = showsCancel
         self.sortPreferenceStore = sortPreferenceStore
         self.onSelect = onSelect
     }
@@ -46,6 +49,7 @@ struct ExercisePickerView: View {
                 ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
             ),
             mode: mode,
+            showsCancel: showsCancel,
             sortPreferenceStore: sortPreferenceStore,
             onSelect: onSelect
         )
@@ -56,6 +60,7 @@ struct ExercisePickerView: View {
 private struct SearchableExercisePicker: View {
     let baseRows: [ExercisePickerRowContent]
     let mode: ExercisePickerMode
+    var showsCancel = true
     let sortPreferenceStore: ExercisePickerSortPreferenceStore
     let onSelect: ([Exercise]) -> Void
     @State private var searchText = ""
@@ -64,6 +69,7 @@ private struct SearchableExercisePicker: View {
         ExercisePickerList(
             baseRows: baseRows,
             mode: mode,
+            showsCancel: showsCancel,
             sortPreferenceStore: sortPreferenceStore,
             searchText: $searchText,
             onSelect: onSelect
@@ -82,6 +88,7 @@ private struct ExercisePickerList: View {
     @Environment(\.isSearching) private var isSearching
     let baseRows: [ExercisePickerRowContent]
     let mode: ExercisePickerMode
+    var showsCancel = true
     let onSelect: ([Exercise]) -> Void
     @State private var selectedExerciseIDs: [UUID] = []
     @Binding private var searchText: String
@@ -93,12 +100,14 @@ private struct ExercisePickerList: View {
     init(
         baseRows: [ExercisePickerRowContent],
         mode: ExercisePickerMode,
+        showsCancel: Bool = true,
         sortPreferenceStore: ExercisePickerSortPreferenceStore,
         searchText: Binding<String>,
         onSelect: @escaping ([Exercise]) -> Void
     ) {
         self.baseRows = baseRows
         self.mode = mode
+        self.showsCancel = showsCancel
         self.sortPreferenceStore = sortPreferenceStore
         _searchText = searchText
         self.onSelect = onSelect
@@ -256,14 +265,14 @@ private struct ExercisePickerList: View {
             }
         }
         .toolbar {
-            if mode.isAddExercise {
+            if mode.isAddExercise && showsCancel {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel", role: .cancel) {
                         dismiss()
                     }
                     .accessibilityIdentifier("ExercisePickerCancelButton")
                 }
-            } else {
+            } else if !mode.isAddExercise {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
                         dismiss()

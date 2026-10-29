@@ -40,6 +40,8 @@ struct WorkoutExerciseListSnapshot: Equatable {
         let referenceNotes: String?
         let updatedAt: Date
         let sets: [SetState]
+        var isNew = false
+        private var plannedSetCount: Int?
 
         init(_ exercise: LoggedExercise) {
             id = exercise.id
@@ -52,6 +54,19 @@ struct WorkoutExerciseListSnapshot: Equatable {
             sets = exercise.sortedSets.map(SetState.init)
         }
 
+        init(addition: WorkoutExerciseListDraft.Addition) {
+            id = addition.id
+            name = addition.exercise.name
+            metadata = addition.exercise.metadataDisplayText
+            orderIndex = 0
+            notes = ""
+            referenceNotes = nil
+            updatedAt = .distantPast
+            sets = []
+            isNew = true
+            plannedSetCount = addition.initialSetKinds.count
+        }
+
         var loggedSetCount: Int { sets.filter(\.hasLoggedValues).count }
         var loggedSetsText: String {
             switch loggedSetCount {
@@ -60,9 +75,9 @@ struct WorkoutExerciseListSnapshot: Equatable {
             case let count: "\(count) logged sets"
             }
         }
-        var progressText: String { "\(sets.filter(\.isCompleted).count)/\(sets.count) sets" }
+        var progressText: String { "\(sets.filter(\.isCompleted).count)/\(plannedSetCount ?? sets.count) sets" }
         var accessibilityValue: String {
-            [metadata, progressText].compactMap { $0 }.joined(separator: ", ")
+            [metadata, isNew ? "New" : nil, progressText].compactMap { $0 }.joined(separator: ", ")
         }
     }
 
@@ -81,7 +96,15 @@ struct WorkoutExerciseListSnapshot: Equatable {
     }
 }
 
+/// Draft workout membership; pending additions enter SwiftData only when Done saves.
 struct WorkoutExerciseListDraft {
+    struct Addition {
+        let id = UUID()
+        let exercise: Exercise
+        var initialSetKinds: [SetKind] = [.working]
+    }
+    var additions: [Addition] = []
+
     let baseline: WorkoutExerciseListSnapshot
     var orderedIDs: [UUID]
 
@@ -91,13 +114,20 @@ struct WorkoutExerciseListDraft {
     }
 
     var exercises: [WorkoutExerciseListSnapshot.ExerciseState] {
-        let byID = Dictionary(uniqueKeysWithValues: baseline.exercises.map { ($0.id, $0) })
+        let pending = additions.map(WorkoutExerciseListSnapshot.ExerciseState.init(addition:))
+        let byID = Dictionary(uniqueKeysWithValues: (baseline.exercises + pending).map { ($0.id, $0) })
         return orderedIDs.compactMap { byID[$0] }
     }
 
     var removedExercises: [WorkoutExerciseListSnapshot.ExerciseState] {
         let remaining = Set(orderedIDs)
         return baseline.exercises.filter { !remaining.contains($0.id) }
+    }
+
+    mutating func append(_ exercises: [Exercise], initialSetKinds: (Exercise) -> [SetKind] = { _ in [.working] }) {
+        let pending = exercises.map { Addition(exercise: $0, initialSetKinds: initialSetKinds($0)) }
+        additions.append(contentsOf: pending)
+        orderedIDs.append(contentsOf: pending.map(\.id))
     }
 
     var needsRemovalConfirmation: Bool { removedExercises.contains { $0.loggedSetCount > 0 } }
