@@ -302,6 +302,9 @@ function normalizeLoggedExerciseUpdatePayload(
       defaultHasSnapshotMetadata,
     sourceLoggedExerciseID:
       record.sourceLoggedExerciseID ?? existing.sourceLoggedExerciseID ?? null,
+    supersetGroupID: record.supersetGroupID === undefined
+      ? existing.supersetGroupID ?? null
+      : record.supersetGroupID,
   };
 }
 

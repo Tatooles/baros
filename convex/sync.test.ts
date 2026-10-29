@@ -2148,3 +2148,29 @@ describe("sync change cursors", () => {
     expect(secondPage.hasMore.loggedSets).toBe(false);
   });
 });
+
+
+test("superset sync distinguishes legacy omission from explicit removal", async () => {
+  const t = testDb();
+  const client = t.withIdentity(userA);
+  await client.mutation(api.sync.upsertExercise, { record: exerciseRecord() });
+  await client.mutation(api.sync.upsertWorkoutSession, { record: workoutSessionRecord() });
+  const record = loggedExerciseRecord();
+  await client.mutation(api.sync.upsertLoggedExercise, {
+    record: { ...record, supersetGroupID: "group-a" },
+  });
+  await client.mutation(api.sync.upsertLoggedExercise, {
+    record: { ...record, notes: "edited by an older build", updatedAt: 3 },
+  });
+  const readGroup = () => t.run(async ctx =>
+    (await ctx.db.query("loggedExercises").unique())?.supersetGroupID);
+  expect(await readGroup()).toBe("group-a");
+  await client.mutation(api.sync.upsertLoggedExercise, {
+    record: { ...record, updatedAt: 4, supersetGroupID: null },
+  });
+  expect(await readGroup()).toBeNull();
+  await client.mutation(api.sync.upsertLoggedExercise, {
+    record: { ...record, updatedAt: 5 },
+  });
+  expect(await readGroup()).toBeNull();
+});
