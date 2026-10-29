@@ -16,6 +16,8 @@ struct HomeView: View {
     @State private var now = Date.now
     @State private var replayID = 0
     @State private var ring = HomeRingModel(workouts: [], now: .now, calendar: .current)
+    @State private var openedWorkoutID: UUID?
+    @State private var ringWorkoutChoice: HomeRingWorkoutChoice?
     @AppStorage(HomeRingPeriod.storageKey) private var periodRaw = HomeRingPeriod.month.rawValue
     #if DEBUG
     private let fixture = HomeRingFixture.launchFixture
@@ -45,7 +47,11 @@ struct HomeView: View {
                     VStack(spacing: 12) {
                         HomeYearRingView(model: ring, period: effectivePeriod,
                                          diameter: min(geometry.size.width * 0.80, 350),
-                                         replayID: replayID)
+                                         replayID: replayID,
+                                         exerciseCount: { id in
+                                             content.completedSessions.first { $0.id == id }?.sortedLoggedExercises.count
+                                         },
+                                         open: { ids in openRingWorkouts(ids, content: content) })
                         Picker("History period", selection: $periodRaw) {
                             ForEach(HomeRingPeriod.allCases, id: \.rawValue) { period in
                                 Text(period.title).tag(period.rawValue)
@@ -74,6 +80,16 @@ struct HomeView: View {
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(item: $openedWorkoutID) { id in
+            WorkoutHistoryDestinationView(sessionID: id)
+        }
+        .confirmationDialog("Open a workout", isPresented: Binding(
+            get: { ringWorkoutChoice != nil }, set: { if !$0 { ringWorkoutChoice = nil } }
+        ), titleVisibility: .hidden, presenting: ringWorkoutChoice) { choice in
+            ForEach(choice.options) { option in
+                Button(option.label) { openedWorkoutID = option.id }
+            }
+        }
         .sheet(item: $startSheetPresentation, onDismiss: presentStartedWorkoutIfNeeded) { _ in
             HomeStartWorkoutSheet(content: content, activeWorkoutEngine: activeWorkoutEngine,
                                   onWorkoutStarted: handOffStartedWorkout)
@@ -133,6 +149,20 @@ struct HomeView: View {
         }
     }
 
+    private func openRingWorkouts(_ ids: [UUID], content: HomeContent) {
+        let sessions = ids.compactMap { id in content.completedSessions.first { $0.id == id } }
+        guard sessions.count > 1 else {
+            openedWorkoutID = sessions.first?.id
+            return
+        }
+        let sameDay = sessions.allSatisfy { Calendar.current.isDate($0.startedAt, inSameDayAs: sessions[0].startedAt) }
+        ringWorkoutChoice = HomeRingWorkoutChoice(options: sessions.map { session in
+            let when = sameDay ? session.startedAt.formatted(date: .omitted, time: .shortened)
+                : session.startedAt.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+            return HomeRingWorkoutChoice.Option(id: session.id, label: "\(session.title) · \(when)")
+        })
+    }
+
     private func replaySweep() {
         replayID += 1
     }
@@ -190,6 +220,16 @@ struct HomeView: View {
 
 private struct HomeStartSheetPresentation: Identifiable {
     let id = UUID()
+}
+
+/// Several workouts share the opened slot, so Home asks which one to show.
+private struct HomeRingWorkoutChoice {
+    struct Option: Identifiable {
+        let id: UUID
+        let label: String
+    }
+
+    let options: [Option]
 }
 
 private struct HomeQuickStartSelection: Identifiable {

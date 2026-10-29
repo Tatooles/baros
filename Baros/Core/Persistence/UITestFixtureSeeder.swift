@@ -18,6 +18,8 @@ enum UITestFixtureSeeder {
     /// With the long-name workout: exercise 1 alone, 2–3 as a pair and 4–6 as a giant set.
     static let supersetsArgument = "--uitest-seed-supersets"
     static let homeRingHistoryArgument = "--uitest-seed-home-ring-history"
+    /// Fourteen months of named workouts with varied exercises and double days, for scrub previews.
+    static let homeRingScrubHistoryArgument = "--uitest-seed-home-ring-scrub-history"
     /// Seeds fixtures for an owner who is no longer signed in, as after an expired session.
     static let signedOutOwnerArgument = "--uitest-seed-signed-out-owner"
 
@@ -69,6 +71,10 @@ enum UITestFixtureSeeder {
 
         if arguments.contains(homeRingHistoryArgument) {
             try seedHomeRingHistory(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
+        if arguments.contains(homeRingScrubHistoryArgument) {
+            try seedHomeRingScrubHistory(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         }
 
         for title in values(after: completedBenchWorkoutArgument, in: arguments) {
@@ -193,6 +199,80 @@ enum UITestFixtureSeeder {
                     sets: (0..<3).map { LoggedSet(orderIndex: $0, weight: 185, reps: 5, isCompleted: true) }
                 )]
             ))
+        }
+        try context.save()
+    }
+
+    /// Idempotent: Mon/Wed/Fri/Sat plans with skipped days and double days, plus stress cases that a
+    /// straight drag reaches. Month: a long name 8 days back, a long double 15 back, a triple 22 back.
+    /// Year: 7 workouts 13 weeks back, 5 long names 26 back, and 6 with a double day 39 back.
+    static func seedHomeRingScrubHistory(
+        ownerTokenIdentifier: String?, context: ModelContext, now: Date = .now, calendar: Calendar = .current
+    ) throws {
+        let existingIDs = Set(try context.fetch(FetchDescriptor<WorkoutSession>()).map(\.id))
+        let today = calendar.startOfDay(for: now)
+        let thisWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
+        let exercises: [String: [String]] = [
+            "Push Day": ["Bench Press", "Incline Dumbbell Press", "Overhead Press", "Lateral Raise", "Triceps Pushdown"],
+            "Pull Day": ["Deadlift", "Pull-Up", "Barbell Row", "Face Pull", "Hammer Curl", "Biceps Curl"],
+            "Leg Day": ["Back Squat", "Romanian Deadlift", "Leg Press", "Walking Lunge"],
+            "Upper Body": ["Bench Press", "Pull-Up", "Dumbbell Shoulder Press", "Cable Row", "Dip", "Curl", "Pushdown"],
+        ]
+        let plans = ["Push Day", "Pull Day", "Leg Day", "Upper Body"]
+        let specialDays: [Int: [String]] = [
+            8: ["Upper Body Push/Pull Superset Session"],
+            15: ["Heavy Lower Body – Squat Focus Week 3", "Posterior Chain & Core Accessory Work"],
+            22: ["Push Day", "Zone 2 Conditioning", "Mobility & Stretch"],
+        ]
+        let specialWeeks: [Int: [[String]]] = [
+            13: [["Push Day"], ["Lower Body Strength"], ["Pull Day"], ["Zone 2 + Mobility"],
+                 ["Upper Hypertrophy"], ["Full Body Conditioning Circuit"], ["Long Run"]],
+            26: [["Heavy Lower Body – Squat Focus Week 3"], [], ["Upper Body Push/Pull Superset Session"], [],
+                 ["Olympic Lifting Technique Practice"], ["Posterior Chain & Core Accessory Work"], ["Deload Full Body"]],
+            39: [["Push Day", "Conditioning"], [], ["Leg Day"], ["Pull Day"], [], ["Upper Body"], ["Leg Day"]],
+        ]
+        var entries: [(day: Date, titles: [String])] = []
+        for daysBack in (0..<425).reversed() {
+            guard let day = calendar.date(byAdding: .day, value: -daysBack, to: today) else { continue }
+            let week = calendar.dateInterval(of: .weekOfYear, for: day)?.start ?? day
+            let weeksBack = (calendar.dateComponents([.day], from: week, to: thisWeek).day ?? 0) / 7
+            if let special = specialWeeks[weeksBack] {
+                let offset = calendar.dateComponents([.day], from: week, to: day).day ?? 0
+                if special.indices.contains(offset), !special[offset].isEmpty { entries.append((day, special[offset])) }
+                continue
+            }
+            if let special = specialDays[daysBack] {
+                entries.append((day, special))
+                continue
+            }
+            let weekday = calendar.component(.weekday, from: day)
+            let doubled = daysBack == 2 || daysBack == 40
+            guard [2, 4, 6, 7].contains(weekday) || doubled, daysBack % 11 != 5,
+                  !(150..<164).contains(daysBack) else { continue }
+            let plan = plans[entries.count % plans.count]
+            entries.append((day, doubled ? [plan, "Conditioning"] : [plan]))
+        }
+        var index = 0
+        for entry in entries {
+            for (session, title) in entry.titles.enumerated() {
+                defer { index += 1 }
+                let id = stableUUID(String(format: "00000311-0000-4000-8000-%012d", index))
+                guard !existingIDs.contains(id),
+                      let startedAt = calendar.date(bySettingHour: 7 + session * 5, minute: 0, second: 0, of: entry.day),
+                      startedAt <= now else { continue }
+                let names = exercises[title] ?? ["Rower", "Kettlebell Swing", "Goblet Squat"]
+                let duration = Double(session > 0 ? 25 : 38 + (index * 13) % 45) * 60
+                let endedAt = min(now, startedAt.addingTimeInterval(duration))
+                context.insert(WorkoutSession(
+                    id: id, title: title, startedAt: startedAt, endedAt: endedAt,
+                    durationSeconds: Int(endedAt.timeIntervalSince(startedAt)), status: .completed, source: .blank,
+                    syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                    loggedExercises: names.enumerated().map { order, name in
+                        LoggedExercise(orderIndex: order, exerciseSnapshotName: name,
+                                       sets: (0..<3).map { LoggedSet(orderIndex: $0, weight: 95, reps: 8, isCompleted: true) })
+                    }
+                ))
+            }
         }
         try context.save()
     }
