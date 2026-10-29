@@ -302,6 +302,8 @@ function normalizeLoggedExerciseUpdatePayload(
       defaultHasSnapshotMetadata,
     sourceLoggedExerciseID:
       record.sourceLoggedExerciseID ?? existing.sourceLoggedExerciseID ?? null,
+    // Builds from before supersets omit the field; keep the stored grouping.
+    // Newer builds always send it, with null for ungrouped.
     supersetGroupID: record.supersetGroupID === undefined
       ? existing.supersetGroupID ?? null
       : record.supersetGroupID,

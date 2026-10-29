@@ -2149,28 +2149,70 @@ describe("sync change cursors", () => {
   });
 });
 
+describe("superset grouping", () => {
+  async function seedParents() {
+    const t = testDb();
+    const client = t.withIdentity(userA);
+    await client.mutation(api.sync.upsertExercise, { record: exerciseRecord() });
+    await client.mutation(api.sync.upsertWorkoutSession, { record: workoutSessionRecord() });
+    const readGroup = () =>
+      t.run(async (ctx) => (await ctx.db.query("loggedExercises").unique())?.supersetGroupID);
+    return { client, readGroup };
+  }
 
-test("superset sync distinguishes legacy omission from explicit removal", async () => {
-  const t = testDb();
-  const client = t.withIdentity(userA);
-  await client.mutation(api.sync.upsertExercise, { record: exerciseRecord() });
-  await client.mutation(api.sync.upsertWorkoutSession, { record: workoutSessionRecord() });
-  const record = loggedExerciseRecord();
-  await client.mutation(api.sync.upsertLoggedExercise, {
-    record: { ...record, supersetGroupID: "group-a" },
+  test("older builds that omit the field keep the stored grouping", async () => {
+    const { client, readGroup } = await seedParents();
+    const record = loggedExerciseRecord();
+    await client.mutation(api.sync.upsertLoggedExercise, {
+      record: { ...record, supersetGroupID: "group-a" },
+    });
+    expect(await readGroup()).toBe("group-a");
+
+    await client.mutation(api.sync.upsertLoggedExercise, {
+      record: { ...record, notes: "edited by an older build", updatedAt: 3 },
+    });
+    expect(await readGroup()).toBe("group-a");
+
+    const changes = await client.query(api.sync.fetchChanges, { cursors: zeroCursors });
+    expect(changes.loggedExercises).toMatchObject([
+      { notes: "edited by an older build", supersetGroupID: "group-a" },
+    ]);
   });
-  await client.mutation(api.sync.upsertLoggedExercise, {
-    record: { ...record, notes: "edited by an older build", updatedAt: 3 },
+
+  test("an explicit null clears grouping and later omissions keep it cleared", async () => {
+    const { client, readGroup } = await seedParents();
+    const record = loggedExerciseRecord();
+    await client.mutation(api.sync.upsertLoggedExercise, {
+      record: { ...record, supersetGroupID: "group-a" },
+    });
+    await client.mutation(api.sync.upsertLoggedExercise, {
+      record: { ...record, updatedAt: 4, supersetGroupID: null },
+    });
+    expect(await readGroup()).toBeNull();
+
+    await client.mutation(api.sync.upsertLoggedExercise, {
+      record: { ...record, updatedAt: 5 },
+    });
+    expect(await readGroup()).toBeNull();
   });
-  const readGroup = () => t.run(async ctx =>
-    (await ctx.db.query("loggedExercises").unique())?.supersetGroupID);
-  expect(await readGroup()).toBe("group-a");
-  await client.mutation(api.sync.upsertLoggedExercise, {
-    record: { ...record, updatedAt: 4, supersetGroupID: null },
+
+  test("stale uploads cannot change grouping", async () => {
+    const { client, readGroup } = await seedParents();
+    const record = loggedExerciseRecord({ updatedAt: 10 });
+    await client.mutation(api.sync.upsertLoggedExercise, {
+      record: { ...record, supersetGroupID: "group-a" },
+    });
+    const result = await client.mutation(api.sync.upsertLoggedExercise, {
+      record: { ...record, updatedAt: 9, supersetGroupID: "group-b" },
+    });
+    expect(result.status).toBe("ignored_stale");
+    expect(await readGroup()).toBe("group-a");
   });
-  expect(await readGroup()).toBeNull();
-  await client.mutation(api.sync.upsertLoggedExercise, {
-    record: { ...record, updatedAt: 5 },
+
+  test("records written before supersets read back without a group", async () => {
+    const { client } = await seedParents();
+    await client.mutation(api.sync.upsertLoggedExercise, { record: loggedExerciseRecord() });
+    const changes = await client.query(api.sync.fetchChanges, { cursors: zeroCursors });
+    expect(changes.loggedExercises[0].supersetGroupID ?? null).toBeNull();
   });
-  expect(await readGroup()).toBeNull();
 });
