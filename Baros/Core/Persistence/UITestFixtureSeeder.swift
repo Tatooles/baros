@@ -54,6 +54,17 @@ enum UITestFixtureSeeder {
             try context.save()
         }
 
+        // A retained outgoing-owner workout needs no exercise catalog to block updates.
+        if arguments.contains("--uitest-update-hidden-active-workout"),
+           arguments.contains("--uitest-in-memory-store") {
+            context.insert(WorkoutSession(
+                title: "Outgoing owner workout", startedAt: .now, status: .active, source: .blank,
+                deletedAt: arguments.contains("--uitest-update-hidden-workout-deleted") ? .now : nil,
+                syncOwnerTokenIdentifier: "issuer|outgoing_owner"
+            ))
+            try context.save()
+        }
+
         if arguments.contains(homeRingHistoryArgument) {
             try seedHomeRingHistory(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         }
