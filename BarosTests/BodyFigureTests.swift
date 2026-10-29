@@ -20,13 +20,25 @@ final class BodyFigureTests: XCTestCase {
             switch group {
             case .cardio, .other:
                 XCTAssertTrue(group.figureParts.isEmpty, "\(group)")
-            case .fullBody:
-                XCTAssertEqual(group.figureParts, Set(BodyFigurePart.allCases.filter { $0.muscleGroup != nil }))
+            case .fullBody, .upperBody, .lowerBody:
+                continue
             default:
                 XCTAssertFalse(group.figureParts.isEmpty, "\(group)")
                 XCTAssertTrue(group.figureParts.allSatisfy { $0.muscleGroup == group }, "\(group)")
             }
         }
+    }
+
+    func testUpperAndLowerBodySplitFullBodyAtTheWaist() {
+        let muscles = Set(BodyFigurePart.allCases.filter { $0.muscleGroup != nil })
+        let upper = ExerciseMuscleGroup.upperBody.figureParts
+        let lower = ExerciseMuscleGroup.lowerBody.figureParts
+
+        XCTAssertEqual(ExerciseMuscleGroup.fullBody.figureParts, muscles)
+        XCTAssertEqual(upper.union(lower), muscles)
+        XCTAssertTrue(upper.isDisjoint(with: lower))
+        XCTAssertTrue(upper.isSuperset(of: [.chest, .abs, .lowerBack, .forearm]))
+        XCTAssertTrue(lower.isSuperset(of: [.gluteal, .gluteusMedius, .quadriceps, .calves]))
     }
 
     func testRegionsStayInsideTheirFigureBounds() {
@@ -80,6 +92,8 @@ final class BodyFigureTests: XCTestCase {
         // Drawn on both sides, or on neither: keep the current side.
         XCTAssertEqual(BodyFigureSide.showing(.shoulders, from: .back), .back)
         XCTAssertEqual(BodyFigureSide.showing(.fullBody, from: .back), .back)
+        XCTAssertEqual(BodyFigureSide.showing(.upperBody, from: .back), .back)
+        XCTAssertEqual(BodyFigureSide.showing(.lowerBody, from: .front), .front)
         XCTAssertEqual(BodyFigureSide.showing(.cardio, from: .back), .back)
         XCTAssertEqual(BodyFigureSide.showing(.other, from: .front), .front)
     }

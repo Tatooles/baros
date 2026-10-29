@@ -55,12 +55,25 @@ enum BodyFigurePart: String, CaseIterable, Sendable {
 
 extension ExerciseMuscleGroup {
     /// The figure regions highlighted for this group. Full Body highlights every
-    /// muscle; Cardio and Other have no anatomical region.
+    /// muscle, Upper Body everything above the waist, and Lower Body the hips
+    /// and legs; Cardio and Other have no anatomical region.
     var figureParts: Set<BodyFigurePart> {
-        let muscles = BodyFigurePart.allCases.filter { $0.muscleGroup != nil }
-        if self == .fullBody { return Set(muscles) }
-        return Set(muscles.filter { $0.muscleGroup == self })
+        let groups: Set<ExerciseMuscleGroup> = switch self {
+        case .fullBody: Self.upperBodyGroups.union(Self.lowerBodyGroups)
+        case .upperBody: Self.upperBodyGroups
+        case .lowerBody: Self.lowerBodyGroups
+        default: [self]
+        }
+        return Set(BodyFigurePart.allCases.filter { $0.muscleGroup.map(groups.contains) == true })
     }
+
+    private static let upperBodyGroups: Set<ExerciseMuscleGroup> = [
+        .neck, .traps, .shoulders, .chest, .upperBack, .lats, .core, .lowerBack,
+        .biceps, .triceps, .forearms,
+    ]
+    private static let lowerBodyGroups: Set<ExerciseMuscleGroup> = [
+        .glutes, .abductors, .adductors, .quads, .hamstrings, .calves,
+    ]
 }
 
 enum BodyFigureSide: Hashable, CaseIterable, Sendable {

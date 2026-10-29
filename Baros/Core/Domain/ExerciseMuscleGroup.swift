@@ -14,6 +14,7 @@ enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
     case hamstrings
     case lats
     case lowerBack
+    case lowerBody
     case neck
     case other
     case quads
@@ -21,6 +22,7 @@ enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
     case traps
     case triceps
     case upperBack
+    case upperBody
 
     var id: String { rawValue }
 
@@ -44,6 +46,8 @@ enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
         case .core: return "Core"
         case .neck: return "Neck"
         case .fullBody: return "Full Body"
+        case .upperBody: return "Upper Body"
+        case .lowerBody: return "Lower Body"
         case .cardio: return "Cardio"
         case .other: return "Other"
         }
@@ -67,7 +71,7 @@ enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
             title: "Legs",
             groups: [.glutes, .abductors, .adductors, .quads, .hamstrings, .calves]
         ),
-        PickerSection(title: "General", groups: [.fullBody, .cardio, .other]),
+        PickerSection(title: "General", groups: [.fullBody, .upperBody, .lowerBody, .cardio, .other]),
     ]
 
     static func legacyGroup(for rawValue: String) -> ExerciseMuscleGroup {
@@ -92,6 +96,8 @@ enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
         case "core", "abs", "abdominals": return .core
         case "neck": return .neck
         case "full body", "full-body": return .fullBody
+        case "upper body", "full upper body": return .upperBody
+        case "lower body", "full lower body": return .lowerBody
         case "cardio": return .cardio
         default: return .other
         }
