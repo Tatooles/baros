@@ -47,6 +47,13 @@ enum UITestFixtureSeeder {
         ownerTokenIdentifier: String? = nil,
         context: ModelContext
     ) throws {
+        if arguments.contains("--uitest-seed-owner-loss-workout") {
+            context.insert(WorkoutSession(title: "Private expired-session workout", startedAt: .now,
+                status: .active, source: .blank,
+                syncOwnerTokenIdentifier: signedOutOwner(in: arguments)))
+            try context.save()
+        }
+
         if arguments.contains(homeRingHistoryArgument) {
             try seedHomeRingHistory(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         }

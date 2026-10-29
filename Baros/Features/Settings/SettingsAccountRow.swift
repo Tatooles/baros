@@ -1,6 +1,7 @@
 import ClerkKit
 import ClerkKitUI
 import SwiftUI
+import SwiftData
 
 enum UITestAuthOverride {
     static var isForcedSignedOut: Bool {
@@ -13,13 +14,18 @@ enum UITestAuthOverride {
 }
 
 struct SettingsAccountRow: View {
+    @Environment(ActiveWorkoutEngine.self) private var engine
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwner
+    @Environment(\.accountSignOutAction) private var signOut
     @Environment(Clerk.self) private var clerk
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Query private var workouts: [WorkoutSession]
     @State private var presentedSheet: PresentedSheet?
 
     private enum PresentedSheet: String, Identifiable {
         case auth
         case userProfile
+        case account
 
         var id: String { rawValue }
     }
@@ -50,7 +56,12 @@ struct SettingsAccountRow: View {
     var body: some View {
         Button {
             // Match Clerk's UserButton: unfinished session tasks resume sign-in instead of the profile.
-            presentedSheet = displayState.isSignedIn && !hasPendingSessionTasks ? .userProfile : .auth
+            if displayState.isSignedIn {
+                presentedSheet = workouts.contains { $0.status == .active && !$0.isDeleted }
+                    ? .account : (hasPendingSessionTasks ? .auth : .userProfile)
+            } else {
+                presentedSheet = .auth
+            }
         } label: {
             rowLayout {
                 avatar
@@ -98,11 +109,48 @@ struct SettingsAccountRow: View {
             case .userProfile:
                 UserProfileView()
                     .presentationDragIndicator(.visible)
+                    .onAppear { engine.isAccountManagementPresented = true }
+                    .onDisappear { engine.isAccountManagementPresented = false }
+            case .account:
+                NavigationStack {
+                    Form {
+                        Section {
+                            Text(displayState.title).font(.headline)
+                            Text(displayState.subtitle).foregroundStyle(.secondary)
+                        }
+                        Section {
+                            AccountTransitionButton(destination: .manageAccount) {
+                                presentedSheet = hasPendingSessionTasks ? .auth : .userProfile
+                            }
+                            .accessibilityIdentifier("AccountManageProfileButton")
+                            AccountTransitionButton(destination: .signOut, role: .destructive) {
+                                try await signOut()
+                                presentedSheet = nil
+                            }
+                            .accessibilityIdentifier("AccountSignOutButton")
+                        }
+                    }
+                    .navigationTitle("Account")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { presentedSheet = nil }
+                        }
+                    }
+                }
+                .presentationDragIndicator(.visible)
             }
+        }
+        .onChange(of: currentOwner.localDataOwnerTokenIdentifier) { _, _ in
+            presentedSheet = nil
+        }
+        .onChange(of: clerk.session?.id) { _, _ in
+            // A native switch can reveal a previously hidden active workout.
+            // Close the ungated profile as soon as Clerk replaces its session.
+            if presentedSheet == .userProfile || presentedSheet == .account { presentedSheet = nil }
         }
         .onChange(of: clerk.user) { _, user in
             // Signing out from the profile sheet leaves nothing to show there.
-            if user == nil, presentedSheet == .userProfile {
+            if user == nil, presentedSheet == .userProfile || presentedSheet == .account {
                 presentedSheet = nil
             }
         }

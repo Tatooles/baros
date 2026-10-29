@@ -3,12 +3,21 @@ import Observation
 import SwiftData
 
 enum ActiveWorkoutEngineError: LocalizedError, Equatable {
+    case accountTransitionInProgress
+    case multipleActiveWorkouts
+    case anotherOwnerHasActiveWorkout
     case invalidExerciseReorder
     case invalidExerciseSwap
     case pastWorkoutUnavailable
 
     var errorDescription: String? {
         switch self {
+        case .accountTransitionInProgress:
+            return "Close account management before starting a workout."
+        case .multipleActiveWorkouts:
+            return "More than one unfinished workout is saved on this iPhone. Resolve them in Settings before starting another."
+        case .anotherOwnerHasActiveWorkout:
+            return "An active workout from another account is saved on this iPhone. Resolve it before starting another workout."
         case .invalidExerciseReorder:
             return "Workout exercises changed. Review the current order and try again."
         case .invalidExerciseSwap:
@@ -34,6 +43,8 @@ final class ActiveWorkoutEngine {
 
     var activeSessionID: UUID?
     var isStartingWorkout = false
+    var isAccountTransitionInProgress = false
+    var isAccountManagementPresented = false
     var lastErrorMessage: String?
     private var pendingSetSave: PendingSetSave?
     #if DEBUG
@@ -60,6 +71,7 @@ final class ActiveWorkoutEngine {
         context: ModelContext,
         now: Date = .now
     ) throws -> WorkoutSession {
+        try requireWorkoutStartAllowed(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         if let active = try currentActiveSession(ownerTokenIdentifier: ownerTokenIdentifier, context: context) {
             activeSessionID = active.id
             return active
@@ -98,6 +110,7 @@ final class ActiveWorkoutEngine {
             throw ActiveWorkoutEngineError.pastWorkoutUnavailable
         }
 
+        try requireWorkoutStartAllowed(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         if let active = try currentActiveSession(ownerTokenIdentifier: ownerTokenIdentifier, context: context) {
             activeSessionID = active.id
             return active
@@ -741,69 +754,128 @@ final class ActiveWorkoutEngine {
         try context.save()
     }
 
-    @MainActor
     func finishWorkout(
         _ session: WorkoutSession,
         ownerTokenIdentifier: String? = nil,
         syncScheduler: SyncScheduler? = nil,
         context: ModelContext,
-        now: Date = .now
+        now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws {
-        let effectiveOwnerTokenIdentifier = session.syncOwnerTokenIdentifier ?? ownerTokenIdentifier
-        applyFinalWorkoutTitle(to: session)
-        session.syncOwnerTokenIdentifier = effectiveOwnerTokenIdentifier
-        session.status = .completed
-        session.endedAt = now
-        session.durationSeconds = max(0, Int(now.timeIntervalSince(session.startedAt)))
-        session.touch(now: now)
-        do {
-            let recorder = SyncOutboxRecorder()
+        try finishWorkouts([session], ownerTokenIdentifier: ownerTokenIdentifier,
+            syncScheduler: syncScheduler, context: context, now: now, save: save)
+    }
+
+    /// Account transitions may resolve legacy records together. Stage every
+    /// graph in the same transaction; timer and sync effects follow the save.
+    func finishWorkouts(
+        _ sessions: [WorkoutSession],
+        ownerTokenIdentifier: String? = nil,
+        syncScheduler: SyncScheduler? = nil,
+        context: ModelContext,
+        now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        try persistWorkoutFinalization(sessions, context: context, save: save) { session in
+            let effectiveOwner = session.syncOwnerTokenIdentifier ?? ownerTokenIdentifier
+            applyFinalWorkoutTitle(to: session)
+            session.syncOwnerTokenIdentifier = effectiveOwner
+            session.status = .completed
+            session.endedAt = now
+            session.durationSeconds = max(0, Int(now.timeIntervalSince(session.startedAt)))
+            session.touch(now: now)
             var records = [SyncOutboxRecorder.CreateRecord(entityKind: .workoutSession, entityID: session.id)]
-            for loggedExercise in session.sortedLoggedExercises {
-                records.append(.init(
-                    entityKind: .loggedExercise,
-                    entityID: loggedExercise.id
-                ))
-                for set in loggedExercise.sortedSets {
-                    records.append(.init(
-                        entityKind: .loggedSet,
-                        entityID: set.id
-                    ))
-                }
+            for exercise in session.sortedLoggedExercises {
+                records.append(.init(entityKind: .loggedExercise, entityID: exercise.id))
+                records += exercise.sortedSets.map { .init(entityKind: .loggedSet, entityID: $0.id) }
             }
-            try recorder.recordCreates(
-                records,
-                ownerTokenIdentifier: effectiveOwnerTokenIdentifier,
-                context: context,
-                now: now
-            )
-            try context.save()
-        } catch {
-            context.rollback()
-            throw error
+            try SyncOutboxRecorder().recordCreates(records,
+                ownerTokenIdentifier: effectiveOwner, context: context, now: now)
         }
-        restTimer.cancel(sessionID: session.id)
-        if activeSessionID == session.id {
-            activeSessionID = nil
-        }
-        if syncScheduler?.currentOwnerTokenIdentifier == effectiveOwnerTokenIdentifier,
-           effectiveOwnerTokenIdentifier != nil {
+        if let owner = syncScheduler?.currentOwnerTokenIdentifier,
+           sessions.contains(where: { $0.syncOwnerTokenIdentifier == owner }) {
             syncScheduler?.requestSync()
         }
     }
 
-    func discardWorkout(_ session: WorkoutSession, context: ModelContext) throws {
-        session.status = .discarded
-        session.touch()
+    func discardWorkout(_ session: WorkoutSession, context: ModelContext,
+                        save: (ModelContext) throws -> Void = { try $0.save() }) throws {
+        try discardWorkouts([session], context: context, save: save)
+    }
+
+    func discardWorkouts(_ sessions: [WorkoutSession], context: ModelContext,
+                         save: (ModelContext) throws -> Void = { try $0.save() }) throws {
+        let now = Date.now
+        try persistWorkoutFinalization(sessions, context: context, save: save) { session in
+            session.status = .discarded
+            session.touch(now: now)
+        }
+    }
+
+    private func persistWorkoutFinalization(
+        _ sessions: [WorkoutSession], context: ModelContext,
+        save: (ModelContext) throws -> Void,
+        mutate: (WorkoutSession) throws -> Void
+    ) throws {
+        guard !sessions.isEmpty else { return }
+        let baselines = sessions.map(WorkoutFinalizationSnapshot.init)
         do {
-            try context.save()
+            for session in sessions { try mutate(session) }
+            try save(context)
         } catch {
             context.rollback()
+            // Rollback alone may leave observed model instances at attempted
+            // values. Restore every captured workout, including earlier ones.
+            for (session, baseline) in zip(sessions, baselines) { baseline.restore(session) }
             throw error
         }
-        restTimer.cancel(sessionID: session.id)
-        if activeSessionID == session.id {
-            activeSessionID = nil
+        for session in sessions {
+            restTimer.cancel(sessionID: session.id)
+            if activeSessionID == session.id { activeSessionID = nil }
+        }
+    }
+
+    private struct WorkoutFinalizationSnapshot {
+        let title: String
+        let owner: String?
+        let status: WorkoutSessionStatus
+        let endedAt: Date?
+        let duration: Int
+        let updatedAt: Date
+
+        init(_ session: WorkoutSession) {
+            title = session.title
+            owner = session.syncOwnerTokenIdentifier
+            status = session.status
+            endedAt = session.endedAt
+            duration = session.durationSeconds
+            updatedAt = session.updatedAt
+        }
+
+        func restore(_ session: WorkoutSession) {
+            session.title = title
+            session.syncOwnerTokenIdentifier = owner
+            session.status = status
+            session.endedAt = endedAt
+            session.durationSeconds = duration
+            session.updatedAt = updatedAt
+        }
+    }
+
+    /// Visibility must never be used as proof that the device has no active workout.
+    /// This check reveals no outgoing-owner model to the caller and never finalizes it.
+    private func requireWorkoutStartAllowed(ownerTokenIdentifier: String?, context: ModelContext) throws {
+        guard !isAccountTransitionInProgress, !isAccountManagementPresented else {
+            throw ActiveWorkoutEngineError.accountTransitionInProgress
+        }
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>()).filter { $0.status == .active && !$0.isDeleted }
+        guard sessions.count <= 1 else { throw ActiveWorkoutEngineError.multipleActiveWorkouts }
+        if sessions.contains(where: {
+            $0.status == .active && !$0.isDeleted
+                && $0.syncOwnerTokenIdentifier != nil
+                && $0.syncOwnerTokenIdentifier != ownerTokenIdentifier
+        }) {
+            throw ActiveWorkoutEngineError.anotherOwnerHasActiveWorkout
         }
     }
 
@@ -813,13 +885,6 @@ final class ActiveWorkoutEngine {
             ownerTokenIdentifier: ownerTokenIdentifier
         )
             .sorted { $0.startedAt > $1.startedAt }
-
-        if activeSessions.count > 1 {
-            for staleSession in activeSessions.dropFirst() {
-                staleSession.status = .discarded
-            }
-            try context.save()
-        }
 
         return activeSessions.first
     }

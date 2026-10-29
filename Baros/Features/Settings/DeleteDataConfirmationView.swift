@@ -80,26 +80,19 @@ struct DeleteDataConfirmationView: View {
             }
 
             Section {
-                Button(role: .destructive) {
-                    Task {
-                        switch mode {
-                        case .account:
-                            await coordinator.deleteAccount()
-                        case .localData:
-                            await coordinator.deleteLocalData()
-                        }
-                    }
-                } label: {
-                    HStack {
-                        Text(buttonText)
-                        if coordinator.phase.isRunning {
-                            Spacer()
-                            ProgressView()
-                        }
-                    }
+                if mode == .account {
+                    AccountTransitionButton(destination: .deleteAccount, role: .destructive) {
+                        await coordinator.deleteAccount()
+                    } label: { progressLabel }
+                    .disabled(confirmationText != "DELETE" || coordinator.phase.isRunning)
+                    .accessibilityIdentifier("DeleteDataConfirmButton")
+                } else {
+                    Button(role: .destructive) {
+                        Task { await coordinator.deleteLocalData() }
+                    } label: { progressLabel }
+                    .disabled(confirmationText != "DELETE" || coordinator.phase.isRunning)
+                    .accessibilityIdentifier("DeleteDataConfirmButton")
                 }
-                .disabled(confirmationText != "DELETE" || coordinator.phase.isRunning)
-                .accessibilityIdentifier("DeleteDataConfirmButton")
             }
         }
         .scrollContentBackground(.hidden)
@@ -111,6 +104,16 @@ struct DeleteDataConfirmationView: View {
             if phase == .completed {
                 onCompleted()
                 dismiss()
+            }
+        }
+    }
+
+    private var progressLabel: some View {
+        HStack {
+            Text(buttonText)
+            if coordinator.phase.isRunning {
+                Spacer()
+                ProgressView()
             }
         }
     }

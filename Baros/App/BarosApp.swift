@@ -150,6 +150,18 @@ struct BarosApp: App {
         }
     }
 
+    private var accountSignOutAction: AccountSignOutAction {
+        #if DEBUG
+        if let uiTestClerkSessionProvider {
+            return AccountSignOutAction { uiTestClerkSessionProvider.signOut() }
+        }
+        if UITestAuthOverride.isForcedSignedIn {
+            return AccountSignOutAction { }
+        }
+        #endif
+        return .live
+    }
+
     var body: some Scene {
         WindowGroup {
             AppShellView(
@@ -167,8 +179,10 @@ struct BarosApp: App {
             .environment(Clerk.shared)
             .environment(appAppearanceStore)
             .environment(activeWorkoutEngine.restTimer)
+            .environment(activeWorkoutEngine)
             .environment(syncScheduler)
             .environment(currentOwnerCoordinator)
+            .environment(\.accountSignOutAction, accountSignOutAction)
             .environment(
                 \.syncRecoveryAction,
                 SyncRecoveryAction { trigger in

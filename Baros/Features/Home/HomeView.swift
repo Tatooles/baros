@@ -40,6 +40,7 @@ struct HomeView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     header
+                    WorkoutRecoveryNotice()
                     Spacer(minLength: 20).frame(maxHeight: 40)
                     VStack(spacing: 12) {
                         HomeYearRingView(model: ring, period: effectivePeriod,
@@ -124,8 +125,11 @@ struct HomeView: View {
             Text(now.formatted(.dateTime.month(.wide).day()))
                 .font(.headline.weight(.medium))
                 .foregroundStyle(AppTheme.textSecondary)
-            SignedOutReminderBanner(bottomSpacing: 0)
-                .padding(.top, 12)
+            if WorkoutRecovery.hiddenSessions(in: sessions,
+                owner: currentOwnerCoordinator.localDataOwnerTokenIdentifier).isEmpty {
+                SignedOutReminderBanner(bottomSpacing: 0)
+                    .padding(.top, 12)
+            }
         }
     }
 

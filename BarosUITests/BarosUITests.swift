@@ -2,6 +2,160 @@ import UIKit
 import XCTest
 
 final class BarosUITests: XCTestCase {
+    @MainActor
+    func testAccountWorkoutGateCancelThenFinish() {
+        let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth", "--uitest-sync-owner", "issuer|ui_owner",
+            "--uitest-seed-large-active-workout"])
+        app.launch()
+        minimizeAccountWorkout(in: app)
+        tapTab(.settings, in: app)
+        app.buttons["SettingsManageAccountButton"].tap()
+        XCTAssertTrue(app.buttons["AccountSignOutButton"].waitForExistence(timeout: 3))
+        app.buttons["AccountSignOutButton"].tap()
+        let finish = app.buttons["Finish Workout and Sign Out"]
+        XCTAssertTrue(finish.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Discard Workout and Sign Out"].exists)
+        attachAccountEvidence("Account resolution choices", app: app)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["AccountSignOutButton"].exists)
+        app.buttons["AccountSignOutButton"].tap()
+        finish.tap()
+        XCTAssertTrue(app.buttons["AccountSignOutButton"].waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitForNonExistence(timeout: 3))
+        tapTab(.history, in: app)
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+        attachAccountEvidence("Finished workout retained in history", app: app)
+    }
+
+    @MainActor
+    func testAccountWorkoutGateSaveFailureKeepsWorkoutAndAccount() {
+        let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth", "--uitest-sync-owner", "issuer|ui_owner",
+            "--uitest-seed-large-active-workout", "--uitest-fail-account-workout-save"])
+        app.launch()
+        minimizeAccountWorkout(in: app)
+        tapTab(.settings, in: app)
+        app.buttons["SettingsManageAccountButton"].tap()
+        app.buttons["AccountSignOutButton"].tap()
+        app.buttons["Discard Workout and Sign Out"].tap()
+        XCTAssertTrue(app.alerts["Couldn’t Continue"].waitForExistence(timeout: 3))
+        attachAccountEvidence("Save failure blocks sign out", app: app)
+        app.alerts.buttons["OK"].tap()
+        XCTAssertTrue(app.buttons["AccountSignOutButton"].exists)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testHiddenWorkoutRecoveryRequiresConfirmedDiscard() {
+        let app = makeApp(extraArguments: ["--uitest-seed-signed-out-owner", "issuer|outgoing",
+            "--uitest-seed-owner-loss-workout", "--uitest-accessibility-dynamic-type"])
+        app.launch()
+        let discard = app.buttons["WorkoutRecoveryDiscardButton"]
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
+        XCTAssertFalse(app.staticTexts["Performance Workout 10x5"].exists)
+        attachAccountEvidence("Private recovery at accessibility size", app: app)
+        discard.tap()
+        XCTAssertTrue(app.buttons["Discard Workout"].waitForExistence(timeout: 3))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(discard.exists)
+        discard.tap()
+        app.buttons["Discard Workout"].tap()
+        XCTAssertTrue(discard.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitForNonExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testHiddenWorkoutRecoverySaveFailureKeepsRecoveryAvailable() {
+        let app = makeApp(extraArguments: ["--uitest-seed-signed-out-owner", "issuer|outgoing",
+            "--uitest-seed-owner-loss-workout", "--uitest-fail-account-workout-save"])
+        app.launch()
+        let discard = app.buttons["WorkoutRecoveryDiscardButton"]
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        discard.tap()
+        app.buttons["Discard Workout"].tap()
+        XCTAssertTrue(app.alerts["Couldn’t Discard Workout"].waitForExistence(timeout: 3))
+        app.alerts.buttons["OK"].tap()
+        XCTAssertTrue(discard.exists)
+        XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
+    }
+
+    @MainActor
+    func testAccountManagementAndDeletionCannotBypassWorkoutGate() {
+        let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth", "--uitest-sync-owner", "issuer|ui_owner",
+            "--uitest-seed-large-active-workout"])
+        app.launch()
+        minimizeAccountWorkout(in: app)
+        tapTab(.settings, in: app)
+        app.buttons["SettingsManageAccountButton"].tap()
+        app.buttons["AccountManageProfileButton"].tap()
+        XCTAssertTrue(app.buttons["Finish Workout and Manage Account"].waitForExistence(timeout: 3))
+        app.buttons["Cancel"].tap()
+        app.buttons["Done"].tap()
+        revealSettingsRow(app.buttons["SettingsDeleteAccountRow"], in: app)
+        app.buttons["SettingsDeleteAccountRow"].tap()
+        enterDeleteConfirmation(in: app)
+        app.buttons["DeleteDataConfirmButton"].tap()
+        XCTAssertTrue(app.buttons["Finish Workout and Delete Account"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Discard Workout and Delete Account"].exists)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.navigationBars["Delete Account"].exists)
+    }
+
+    @MainActor
+    func testWrongAccountCanSignOutToRecoverPreservedWorkout() {
+        let app = makeApp(extraArguments: ["--uitest-sync-owner", "issuer|ui_owner",
+            "--uitest-clerk-session-control", "--uitest-seed-large-active-workout"])
+        app.launch()
+        minimizeAccountWorkout(in: app)
+        app.buttons["UITestClerkAccountSwitchButton"].tap()
+        let signOut = app.buttons["WorkoutRecoverySignOutButton"]
+        XCTAssertTrue(signOut.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
+        attachAccountEvidence("Wrong-account recovery offers safe sign-out", app: app)
+        signOut.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["WorkoutRecoveryAuthView"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
+    }
+
+    @MainActor
+    func testAccountDeletionKeepsProgressDuringCloudRequest() {
+        let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth",
+            "--uitest-fail-cloud-deletion-once", "--uitest-delay-cloud-deletion"])
+        app.launch()
+        tapTab(.settings, in: app)
+        revealSettingsRow(app.buttons["SettingsDeleteAccountRow"], in: app)
+        app.buttons["SettingsDeleteAccountRow"].tap()
+        enterDeleteConfirmation(in: app)
+        app.buttons["DeleteDataConfirmButton"].tap()
+        XCTAssertTrue(app.staticTexts["Deleting Cloud Data..."].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.activityIndicators.firstMatch.exists)
+        attachAccountEvidence("Account deletion shows network progress", app: app)
+        XCTAssertTrue(app.staticTexts["DeleteDataErrorMessage"].waitForExistence(timeout: 6))
+    }
+
+    @MainActor
+    private func minimizeAccountWorkout(in app: XCUIApplication) {
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        let grabber = app.buttons["Sheet Grabber"]
+        for _ in 0..<3 {
+            if app.buttons["ActiveWorkoutAccessory"].exists && !app.textFields["WorkoutTitle"].exists { return }
+            guard grabber.waitForExistence(timeout: 3) else { break }
+            grabber.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97)))
+            if app.buttons["ActiveWorkoutAccessory"].waitForExistence(timeout: 4) { return }
+        }
+        XCTFail("Active workout did not minimize")
+    }
+
+    @MainActor
+    private func attachAccountEvidence(_ name: String, app: XCUIApplication) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     override func setUpWithError() throws {
         try super.setUpWithError()
         continueAfterFailure = false
@@ -1083,14 +1237,9 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
-        let returnToWorkoutButton = app.buttons["ReturnToActiveWorkoutButton"]
-        XCTAssertTrue(returnToWorkoutButton.waitForExistence(timeout: 3))
-        XCTAssertFalse(app.buttons["StartBlankWorkoutButton"].exists)
-        XCTAssertFalse(app.buttons["UsePastWorkoutButton"].exists)
-
-        returnToWorkoutButton.tap()
-
-        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ReturnToActiveWorkoutButton"].exists)
+        XCTAssertTrue(app.buttons["WorkoutRecoveryDiscardButton"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.textFields["WorkoutTitle"].exists)
     }
 
     @MainActor

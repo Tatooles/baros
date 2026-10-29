@@ -4,6 +4,61 @@ import XCTest
 
 @MainActor
 final class ActiveWorkoutEngineTests: XCTestCase {
+    func testStartingWorkoutRejectsHiddenActiveWorkoutAcrossOwnersAndRelaunch() throws {
+        for destinationOwner: String? in [nil, "issuer|owner_b"] {
+            for fromHistory in [false, true] {
+                let container = try SwiftDataTestSupport.makeInMemoryContainer()
+                let context = container.mainContext
+                let outgoing = try ActiveWorkoutEngine().startBlankWorkout(
+                    ownerTokenIdentifier: "issuer|owner_a", context: context)
+                outgoing.title = "Private outgoing workout"
+                let past = WorkoutSession(title: "Past", startedAt: .now,
+                    status: .completed, source: .blank,
+                    syncOwnerTokenIdentifier: destinationOwner)
+                context.insert(past)
+                try context.save()
+
+                // A fresh engine cannot rely on the previous engine's activeSessionID.
+                let engine = ActiveWorkoutEngine()
+                XCTAssertThrowsError(try {
+                    if fromHistory {
+                        return try engine.startWorkout(fromPast: past,
+                            ownerTokenIdentifier: destinationOwner, context: context)
+                    }
+                    return try engine.startBlankWorkout(
+                        ownerTokenIdentifier: destinationOwner, context: context)
+                }()) { error in
+                    XCTAssertEqual(error as? ActiveWorkoutEngineError, .anotherOwnerHasActiveWorkout)
+                    XCTAssertFalse(error.localizedDescription.contains(outgoing.title))
+                }
+                XCTAssertNil(engine.activeSessionID)
+                XCTAssertEqual(outgoing.status, .active)
+                XCTAssertEqual(outgoing.syncOwnerTokenIdentifier, "issuer|owner_a")
+                XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutSession>()).filter {
+                    $0.status == .active && !$0.isDeleted
+                }.map(\.id), [outgoing.id])
+                XCTAssertFalse(context.hasChanges)
+            }
+        }
+    }
+
+    func testStartingWorkoutIgnoresHiddenTombstonesAndTerminalWorkouts() throws {
+        for status in [WorkoutSessionStatus.completed, .discarded, .active] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let outgoing = WorkoutSession(title: "Other account", startedAt: .now,
+                status: status, source: .blank, syncOwnerTokenIdentifier: "issuer|owner_a")
+            if status == .active { outgoing.markDeleted() }
+            context.insert(outgoing)
+            try context.save()
+
+            let started = try ActiveWorkoutEngine().startBlankWorkout(context: context)
+            XCTAssertNotEqual(started.id, outgoing.id)
+            XCTAssertNil(started.syncOwnerTokenIdentifier)
+            XCTAssertEqual(outgoing.status, status)
+        }
+    }
+
     func testSetSaveReportsOncePerFailedEditAndResetsAfterRecovery() throws {
         var failures: [ActiveWorkoutSetSaveFailure] = []
         let engine = ActiveWorkoutEngine(reportSetSaveFailure: { failures.append($0) })
