@@ -231,6 +231,7 @@ struct AppShellView: View {
         if case .resolving = currentOwnerCoordinator.state { return false }
         return hasMadeLaunchExperienceDecision && launchPresentation == nil
             && firstRunStore.state.hasCompletedOnboarding
+            && !activeWorkoutEngine.isAccountTransitionInProgress
             // Hidden outgoing-owner workouts remain active until recovery/discard (#188).
             && !sessions.contains { $0.status == .active && !$0.isDeleted }
             && !navigationState.isActiveWorkoutPresented

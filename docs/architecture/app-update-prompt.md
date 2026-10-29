@@ -22,7 +22,8 @@ receipt refresh/authentication UI is requested. TestFlight's sandbox environment
 is intentionally excluded.
 
 `AppShellView` supplies idle eligibility to `AppUpdatePrompt`: resolved ownership,
-completed launch/onboarding decisions, and no nondeleted active workout across any owner (including a
+completed launch/onboarding decisions, no account transition in progress (including
+cloud deletion after workout resolution), and no nondeleted active workout across any owner (including a
 minimized or hidden outgoing-owner workout retained for recovery/discard by #188). The presentation anchor checks the actual window/controller tree
 for any presented controller or transition, covering nested feature/Clerk modals.
 While an offer is pending it rechecks once per second, allowing dismissal to

@@ -86,6 +86,41 @@ final class AppUpdatePromptUITests: XCTestCase {
         app.alerts["Update available"].buttons["Later"].tap()
     }
 
+    func testAccountDeletionDefersOfferUntilCloudRequestFinishes() {
+        let app = app(extra: [
+            "--uitest-update-reset", "--uitest-force-signed-in-auth",
+            "--uitest-sync-owner", "issuer|ui_owner", "--uitest-seed-large-active-workout",
+            "--uitest-fail-cloud-deletion-once", "--uitest-delay-cloud-deletion",
+        ])
+        app.launchArguments.removeAll { $0 == "--uitest-force-signed-out-auth" }
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 10))
+        let grabber = app.buttons["Sheet Grabber"]
+        XCTAssertTrue(grabber.waitForExistence(timeout: 3))
+        grabber.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97)))
+        XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitForExistence(timeout: 4))
+        app.buttons["Settings"].tap()
+        let deleteRow = app.buttons["SettingsDeleteAccountRow"]
+        for _ in 0..<5 where !deleteRow.isHittable { app.swipeUp() }
+        XCTAssertTrue(deleteRow.isHittable)
+        deleteRow.tap()
+        let field = app.textFields["DeleteDataConfirmationField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText("DELETE")
+        app.buttons["DeleteDataConfirmButton"].tap()
+        let finish = app.buttons["Finish Workout and Delete Account"]
+        XCTAssertTrue(finish.waitForExistence(timeout: 3))
+        finish.tap()
+        // Resolving the workout returns to Home while the cloud action is still awaiting.
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 2))
+        XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
+        XCTAssertFalse(app.alerts["Update available"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.alerts["Update available"].waitForExistence(timeout: 5))
+        app.alerts["Update available"].buttons["Later"].tap()
+    }
+
     func testOnboardingDefersPrompt() {
         let app = app(extra: ["--uitest-update-reset", "--uitest-reset-first-run-experience"])
         app.launchArguments.removeAll { $0 == "--uitest-skip-first-run-experience" }
