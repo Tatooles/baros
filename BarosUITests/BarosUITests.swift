@@ -1071,6 +1071,30 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testHomeRingScrubPreviewOpensWhatItShowsFromTheEdgeOfALongName() {
+        let app = makeApp(extraArguments: ["--uitest-seed-home-ring-scrub-history"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 10))
+        let center = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        // Just below 9 o'clock is 8 days back, where the seed puts one long-named workout.
+        let nineOClock = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.53))
+        let previewed = NSPredicate(format: "value CONTAINS %@", "Upper Body Push/Pull Superset Session")
+        // Scrubbing turns on once the sweep finishes, so retry the drag until the preview appears.
+        for _ in 0..<5 where !previewed.evaluate(with: ring) {
+            center.press(forDuration: 0.05, thenDragTo: nineOClock)
+        }
+        XCTAssertTrue(previewed.evaluate(with: ring), String(describing: ring.value))
+
+        // Tapping beyond the resting center target (0.22 of the ring), but inside the preview's
+        // text, opens the previewed workout instead of the slot at that angle.
+        center.withOffset(CGVector(dx: ring.frame.width * 0.27, dy: 0)).tap()
+        let heading = app.descendants(matching: .any)["WorkoutHistoryHeading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 3))
+        XCTAssertTrue(heading.label.hasPrefix("Upper Body Push/Pull Superset Session"), heading.label)
+    }
+
+    @MainActor
     func testMinimizedStateDoesNotPersistAcrossRelaunch() {
         let app = makeDiskBackedResetApp()
         app.launch()

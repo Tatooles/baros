@@ -154,7 +154,11 @@ struct HomeYearRingView: View {
                 let center = CGPoint(x: diameter / 2, y: diameter / 2)
                 if touch == nil {
                     clearSelection?.cancel()
-                    touch = ScrubTouch(startedInCenter: distance(value.startLocation, center) < diameter * 0.22)
+                    // While a preview shows, anywhere inside the track is its tap target, so a tap on
+                    // the edge of a long name opens what it shows instead of the slot at that angle.
+                    let tapRadius = selectedIndex == nil ? diameter * 0.22
+                        : HomeRingCanvas.trackRadius(side: diameter, period: period) - 4
+                    touch = ScrubTouch(startedInCenter: distance(value.startLocation, center) < tapRadius)
                 }
                 if hypot(value.translation.width, value.translation.height) > 8 { touch?.moved = true }
                 // A touch that starts in the center stays a tap until it moves.
@@ -255,6 +259,10 @@ private struct HomeRingCanvas: View, Animatable {
     let drawsTrack: Bool
     let selectedIndex: Int?
 
+    static func trackRadius(side: CGFloat, period: HomeRingPeriod) -> CGFloat {
+        side * (period == .month ? 0.308 : 0.345)
+    }
+
     nonisolated var animatableData: Double {
         get { progress }
         set { progress = newValue }
@@ -265,7 +273,7 @@ private struct HomeRingCanvas: View, Animatable {
             let side = min(size.width, size.height)
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             // Longer Month spokes grow outward; the center and dial's bounds stay clear.
-            let radius = side * (period == .month ? 0.308 : 0.345)
+            let radius = Self.trackRadius(side: side, period: period)
             let trackProgress = drawsTrack ? min(1, progress / 0.78) : 1
             // While scrubbing, everything but the selected slot steps back.
             let dim = selectedIndex == nil ? 1 : 0.32
