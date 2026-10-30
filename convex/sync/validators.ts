@@ -69,6 +69,8 @@ export const loggedExercisePayloadValidator = v.object({
   notes: v.string(),
   referenceNotes: nullableString,
   sourceLoggedExerciseID: v.optional(nullableString),
+  // Omission is a legacy upload; null explicitly removes grouping.
+  supersetGroupID: v.optional(nullableString),
 });
 
 export const loggedSetPayloadValidator = v.object({
