@@ -115,15 +115,13 @@ final class EditSheetSupersetPrototype {
     static let shared = EditSheetSupersetPrototype()
 
     enum Variant: String, CaseIterable {
-        case linkButtons = "A"
-        case rowMenu = "B"
         case select = "C"
+        case linkMode = "D"
 
         var name: String {
             switch self {
-            case .linkButtons: "Link buttons"
-            case .rowMenu: "Row menu"
             case .select: "Select"
+            case .linkMode: "Link mode"
             }
         }
     }
@@ -139,7 +137,7 @@ final class EditSheetSupersetPrototype {
 
     private init() {
         variant = UserDefaults.standard.string(forKey: Self.variantKey)
-            .flatMap(Variant.init(rawValue:)) ?? .linkButtons
+            .flatMap(Variant.init(rawValue:)) ?? .select
     }
 
     func cycle(_ step: Int) {
@@ -355,11 +353,11 @@ struct SupersetPrototypeRailLabel: View {
     }
 }
 
-/// One Edit Workout row: the existing card plus the rail and the variant's controls.
+/// One Edit Workout row: the existing card plus the rail, and link chips while linking.
 struct SupersetPrototypeSheetRow: View {
     let exercise: WorkoutExerciseListSnapshot.ExerciseState
     let index: Int
-    let variant: EditSheetSupersetPrototype.Variant
+    let showsJoints: Bool
     @Binding var grouping: SupersetPrototypeGrouping
 
     private static let railWidth: CGFloat = 4
@@ -371,7 +369,7 @@ struct SupersetPrototypeSheetRow: View {
         let joinsBelow = position == .first || position == .middle
         VStack(alignment: .leading, spacing: 0) {
             piece(rail: joinsAbove) { Color.clear.frame(height: 6) }
-            if variant == .linkButtons, index > 0 {
+            if showsJoints, index > 0 {
                 piece(rail: joinsAbove) { joint(linked: joinsAbove) }
             }
             if position == .first {
@@ -386,55 +384,11 @@ struct SupersetPrototypeSheetRow: View {
         }
     }
 
-    @ViewBuilder
-    private var card: some View {
-        if variant == .rowMenu {
-            HStack(spacing: 2) {
-                ReorderExerciseRow(exercise: exercise)
-                Menu {
-                    menuItems
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .frame(width: 34, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .accessibilityLabel("Superset options for \(exercise.name)")
-            }
-        } else {
-            ReorderExerciseRow(exercise: exercise)
-        }
-    }
-
-    @ViewBuilder
-    private var menuItems: some View {
-        let id = exercise.id
-        if grouping.canJoinPrevious(id) {
-            Button { withAnimation(.snappy) { joinPrevious(id) } } label: {
-                Label("Join Previous Superset", systemImage: "link")
-            }
-        }
-        if grouping.canStartWithNext(id) {
-            Button { withAnimation(.snappy) { startWithNext(id) } } label: {
-                Label("Superset with Next", systemImage: "link")
-            }
-        }
-        if grouping.isGrouped(id) {
-            Button { withAnimation(.snappy) { grouping.remove(id) } } label: {
-                Label("Remove from Superset", systemImage: "minus.circle")
-            }
-        }
-    }
+    private var card: some View { ReorderExerciseRow(exercise: exercise) }
 
     private func joinPrevious(_ id: UUID) {
         guard let previous = grouping.neighbor(of: id, -1) else { return }
         grouping.link(previous, id)
-    }
-
-    private func startWithNext(_ id: UUID) {
-        guard let next = grouping.neighbor(of: id, 1) else { return }
-        grouping.link(id, next)
     }
 
     private func joint(linked: Bool) -> some View {
@@ -488,18 +442,19 @@ struct SupersetPrototypeReorderList: View {
     @Binding var grouping: SupersetPrototypeGrouping
     var add: () -> Void = {}
     @State private var isSelecting = false
+    @State private var isLinking = false
     @State private var selection: Set<UUID> = []
 
     var body: some View {
         let variant = EditSheetSupersetPrototype.shared.variant
         List(selection: isSelecting ? $selection : nil) {
             ForEach(Array(exercises.enumerated()), id: \.element.id) { index, exercise in
-                SupersetPrototypeSheetRow(exercise: exercise, index: index, variant: variant, grouping: $grouping)
+                SupersetPrototypeSheetRow(exercise: exercise, index: index, showsJoints: isLinking, grouping: $grouping)
                     .contentShape(.dragPreview, RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous))
                     .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 8))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
-                    .deleteDisabled(isSelecting)
+                    .deleteDisabled(isSelecting || isLinking)
                     .tag(exercise.id)
             }
             .onMove { source, destination in
@@ -508,7 +463,7 @@ struct SupersetPrototypeReorderList: View {
             .onDelete { offsets in
                 grouping.removeExercises(Set(offsets.map { exercises[$0].id }))
             }
-            if !isSelecting {
+            if !isSelecting && !isLinking {
                 footer(variant: variant)
                     .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 12, trailing: 20))
                     .listRowSeparator(.hidden)
@@ -522,11 +477,13 @@ struct SupersetPrototypeReorderList: View {
         .scrollContentBackground(.hidden)
         .contentMargins(.top, 8, for: .scrollContent)
         .environment(\.editMode, .constant(.active))
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .safeAreaBar(edge: .bottom, spacing: 0) {
             if isSelecting { selectionBar }
+            if isLinking { linkBar }
         }
         .onChange(of: variant) { _, _ in
             isSelecting = false
+            isLinking = false
             selection = []
         }
         .accessibilityIdentifier("ReorderExercisesList")
@@ -543,9 +500,11 @@ struct SupersetPrototypeReorderList: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("EditWorkoutAddExercisesButton")
-            if variant == .select, exercises.count >= 2 {
+            if exercises.count >= 2 {
                 Button {
-                    withAnimation(.snappy) { isSelecting = true }
+                    withAnimation(.snappy) {
+                        if variant == .select { isSelecting = true } else { isLinking = true }
+                    }
                 } label: {
                     Label("Superset", systemImage: "link")
                         .font(.headline)
@@ -556,6 +515,27 @@ struct SupersetPrototypeReorderList: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    private var linkBar: some View {
+        VStack(spacing: 10) {
+            Text("Tap a link to join or split exercises")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(AppTheme.textSecondary)
+            Button {
+                withAnimation(.snappy) { isLinking = false }
+            } label: {
+                Text("Done Linking")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(AppTheme.brandAccentFill)
+            .font(.headline)
+            .controlSize(.large)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
     }
 
     private var selectionBar: some View {
