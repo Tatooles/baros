@@ -2188,6 +2188,45 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testBodyFigureShowsTargetAreaChosenForCreatedExercise() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkout(in: app)
+        app.buttons["AddExerciseButton"].tap()
+        app.buttons["ExercisePickerRow-Bench Press-Barbell"].tap()
+        let search = app.searchFields.firstMatch
+        search.tap()
+        search.typeText("A Figure Row")
+        app.buttons["ExercisePickerCreateExerciseFromSearchButton"].tap()
+
+        let figure = app.descendants(matching: .any)["ExerciseMuscleFigure"]
+        XCTAssertTrue(figure.waitForExistence(timeout: 3))
+        XCTAssertEqual(figure.value as? String, "Chest highlighted")
+        let targetArea = app.buttons["ExercisePrimaryMuscleGroupPicker"]
+        XCTAssertTrue(targetArea.label.hasSuffix("Chest"))
+
+        XCTAssertTrue(waitForHittable(targetArea, timeout: 3))
+        selectPickerValue(identifier: "ExercisePrimaryMuscleGroupPicker", value: "Lats", in: app)
+        XCTAssertEqual(figure.value as? String, "Lats highlighted")
+
+        // The figure only shows the selection; tapping it changes nothing.
+        figure.tap()
+        XCTAssertEqual(figure.value as? String, "Lats highlighted")
+        XCTAssertTrue(targetArea.label.hasSuffix("Lats"))
+
+        app.buttons["ExerciseEditorSaveButton"].tap()
+        let created = app.buttons["ExercisePickerRow-A Figure Row-Barbell"]
+        XCTAssertTrue(created.waitForExistence(timeout: 3))
+        XCTAssertTrue(created.isSelected)
+        XCTAssertTrue(created.label.contains("Barbell • Lats"))
+        XCTAssertTrue(app.buttons["ExercisePickerRow-Bench Press-Barbell"].isSelected)
+        let add = app.buttons["ExercisePickerAddSelectedButton"]
+        XCTAssertEqual(add.label, "Add 2 Exercises")
+        add.tap()
+        assertActiveWorkoutExerciseOrder(["Bench Press", "A Figure Row"], in: app)
+    }
+
+    @MainActor
     func testExercisePickerShowsPerformanceSummaryAndInlineSortMenu() {
         let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
         app.launch()

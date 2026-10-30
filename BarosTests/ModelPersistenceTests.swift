@@ -30,6 +30,12 @@ final class ModelPersistenceTests: XCTestCase {
         XCTAssertEqual(ExerciseMuscleGroup.lowerBack.displayName, "Lower Back")
         XCTAssertEqual(ExerciseMuscleGroup.fullBody.displayName, "Full Body")
         XCTAssertEqual(ExerciseMuscleGroup(rawValue: "futureValue") ?? .other, .other)
+        XCTAssertEqual(ExerciseMuscleGroup.legacyGroup(for: "Full Upper Body"), .upperBody)
+        XCTAssertEqual(ExerciseMuscleGroup.legacyGroup(for: "Full Lower Body"), .lowerBody)
+        // The editor saves the display name, so every group must round-trip through it.
+        for group in ExerciseMuscleGroup.allCases {
+            XCTAssertEqual(ExerciseMuscleGroup.legacyGroup(for: group.displayName), group, "\(group)")
+        }
     }
 
     func testExerciseMuscleGroupCasesAreAlphabetical() {

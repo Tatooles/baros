@@ -14,6 +14,7 @@ enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
     case hamstrings
     case lats
     case lowerBack
+    case lowerBody
     case neck
     case other
     case quads
@@ -21,6 +22,7 @@ enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
     case traps
     case triceps
     case upperBack
+    case upperBody
 
     var id: String { rawValue }
 
@@ -44,10 +46,36 @@ enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
         case .core: return "Core"
         case .neck: return "Neck"
         case .fullBody: return "Full Body"
+        case .upperBody: return "Upper Body"
+        case .lowerBody: return "Lower Body"
         case .cardio: return "Cardio"
         case .other: return "Other"
         }
     }
+
+    struct PickerSection: Identifiable {
+        let title: String
+        let groups: [ExerciseMuscleGroup]
+
+        var id: String { title }
+    }
+
+    /// Every group exactly once. Upper holds everything Upper Body highlights,
+    /// Lower everything Lower Body highlights, each ordered top to bottom.
+    static let pickerSections: [PickerSection] = [
+        PickerSection(
+            title: "Upper",
+            groups: [
+                .upperBody, .neck, .traps, .shoulders, .chest, .upperBack, .lats,
+                .biceps, .triceps, .forearms, .core, .lowerBack,
+            ]
+        ),
+        PickerSection(
+            title: "Lower",
+            groups: [.lowerBody, .glutes, .abductors, .adductors, .quads, .hamstrings, .calves]
+        ),
+        PickerSection(title: "General", groups: [.fullBody, .cardio, .other]),
+    ]
 
     static func legacyGroup(for rawValue: String) -> ExerciseMuscleGroup {
         let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -71,6 +99,8 @@ enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
         case "core", "abs", "abdominals": return .core
         case "neck": return .neck
         case "full body", "full-body": return .fullBody
+        case "upper body", "full upper body": return .upperBody
+        case "lower body", "full lower body": return .lowerBody
         case "cardio": return .cardio
         default: return .other
         }
