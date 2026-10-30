@@ -70,7 +70,8 @@ struct SetRowView: View, @MainActor Equatable {
             commitRegistrationID = setInputRegistry.register(
                 fields: ownFields,
                 commit: { commitDraftsIfNeeded() },
-                prepareForRPESelection: prepareValuesForSetAction
+                prepareForRPESelection: prepareValuesForSetAction,
+                prepareLinked: prepareLinkedValues
             )
         }
         .onChange(of: previous) { _, _ in
@@ -409,6 +410,16 @@ struct SetRowView: View, @MainActor Equatable {
         clearFocusedFieldForThisSet()
     }
 
+    private func prepareLinkedValues(
+        current: ActiveWorkoutSetInput.Values,
+        previous: PreviousSetPerformance?,
+        suggestions: ActiveWorkoutSetInput.Values
+    ) -> ActiveWorkoutSetInput.Values {
+        defer { onPreviewChange(nil) }
+        return input.preparedValuesForSetAction(current: current, weightUnit: weightUnit,
+            completesSet: true, isCompleted: set.isCompleted, previous: previous, suggestions: suggestions)
+    }
+
     private func prepareValuesForSetAction(
         completesSet: Bool
     ) -> ActiveWorkoutSetInput.Values {
@@ -452,7 +463,8 @@ struct SetRowView: View, @MainActor Equatable {
         setInputRegistry.updateRegistration(
             commitRegistrationID,
             commit: { commitDraftsIfNeeded() },
-            prepareForRPESelection: prepareValuesForSetAction
+            prepareForRPESelection: prepareValuesForSetAction,
+            prepareLinked: prepareLinkedValues
         )
     }
 

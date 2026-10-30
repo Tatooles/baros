@@ -213,7 +213,7 @@ struct ExerciseCardView: View {
                                     )
                                         .equatable()
                                         .padding(.horizontal, 16)
-                                    RestSetDivider(slot: engine.restTimer.slot(for: set.id), timer: engine.restTimer)
+                                    RestSetDivider(setID: set.id, slot: engine.restTimer.slot(for: set.id), timer: engine.restTimer)
                                         .padding(.horizontal, 16)
                                 }
                             }

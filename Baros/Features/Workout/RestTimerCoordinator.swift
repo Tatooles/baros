@@ -8,6 +8,9 @@ struct WorkoutRest: Codable, Equatable {
     let id: UUID
     let sessionID: UUID
     let setID: UUID
+    var participatingSetIDs: [UUID]? = nil
+
+    var setIDs: [UUID] { participatingSetIDs ?? [setID] }
     let startedAt: Date
     var endsAt: Date
     var wasSkipped: Bool
@@ -20,12 +23,11 @@ struct WorkoutRest: Codable, Equatable {
         min(1, max(0, endsAt.timeIntervalSince(date) / max(1, endsAt.timeIntervalSince(startedAt))))
     }
 
-    /// Whether `session` is this rest's workout and still holds its completed starting set.
+    /// Whether every participant still exists and is completed in this workout.
     func starterIsCompleted(in session: WorkoutSession) -> Bool {
-        session.id == sessionID
-            && session.sortedLoggedExercises.contains { exercise in
-                exercise.sortedSets.contains { $0.id == setID && $0.isCompleted }
-            }
+        let completedIDs = Set(session.sortedLoggedExercises.flatMap { $0.sortedSets }
+            .filter(\.isCompleted).map(\.id))
+        return session.id == sessionID && setIDs.allSatisfy(completedIDs.contains)
     }
 }
 
@@ -78,9 +80,10 @@ final class RestTimerCoordinator {
     private(set) var isEnabled: Bool
     private(set) var inlineIsVisible: Bool?
     /// Visible dividers keep their slots alive; the coordinator keeps only the
-    /// slot it is presenting. Slots for sets nobody shows are released.
+    /// slots it is presenting. Slots for other sets nobody shows are released.
     @ObservationIgnored private var slots: [UUID: WeakSlot] = [:]
-    @ObservationIgnored private var presentedSlot: RestTimerSlot?
+    @ObservationIgnored private var presentedSlots: [RestTimerSlot] = []
+    @ObservationIgnored private var visibleSetIDs: Set<UUID> = []
     @ObservationIgnored private var savedRest: WorkoutRest?
     @ObservationIgnored private let clock: () -> Date
     @ObservationIgnored private let persist: (WorkoutRest?) -> Void
@@ -136,13 +139,13 @@ final class RestTimerCoordinator {
         if !enabled { cancel() }
     }
 
-    func start(sessionID: UUID, setID: UUID, duration: Int) {
+    func start(sessionID: UUID, setID: UUID, duration: Int, participatingSetIDs: [UUID]? = nil) {
         guard isEnabled else { return }
         clearPresentation()
         let now = clock()
         let rest = WorkoutRest(
             id: UUID(), sessionID: sessionID, setID: setID,
-            startedAt: now, endsAt: now.addingTimeInterval(Double(max(1, duration))), wasSkipped: false)
+            participatingSetIDs: participatingSetIDs, startedAt: now, endsAt: now.addingTimeInterval(Double(max(1, duration))), wasSkipped: false)
         install(rest)
         current?.controlsExpanded = !voiceOverRunning()
         scheduleCollapse(after: 3)
@@ -170,7 +173,7 @@ final class RestTimerCoordinator {
     }
 
     func cancel(ifStartedBy setID: UUID) {
-        guard (current?.rest ?? savedRest)?.setID == setID else { return }
+        guard (current?.rest ?? savedRest)?.setIDs.contains(setID) == true else { return }
         cancel()
     }
 
@@ -245,9 +248,12 @@ final class RestTimerCoordinator {
         }
     }
 
-    func reportInlineVisibility(_ visible: Bool, restID: UUID) {
-        guard current?.rest.id == restID else { return }
-        if inlineIsVisible != visible { inlineIsVisible = visible }
+    func reportInlineVisibility(_ visible: Bool, restID: UUID, setID: UUID? = nil) {
+        guard let rest = current?.rest, rest.id == restID else { return }
+        let id = setID ?? rest.setID
+        if visible { visibleSetIDs.insert(id) } else { visibleSetIDs.remove(id) }
+        let anyVisible = !visibleSetIDs.isEmpty
+        if inlineIsVisible != anyVisible { inlineIsVisible = anyVisible }
     }
 
     func toggleControls() {
@@ -266,8 +272,8 @@ final class RestTimerCoordinator {
         current = period
         inlineIsVisible = nil
         slots = slots.filter { $0.value.slot != nil }
-        presentedSlot = slot(for: rest.setID)
-        presentedSlot?.period = period
+        presentedSlots = rest.setIDs.map { slot(for: $0) }
+        for slot in presentedSlots { slot.period = period }
         savedRest = rest
         persist(rest)
     }
@@ -275,8 +281,9 @@ final class RestTimerCoordinator {
     private func clearPresentation() {
         expiryTask?.cancel()
         collapseTask?.cancel()
-        presentedSlot?.period = nil
-        presentedSlot = nil
+        for slot in presentedSlots { slot.period = nil }
+        presentedSlots = []
+        visibleSetIDs = []
         current = nil
         inlineIsVisible = nil
     }

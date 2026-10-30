@@ -97,6 +97,18 @@ final class SupersetUITests: XCTestCase {
         XCTAssertEqual(app.textFields["SetWeightField-2-1"].value as? String, "100")
     }
 
+    func testLinkedCompletionDoesNotReplaceRejectedPartnerReps() {
+        let app = launch(seedsSupersets: true)
+        app.buttons["ExerciseHeader-0"].tap()
+        let reps = app.textFields["SetRepsField-2-0"]
+        reps.tap()
+        reps.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4) + "1001")
+        app.buttons["SetCompletionButton-1-0"].tap()
+        XCTAssertTrue(waitForLabel(app.buttons["SetCompletionButton-2-0"], "Mark set incomplete"))
+        XCTAssertEqual(app.textFields["SetRepsField-2-0"].value as? String, "REPS")
+        attachScreenshot("Rejected partner reps stay empty", app: app)
+    }
+
     // MARK: Helpers
 
     private func launch(seedsSupersets: Bool = false) -> XCUIApplication {
