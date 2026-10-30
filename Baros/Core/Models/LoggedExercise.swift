@@ -14,6 +14,11 @@ final class LoggedExercise: Identifiable {
     var sourceLoggedExerciseID: UUID?
     /// Shared by neighboring exercises in a superset. See `SupersetGrouping`.
     var supersetGroupID: UUID?
+    /// Whether this device has changed the grouping, so nil means "ungrouped"
+    /// rather than unknown. A row from before supersets, or pulled by an older
+    /// build, may have a server group this device never saw; uploads omit nil
+    /// for those so the server keeps it.
+    var hasLocalSupersetChange: Bool = false
     var createdAt: Date
     var updatedAt: Date
     var deletedAt: Date?

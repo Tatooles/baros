@@ -371,26 +371,61 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertEqual(upgraded.id, exerciseID)
         XCTAssertEqual(upgraded.exerciseSnapshotName, "Legacy Row")
         XCTAssertNil(upgraded.supersetGroupID)
+        XCTAssertFalse(upgraded.hasLocalSupersetChange, "Upgraded rows don't claim to know their grouping")
         upgraded.supersetGroupID = UUID()
         try container.mainContext.save()
     }
 
     // MARK: Sync
 
-    func testUploadsSendTheGroupOrAnExplicitNull() throws {
-        let (_, session) = try makeWorkout(names: ["A", "B", "C"], groups: [0, 0, nil])
+    func testUploadsSendGroupsAndOnlyThisDevicesRemovals() throws {
+        let (context, session) = try makeWorkout(names: ["A", "B", "C"], groups: [0, 0, nil])
         let exercises = session.sortedLoggedExercises
         let grouped = SyncPayloadMapper.loggedExercisePayload(from: exercises[0])
         XCTAssertEqual(grouped.supersetGroupID, exercises[0].supersetGroupID?.uuidString.lowercased())
         let groupedArgs = ConvexSyncArgumentMapper.loggedExerciseRecord(grouped)
         XCTAssertEqual(groupedArgs["supersetGroupID"] as? String, grouped.supersetGroupID)
 
-        let ungroupedArgs = ConvexSyncArgumentMapper.loggedExerciseRecord(
+        // Never grouped here: omitted, like an older build, so the server keeps its value.
+        let untouchedArgs = ConvexSyncArgumentMapper.loggedExerciseRecord(
             SyncPayloadMapper.loggedExercisePayload(from: exercises[2])
         )
-        // Present but nil encodes as null: this build's removal, not an older build's omission.
-        XCTAssertTrue(ungroupedArgs.keys.contains("supersetGroupID"))
-        XCTAssertNil(ungroupedArgs["supersetGroupID"] ?? nil)
+        XCTAssertFalse(untouchedArgs.keys.contains("supersetGroupID"))
+
+        // Ungrouped here: present and nil, which encodes as null and clears the server's group.
+        try ActiveWorkoutEngine().changeSuperset(.remove, for: exercises[1], context: context)
+        let removedArgs = ConvexSyncArgumentMapper.loggedExerciseRecord(
+            SyncPayloadMapper.loggedExercisePayload(from: exercises[1])
+        )
+        XCTAssertTrue(removedArgs.keys.contains("supersetGroupID"))
+        XCTAssertNil(removedArgs["supersetGroupID"] ?? nil)
+    }
+
+    /// An older build pulled a grouped workout without the field. After upgrading,
+    /// editing that completed workout must not clear the server's grouping.
+    func testUpgradedDeviceEditingAnUnseenGroupKeepsTheServerGrouping() async throws {
+        let owner = "issuer|owner"
+        let (context, session) = try makeWorkout(names: ["A", "B"], status: .completed, owner: owner)
+        let exercise = session.sortedLoggedExercises[0]
+        XCTAssertNil(exercise.supersetGroupID)
+        XCTAssertFalse(exercise.hasLocalSupersetChange)
+
+        var draft = CompletedWorkoutEditDraft(session: session)
+        draft.exercises[0].notes = "Edited after upgrading"
+        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(
+            draft, for: session, ownerTokenIdentifier: owner, context: context
+        )
+        let client = FakeSyncClient()
+        client.fetchResponses = [SyncFetchChangesResponse(
+            userSettings: [], exercises: [], workoutSessions: [], loggedExercises: [], loggedSets: [],
+            cursors: SyncChangeCursors(userSettings: 0, exercises: 0),
+            hasMore: SyncHasMore(userSettings: false, exercises: false)
+        )]
+        _ = try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        let upload = try XCTUnwrap(client.upsertedLoggedExercises.last { $0.clientId == exercise.id.uuidString.lowercased() })
+        XCTAssertEqual(upload.notes, "Edited after upgrading")
+        XCTAssertFalse(ConvexSyncArgumentMapper.loggedExerciseRecord(upload).keys.contains("supersetGroupID"))
     }
 
     func testDownloadsDecodeWithAndWithoutTheField() throws {

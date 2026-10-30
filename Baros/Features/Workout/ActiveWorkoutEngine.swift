@@ -411,7 +411,7 @@ final class ActiveWorkoutEngine {
         let originalSessionUpdatedAt = session.updatedAt
         let originalExerciseStates = visibleExercises.map {
             (exercise: $0, orderIndex: $0.orderIndex, supersetGroupID: $0.supersetGroupID,
-             updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
+             hasLocalSupersetChange: $0.hasLocalSupersetChange, updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
         }
         let originalSetStates = removedSets.map {
             (set: $0, updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
@@ -471,6 +471,7 @@ final class ActiveWorkoutEngine {
             for state in originalExerciseStates {
                 state.exercise.orderIndex = state.orderIndex
                 state.exercise.supersetGroupID = state.supersetGroupID
+                state.exercise.hasLocalSupersetChange = state.hasLocalSupersetChange
                 state.exercise.updatedAt = state.updatedAt
                 state.exercise.deletedAt = state.deletedAt
             }
@@ -528,11 +529,13 @@ final class ActiveWorkoutEngine {
         let originalSessionUpdatedAt = session.updatedAt
         let changed = zip(exercises, updated).filter { $0.0.supersetGroupID != $0.1 }
         let originalStates = changed.map {
-            (exercise: $0.0, supersetGroupID: $0.0.supersetGroupID, updatedAt: $0.0.updatedAt)
+            (exercise: $0.0, supersetGroupID: $0.0.supersetGroupID,
+             hasLocalSupersetChange: $0.0.hasLocalSupersetChange, updatedAt: $0.0.updatedAt)
         }
         guard !changed.isEmpty else { return }
         for (exercise, group) in changed {
             exercise.supersetGroupID = group
+            exercise.hasLocalSupersetChange = true
             exercise.touch(now: now)
         }
         do {
@@ -540,6 +543,7 @@ final class ActiveWorkoutEngine {
         } catch {
             for state in originalStates {
                 state.exercise.supersetGroupID = state.supersetGroupID
+                state.exercise.hasLocalSupersetChange = state.hasLocalSupersetChange
                 state.exercise.updatedAt = state.updatedAt
             }
             session.updatedAt = originalSessionUpdatedAt
@@ -1064,6 +1068,7 @@ final class ActiveWorkoutEngine {
         var didChange = false
         for (exercise, group) in zip(orderedExercises, normalized) where exercise.supersetGroupID != group {
             exercise.supersetGroupID = group
+            exercise.hasLocalSupersetChange = true
             exercise.touch(now: now)
             didChange = true
         }
