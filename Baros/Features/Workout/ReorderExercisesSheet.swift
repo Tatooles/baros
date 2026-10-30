@@ -15,6 +15,7 @@ struct ReorderExercisesSheet: View {
     @State private var removalConfirmation: RemovalConfirmation?
     /// Shown once the removal confirmation has finished dismissing.
     @State private var alertAfterConfirmation: SaveAlert?
+    @State private var supersetGroups: [UUID: UUID] // PROTOTYPE: #340
 
     private enum SaveAlert: String, Identifiable {
         case failure, conflict
@@ -31,14 +32,25 @@ struct ReorderExercisesSheet: View {
         self.session = session
         self.engine = engine
         _draft = State(initialValue: WorkoutExerciseListDraft(session: session))
+        let prototype = EditSheetSupersetPrototype.shared
+        prototype.seedIfNeeded(session.sortedLoggedExercises.map(\.id))
+        _supersetGroups = State(initialValue: prototype.committed)
+    }
+
+    // PROTOTYPE: #340
+    private var grouping: SupersetPrototypeGrouping {
+        get { SupersetPrototypeGrouping(order: draft.orderedIDs, groups: supersetGroups) }
+        nonmutating set {
+            draft.orderedIDs = newValue.order
+            supersetGroups = newValue.groups
+        }
     }
 
     var body: some View {
         NavigationStack {
-            ReorderExercisesList(
+            SupersetPrototypeReorderList(
                 exercises: draft.exercises,
-                reorder: { draft.orderedIDs = $0 },
-                remove: { ids in draft.orderedIDs.removeAll(where: ids.contains) },
+                grouping: Binding(get: { grouping }, set: { grouping = $0 }),
                 add: {
                     detent = .large
                     showsPicker = true
@@ -54,18 +66,23 @@ struct ReorderExercisesSheet: View {
                 }
             }
             .navigationDestination(isPresented: $showsPicker) {
-                ExercisePickerView(mode: .add(existingExerciseIDs: existingExerciseIDs), showsCancel: false) { exercises in
-                    draft.append(exercises) {
-                        engine.initialSetKinds(for: $0,
-                            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
-                            sessions: sessions)
+                ExercisePickerView(
+                    mode: .add(existingExerciseIDs: existingExerciseIDs),
+                    showsCancel: false,
+                    onSelectAsSuperset: { exercises in
+                        append(exercises)
+                        grouping.groupTrailing(exercises.count)
+                        showsPicker = false
                     }
+                ) { exercises in
+                    append(exercises)
                     showsPicker = false
                 }
             }
             .navigationTitle("Edit Workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) { EditSheetSupersetSwitcher() } // PROTOTYPE: #340
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                         .accessibilityIdentifier("CancelReorderExercisesButton")
@@ -107,6 +124,14 @@ struct ReorderExercisesSheet: View {
         .presentationDragIndicator(.visible)
     }
 
+    private func append(_ exercises: [Exercise]) {
+        draft.append(exercises) {
+            engine.initialSetKinds(for: $0,
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
+                sessions: sessions)
+        }
+    }
+
     private var existingExerciseIDs: Set<UUID> {
         let remaining = Set(draft.orderedIDs)
         return Set(session.sortedLoggedExercises.filter { remaining.contains($0.id) }.compactMap { $0.exercise?.id }
@@ -132,6 +157,7 @@ struct ReorderExercisesSheet: View {
         // Revalidate after the confirmation as sync can arrive while it is open.
         guard draft.baseline == WorkoutExerciseListSnapshot(session: session) else {
             draft = WorkoutExerciseListDraft(session: session)
+            supersetGroups = EditSheetSupersetPrototype.shared.committed
             return .conflict
         }
         do {
@@ -141,10 +167,18 @@ struct ReorderExercisesSheet: View {
                 ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                 context: modelContext
             )
+            // PROTOTYPE: #340. Saved exercises follow the draft order; additions get new ids.
+            var saved = grouping
+            saved.normalize()
+            let savedIDs = Dictionary(uniqueKeysWithValues: zip(saved.order, session.sortedLoggedExercises.map(\.id)))
+            EditSheetSupersetPrototype.shared.committed = Dictionary(
+                uniqueKeysWithValues: saved.groups.compactMap { id, group in savedIDs[id].map { ($0, group) } }
+            )
             dismiss()
             return nil
         } catch ActiveWorkoutEngineError.invalidExerciseReorder {
             draft = WorkoutExerciseListDraft(session: session)
+            supersetGroups = EditSheetSupersetPrototype.shared.committed
             return .conflict
         } catch {
             return .failure

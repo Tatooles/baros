@@ -95,7 +95,12 @@ struct WorkoutSessionView: View {
                     }
                     .padding(.horizontal, 4)
 
-                    ForEach(Array(sortedLoggedExercises.enumerated()), id: \.element.id) { exerciseIndex, loggedExercise in
+                    // PROTOTYPE: #340 side rail around groups made in Edit Workout.
+                    ForEach(EditSheetSupersetPrototype.shared.blocks(for: sortedLoggedExercises)) { block in
+                      SupersetPrototypeSessionBlock(count: block.members.count) {
+                      ForEach(block.members, id: \.exercise.id) { member in
+                        let exerciseIndex = member.index
+                        let loggedExercise = member.exercise
                         ExerciseCardView(
                             loggedExercise: loggedExercise,
                             exerciseIndex: exerciseIndex,
@@ -120,6 +125,8 @@ struct WorkoutSessionView: View {
                             }
                         )
                         .id(loggedExercise.id)
+                      }
+                      }
                     }
 
                     let actionLayout = dynamicTypeSize.isAccessibilitySize
