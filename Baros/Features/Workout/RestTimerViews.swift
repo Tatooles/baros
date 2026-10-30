@@ -10,6 +10,7 @@ struct RestGutterAnchorKey: PreferenceKey {
 /// Always occupies the existing divider position. Its observation is confined
 /// to one slot; opening a gutter doesn't rebuild the surrounding card or rows.
 struct RestSetDivider: View {
+    let setID: UUID
     let slot: RestTimerSlot
     let timer: RestTimerCoordinator
     @ScaledMetric(relativeTo: .caption2) private var gutterHeight = 18
@@ -19,7 +20,7 @@ struct RestSetDivider: View {
     var body: some View {
         Group {
             if let period = slot.period {
-                RestGutter(period: period, timer: timer, height: max(18, gutterHeight), badgeWidth: badgeWidth)
+                RestGutter(setID: setID, period: period, timer: timer, height: max(18, gutterHeight), badgeWidth: badgeWidth)
                     .id(period.rest.id)
                     .transition(.opacity)
             } else {
@@ -31,6 +32,7 @@ struct RestSetDivider: View {
 }
 
 private struct RestGutter: View {
+    let setID: UUID
     let period: RestTimerPeriod
     let timer: RestTimerCoordinator
     let height: CGFloat
@@ -48,11 +50,11 @@ private struct RestGutter: View {
         .onAppear {
             withAnimation(restTimerReducesMotion(reduceMotion) ? .easeOut(duration: 0.15) : nil) { hasAppeared = true }
         }
-        .anchorPreference(key: RestGutterAnchorKey.self, value: .bounds) { [period.rest.setID: $0] }
+        .anchorPreference(key: RestGutterAnchorKey.self, value: .bounds) { [setID: $0] }
         .onScrollVisibilityChange(threshold: 0.6) { visible in
-            timer.reportInlineVisibility(visible, restID: period.rest.id)
+            timer.reportInlineVisibility(visible, restID: period.rest.id, setID: setID)
         }
-        .onDisappear { timer.reportInlineVisibility(false, restID: period.rest.id) }
+        .onDisappear { timer.reportInlineVisibility(false, restID: period.rest.id, setID: setID) }
     }
 }
 
