@@ -94,8 +94,16 @@ struct WorkoutHistoryDetailView: View {
                 }
 
                 VStack(spacing: 12) {
-                    ForEach(session.sortedLoggedExercises) { loggedExercise in
-                        workoutExerciseSection(loggedExercise)
+                    ForEach(SupersetGrouping.blocks(session.sortedLoggedExercises, groupID: \.supersetGroupID)) { block in
+                        if block.isSuperset {
+                            SupersetRail(count: block.members.count, spacing: 12) {
+                                ForEach(block.members) { loggedExercise in
+                                    workoutExerciseSection(loggedExercise)
+                                }
+                            }
+                        } else {
+                            workoutExerciseSection(block.members[0])
+                        }
                     }
                 }
                 .padding(.top, 24)

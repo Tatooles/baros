@@ -58,6 +58,10 @@ struct LoggedExerciseSyncPayload: Codable, Equatable {
     let notes: String
     let referenceNotes: String?
     let sourceLoggedExerciseID: String?
+    var supersetGroupID: String? = nil
+    /// Omitted uploads keep the server's grouping, as for older builds. Null is
+    /// sent only for a removal made on this device.
+    var sendsSupersetGroupID = false
 }
 
 struct LoggedSetSyncPayload: Codable, Equatable {
@@ -143,7 +147,9 @@ enum SyncPayloadMapper {
             hasSnapshotMetadata: loggedExercise.hasSnapshotMetadata,
             notes: loggedExercise.notes,
             referenceNotes: loggedExercise.referenceNotes,
-            sourceLoggedExerciseID: loggedExercise.sourceLoggedExerciseID?.uuidString.lowercased()
+            sourceLoggedExerciseID: loggedExercise.sourceLoggedExerciseID?.uuidString.lowercased(),
+            supersetGroupID: loggedExercise.supersetGroupID?.uuidString.lowercased(),
+            sendsSupersetGroupID: loggedExercise.supersetGroupID != nil || loggedExercise.hasLocalSupersetChange
         )
     }
 
@@ -246,6 +252,7 @@ struct LoggedExerciseSyncRecord: Codable, Equatable {
     let notes: String
     let referenceNotes: String?
     let sourceLoggedExerciseID: String?
+    var supersetGroupID: String? = nil
 }
 
 struct LoggedSetSyncRecord: Codable, Equatable {

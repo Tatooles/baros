@@ -388,6 +388,11 @@ struct SetRowView: View, @MainActor Equatable {
     }
 
     private func completeButtonTapped() {
+        // A superset round fills partners from saved values, so save a draft
+        // still being typed in another row first.
+        if let field = focusedField.wrappedValue, !ownFields.contains(field) {
+            setInputRegistry.commit(field)
+        }
         guard !engine.hasPendingSetSave, canEditSet else { return }
         let preparedValues = prepareValuesForSetAction(completesSet: !set.isCompleted)
         withAnimation(.easeInOut(duration: 0.2)) {

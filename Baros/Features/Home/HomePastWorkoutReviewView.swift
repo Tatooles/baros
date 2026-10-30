@@ -30,16 +30,22 @@ struct HomePastWorkoutReviewView: View {
                         .padding(.vertical, 20)
                         .accessibilityIdentifier("PastWorkoutReviewEmptyState")
                 } else {
-                    ForEach(Array(presentation.exercises.enumerated()), id: \.element.id) { index, exercise in
-                        HomePastWorkoutReviewExerciseRow(
-                            exercise: exercise,
-                            accessibilityIdentifier: "PastWorkoutReviewExercise-\(index)"
-                        )
-
-                        if index < presentation.exercises.count - 1 {
-                            Divider()
-                                .overlay(AppTheme.subtleBorder)
+                    let exercises = presentation.exercises
+                    let blocks = SupersetGrouping.blocks(exercises, groupID: \.supersetGroupID)
+                    ForEach(blocks) { block in
+                        if block.isSuperset {
+                            SupersetRail(count: block.members.count, spacing: 0) {
+                                ForEach(block.members) { exercise in
+                                    exerciseRow(exercise, in: exercises)
+                                    if exercise.id != block.members.last?.id { divider }
+                                }
+                            }
+                            .padding(.top, 12)
+                        } else {
+                            exerciseRow(block.members[0], in: exercises)
                         }
+
+                        if block.id != blocks.last?.id { divider }
                     }
                 }
             }
@@ -76,6 +82,21 @@ struct HomePastWorkoutReviewView: View {
                 .accessibilityIdentifier("PastWorkoutReviewStructureSummary")
         }
         .accessibilityElement(children: .contain)
+    }
+
+    private func exerciseRow(
+        _ exercise: HomePastWorkoutReviewPresentation.Exercise,
+        in exercises: [HomePastWorkoutReviewPresentation.Exercise]
+    ) -> some View {
+        HomePastWorkoutReviewExerciseRow(
+            exercise: exercise,
+            accessibilityIdentifier: "PastWorkoutReviewExercise-\(exercises.firstIndex { $0.id == exercise.id } ?? 0)"
+        )
+    }
+
+    private var divider: some View {
+        Divider()
+            .overlay(AppTheme.subtleBorder)
     }
 
     private var startWorkoutFooter: some View {

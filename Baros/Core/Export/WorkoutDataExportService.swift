@@ -22,9 +22,12 @@ struct WorkoutDataExportService {
         var rows: [[String]] = [Self.header]
 
         for session in sortedCompletedSessions(from: sessions, ownerTokenIdentifier: ownerTokenIdentifier) {
-            for loggedExercise in sortedLoggedExercises(from: session) {
+            let loggedExercises = sortedLoggedExercises(from: session)
+            let supersets = Self.supersetNumbers(for: loggedExercises)
+            for loggedExercise in loggedExercises {
                 for set in sortedSets(from: loggedExercise) {
-                    rows.append(row(for: set, loggedExercise: loggedExercise, session: session, unit: unit))
+                    rows.append(row(for: set, loggedExercise: loggedExercise, superset: supersets[loggedExercise.id],
+                                    session: session, unit: unit))
                 }
             }
         }
@@ -52,8 +55,19 @@ struct WorkoutDataExportService {
         "completed_at",
         "workout_id",
         "logged_exercise_id",
-        "set_id"
+        "set_id",
+        "superset"
     ]
+
+    /// Numbers each workout's supersets 1, 2, … in order; single exercises have none.
+    private static func supersetNumbers(for loggedExercises: [LoggedExercise]) -> [UUID: Int] {
+        var numbers: [UUID: Int] = [:]
+        let supersets = SupersetGrouping.blocks(loggedExercises, groupID: \.supersetGroupID).filter(\.isSuperset)
+        for (index, block) in supersets.enumerated() {
+            for member in block.members { numbers[member.id] = index + 1 }
+        }
+        return numbers
+    }
 
     private func sortedCompletedSessions(
         from sessions: [WorkoutSession],
@@ -100,6 +114,7 @@ struct WorkoutDataExportService {
     private func row(
         for set: LoggedSet,
         loggedExercise: LoggedExercise,
+        superset: Int?,
         session: WorkoutSession,
         unit: MeasurementUnit
     ) -> [String] {
@@ -125,7 +140,8 @@ struct WorkoutDataExportService {
             set.completedAt.map(formatDate) ?? "",
             session.id.uuidString,
             loggedExercise.id.uuidString,
-            set.id.uuidString
+            set.id.uuidString,
+            superset.map(String.init) ?? ""
         ]
     }
 

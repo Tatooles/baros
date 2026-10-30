@@ -153,7 +153,7 @@ enum ConvexSyncArgumentMapper {
     }
 
     static func loggedExerciseRecord(_ record: LoggedExerciseSyncPayload) -> [String: ConvexEncodable?] {
-        [
+        var args: [String: ConvexEncodable?] = [
             "clientId": record.clientId,
             "createdAt": record.createdAt,
             "updatedAt": record.updatedAt,
@@ -169,6 +169,11 @@ enum ConvexSyncArgumentMapper {
             "referenceNotes": record.referenceNotes,
             "sourceLoggedExerciseID": record.sourceLoggedExerciseID,
         ]
+        if record.sendsSupersetGroupID {
+            // updateValue keeps a nil, which encodes as null.
+            args.updateValue(record.supersetGroupID, forKey: "supersetGroupID")
+        }
+        return args
     }
 
     static func loggedSetRecord(_ record: LoggedSetSyncPayload) -> [String: ConvexEncodable?] {
