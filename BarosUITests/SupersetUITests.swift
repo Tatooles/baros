@@ -81,6 +81,22 @@ final class SupersetUITests: XCTestCase {
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
     }
 
+    /// A partner fills from what's typed in its own set above, even before that field loses focus.
+    func testRoundFillsPartnersFromATypedDraftInAnotherExercise() {
+        let app = launch(seedsSupersets: true)
+        app.buttons["ExerciseHeader-0"].tap()
+        let draft = app.textFields["SetWeightField-2-0"]
+        draft.tap()
+        draft.typeText("100")
+        let check = app.buttons["SetCompletionButton-1-1"]
+        // The field scrolls above the keyboard first.
+        let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: check)
+        XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 3), .completed)
+        check.tap()
+        XCTAssertTrue(waitForLabel(app.buttons["SetCompletionButton-2-1"], "Mark set incomplete"))
+        XCTAssertEqual(app.textFields["SetWeightField-2-1"].value as? String, "100")
+    }
+
     // MARK: Helpers
 
     private func launch(seedsSupersets: Bool = false) -> XCUIApplication {
