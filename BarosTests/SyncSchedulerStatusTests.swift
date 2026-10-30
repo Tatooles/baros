@@ -1747,7 +1747,7 @@ final class SyncSchedulerStatusTests: XCTestCase {
             updatedAt: Date(timeIntervalSince1970: 100)
         ))
         context.insert(SyncOutboxEntry(
-            entityKind: .workoutTemplate,
+            entityKind: .healthDataLink,
             entityID: UUID(),
             operation: .update,
             ownerTokenIdentifier: owner,

@@ -264,6 +264,18 @@ struct SyncOutboxRecorder {
             )
         }
 
+        for template in try context.fetch(FetchDescriptor<WorkoutTemplate>())
+            where template.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+            try recordBootstrapEntry(
+                entityKind: .workoutTemplate,
+                entityID: template.id,
+                isDeleted: template.isDeleted,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+        }
+
         for session in try context.fetch(FetchDescriptor<WorkoutSession>())
             where session.status != .active
                 && session.syncOwnerTokenIdentifier == ownerTokenIdentifier {

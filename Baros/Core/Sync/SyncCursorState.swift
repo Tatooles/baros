@@ -11,6 +11,7 @@ final class SyncCursorState: Identifiable {
     var workoutSessionsCursor: Double = 0
     var loggedExercisesCursor: Double = 0
     var loggedSetsCursor: Double = 0
+    var workoutTemplatesCursor: Double = 0
     var hasBootstrappedSettingsExercises: Bool = false
     var hasBootstrappedWorkoutGraph: Bool = false
 

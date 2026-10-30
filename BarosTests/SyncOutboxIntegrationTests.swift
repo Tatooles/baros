@@ -360,7 +360,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
 
         XCTAssertEqual(scheduler.requestCount, 1)
         XCTAssertEqual(client.fetchRequests.count, 1)
-        XCTAssertEqual(client.fetchRequests.first?.cursors, SyncChangeCursors(userSettings: 0, exercises: 0))
+        XCTAssertEqual(client.fetchRequests.first?.cursors, SyncChangeCursors(userSettings: 0, exercises: 0, workoutTemplates: 0))
     }
 
     func testConfiguredSchedulerSeedsDefaultsForCurrentOwner() throws {
@@ -494,8 +494,8 @@ final class SyncOutboxIntegrationTests: XCTestCase {
 
         XCTAssertEqual(scheduler.requestCount, 2)
         XCTAssertEqual(client.fetchRequests.count, 2)
-        XCTAssertEqual(client.fetchRequests.first?.cursors, SyncChangeCursors(userSettings: 0, exercises: 0))
-        XCTAssertEqual(client.fetchRequests.last?.cursors, SyncChangeCursors(userSettings: 0, exercises: 0))
+        XCTAssertEqual(client.fetchRequests.first?.cursors, SyncChangeCursors(userSettings: 0, exercises: 0, workoutTemplates: 0))
+        XCTAssertEqual(client.fetchRequests.last?.cursors, SyncChangeCursors(userSettings: 0, exercises: 0, workoutTemplates: 0))
     }
 
     func testSchedulerStopsOldOwnerSyncWhenOwnerChangesDuringRun() async throws {

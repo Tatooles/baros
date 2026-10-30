@@ -25,6 +25,14 @@ enum SyncOutboxClaimEligibility {
             }
             return exercise.syncOwnerTokenIdentifier == nil
                 || exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier
+        case .workoutTemplate:
+            guard let template = try context.fetch(FetchDescriptor<WorkoutTemplate>(
+                predicate: #Predicate { $0.id == entityID }
+            )).first else {
+                return false
+            }
+            return template.syncOwnerTokenIdentifier == nil
+                || template.syncOwnerTokenIdentifier == ownerTokenIdentifier
         case .workoutSession:
             guard let session = try context.fetch(FetchDescriptor<WorkoutSession>(
                 predicate: #Predicate { $0.id == entityID }

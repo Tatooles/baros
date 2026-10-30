@@ -10,6 +10,7 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
     case invalidExerciseSwap
     case invalidSupersetChange
     case pastWorkoutUnavailable
+    case templateUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -27,6 +28,8 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
             return "Workout exercises changed. Review the superset and try again."
         case .pastWorkoutUnavailable:
             return "That past workout is no longer available. Choose another workout and try again."
+        case .templateUnavailable:
+            return "That template is no longer available. Choose another template and try again."
         }
     }
 }
@@ -167,6 +170,83 @@ final class ActiveWorkoutEngine {
                     updatedAt: now,
                     sourceLoggedSetID: pastSet.id
                 )
+                set.loggedExercise = loggedExercise
+                context.insert(set)
+                loggedExercise.sets.append(set)
+            }
+
+            session.loggedExercises.append(loggedExercise)
+        }
+
+        try context.save()
+        activeSessionID = session.id
+        return session
+    }
+
+    /// Starts with the template's exercises in order. Each gets set rows the
+    /// way adding it would; an entry whose exercise is gone keeps its name.
+    @discardableResult
+    func startWorkout(
+        fromTemplate template: WorkoutTemplate,
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext,
+        now: Date = .now
+    ) throws -> WorkoutSession {
+        guard !template.isDeleted, template.isVisible(to: ownerTokenIdentifier) else {
+            throw ActiveWorkoutEngineError.templateUnavailable
+        }
+
+        try requireWorkoutStartAllowed(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        if let active = try currentActiveSession(ownerTokenIdentifier: ownerTokenIdentifier, context: context) {
+            activeSessionID = active.id
+            return active
+        }
+
+        isStartingWorkout = true
+        defer { isStartingWorkout = false }
+
+        let history = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let exercisesByID = Dictionary(
+            try context.fetch(FetchDescriptor<Exercise>())
+                .filter { $0.isVisible(to: ownerTokenIdentifier) }
+                .map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        let session = WorkoutSession(
+            title: template.name,
+            startedAt: now,
+            status: .active,
+            source: .template,
+            createdAt: now,
+            updatedAt: now,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier
+        )
+        context.insert(session)
+
+        let entries = template.entries
+        let copiedGroupIDs = SupersetGrouping.copied(entries.map(\.supersetGroupID))
+        for (index, (entry, supersetGroupID)) in zip(entries, copiedGroupIDs).enumerated() {
+            let exercise = entry.exerciseID.flatMap { exercisesByID[$0] }
+            let loggedExercise = LoggedExercise(
+                orderIndex: index,
+                exercise: exercise,
+                exerciseSnapshotName: exercise?.name ?? entry.exerciseSnapshotName,
+                exerciseSnapshotEquipmentRaw: exercise?.equipmentRaw ?? entry.exerciseSnapshotEquipmentRaw,
+                exerciseSnapshotPrimaryMuscleGroupRaw: exercise?.primaryMuscleGroupRaw
+                    ?? entry.exerciseSnapshotPrimaryMuscleGroupRaw,
+                supersetGroupID: supersetGroupID,
+                createdAt: now,
+                updatedAt: now
+            )
+            loggedExercise.session = session
+            context.insert(loggedExercise)
+
+            let kinds = exercise.map {
+                initialSetKinds(for: $0, ownerTokenIdentifier: ownerTokenIdentifier, sessions: history)
+            } ?? [.working]
+            for (setIndex, kind) in kinds.enumerated() {
+                let set = LoggedSet(orderIndex: setIndex, kind: kind, createdAt: now, updatedAt: now)
                 set.loggedExercise = loggedExercise
                 context.insert(set)
                 loggedExercise.sets.append(set)

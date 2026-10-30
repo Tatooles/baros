@@ -447,6 +447,8 @@ final class SyncCoordinator {
             try findLoggedExercise(id: entry.entityID, context: context)?.session?.syncOwnerTokenIdentifier = ownerTokenIdentifier
         case .loggedSet:
             try findLoggedSet(id: entry.entityID, context: context)?.loggedExercise?.session?.syncOwnerTokenIdentifier = ownerTokenIdentifier
+        case .workoutTemplate:
+            try findWorkoutTemplate(id: entry.entityID, context: context)?.syncOwnerTokenIdentifier = ownerTokenIdentifier
         default:
             break
         }
@@ -617,6 +619,7 @@ final class SyncCoordinator {
         case .some(.loggedSet): 2
         case .some(.loggedExercise): 3
         case .some(.workoutSession): 4
+        case .some(.workoutTemplate): 5
         default: 999
         }
     }
@@ -628,6 +631,7 @@ final class SyncCoordinator {
         case .some(.workoutSession): 2
         case .some(.loggedExercise): 3
         case .some(.loggedSet): 4
+        case .some(.workoutTemplate): 5
         default: 999
         }
     }
@@ -690,6 +694,14 @@ final class SyncCoordinator {
                 throw SyncCoordinatorError.ownerMismatch(entityKind: .loggedSet, entityID: entry.entityID)
             }
             return try await client.upsertLoggedSet(SyncPayloadMapper.loggedSetPayload(from: set))
+        case (.workoutTemplate, .create), (.workoutTemplate, .update):
+            guard let template = try findWorkoutTemplate(id: entry.entityID, context: context) else {
+                return try await client.tombstone(entityKind: .workoutTemplate, clientId: entry.entityID, deletedAt: fallbackTimestamp)
+            }
+            guard template.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
+                throw SyncCoordinatorError.ownerMismatch(entityKind: .workoutTemplate, entityID: entry.entityID)
+            }
+            return try await client.upsertWorkoutTemplate(SyncPayloadMapper.workoutTemplatePayload(from: template))
         case (.userSettings, .delete):
             let settings = try findUserSettings(id: entry.entityID, context: context)
             if let settings, settings.syncOwnerTokenIdentifier != ownerTokenIdentifier {
@@ -725,6 +737,13 @@ final class SyncCoordinator {
             }
             let deletedAt = set?.deletedAt ?? fallbackTimestamp
             return try await client.tombstone(entityKind: .loggedSet, clientId: entry.entityID, deletedAt: deletedAt)
+        case (.workoutTemplate, .delete):
+            let template = try findWorkoutTemplate(id: entry.entityID, context: context)
+            if let template, template.syncOwnerTokenIdentifier != ownerTokenIdentifier {
+                throw SyncCoordinatorError.ownerMismatch(entityKind: .workoutTemplate, entityID: entry.entityID)
+            }
+            let deletedAt = template?.deletedAt ?? fallbackTimestamp
+            return try await client.tombstone(entityKind: .workoutTemplate, clientId: entry.entityID, deletedAt: deletedAt)
         default:
             return nil
         }
@@ -754,6 +773,8 @@ final class SyncCoordinator {
             state.loggedExercisesCursor = min(state.loggedExercisesCursor, refetchCursor)
         case .some(.loggedSet):
             state.loggedSetsCursor = min(state.loggedSetsCursor, refetchCursor)
+        case .some(.workoutTemplate):
+            state.workoutTemplatesCursor = min(state.workoutTemplatesCursor, refetchCursor)
         default:
             break
         }
@@ -799,6 +820,14 @@ final class SyncCoordinator {
         )).first
     }
 
+    private func findWorkoutTemplate(id: UUID, context: ModelContext) throws -> WorkoutTemplate? {
+        try context.fetch(FetchDescriptor<WorkoutTemplate>(
+            predicate: #Predicate { template in
+                template.id == id
+            }
+        )).first
+    }
+
     private func pullChanges(ownerTokenIdentifier: String, context: ModelContext) async throws -> SyncPullSummary {
         let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
         var summary = SyncPullSummary()
@@ -812,7 +841,8 @@ final class SyncCoordinator {
             exercises: state.exercisesCursor,
             workoutSessions: state.workoutSessionsCursor,
             loggedExercises: state.loggedExercisesCursor,
-            loggedSets: state.loggedSetsCursor
+            loggedSets: state.loggedSetsCursor,
+            workoutTemplates: state.workoutTemplatesCursor
         )
 
         while hasMore {
@@ -848,6 +878,12 @@ final class SyncCoordinator {
                 context: context
             )
 
+            try apply(
+                workoutTemplateRecords: response.workoutTemplates ?? [],
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+
             summary.record(workoutSessionApplyResult)
             summary.record(loggedExerciseApplyResult)
             summary.record(loggedSetApplyResult)
@@ -866,6 +902,10 @@ final class SyncCoordinator {
             )
             state.userSettingsCursor = max(state.userSettingsCursor, response.cursors.userSettings)
             state.exercisesCursor = max(state.exercisesCursor, response.cursors.exercises)
+            if let workoutTemplatesCursor = response.cursors.workoutTemplates {
+                fetchCursors.workoutTemplates = max(fetchCursors.workoutTemplates ?? 0, workoutTemplatesCursor)
+                state.workoutTemplatesCursor = max(state.workoutTemplatesCursor, workoutTemplatesCursor)
+            }
             if let appliedWorkoutSessionCursor = workoutSessionApplyResult.appliedCursor {
                 state.workoutSessionsCursor = max(state.workoutSessionsCursor, appliedWorkoutSessionCursor)
             }
@@ -1024,6 +1064,7 @@ final class SyncCoordinator {
                     )
                     exercise.id = id
                     exercise.syncOwnerTokenIdentifier = ownerTokenIdentifier
+                    try repointTemplateEntries(from: localID, to: id, context: context)
                     try retargetOutboxEntries(
                         entityKind: .exercise,
                         from: localID,
@@ -1079,6 +1120,80 @@ final class SyncCoordinator {
         exercise.createdAt = Date(timeIntervalSince1970: record.createdAt)
         exercise.updatedAt = Date(timeIntervalSince1970: record.updatedAt)
         exercise.deletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))
+    }
+
+    private func apply(
+        workoutTemplateRecords records: [WorkoutTemplateSyncRecord],
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws {
+        for record in records {
+            guard let id = UUID(uuidString: record.clientId) else { continue }
+            let incomingUpdatedAt = Date(timeIntervalSince1970: record.updatedAt)
+            let incomingDeletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))
+
+            if let template = try findWorkoutTemplate(id: id, context: context) {
+                guard template.syncOwnerTokenIdentifier == nil || template.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
+                    continue
+                }
+                guard SyncConflictResolver.decision(
+                    localUpdatedAt: template.updatedAt,
+                    localDeletedAt: template.deletedAt,
+                    incomingUpdatedAt: incomingUpdatedAt,
+                    incomingDeletedAt: incomingDeletedAt,
+                    allowsIncomingRestore: false
+                ) == .applyIncoming else {
+                    continue
+                }
+                template.syncOwnerTokenIdentifier = ownerTokenIdentifier
+                template.name = record.name
+                template.entries = Self.templateEntries(from: record)
+                template.createdAt = Date(timeIntervalSince1970: record.createdAt)
+                template.updatedAt = incomingUpdatedAt
+                template.deletedAt = incomingDeletedAt
+            } else {
+                context.insert(WorkoutTemplate(
+                    id: id,
+                    name: record.name,
+                    entries: Self.templateEntries(from: record),
+                    syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                    createdAt: Date(timeIntervalSince1970: record.createdAt),
+                    updatedAt: incomingUpdatedAt,
+                    deletedAt: incomingDeletedAt
+                ))
+            }
+        }
+    }
+
+    private static func templateEntries(from record: WorkoutTemplateSyncRecord) -> [WorkoutTemplateEntry] {
+        record.entries.compactMap { entry in
+            guard let id = UUID(uuidString: entry.id) else { return nil }
+            return WorkoutTemplateEntry(
+                id: id,
+                exerciseID: entry.exerciseClientId.flatMap(UUID.init(uuidString:)),
+                exerciseSnapshotName: entry.exerciseSnapshotName,
+                exerciseSnapshotEquipmentRaw: entry.exerciseSnapshotEquipmentRaw,
+                exerciseSnapshotPrimaryMuscleGroupRaw: entry.exerciseSnapshotPrimaryMuscleGroupRaw,
+                supersetGroupID: entry.supersetGroupID.flatMap(UUID.init(uuidString:))
+            )
+        }
+    }
+
+    /// Keeps template entries on an exercise whose id sync replaced or merged,
+    /// and uploads the change so other devices follow.
+    private func repointTemplateEntries(from oldExerciseID: UUID, to newExerciseID: UUID, context: ModelContext) throws {
+        let now = Date.now
+        for template in try context.fetch(FetchDescriptor<WorkoutTemplate>())
+        where template.repointEntries(from: oldExerciseID, to: newExerciseID) {
+            template.updatedAt = max(now, template.updatedAt)
+            try recorder.recordUpdate(
+                entityKind: .workoutTemplate,
+                entityID: template.id,
+                ownerTokenIdentifier: template.syncOwnerTokenIdentifier,
+                context: context,
+                now: now
+            )
+        }
     }
 
     private func apply(
@@ -1526,6 +1641,7 @@ final class SyncCoordinator {
         where loggedExercise.exercise?.id == duplicateID {
             loggedExercise.exercise = canonical
         }
+        try repointTemplateEntries(from: duplicateID, to: canonical.id, context: context)
         try retargetOutboxEntries(
             entityKind: .exercise,
             from: duplicateID,
@@ -1726,7 +1842,7 @@ private struct WorkoutChildApplyResult {
 
 private extension SyncHasMore {
     var hasAnyMore: Bool {
-        userSettings || exercises || workoutSessions || loggedExercises || loggedSets
+        userSettings || exercises || workoutSessions || loggedExercises || loggedSets || workoutTemplates == true
     }
 }
 

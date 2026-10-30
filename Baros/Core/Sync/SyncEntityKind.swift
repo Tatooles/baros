@@ -14,6 +14,7 @@ enum SyncEntityKind: String, CaseIterable, Equatable, Codable, Hashable {
         .workoutSession,
         .loggedExercise,
         .loggedSet,
+        .workoutTemplate,
     ]
 
     var isV1Synced: Bool {
