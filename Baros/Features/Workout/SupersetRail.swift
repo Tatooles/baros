@@ -12,18 +12,26 @@ struct SupersetRail<Content: View>: View {
     var spacing: CGFloat = 8
     /// Off where the leading margin holds other controls, such as edit-mode lists.
     var reachesIntoMargin = true
+    /// Equal label space below keeps native row controls centered on the members.
+    var balancesLabel = false
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             SupersetLabel(count: count)
                 .padding(.leading, 12)
-            HStack(spacing: Self.railSpacing) {
-                Capsule()
-                    .fill(AppTheme.brandAccentForeground)
-                    .frame(width: Self.railWidth)
+            VStack(spacing: spacing) { content }
+                .padding(.leading, Self.railWidth + Self.railSpacing)
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(AppTheme.brandAccentForeground)
+                        .frame(width: Self.railWidth)
+                        .accessibilityHidden(true)
+                }
+            if balancesLabel {
+                SupersetLabel(count: count)
+                    .hidden()
                     .accessibilityHidden(true)
-                VStack(spacing: spacing) { content }
             }
         }
         .padding(.leading, reachesIntoMargin ? -Self.marginWidth : 0)

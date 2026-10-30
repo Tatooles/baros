@@ -59,6 +59,7 @@ final class ActiveWorkoutEngine {
     /// The Previous column's values, keyed by logged exercise. A linked round
     /// fills each partner's empty fields from them, as that partner's own check would.
     @ObservationIgnored var previousSetsByLoggedExerciseID: [UUID: [PreviousSetPerformance]] = [:]
+    @ObservationIgnored weak var setInputRegistry: ActiveSetInputRegistry?
     var pendingSetSaveID: UUID? { pendingSetSave?.id }
 
     func loadActiveSession(ownerTokenIdentifier: String? = nil, context: ModelContext) {
@@ -763,7 +764,8 @@ final class ActiveWorkoutEngine {
                     let settings = UserSettings.visibleSettingsRecords(from: records,
                         ownerTokenIdentifier: restSettingsOwnerTokenIdentifier ?? session.syncOwnerTokenIdentifier).first
                     restTimer.start(sessionID: session.id, setID: set.id,
-                        duration: RestDurationLookup.seconds(for: exercise, settings: settings))
+                        duration: RestDurationLookup.seconds(for: exercise, settings: settings),
+                        participatingSetIDs: roundSetIDs(for: set))
                 } else {
                     restTimer.cancel(ifStartedBy: set.id)
                 }
@@ -778,6 +780,19 @@ final class ActiveWorkoutEngine {
                 reportSetSaveFailure(ActiveWorkoutSetSaveFailure(operation: action.operation, error: error))
             }
             throw error
+        }
+    }
+
+    /// Membership is captured at rest start, so deleting or unchecking any
+    /// participating set cancels that round even if its grouping later changes.
+    private func roundSetIDs(for set: LoggedSet) -> [UUID] {
+        guard let exercise = set.loggedExercise, let session = exercise.session,
+              let position = exercise.sortedSets.firstIndex(where: { $0.id == set.id }),
+              let block = SupersetGrouping.blocks(session.sortedLoggedExercises, groupID: \.supersetGroupID)
+                .first(where: { $0.members.contains { $0.id == exercise.id } }) else { return [set.id] }
+        return block.members.compactMap { member in
+            let sets = member.sortedSets
+            return sets.indices.contains(position) && sets[position].isCompleted ? sets[position].id : nil
         }
     }
 
@@ -802,12 +817,14 @@ final class ActiveWorkoutEngine {
             let previous = previousSetsByLoggedExerciseID[partnerExercise.id].flatMap {
                 $0.indices.contains(position) ? $0[position] : nil
             }
-            partner.weight = WorkoutNumericInputPolicy.validatedWeight(partner.weight)
-                ?? WorkoutNumericInputPolicy.validatedWeight(above.weight)
-                ?? WorkoutNumericInputPolicy.validatedWeight(previous?.weight)
-            partner.reps = WorkoutNumericInputPolicy.validatedReps(partner.reps)
-                ?? WorkoutNumericInputPolicy.validatedReps(above.reps)
-                ?? WorkoutNumericInputPolicy.validatedReps(previous?.reps)
+            // A mounted row owns draft/rejection state. Use exactly the same
+            // preparation as its direct check; nil means there is no editor.
+            let values = setInputRegistry?.prepareLinkedSet(id: partner.id,
+                current: .init(weight: partner.weight, reps: partner.reps), previous: previous, suggestions: above)
+                ?? ActiveWorkoutSetInput().preparedLinkedValues(
+                    current: .init(weight: partner.weight, reps: partner.reps), previous: previous, suggestions: above)
+            partner.weight = values.weight
+            partner.reps = values.reps
             partner.isCompleted = true
             partner.completedAt = now
             partner.touch(now: now)
