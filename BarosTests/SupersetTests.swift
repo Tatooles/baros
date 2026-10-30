@@ -347,8 +347,9 @@ final class SupersetWorkoutTests: XCTestCase {
         let model = try XCTUnwrap(NSManagedObjectModel.makeManagedObjectModel(for: BarosSchema.models))
         let legacy = try XCTUnwrap(model.copy() as? NSManagedObjectModel)
         let entity = try XCTUnwrap(legacy.entitiesByName["LoggedExercise"])
-        entity.properties.removeAll { $0.name == "supersetGroupID" }
-        XCTAssertNil(entity.attributesByName["supersetGroupID"])
+        let supersetAttributes: Set = ["supersetGroupID", "hasLocalSupersetChange"]
+        entity.properties.removeAll { supersetAttributes.contains($0.name) }
+        XCTAssertTrue(supersetAttributes.isDisjoint(with: entity.attributesByName.keys))
 
         let exerciseID = UUID()
         do {
