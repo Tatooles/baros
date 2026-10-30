@@ -61,7 +61,7 @@ struct ExerciseEditorView: View {
                     }
                 }
                 .accessibilityIdentifier("ExercisePrimaryMuscleGroupPicker")
-                MuscleFigureView(selection: $primaryMuscleGroup)
+                MuscleFigureView(selection: primaryMuscleGroup)
                     .padding(.vertical, 12)
             }
 

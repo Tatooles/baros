@@ -60,18 +60,21 @@ enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable {
         var id: String { title }
     }
 
-    /// Every group exactly once, ordered top to bottom within each area.
+    /// Every group exactly once. Upper holds everything Upper Body highlights,
+    /// Lower everything Lower Body highlights, each ordered top to bottom.
     static let pickerSections: [PickerSection] = [
         PickerSection(
-            title: "Torso",
-            groups: [.neck, .traps, .shoulders, .chest, .upperBack, .lats, .core, .lowerBack]
+            title: "Upper",
+            groups: [
+                .upperBody, .neck, .traps, .shoulders, .chest, .upperBack, .lats,
+                .biceps, .triceps, .forearms, .core, .lowerBack,
+            ]
         ),
-        PickerSection(title: "Arms", groups: [.biceps, .triceps, .forearms]),
         PickerSection(
-            title: "Legs",
-            groups: [.glutes, .abductors, .adductors, .quads, .hamstrings, .calves]
+            title: "Lower",
+            groups: [.lowerBody, .glutes, .abductors, .adductors, .quads, .hamstrings, .calves]
         ),
-        PickerSection(title: "General", groups: [.fullBody, .upperBody, .lowerBody, .cardio, .other]),
+        PickerSection(title: "General", groups: [.fullBody, .cardio, .other]),
     ]
 
     static func legacyGroup(for rawValue: String) -> ExerciseMuscleGroup {
