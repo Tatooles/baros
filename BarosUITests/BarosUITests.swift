@@ -2205,8 +2205,8 @@ final class BarosUITests: XCTestCase {
         let targetArea = app.buttons["ExercisePrimaryMuscleGroupPicker"]
         XCTAssertTrue(targetArea.label.hasSuffix("Chest"))
 
-        targetArea.tap()
-        app.buttons["Lats"].tap()
+        XCTAssertTrue(waitForHittable(targetArea, timeout: 3))
+        selectPickerValue(identifier: "ExercisePrimaryMuscleGroupPicker", value: "Lats", in: app)
         XCTAssertEqual(figure.value as? String, "Lats highlighted")
 
         // The figure only shows the selection; tapping it changes nothing.
