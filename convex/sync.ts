@@ -302,6 +302,11 @@ function normalizeLoggedExerciseUpdatePayload(
       defaultHasSnapshotMetadata,
     sourceLoggedExerciseID:
       record.sourceLoggedExerciseID ?? existing.sourceLoggedExerciseID ?? null,
+    // Builds from before supersets omit the field; keep the stored grouping.
+    // Grouped rows send an id; explicit removals send null. Unknown grouping stays omitted.
+    supersetGroupID: record.supersetGroupID === undefined
+      ? existing.supersetGroupID ?? null
+      : record.supersetGroupID,
   };
 }
 

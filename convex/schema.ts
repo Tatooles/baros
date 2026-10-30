@@ -110,6 +110,7 @@ export default defineSchema({
     notes: v.string(),
     referenceNotes: nullableString,
     sourceLoggedExerciseID: v.optional(nullableString),
+    supersetGroupID: v.optional(nullableString),
   })
     .index("by_ownerTokenIdentifier_and_clientId", [
       "ownerTokenIdentifier",
