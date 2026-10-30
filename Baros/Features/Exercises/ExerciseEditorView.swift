@@ -42,21 +42,32 @@ struct ExerciseEditorView: View {
                     }
                 }
                 .accessibilityIdentifier("ExerciseEquipmentPicker")
-                Picker("Primary Muscle", selection: $primaryMuscleGroup) {
-                    ForEach(ExerciseMuscleGroup.allCases) { muscleGroup in
-                        Text(muscleGroup.displayName).tag(muscleGroup)
-                    }
-                }
-                .accessibilityIdentifier("ExercisePrimaryMuscleGroupPicker")
-                TextField("Notes", text: $notes, axis: .vertical)
-                    .accessibilityIdentifier("ExerciseNotesField")
-            }
-
-            if let validationMessage {
-                Section {
+            } footer: {
+                // Above the figure, so the message stays on screen after Save.
+                if let validationMessage {
                     Text(validationMessage)
                         .foregroundStyle(AppTheme.destructiveForeground)
                 }
+            }
+
+            Section {
+                Picker("Target Area", selection: $primaryMuscleGroup) {
+                    ForEach(ExerciseMuscleGroup.pickerSections) { section in
+                        Section(section.title) {
+                            ForEach(section.groups) { muscleGroup in
+                                Text(muscleGroup.displayName).tag(muscleGroup)
+                            }
+                        }
+                    }
+                }
+                .accessibilityIdentifier("ExercisePrimaryMuscleGroupPicker")
+                MuscleFigureView(selection: primaryMuscleGroup)
+                    .padding(.vertical, 12)
+            }
+
+            Section {
+                TextField("Notes (Optional)", text: $notes, axis: .vertical)
+                    .accessibilityIdentifier("ExerciseNotesField")
             }
         }
         .scrollContentBackground(.hidden)
