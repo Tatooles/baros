@@ -303,7 +303,7 @@ function normalizeLoggedExerciseUpdatePayload(
     sourceLoggedExerciseID:
       record.sourceLoggedExerciseID ?? existing.sourceLoggedExerciseID ?? null,
     // Builds from before supersets omit the field; keep the stored grouping.
-    // Newer builds always send it, with null for ungrouped.
+    // Grouped rows send an id; explicit removals send null. Unknown grouping stays omitted.
     supersetGroupID: record.supersetGroupID === undefined
       ? existing.supersetGroupID ?? null
       : record.supersetGroupID,
