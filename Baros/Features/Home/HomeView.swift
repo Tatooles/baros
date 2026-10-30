@@ -51,7 +51,8 @@ struct HomeView: View {
                                          exerciseCount: { id in
                                              content.completedSessions.first { $0.id == id }?.sortedLoggedExercises.count
                                          },
-                                         open: { ids in openRingWorkouts(ids, content: content) })
+                                         open: { ids in openRingWorkouts(ids, content: content) },
+                                         holdsSelection: ringWorkoutChoice != nil)
                         Picker("History period", selection: $periodRaw) {
                             ForEach(HomeRingPeriod.allCases, id: \.rawValue) { period in
                                 Text(period.title).tag(period.rawValue)
@@ -149,11 +150,12 @@ struct HomeView: View {
         }
     }
 
-    private func openRingWorkouts(_ ids: [UUID], content: HomeContent) {
+    /// Returns true when it presented a picker rather than opening a workout.
+    private func openRingWorkouts(_ ids: [UUID], content: HomeContent) -> Bool {
         let sessions = ids.compactMap { id in content.completedSessions.first { $0.id == id } }
         guard sessions.count > 1 else {
             openedWorkoutID = sessions.first?.id
-            return
+            return false
         }
         let sameDay = sessions.allSatisfy { Calendar.current.isDate($0.startedAt, inSameDayAs: sessions[0].startedAt) }
         ringWorkoutChoice = HomeRingWorkoutChoice(options: sessions.map { session in
@@ -161,6 +163,7 @@ struct HomeView: View {
                 : session.startedAt.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
             return HomeRingWorkoutChoice.Option(id: session.id, label: "\(session.title) · \(when)")
         })
+        return true
     }
 
     private func replaySweep() {

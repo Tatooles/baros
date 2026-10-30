@@ -1095,6 +1095,35 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testHomeRingKeepsTheTappedSpokeSelectedWhileItsPickerIsOpen() {
+        let app = makeApp(extraArguments: ["--uitest-seed-home-ring-scrub-history"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 10))
+        // Just below 3 o'clock, out on the spokes, is 22 days back, where the seed puts three workouts.
+        let spoke = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.53))
+        let choice = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Mobility & Stretch")).firstMatch
+        // Taps do nothing until the sweep finishes, so retry until the picker opens.
+        for _ in 0..<5 where !choice.exists {
+            spoke.tap()
+            _ = choice.waitForExistence(timeout: 1)
+        }
+        XCTAssertTrue(choice.exists)
+
+        // The selection used to clear 0.6 s after opening, under the still-open picker.
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(choice.exists)
+        let held = NSPredicate(format: "value CONTAINS %@", "Push Day. Zone 2 Conditioning. Mobility & Stretch")
+        XCTAssertTrue(held.evaluate(with: ring), String(describing: ring.value))
+
+        // Tapping outside closes the picker and the selection together.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        XCTAssertTrue(choice.waitForNonExistence(timeout: 3))
+        let cleared = expectation(for: NSPredicate(format: "value == ''"), evaluatedWith: ring)
+        wait(for: [cleared], timeout: 3)
+    }
+
+    @MainActor
     func testMinimizedStateDoesNotPersistAcrossRelaunch() {
         let app = makeDiskBackedResetApp()
         app.launch()

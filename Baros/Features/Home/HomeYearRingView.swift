@@ -9,6 +9,9 @@ struct HomeYearRingView: View {
     @State private var drawsTrack = false
     @State private var scrubReady = false
     @State private var selectedIndex: Int?
+    /// The ring keeps drawing the last selection while `emphasis` fades it out.
+    @State private var highlightIndex: Int?
+    @State private var emphasis: Double = 0
     @State private var touch: ScrubTouch?
     @State private var clearSelection: Task<Void, Never>?
     @ScaledMetric(relativeTo: .largeTitle) private var numberSize: CGFloat = 58
@@ -20,7 +23,10 @@ struct HomeYearRingView: View {
     let replayID: Int
     /// Loads one workout's logged exercises; called only for the slot being previewed.
     let exerciseCount: (UUID) -> Int?
-    let open: ([UUID]) -> Void
+    /// Returns true when it presented a picker instead of opening a workout.
+    let open: ([UUID]) -> Bool
+    /// True while that picker is up; the selection stays until it closes.
+    let holdsSelection: Bool
 
     private var innerLapCount: Int {
         period == .year ? model.yearSpokes.map(\.lap).max() ?? 0 : 0
@@ -36,14 +42,17 @@ struct HomeYearRingView: View {
     var body: some View {
         ZStack {
             HomeRingCanvas(spokes: model.spokes(for: period), emptySlots: model.emptySlotIndices(for: period),
-                           period: period, progress: progress, drawsTrack: drawsTrack, selectedIndex: selectedIndex)
+                           period: period, progress: progress, drawsTrack: drawsTrack,
+                           highlightIndex: highlightIndex, emphasis: emphasis)
             if let preview {
                 // The list's widest rows sit mid-height, where the circle inside the tree rings is widest.
                 previewText(preview)
                     .frame(width: diameter * (innerLapCount > 0 ? 0.46 : 0.58))
+                    .transition(centerTransition)
             } else {
                 summaryText
                     .frame(width: diameter * (innerLapCount > 0 ? 0.40 : 0.56))
+                    .transition(centerTransition)
             }
         }
         .frame(width: diameter, height: diameter)
@@ -62,7 +71,15 @@ struct HomeYearRingView: View {
         .accessibilityAction { openSelection() }
         .accessibilityIdentifier("HomeYearRing")
         .task(id: SweepTrigger(replayID: replayID, reduceMotion: reduceMotion)) { await sweep() }
-        .onChange(of: period) { _, _ in selectedIndex = nil }
+        .onChange(of: period) { _, _ in clear(animated: false) }
+        .onChange(of: holdsSelection) { _, holds in
+            if !holds { clear(animated: true) }
+        }
+    }
+
+    /// Scrubbing swaps the center instantly; only clearing animates, so the swap is a fade, not a cut.
+    private var centerTransition: AnyTransition {
+        reduceMotion ? .opacity : AnyTransition(BlurReplaceTransition(configuration: .downUp))
     }
 
     @ViewBuilder private var summaryText: some View {
@@ -164,8 +181,8 @@ struct HomeYearRingView: View {
                 // A touch that starts in the center stays a tap until it moves.
                 guard touch?.startedInCenter == false || touch?.moved == true,
                       distance(value.location, center) > 12 else { return }
-                selectedIndex = HomeRingScrubGeometry.slotIndex(at: value.location, center: center,
-                                                                slotCount: period.slotCount)
+                select(HomeRingScrubGeometry.slotIndex(at: value.location, center: center,
+                                                       slotCount: period.slotCount))
             }
             .onEnded { _ in
                 let ended = touch
@@ -187,16 +204,29 @@ struct HomeYearRingView: View {
         clearSelection = Task { @MainActor in
             try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
+            clear(animated: true)
+        }
+    }
+
+    private func select(_ index: Int) {
+        selectedIndex = index
+        highlightIndex = index
+        emphasis = 1
+    }
+
+    private func clear(animated: Bool) {
+        let animation: Animation? = animated ? (reduceMotion ? .easeOut(duration: 0.2) : .easeInOut(duration: 0.45)) : nil
+        withAnimation(animation) {
             selectedIndex = nil
+            emphasis = 0
         }
     }
 
     private func openSelection() {
         guard let preview, !preview.workoutIDs.isEmpty else { return }
         clearSelection?.cancel()
-        open(preview.workoutIDs)
-        // Clear behind the pushed detail so Home returns to its summary.
-        scheduleClear(after: 0.6)
+        // A picker holds the selection until it closes; a pushed detail clears it behind the push.
+        if !open(preview.workoutIDs) { scheduleClear(after: 0.6) }
     }
 
     /// Up moves toward today; down moves back in time. The first swipe lands on today or this week.
@@ -204,12 +234,12 @@ struct HomeYearRingView: View {
         clearSelection?.cancel()
         guard model.totalWorkouts > 0 else { return }
         guard let index = selectedIndex else {
-            selectedIndex = 0
+            select(0)
             return
         }
         switch direction {
-        case .increment: selectedIndex = max(0, index - 1)
-        case .decrement: selectedIndex = min(period.slotCount - 1, index + 1)
+        case .increment: select(max(0, index - 1))
+        case .decrement: select(min(period.slotCount - 1, index + 1))
         @unknown default: break
         }
     }
@@ -229,6 +259,8 @@ struct HomeYearRingView: View {
             drawsTrack = model.totalWorkouts == 0
             progress = reduceMotion ? 1 : 0
             selectedIndex = nil
+            highlightIndex = nil
+            emphasis = 0
             scrubReady = reduceMotion
         }
         guard !reduceMotion else {
@@ -257,15 +289,17 @@ private struct HomeRingCanvas: View, Animatable {
     let period: HomeRingPeriod
     var progress: Double
     let drawsTrack: Bool
-    let selectedIndex: Int?
+    let highlightIndex: Int?
+    /// 1 while a slot is selected; animates to 0 as the selection clears.
+    var emphasis: Double
 
     static func trackRadius(side: CGFloat, period: HomeRingPeriod) -> CGFloat {
         side * (period == .month ? 0.308 : 0.345)
     }
 
-    nonisolated var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
+    nonisolated var animatableData: AnimatablePair<Double, Double> {
+        get { AnimatablePair(progress, emphasis) }
+        set { (progress, emphasis) = (newValue.first, newValue.second) }
     }
 
     var body: some View {
@@ -276,7 +310,7 @@ private struct HomeRingCanvas: View, Animatable {
             let radius = Self.trackRadius(side: side, period: period)
             let trackProgress = drawsTrack ? min(1, progress / 0.78) : 1
             // While scrubbing, everything but the selected slot steps back.
-            let dim = selectedIndex == nil ? 1 : 0.32
+            let dim = 1 - 0.68 * emphasis
             var track = Path()
             track.addArc(center: center, radius: radius,
                          startAngle: .degrees(-90), endAngle: .degrees(-90 + 360 * trackProgress), clockwise: false)
@@ -285,17 +319,20 @@ private struct HomeRingCanvas: View, Animatable {
             for index in emptySlots {
                 let growth = revealedGrowth(at: index)
                 guard growth > 0 else { continue }
-                let selected = index == selectedIndex
+                let lift = index == highlightIndex ? emphasis : 0
                 let angle = slotAngle(index)
                 let startRadius = radius + 6
-                let endRadius = startRadius + (selected ? 10 : 7.5) * growth
+                let endRadius = startRadius + (7.5 + 2.5 * lift) * growth
                 var tick = Path()
                 tick.move(to: point(center, startRadius, angle))
                 tick.addLine(to: point(center, endRadius, angle))
-                let restColor = selected ? AppTheme.textPrimary
-                    : (colorScheme == .dark ? Color.white.opacity(0.40) : Color.black.opacity(0.35)).opacity(dim)
-                context.stroke(tick, with: .color(restColor),
-                               style: StrokeStyle(lineWidth: selected ? 2.5 : 1.5, lineCap: .round))
+                let restColor = (colorScheme == .dark ? Color.white.opacity(0.40) : Color.black.opacity(0.35))
+                    .opacity(lift > 0 ? 1 - lift : dim)
+                context.stroke(tick, with: .color(restColor), style: StrokeStyle(lineWidth: 1.5 + lift, lineCap: .round))
+                if lift > 0 {
+                    context.stroke(tick, with: .color(AppTheme.textPrimary.opacity(lift)),
+                                   style: StrokeStyle(lineWidth: 1.5 + lift, lineCap: .round))
+                }
             }
 
             for spoke in spokes {
@@ -303,7 +340,7 @@ private struct HomeRingCanvas: View, Animatable {
                 guard easedGrowth > 0 else { continue }
                 let angle = slotAngle(spoke.angleIndex)
                 let inner = spoke.lap > 0
-                let selected = !inner && spoke.angleIndex == selectedIndex
+                let lift = !inner && spoke.angleIndex == highlightIndex ? emphasis : 0
                 let startRadius = inner ? radius - 7 - CGFloat(spoke.lap - 1) * side * 0.049 : radius + 6
                 let length = inner ? (3 + CGFloat(spoke.normalizedLength) * side * 0.034)
                     : (period == .month ? CGFloat(spoke.monthLengthFraction) * side
@@ -312,15 +349,15 @@ private struct HomeRingCanvas: View, Animatable {
                 var line = Path()
                 line.move(to: point(center, startRadius, angle))
                 line.addLine(to: point(center, endRadius, angle))
+                let resting = 0.5 + spoke.normalizedLength * 0.5
                 let color = inner ? Color(.secondaryLabel).opacity(0.45 * dim)
-                    : selected ? Color.accentColor
-                    : Color.accentColor.opacity((0.5 + spoke.normalizedLength * 0.5) * dim)
+                    : Color.accentColor.opacity(lift > 0 ? resting + (1 - resting) * lift : resting * dim)
                 let width: CGFloat = inner ? 1.8 : (period == .month ? 5.5 : 3.25)
                 context.stroke(line, with: .color(color), style: StrokeStyle(
-                    lineWidth: selected ? width + 1.5 : width, lineCap: .round))
+                    lineWidth: width + 1.5 * lift, lineCap: .round))
             }
 
-            let dotOpacity = (drawsTrack ? min(1, max(0, (progress - 0.78) / 0.12)) : 1) * (selectedIndex == nil ? 1 : 0.4)
+            let dotOpacity = (drawsTrack ? min(1, max(0, (progress - 0.78) / 0.12)) : 1) * (1 - 0.6 * emphasis)
             let pulsePhase = min(1, max(0, (progress - 0.84) / 0.16))
             let pulse = sin(pulsePhase * .pi)
             let dot = CGPoint(x: center.x, y: center.y - radius)
