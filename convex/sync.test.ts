@@ -4,6 +4,7 @@ import { api, internal } from "./_generated/api";
 import {
   deleteAccountDataForOwner,
   deleteAccountDataWithBatches,
+  mergeWorkoutTemplateEntries,
 } from "./sync";
 import schema from "./schema";
 
@@ -504,6 +505,7 @@ describe("account data deletion", () => {
         workoutSessions: 1,
         exercises: 1,
         userSettings: 1,
+        workoutTemplates: 0,
       },
     });
 
@@ -556,6 +558,7 @@ describe("account data deletion", () => {
         workoutSessions: 0,
         exercises: 0,
         userSettings: 0,
+        workoutTemplates: 0,
       },
     });
   });
@@ -738,6 +741,7 @@ describe("account data deletion", () => {
         workoutSessions: 1,
         exercises: 1,
         userSettings: 1,
+        workoutTemplates: 0,
       },
     });
 
@@ -1342,11 +1346,13 @@ describe("account data deletion", () => {
       "workoutSessions",
       "exercises",
       "userSettings",
+      "workoutTemplates",
       "loggedSets",
       "loggedExercises",
       "workoutSessions",
       "exercises",
       "userSettings",
+      "workoutTemplates",
     ]);
   });
 
@@ -1411,6 +1417,7 @@ describe("account data deletion", () => {
         workoutSessions: 0,
         exercises: 2,
         userSettings: 0,
+        workoutTemplates: 0,
       },
     });
 
@@ -1438,6 +1445,7 @@ describe("account data deletion", () => {
         workoutSessions: 0,
         exercises: 0,
         userSettings: 0,
+        workoutTemplates: 0,
       },
     });
 
@@ -2216,3 +2224,225 @@ describe("superset grouping", () => {
     expect(changes.loggedExercises[0].supersetGroupID ?? null).toBeNull();
   });
 });
+
+describe("workout templates", () => {
+  const templateCursors = { ...zeroCursors, workoutTemplates: 0 };
+
+  /// Fetches with a template cursor, which always returns template changes.
+  async function fetchTemplateChanges(
+    client: ReturnType<ReturnType<typeof testDb>["withIdentity"]>,
+    cursors: SyncCursors & { workoutTemplates?: number } = templateCursors,
+    limit?: number,
+  ) {
+    const changes = await client.query(api.sync.fetchChanges, { cursors, limit });
+    if (!("workoutTemplates" in changes)) {
+      throw new Error("Expected template changes");
+    }
+    return changes;
+  }
+
+  function templateEntry(overrides: Partial<WorkoutTemplateEntry> = {}): WorkoutTemplateEntry {
+    return {
+      id: "entry-1",
+      exerciseClientId: "exercise-1",
+      exerciseSnapshotName: "Bench Press",
+      exerciseSnapshotEquipmentRaw: "barbell",
+      exerciseSnapshotPrimaryMuscleGroupRaw: "chest",
+      supersetGroupID: null,
+      ...overrides,
+    };
+  }
+
+  function templateRecord(overrides: Partial<WorkoutTemplateRecord> = {}): WorkoutTemplateRecord {
+    return {
+      clientId: "template-1",
+      name: "Upper Day",
+      entries: [
+        templateEntry(),
+        templateEntry({ id: "entry-2", exerciseClientId: null, exerciseSnapshotName: "Row" }),
+      ],
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: null,
+      ...overrides,
+    };
+  }
+
+  test("templates round-trip in order through fetchChanges", async () => {
+    const t = testDb();
+    const client = t.withIdentity(userA);
+    await expect(
+      client.mutation(api.sync.upsertWorkoutTemplate, { record: templateRecord() }),
+    ).resolves.toMatchObject({ status: "inserted" });
+
+    const changes = await fetchTemplateChanges(client);
+    expect(changes.workoutTemplates).toMatchObject([
+      {
+        clientId: "template-1",
+        name: "Upper Day",
+        entries: [
+          { id: "entry-1", exerciseClientId: "exercise-1" },
+          { id: "entry-2", exerciseClientId: null, exerciseSnapshotName: "Row" },
+        ],
+      },
+    ]);
+    expect(changes.cursors.workoutTemplates).toBe(
+      changes.workoutTemplates[0].serverUpdatedAt,
+    );
+    expect(changes.hasMore.workoutTemplates).toBe(false);
+  });
+
+  test("builds that send no template cursor get the response they already decode", async () => {
+    const t = testDb();
+    const client = t.withIdentity(userA);
+    await client.mutation(api.sync.upsertWorkoutTemplate, { record: templateRecord() });
+
+    const changes = await client.query(api.sync.fetchChanges, { cursors: zeroCursors });
+    expect(changes).not.toHaveProperty("workoutTemplates");
+    expect(changes.cursors).not.toHaveProperty("workoutTemplates");
+    expect(changes.hasMore).not.toHaveProperty("workoutTemplates");
+  });
+
+  test("template cursors page independently", async () => {
+    const t = testDb();
+    const client = t.withIdentity(userA);
+    for (const index of [1, 2, 3]) {
+      await client.mutation(api.sync.upsertWorkoutTemplate, {
+        record: templateRecord({ clientId: `template-${index}` }),
+      });
+    }
+
+    const first = await fetchTemplateChanges(client, templateCursors, 2);
+    expect(first.workoutTemplates.map((record) => record.clientId)).toEqual([
+      "template-1",
+      "template-2",
+    ]);
+    expect(first.hasMore.workoutTemplates).toBe(true);
+
+    const second = await fetchTemplateChanges(client, first.cursors, 2);
+    expect(second.workoutTemplates.map((record) => record.clientId)).toEqual([
+      "template-3",
+    ]);
+    expect(second.hasMore.workoutTemplates).toBe(false);
+  });
+
+  test("an update replaces the entries and their order", async () => {
+    const t = testDb();
+    const client = t.withIdentity(userA);
+    await client.mutation(api.sync.upsertWorkoutTemplate, { record: templateRecord() });
+    await expect(
+      client.mutation(api.sync.upsertWorkoutTemplate, {
+        record: templateRecord({
+          name: "Upper A",
+          updatedAt: 3,
+          entries: [
+            templateEntry({ id: "entry-2", exerciseSnapshotName: "Row", supersetGroupID: "group-a" }),
+            templateEntry({ id: "entry-3", exerciseSnapshotName: "Curl", supersetGroupID: "group-a" }),
+          ],
+        }),
+      }),
+    ).resolves.toMatchObject({ status: "updated" });
+
+    const changes = await fetchTemplateChanges(client);
+    expect(changes.workoutTemplates[0].name).toBe("Upper A");
+    expect(
+      changes.workoutTemplates[0].entries.map(({ id, supersetGroupID }) => [id, supersetGroupID]),
+    ).toEqual([
+      ["entry-2", "group-a"],
+      ["entry-3", "group-a"],
+    ]);
+  });
+
+  test("entry fields an older build leaves out keep their stored values", () => {
+    const stored = { ...templateEntry(), targetSets: 3 };
+    const uploaded = templateEntry({ exerciseSnapshotName: "Incline Bench" });
+
+    expect(mergeWorkoutTemplateEntries([stored], [uploaded])).toEqual([
+      { ...uploaded, targetSets: 3 },
+    ]);
+  });
+
+  test("stale and equal-timestamp template upserts are ignored", async () => {
+    const t = testDb();
+    const client = t.withIdentity(userA);
+    await client.mutation(api.sync.upsertWorkoutTemplate, {
+      record: templateRecord({ updatedAt: 10 }),
+    });
+    for (const updatedAt of [9, 10]) {
+      await expect(
+        client.mutation(api.sync.upsertWorkoutTemplate, {
+          record: templateRecord({ name: "Stale", updatedAt }),
+        }),
+      ).resolves.toMatchObject({ status: "ignored_stale" });
+    }
+
+    const changes = await fetchTemplateChanges(client);
+    expect(changes.workoutTemplates[0].name).toBe("Upper Day");
+  });
+
+  test("tombstoned templates stay in the change feed", async () => {
+    const t = testDb();
+    const client = t.withIdentity(userA);
+    await client.mutation(api.sync.upsertWorkoutTemplate, { record: templateRecord() });
+    await expect(
+      client.mutation(api.sync.tombstone, {
+        entityKind: "workoutTemplates",
+        clientId: "template-1",
+        deletedAt: 5,
+      }),
+    ).resolves.toMatchObject({ status: "tombstoned" });
+
+    const changes = await fetchTemplateChanges(client);
+    expect(changes.workoutTemplates).toMatchObject([
+      { clientId: "template-1", deletedAt: 5, updatedAt: 5 },
+    ]);
+  });
+
+  test("users only fetch their own templates", async () => {
+    const t = testDb();
+    await t.withIdentity(userA).mutation(api.sync.upsertWorkoutTemplate, {
+      record: templateRecord(),
+    });
+
+    const changes = await fetchTemplateChanges(t.withIdentity(userB));
+    expect(changes.workoutTemplates).toEqual([]);
+  });
+
+  test("account deletion removes templates", async () => {
+    const t = testDb();
+    await t.withIdentity(userA).mutation(api.sync.upsertWorkoutTemplate, {
+      record: templateRecord(),
+    });
+    await t.withIdentity(userB).mutation(api.sync.upsertWorkoutTemplate, {
+      record: templateRecord(),
+    });
+
+    const result = await t
+      .withIdentity(userA)
+      .action(api.sync.deleteAccountData, { cancellationToken: "device-a" });
+    expect(result.deletedCounts.workoutTemplates).toBe(1);
+
+    const remaining = await t.run((ctx) => ctx.db.query("workoutTemplates").collect());
+    expect(remaining.map((record) => record.ownerTokenIdentifier)).toEqual([
+      userB.tokenIdentifier,
+    ]);
+  });
+});
+
+type WorkoutTemplateEntry = {
+  id: string;
+  exerciseClientId: string | null;
+  exerciseSnapshotName: string;
+  exerciseSnapshotEquipmentRaw: string;
+  exerciseSnapshotPrimaryMuscleGroupRaw: string;
+  supersetGroupID: string | null;
+};
+
+type WorkoutTemplateRecord = {
+  clientId: string;
+  name: string;
+  entries: WorkoutTemplateEntry[];
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+};

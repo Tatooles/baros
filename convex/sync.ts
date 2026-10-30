@@ -19,6 +19,7 @@ import {
   loggedSetPayloadValidator,
   userSettingsPayloadValidator,
   workoutSessionPayloadValidator,
+  workoutTemplatePayloadValidator,
 } from "./sync/validators";
 
 type UserSettingsPayload = Infer<typeof userSettingsPayloadValidator>;
@@ -26,6 +27,7 @@ type ExercisePayload = Infer<typeof exercisePayloadValidator>;
 type WorkoutSessionPayload = Infer<typeof workoutSessionPayloadValidator>;
 type LoggedExercisePayload = Infer<typeof loggedExercisePayloadValidator>;
 type LoggedSetPayload = Infer<typeof loggedSetPayloadValidator>;
+type WorkoutTemplatePayload = Infer<typeof workoutTemplatePayloadValidator>;
 type NormalizedExercisePayload = ExercisePayload & {
   primaryMuscleGroupRaw: string;
 };
@@ -61,6 +63,7 @@ type AccountDataDeletionResult = {
     workoutSessions: number;
     exercises: number;
     userSettings: number;
+    workoutTemplates: number;
   };
 };
 
@@ -69,7 +72,8 @@ type AccountDeletionTable =
   | "loggedExercises"
   | "workoutSessions"
   | "exercises"
-  | "userSettings";
+  | "userSettings"
+  | "workoutTemplates";
 
 const accountDeletionTableValidator = v.union(
   v.literal("loggedSets"),
@@ -77,6 +81,7 @@ const accountDeletionTableValidator = v.union(
   v.literal("workoutSessions"),
   v.literal("exercises"),
   v.literal("userSettings"),
+  v.literal("workoutTemplates"),
 );
 
 const accountDeletionTableOrder = [
@@ -85,6 +90,7 @@ const accountDeletionTableOrder = [
   "workoutSessions",
   "exercises",
   "userSettings",
+  "workoutTemplates",
 ] as const satisfies readonly AccountDeletionTable[];
 
 type AccountDataDeletionTableBatchResult = {
@@ -120,6 +126,8 @@ const syncCursorValidator = v.object({
   workoutSessions: v.number(),
   loggedExercises: v.number(),
   loggedSets: v.number(),
+  // Builds from before templates leave this out and get no template changes.
+  workoutTemplates: v.optional(v.number()),
 });
 
 type SyncCursors = Infer<typeof syncCursorValidator>;
@@ -143,9 +151,11 @@ function assertFinitePayloadNumbers(record: Record<string, unknown>): void {
   }
 }
 
-function assertFiniteCursors(cursors: Record<string, number>): void {
+function assertFiniteCursors(cursors: Record<string, number | undefined>): void {
   for (const [tableName, cursor] of Object.entries(cursors)) {
-    assertFiniteNumber(cursor, `${tableName} cursor`);
+    if (cursor !== undefined) {
+      assertFiniteNumber(cursor, `${tableName} cursor`);
+    }
   }
 }
 
@@ -209,6 +219,7 @@ export async function deleteAccountDataWithBatches(
     workoutSessions: 0,
     exercises: 0,
     userSettings: 0,
+    workoutTemplates: 0,
   };
 
   for (let passIndex = 0; passIndex < maxPasses; passIndex++) {
@@ -385,6 +396,21 @@ async function latestLoggedSetServerUpdatedAt(
   return latest[0]?.serverUpdatedAt ?? 0;
 }
 
+async function latestWorkoutTemplateServerUpdatedAt(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+): Promise<number> {
+  const latest = await ctx.db
+    .query("workoutTemplates")
+    .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
+      q.eq("ownerTokenIdentifier", ownerTokenIdentifier),
+    )
+    .order("desc")
+    .take(1);
+
+  return latest[0]?.serverUpdatedAt ?? 0;
+}
+
 async function nextServerUpdatedAt(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
@@ -395,6 +421,7 @@ async function nextServerUpdatedAt(
     latestWorkoutSessionServerUpdatedAt(ctx, ownerTokenIdentifier),
     latestLoggedExerciseServerUpdatedAt(ctx, ownerTokenIdentifier),
     latestLoggedSetServerUpdatedAt(ctx, ownerTokenIdentifier),
+    latestWorkoutTemplateServerUpdatedAt(ctx, ownerTokenIdentifier),
   ]);
   const maxExisting = Math.max(0, ...latestValues);
 
@@ -666,6 +693,58 @@ async function upsertWorkoutSessionByClientId(
   return { status: "updated", serverUpdatedAt };
 }
 
+/// Starts each entry from the stored one with the same id, so fields an
+/// older build leaves out keep their values. Order and membership come from
+/// the upload.
+export function mergeWorkoutTemplateEntries(
+  existing: Doc<"workoutTemplates">["entries"],
+  uploaded: WorkoutTemplatePayload["entries"],
+): Doc<"workoutTemplates">["entries"] {
+  const existingByID = new Map(existing.map((entry) => [entry.id, entry]));
+  return uploaded.map((entry) => ({ ...existingByID.get(entry.id), ...entry }));
+}
+
+async function upsertWorkoutTemplateByClientId(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+  record: WorkoutTemplatePayload,
+): Promise<UpsertResult> {
+  const existing = await ctx.db
+    .query("workoutTemplates")
+    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
+      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", record.clientId),
+    )
+    .unique();
+
+  if (existing !== null && isStale(existing, record)) {
+    return {
+      status: "ignored_stale",
+      serverUpdatedAt: existing.serverUpdatedAt,
+    };
+  }
+
+  const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
+
+  if (existing === null) {
+    await ctx.db.insert(
+      "workoutTemplates",
+      withServerFields(record, ownerTokenIdentifier, serverUpdatedAt),
+    );
+    return { status: "inserted", serverUpdatedAt };
+  }
+
+  // patch keeps top-level fields the upload leaves out.
+  await ctx.db.patch(
+    existing._id,
+    withServerFields(
+      { ...record, entries: mergeWorkoutTemplateEntries(existing.entries, record.entries) },
+      ownerTokenIdentifier,
+      serverUpdatedAt,
+    ),
+  );
+  return { status: "updated", serverUpdatedAt };
+}
+
 async function findWorkoutSessionByClientId(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
@@ -877,12 +956,19 @@ async function tombstoneExisting(
 ): Promise<TombstoneResult>;
 async function tombstoneExisting(
   ctx: MutationCtx,
+  existing: Doc<"workoutTemplates">,
+  ownerTokenIdentifier: string,
+  deletedAt: number,
+): Promise<TombstoneResult>;
+async function tombstoneExisting(
+  ctx: MutationCtx,
   existing:
     | Doc<"userSettings">
     | Doc<"exercises">
     | Doc<"workoutSessions">
     | Doc<"loggedExercises">
-    | Doc<"loggedSets">,
+    | Doc<"loggedSets">
+    | Doc<"workoutTemplates">,
   ownerTokenIdentifier: string,
   deletedAt: number,
 ): Promise<TombstoneResult> {
@@ -1003,6 +1089,26 @@ async function tombstoneLoggedSetByClientId(
   return await tombstoneExisting(ctx, existing, ownerTokenIdentifier, deletedAt);
 }
 
+async function tombstoneWorkoutTemplateByClientId(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+  clientId: string,
+  deletedAt: number,
+): Promise<TombstoneResult> {
+  const existing = await ctx.db
+    .query("workoutTemplates")
+    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
+      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
+    )
+    .unique();
+
+  if (existing === null) {
+    return { status: "missing" };
+  }
+
+  return await tombstoneExisting(ctx, existing, ownerTokenIdentifier, deletedAt);
+}
+
 async function fetchUserSettingsChanges(
   ctx: SyncReadCtx,
   ownerTokenIdentifier: string,
@@ -1083,6 +1189,24 @@ async function fetchLoggedSetChanges(
 ): Promise<ChangePage<Doc<"loggedSets">>> {
   const records = await ctx.db
     .query("loggedSets")
+    .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
+      q
+        .eq("ownerTokenIdentifier", ownerTokenIdentifier)
+        .gt("serverUpdatedAt", cursor),
+    )
+    .take(limit + 1);
+
+  return pageFromOverfetch(records, limit);
+}
+
+async function fetchWorkoutTemplateChanges(
+  ctx: SyncReadCtx,
+  ownerTokenIdentifier: string,
+  cursor: number,
+  limit: number,
+): Promise<ChangePage<Doc<"workoutTemplates">>> {
+  const records = await ctx.db
+    .query("workoutTemplates")
     .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
       q
         .eq("ownerTokenIdentifier", ownerTokenIdentifier)
@@ -1190,6 +1314,22 @@ async function deleteLoggedSetsForOwnerBatch(
   );
 }
 
+async function deleteWorkoutTemplatesForOwnerBatch(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+): Promise<{ deletedCount: number; hasMore: boolean }> {
+  return await deleteRowsForOwnerBatch(
+    () =>
+      ctx.db
+        .query("workoutTemplates")
+        .withIndex("by_ownerTokenIdentifier_and_serverUpdatedAt", (q) =>
+          q.eq("ownerTokenIdentifier", ownerTokenIdentifier),
+        )
+        .take(accountDeletionBatchSize + 1),
+    (row) => ctx.db.delete(row._id),
+  );
+}
+
 export const upsertUserSettings = mutation({
   args: { record: userSettingsPayloadValidator },
   handler: async (ctx, args) => {
@@ -1252,6 +1392,16 @@ export const upsertLoggedSet = mutation({
   },
 });
 
+export const upsertWorkoutTemplate = mutation({
+  args: { record: workoutTemplatePayloadValidator },
+  handler: async (ctx, args) => {
+    assertFinitePayloadNumbers(args.record);
+    const ownerTokenIdentifier = await requireOwnerTokenIdentifier(ctx);
+    await assertAccountDeletionNotStarted(ctx, ownerTokenIdentifier);
+    return await upsertWorkoutTemplateByClientId(ctx, ownerTokenIdentifier, args.record);
+  },
+});
+
 export const tombstone = mutation({
   args: {
     entityKind: entityKindValidator,
@@ -1294,6 +1444,13 @@ export const tombstone = mutation({
         );
       case "loggedSets":
         return await tombstoneLoggedSetByClientId(
+          ctx,
+          ownerTokenIdentifier,
+          args.clientId,
+          args.deletedAt,
+        );
+      case "workoutTemplates":
+        return await tombstoneWorkoutTemplateByClientId(
           ctx,
           ownerTokenIdentifier,
           args.clientId,
@@ -1520,6 +1677,13 @@ export const deleteAccountDataBatch = internalMutation({
     }
 
     switch (args.tableName) {
+      case "workoutTemplates": {
+        const result = await deleteWorkoutTemplatesForOwnerBatch(
+          ctx,
+          args.ownerTokenIdentifier,
+        );
+        return { tableName: args.tableName, ...result };
+      }
       case "loggedSets": {
         const result = await deleteLoggedSetsForOwnerBatch(
           ctx,
@@ -1668,7 +1832,7 @@ async function fetchChangesForOwner(ctx: SyncReadCtx, args: FetchChangesArgs) {
   );
   const loggedSets = loggedSetPage.records;
 
-  return {
+  const changes = {
     userSettings,
     exercises,
     workoutSessions,
@@ -1697,6 +1861,28 @@ async function fetchChangesForOwner(ctx: SyncReadCtx, args: FetchChangesArgs) {
       loggedExercises: loggedExercisePage.hasMore,
       loggedSets: loggedSetPage.hasMore,
     },
+  };
+
+  // Builds from before templates get exactly the response they decode.
+  const templateCursor = args.cursors.workoutTemplates;
+  if (templateCursor === undefined) {
+    return changes;
+  }
+  const workoutTemplatePage = await fetchWorkoutTemplateChanges(
+    ctx,
+    ownerTokenIdentifier,
+    templateCursor,
+    limit,
+  );
+  const workoutTemplates = workoutTemplatePage.records;
+  return {
+    ...changes,
+    workoutTemplates,
+    cursors: {
+      ...changes.cursors,
+      workoutTemplates: nextCursorFromRecords(workoutTemplates, templateCursor),
+    },
+    hasMore: { ...changes.hasMore, workoutTemplates: workoutTemplatePage.hasMore },
   };
 }
 
