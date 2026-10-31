@@ -86,6 +86,7 @@ private struct ExercisePickerList: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dismissSearch) private var dismissSearch
     @Environment(\.isSearching) private var isSearching
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let baseRows: [ExercisePickerRowContent]
     let mode: ExercisePickerMode
     var showsCancel = true
@@ -204,10 +205,15 @@ private struct ExercisePickerList: View {
                     .accessibilityLabel(creationSuggestion.title)
                 }
             } header: {
-                HStack {
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                    : AnyLayout(HStackLayout())
+                layout {
                     Text("Exercises")
 
-                    Spacer()
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        Spacer()
+                    }
 
                     Menu {
                         Picker("Sort exercises", selection: $sortOrder) {
