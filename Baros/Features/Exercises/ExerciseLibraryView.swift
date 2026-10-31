@@ -97,10 +97,10 @@ struct ExerciseLibraryView: View {
         .navigationDestination(isPresented: $isCreatingExercise) {
             ExerciseEditorView(initialName: creationName)
         }
-        .confirmationDialog("Remove Exercise?", isPresented: Binding(
+        .alert("Remove Exercise?", isPresented: Binding(
             get: { pendingRemoval != nil },
             set: { if !$0 { pendingRemoval = nil } }
-        ), titleVisibility: .visible) {
+        )) {
             Button("Remove", role: .destructive) {
                 if let exercise = pendingRemoval { mutate(exercise, restoring: false) }
                 pendingRemoval = nil
