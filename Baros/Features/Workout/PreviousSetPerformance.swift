@@ -106,22 +106,24 @@ struct PreviousSetPerformance: Equatable {
         ownerTokenIdentifier: String?,
         sourceSessionID: UUID
     ) -> [UUID: [PreviousSetPerformance]] {
-        guard let sourceSession = WorkoutSession.visibleCompletedSessions(
-            from: sessions,
-            ownerTokenIdentifier: ownerTokenIdentifier
-        ).first(where: { $0.id == sourceSessionID }) else {
-            return Dictionary(uniqueKeysWithValues: loggedExercises.map { ($0.id, []) })
-        }
-
-        let sourceEntriesByID = Dictionary(
-            uniqueKeysWithValues: sourceSession.sortedLoggedExercises.map { ($0.id, $0) }
-        )
-
         let unlinkedExercises = loggedExercises.filter { $0.sourceLoggedExerciseID == nil }
         let historyForUnlinkedExercises = lastCompletedSetsByExerciseIDFromHistory(
             for: unlinkedExercises,
             in: sessions,
             ownerTokenIdentifier: ownerTokenIdentifier
+        )
+
+        guard let sourceSession = WorkoutSession.visibleCompletedSessions(
+            from: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        ).first(where: { $0.id == sourceSessionID }) else {
+            return Dictionary(uniqueKeysWithValues: loggedExercises.map {
+                ($0.id, historyForUnlinkedExercises[$0.id] ?? [])
+            })
+        }
+
+        let sourceEntriesByID = Dictionary(
+            uniqueKeysWithValues: sourceSession.sortedLoggedExercises.map { ($0.id, $0) }
         )
 
         return Dictionary(
