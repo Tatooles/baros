@@ -171,10 +171,9 @@ struct HomeYearRingView: View {
                 let center = CGPoint(x: diameter / 2, y: diameter / 2)
                 if touch == nil {
                     clearSelection?.cancel()
-                    // While a preview shows, anywhere inside the track is its tap target, so a tap on
-                    // the edge of a long name opens what it shows instead of the slot at that angle.
-                    let tapRadius = selectedIndex == nil ? diameter * 0.22
-                        : HomeRingCanvas.trackRadius(side: diameter, period: period) - 4
+                    // Anywhere inside the track counts as the center. A tap on the edge of a long name
+                    // opens what the preview shows, and a tap on a past year's tree ring selects nothing.
+                    let tapRadius = HomeRingCanvas.trackRadius(side: diameter, period: period) - 4
                     touch = ScrubTouch(startedInCenter: distance(value.startLocation, center) < tapRadius)
                 }
                 if hypot(value.translation.width, value.translation.height) > 8 { touch?.moved = true }

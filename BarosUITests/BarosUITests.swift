@@ -1086,8 +1086,8 @@ final class BarosUITests: XCTestCase {
         }
         XCTAssertTrue(previewed.evaluate(with: ring), String(describing: ring.value))
 
-        // Tapping beyond the resting center target (0.22 of the ring), but inside the preview's
-        // text, opens the previewed workout instead of the slot at that angle.
+        // Tapping out on the edge of the preview's text opens the previewed workout instead of
+        // the slot at that angle.
         center.withOffset(CGVector(dx: ring.frame.width * 0.27, dy: 0)).tap()
         let heading = app.descendants(matching: .any)["WorkoutHistoryHeading"]
         XCTAssertTrue(heading.waitForExistence(timeout: 3))
@@ -1121,6 +1121,30 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(choice.waitForNonExistence(timeout: 3))
         let cleared = expectation(for: NSPredicate(format: "value == ''"), evaluatedWith: ring)
         wait(for: [cleared], timeout: 3)
+    }
+
+    @MainActor
+    func testHomeRingIgnoresTapsOnPastYearTreeRings() {
+        let app = makeApp(extraArguments: ["--uitest-seed-home-ring-history"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 10))
+        app.segmentedControls["HomeRingPeriodPicker"].buttons["Year"].tap()
+        let center = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let outerSpoke = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5))
+        let previewing = NSPredicate(format: "value != ''")
+        // Scrubbing turns on once the sweep finishes, so retry the drag until a preview appears.
+        for _ in 0..<5 where !previewing.evaluate(with: ring) {
+            center.press(forDuration: 0.05, thenDragTo: outerSpoke)
+        }
+        XCTAssertTrue(previewing.evaluate(with: ring))
+        wait(for: [expectation(for: NSPredicate(format: "value == ''"), evaluatedWith: ring)], timeout: 5)
+
+        // The seed's three years put tree rings just inside the track, where this tap lands.
+        ring.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)).tap()
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertEqual(ring.value as? String, "")
+        XCTAssertFalse(app.descendants(matching: .any)["WorkoutHistoryHeading"].exists)
     }
 
     @MainActor
