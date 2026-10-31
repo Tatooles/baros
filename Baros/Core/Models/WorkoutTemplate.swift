@@ -56,6 +56,11 @@ final class WorkoutTemplate: Identifiable {
 
 /// One exercise in a template. The snapshot keeps the exercise showing by
 /// name after its library exercise is deleted.
+///
+/// New fields must be optional: entries saved before the field existed
+/// decode without it. On the server they must be nullable, because the
+/// server keeps a stored value an upload leaves out, so clearing one takes
+/// an explicit null.
 struct WorkoutTemplateEntry: Codable, Hashable, Identifiable {
     var id: UUID
     /// The library exercise. Looked up by id rather than held as a
