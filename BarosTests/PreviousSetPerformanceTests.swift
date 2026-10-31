@@ -1013,6 +1013,49 @@ final class PreviousSetPerformanceTests: XCTestCase {
         XCTAssertEqual(deletedLookup[deletedSourceActiveLogged.id], [])
     }
 
+    func testUnavailableSourceKeepsIndependentHistoryOnlyForUnlinkedExercises() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(name: "Bench Press", category: .strength,
+                                equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let source = WorkoutSession(title: "Source", startedAt: Date(timeIntervalSince1970: 100),
+                                    status: .completed, source: .blank)
+        let sourceExercise = LoggedExercise(orderIndex: 0, exercise: exercise)
+        let sourceSet = LoggedSet(orderIndex: 0, weight: 185, reps: 5, isCompleted: true)
+        sourceExercise.sets.append(sourceSet)
+        source.loggedExercises.append(sourceExercise)
+        context.insert(source)
+        let surviving = WorkoutSession(title: "Surviving history", startedAt: Date(timeIntervalSince1970: 200),
+                                       status: .completed, source: .blank)
+        let historyExercise = LoggedExercise(orderIndex: 0, exercise: exercise)
+        historyExercise.sets.append(LoggedSet(orderIndex: 0, weight: 205, reps: 8, isCompleted: true))
+        surviving.loggedExercises.append(historyExercise)
+        context.insert(surviving)
+        let active = WorkoutSession(title: "Repeated", startedAt: .now, status: .active, source: .pastWorkout,
+                                    sourceSessionID: source.id)
+        let linked = LoggedExercise(orderIndex: 0, exercise: exercise, sourceLoggedExerciseID: sourceExercise.id)
+        linked.sets.append(LoggedSet(orderIndex: 0, sourceLoggedSetID: sourceSet.id))
+        let unlinked = LoggedExercise(orderIndex: 1, exercise: exercise)
+        unlinked.sets.append(LoggedSet(orderIndex: 0))
+        active.loggedExercises.append(contentsOf: [linked, unlinked])
+        context.insert(active)
+        try context.save()
+
+        // Both rows share a route: the linked row must never borrow the newer history.
+        for sourceIsDeleted in [false, true] {
+            source.deletedAt = sourceIsDeleted ? Date(timeIntervalSince1970: 300) : nil
+            let sessions = sourceIsDeleted ? [source, surviving, active] : [surviving, active]
+            let lookup = PreviousSetPerformance.lastCompletedSetsByExerciseID(
+                for: active.sortedLoggedExercises, in: sessions,
+                ownerTokenIdentifier: nil, sourceSessionID: source.id
+            )
+            XCTAssertEqual(lookup[linked.id], [], "Source deleted: \(sourceIsDeleted)")
+            XCTAssertEqual(lookup[unlinked.id], [PreviousSetPerformance(weight: 205, reps: 8)],
+                           "Source deleted: \(sourceIsDeleted)")
+        }
+    }
+
     func testPastWorkoutLookupPreservesIncompleteSourceSetPositions() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
