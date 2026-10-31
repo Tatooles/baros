@@ -513,7 +513,7 @@ final class ModelPersistenceTests: XCTestCase {
     func testWorkoutTemplateCanBeCreatedWithoutDrivingUI() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
-        let template = WorkoutTemplate(name: "Future Template", notes: "Stored for later")
+        let template = WorkoutTemplate(name: "Future Template")
 
         context.insert(template)
         try context.save()

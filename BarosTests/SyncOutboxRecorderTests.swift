@@ -23,7 +23,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
                 .init(entityKind: .loggedSet, entityID: entityIDs[5]),
                 .init(entityKind: .loggedSet, entityID: entityIDs[6]),
                 .init(entityKind: .loggedSet, entityID: entityIDs[7]),
-                .init(entityKind: .workoutTemplate, entityID: entityIDs[8]),
+                .init(entityKind: .healthDataLink, entityID: entityIDs[8]),
             ]
             let recorder = SyncOutboxRecorder()
             let now = Date(timeIntervalSince1970: 500)
@@ -62,7 +62,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
 
         try recorder.recordCreates([], ownerTokenIdentifier: nil, context: context, now: now)
         try recorder.recordCreates(
-            [.init(entityKind: .workoutTemplate, entityID: UUID()),
+            [.init(entityKind: .healthDataLink, entityID: UUID()),
              .init(entityKind: .healthDataLink, entityID: UUID()),
              .init(entityKind: .seedMetadata, entityID: UUID())],
             ownerTokenIdentifier: "issuer|owner_a",
@@ -424,7 +424,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
         )
         invalidStatus.statusRaw = "paused"
         let excludedKind = SyncOutboxEntry(
-            entityKind: .workoutTemplate,
+            entityKind: .healthDataLink,
             entityID: UUID(uuidString: "00000000-0000-0000-0000-000000001014")!,
             operation: .update,
             status: .pending,
@@ -742,7 +742,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
         let recorder = SyncOutboxRecorder()
         let entityID = UUID(uuidString: "00000000-0000-0000-0000-000000001016")!
 
-        try recorder.recordCreate(entityKind: .workoutTemplate, entityID: entityID, ownerTokenIdentifier: nil, context: context, now: Date(timeIntervalSince1970: 100))
+        try recorder.recordCreate(entityKind: .healthDataLink, entityID: entityID, ownerTokenIdentifier: nil, context: context, now: Date(timeIntervalSince1970: 100))
         try recorder.recordUpdate(entityKind: .healthDataLink, entityID: entityID, ownerTokenIdentifier: nil, context: context, now: Date(timeIntervalSince1970: 200))
         try recorder.recordDelete(entityKind: .seedMetadata, entityID: entityID, ownerTokenIdentifier: nil, context: context, now: Date(timeIntervalSince1970: 300))
         try context.save()
@@ -790,7 +790,7 @@ final class SyncOutboxRecorderTests: XCTestCase {
         _ = add(.loggedSet, 5, .update, createdAt: 10, status: .completed)
         add(.loggedSet, 6, .update, createdAt: 10).operationRaw = "future-operation"
         add(.loggedSet, 6, .update, createdAt: 20).operationRaw = ""
-        _ = add(.workoutTemplate, 8, .update)
+        _ = add(.healthDataLink, 8, .update)
         _ = add(.loggedSet, 9, .update, createdAt: 1, updatedAt: 2)
         // Same ID in a different kind, plus matching IDs owned by someone else.
         _ = add(.loggedExercise, 0, .delete, createdAt: 1)

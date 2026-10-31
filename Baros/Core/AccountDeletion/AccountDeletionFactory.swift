@@ -78,6 +78,7 @@ private final class CloudDeletionUITestClient: SyncClient, @unchecked Sendable {
     func upsertWorkoutSession(_ record: WorkoutSessionSyncPayload) async throws -> SyncMutationResult { throw FixtureError.unexpectedSync }
     func upsertLoggedExercise(_ record: LoggedExerciseSyncPayload) async throws -> SyncMutationResult { throw FixtureError.unexpectedSync }
     func upsertLoggedSet(_ record: LoggedSetSyncPayload) async throws -> SyncMutationResult { throw FixtureError.unexpectedSync }
+    func upsertWorkoutTemplate(_ record: WorkoutTemplateSyncPayload) async throws -> SyncMutationResult { throw FixtureError.unexpectedSync }
     func tombstone(entityKind: SyncEntityKind, clientId: UUID, deletedAt: Date) async throws -> SyncMutationResult { throw FixtureError.unexpectedSync }
     func fetchChanges(cursors: SyncChangeCursors, limit: Int) async throws -> SyncFetchChangesResponse { throw FixtureError.unexpectedSync }
 }

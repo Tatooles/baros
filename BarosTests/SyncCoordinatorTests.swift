@@ -1238,7 +1238,7 @@ final class SyncCoordinatorTests: XCTestCase {
         try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
 
         let fetchRequest = try XCTUnwrap(client.fetchRequests.first)
-        XCTAssertEqual(fetchRequest.cursors, SyncChangeCursors(userSettings: 0, exercises: 0, workoutSessions: 0, loggedExercises: 0, loggedSets: 0))
+        XCTAssertEqual(fetchRequest.cursors, SyncChangeCursors(userSettings: 0, exercises: 0, workoutSessions: 0, loggedExercises: 0, loggedSets: 0, workoutTemplates: 0))
         let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
         let session = try XCTUnwrap(sessions.first { $0.id == sessionID })
         XCTAssertEqual(session.title, "Push")
@@ -4454,6 +4454,8 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
     var upsertedWorkoutSessions: [WorkoutSessionSyncPayload] = []
     var upsertedLoggedExercises: [LoggedExerciseSyncPayload] = []
     var upsertedLoggedSets: [LoggedSetSyncPayload] = []
+    var upsertedWorkoutTemplates: [WorkoutTemplateSyncPayload] = []
+    var workoutTemplateMutationResults: [SyncMutationResult] = []
     var operationLog: [String] = []
     var tombstones: [(SyncEntityKind, UUID, Date)] = []
     var fetchRequests: [(cursors: SyncChangeCursors, limit: Int)] = []
@@ -4535,6 +4537,16 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
         upsertedLoggedExercises.append(record)
         if !loggedExerciseMutationResults.isEmpty {
             return loggedExerciseMutationResults.removeFirst()
+        }
+        return SyncMutationResult(status: "updated", serverUpdatedAt: 1)
+    }
+
+    func upsertWorkoutTemplate(_ record: WorkoutTemplateSyncPayload) async throws -> SyncMutationResult {
+        if let error { throw error }
+        operationLog.append("upsertWorkoutTemplate:\(record.clientId)")
+        upsertedWorkoutTemplates.append(record)
+        if !workoutTemplateMutationResults.isEmpty {
+            return workoutTemplateMutationResults.removeFirst()
         }
         return SyncMutationResult(status: "updated", serverUpdatedAt: 1)
     }
