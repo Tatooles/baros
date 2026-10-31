@@ -4790,7 +4790,9 @@ final class BarosUITests: XCTestCase {
         app.launch()
         app.tabButton(.settings).tap()
         app.buttons["SettingsExerciseLibraryLink"].tap()
+        app.collectionViews.firstMatch.swipeDown()
         let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.tap()
         search.typeText("  barbell bench chest  ")
         XCTAssertTrue(app.buttons["ExerciseLibraryRow-Bench Press-Barbell"].waitForExistence(timeout: 3))
