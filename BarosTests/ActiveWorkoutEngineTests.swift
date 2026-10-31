@@ -25,6 +25,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             let second = try engine.addExercise(exercise, to: session, context: context)
             remainingExerciseID = second.id
             try engine.changeSuperset(.joinNext, for: first, context: context)
+            first.hasLocalSupersetChange = false
+            second.hasLocalSupersetChange = false
+            try context.save()
             let group = first.supersetGroupID
             let originalSets = first.sortedSets
             let originalDate = session.updatedAt

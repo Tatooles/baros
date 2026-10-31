@@ -620,7 +620,7 @@ final class ActiveWorkoutEngine {
     }
 
     #if DEBUG
-    @ObservationIgnored private var injectedStructuralFailures: Set<String> = []
+    @ObservationIgnored private var injectedStructuralFailures: [String: Int] = [:]
     #endif
 
     private func saveStructuralChange(
@@ -628,9 +628,11 @@ final class ActiveWorkoutEngine {
     ) throws {
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
+        let failures = arguments.contains("--uitest-fail-\(action)-save-twice") ? 2
+            : (arguments.contains("--uitest-fail-\(action)-save-once") ? 1 : 0)
         if arguments.contains("--uitest-in-memory-store"),
-           arguments.contains("--uitest-fail-\(action)-save-once"),
-           injectedStructuralFailures.insert(action).inserted {
+           injectedStructuralFailures[action, default: 0] < failures {
+            injectedStructuralFailures[action, default: 0] += 1
             throw CocoaError(.fileWriteUnknown)
         }
         #endif

@@ -273,6 +273,15 @@ struct ExerciseCardView: View {
         } message: {
             Text("Your workout was restored. Try saving this change again.")
         }
+        .onChange(of: showsStructuralError) { _, isPresented in
+            guard !isPresented else { return }
+            // Alert actions dismiss after running, including a failed Retry.
+            Task { @MainActor in
+                await Task.yield()
+                guard failedStructuralAction != nil else { return }
+                showsStructuralError = true
+            }
+        }
         .onChange(of: setStructureKey, initial: true) { _, _ in
             cachedSortedSets = loggedExercise.sortedSets
         }

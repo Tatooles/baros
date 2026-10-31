@@ -24,6 +24,7 @@ struct SetRowView: View, @MainActor Equatable {
     let onPreviewChange: (ActiveWorkoutSetInput.Values?) -> Void
     let onEditRPE: (LoggedSet) -> Void
     @State private var showsRemoveError = false
+    @State private var hasFailedRemoval = false
     @State private var input = ActiveWorkoutSetInput()
     @State private var commitRegistrationID: UUID?
 
@@ -55,9 +56,17 @@ struct SetRowView: View, @MainActor Equatable {
         }
         .alert("Couldn’t remove set", isPresented: $showsRemoveError) {
             Button("Retry") { removeSet() }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) { hasFailedRemoval = false }
         } message: {
             Text("Your set was restored. Try removing it again.")
+        }
+        .onChange(of: showsRemoveError) { _, isPresented in
+            guard !isPresented else { return }
+            Task { @MainActor in
+                await Task.yield()
+                guard hasFailedRemoval else { return }
+                showsRemoveError = true
+            }
         }
         .sensoryFeedback(trigger: set.isCompleted) { _, isCompleted in
             isCompleted ? .impact(weight: .light) : nil
@@ -66,8 +75,13 @@ struct SetRowView: View, @MainActor Equatable {
 
     private func removeSet() {
         guard !engine.hasPendingSetSave else { return }
-        do { try engine.removeSet(set, context: modelContext) }
-        catch { showsRemoveError = true }
+        do {
+            try engine.removeSet(set, context: modelContext)
+            hasFailedRemoval = false
+        } catch {
+            hasFailedRemoval = true
+            showsRemoveError = true
+        }
     }
 
     private var rowContent: some View {
