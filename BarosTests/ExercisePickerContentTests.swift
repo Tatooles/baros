@@ -49,6 +49,30 @@ final class ExercisePickerModeTests: XCTestCase {
 }
 
 final class ExercisePickerContentTests: XCTestCase {
+    func testSearchRequiresEveryWordAcrossNameEquipmentAndTargetAreaInEitherOrder() {
+        let bench = exercise(named: "Bench Press", equipment: .dumbbell, muscleGroup: .chest)
+        let barbellBench = exercise(named: "Bench Press", equipment: .barbell, muscleGroup: .chest)
+        let curl = exercise(named: "Curl", equipment: .dumbbell, muscleGroup: .biceps)
+        for query in ["dumbbell bench", "bench dumbbell", "  CHEST\tbench\nDumbbell  "] {
+            XCTAssertEqual(pickerRows(for: [barbellBench, curl, bench], query: query).map(\.id), [bench.id])
+        }
+        XCTAssertTrue(pickerRows(for: [bench], query: "dumbbell bench quads").isEmpty)
+    }
+
+    func testSearchRanksReversedNameWordsBeforeMetadataMatches() {
+        let nameMatch = exercise(named: "Bench Dumbbell Press", equipment: .barbell)
+        let metadataMatch = exercise(named: "A Bench Press", equipment: .dumbbell)
+        XCTAssertEqual(
+            pickerRows(for: [metadataMatch, nameMatch], query: "dumbbell bench").map(\.id),
+            [nameMatch.id, metadataMatch.id]
+        )
+    }
+
+    func testWhitespaceOnlySearchUsesUnfilteredSelectedSort() {
+        let rows = [exercise(named: "Zulu"), exercise(named: "Alpha")]
+        XCTAssertEqual(pickerRows(for: rows, query: " \t\n").map(\.exercise.name), ["Alpha", "Zulu"])
+    }
+
     func testCreationSuggestionTrimsQueryAndPreservesCapitalizationForPartialNameMatch() {
         let rows = pickerRows(
             for: [exercise(named: "Dumbbell Incline Row")],

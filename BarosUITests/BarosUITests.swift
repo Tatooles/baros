@@ -4785,6 +4785,28 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testExerciseLibrarySearchAcrossFieldsAndCreateFromNoMatches() {
+        let app = makeApp()
+        app.launch()
+        app.tabButton(.settings).tap()
+        app.buttons["SettingsExerciseLibraryLink"].tap()
+        app.collectionViews.firstMatch.swipeDown()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        search.tap()
+        search.typeText("  barbell bench chest  ")
+        XCTAssertTrue(app.buttons["ExerciseLibraryRow-Bench Press-Barbell"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ExerciseLibraryRow-Back Squat-Barbell"].exists)
+        replaceText(in: search, with: "  Novel Press  ")
+        XCTAssertTrue(app.staticTexts["No Matching Exercises"].waitForExistence(timeout: 3))
+        app.buttons["ExerciseLibraryCreateExerciseFromSearchButton"].tap()
+        XCTAssertTrue(app.textFields["ExerciseNameField"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.textFields["ExerciseNameField"].value as? String, "Novel Press")
+        app.buttons["ExerciseEditorSaveButton"].tap()
+        XCTAssertTrue(app.buttons["ExerciseLibraryRow-Novel Press-Barbell"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
     func testExerciseLibraryCreateEditAndRemoveCustomExercise() {
         let app = makeApp()
         app.launch()

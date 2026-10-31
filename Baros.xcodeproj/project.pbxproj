@@ -250,6 +250,7 @@
 		0E03B32667D50C89033DEBDE /* BodyFigureArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CCEFF49BF9857C5D664081 /* BodyFigureArtwork.swift */; };
 		79B89BE034A3ECD5F3A2719A /* MuscleFigureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4951D77EFD0053315B1C6E7F /* MuscleFigureView.swift */; };
 		8237981DC50B58A687CA3E22 /* BodyFigureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34B53A37B3D36D8D4A88F7E4 /* BodyFigureTests.swift */; };
+		26D634932F5262570B3FEF6F /* ExerciseSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62FE797B653EAD084DD1A35C /* ExerciseSearch.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -531,6 +532,7 @@
 		52CCEFF49BF9857C5D664081 /* BodyFigureArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyFigureArtwork.swift; sourceTree = "<group>"; };
 		4951D77EFD0053315B1C6E7F /* MuscleFigureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuscleFigureView.swift; sourceTree = "<group>"; };
 		34B53A37B3D36D8D4A88F7E4 /* BodyFigureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyFigureTests.swift; sourceTree = "<group>"; };
+		62FE797B653EAD084DD1A35C /* ExerciseSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseSearch.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1017,6 +1019,7 @@
 				52CCEFF49BF9857C5D664081 /* BodyFigureArtwork.swift */,
 				69C713C209BCB4247B8DDBE4 /* BodyFigure.swift */,
 				44C8EF7413F539FC06139F9B /* ExerciseLibraryView.swift */,
+				62FE797B653EAD084DD1A35C /* ExerciseSearch.swift */,
 				21F933F283137D43FA08DC3F /* ExercisePickerContent.swift */,
 				1C70A25184382894E0360286 /* ExercisePickerSortPreferenceStore.swift */,
 				C712C286971BE7C1978A666F /* ExercisePickerView.swift */,
@@ -1313,6 +1316,7 @@
 				56919F514C52CBA46A364197 /* ExerciseLibraryView.swift in Sources */,
 				37E6B871849C38FBBDA76F83 /* ExerciseMuscleGroup.swift in Sources */,
 				26C145E0783A5A79750AB1D7 /* ExerciseMutationService.swift in Sources */,
+				26D634932F5262570B3FEF6F /* ExerciseSearch.swift in Sources */,
 				6E0DB6A89FACC208B6821171 /* ExercisePickerContent.swift in Sources */,
 				BF64306430BF2146474B21BB /* ExercisePickerSortPreferenceStore.swift in Sources */,
 				1E8C9B53B3B5803EE6CE732E /* ExercisePickerView.swift in Sources */,

@@ -8,27 +8,48 @@ struct ExerciseLibraryView: View {
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @State private var searchText = ""
     @State private var isCreatingExercise = false
+    @State private var creationName = ""
     @State private var removalErrorMessage: String?
 
     private var filteredExercises: [Exercise] {
-        Exercise.visibleActiveExercises(
+        let search = ExerciseSearch(query: searchText)
+        return Exercise.visibleActiveExercises(
             from: exercises,
             ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
         )
-            .filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) }
+        .compactMap { exercise in
+            search.rank(for: exercise).map { (exercise: exercise, rank: $0) }
+        }
+        .sorted { $0.rank < $1.rank }
+        .map(\.exercise)
     }
 
     var body: some View {
+        let matches = filteredExercises
         List {
-            ForEach(filteredExercises) { exercise in
+            if matches.isEmpty && !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("No Matching Exercises")
+                        .font(.headline)
+                    Button {
+                        creationName = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        isCreatingExercise = true
+                    } label: {
+                        Label("Create Exercise", systemImage: "plus.circle")
+                    }
+                    .accessibilityIdentifier("ExerciseLibraryCreateExerciseFromSearchButton")
+                }
+                .padding(.vertical, 8)
+            }
+            ForEach(matches) { exercise in
                 NavigationLink {
                     ExerciseEditorView(exercise: exercise)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(exercise.name)
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.body.weight(.semibold))
                         Text(exercise.metadataDisplayText)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.footnote.weight(.medium))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -56,6 +77,7 @@ struct ExerciseLibraryView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    creationName = ""
                     isCreatingExercise = true
                 } label: {
                     Image(systemName: "plus")
@@ -64,7 +86,7 @@ struct ExerciseLibraryView: View {
             }
         }
         .navigationDestination(isPresented: $isCreatingExercise) {
-            ExerciseEditorView()
+            ExerciseEditorView(initialName: creationName)
         }
         .alert(
             "Couldn't Remove Exercise",
