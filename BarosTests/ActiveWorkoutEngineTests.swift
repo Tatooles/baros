@@ -1160,6 +1160,26 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(logged.sortedSets.count, 2)
     }
 
+    func testRestoredLibraryExerciseReconnectsPreviousAndHistory() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let past = try insertCompletedSession(startedAt: Date(timeIntervalSince1970: 100),
+            exercise: exercise, sets: [(.working, true), (.working, true)], in: context)
+        let service = ExerciseMutationService()
+        try service.removeExercise(exercise, context: context)
+        try service.restoreExercise(exercise, context: context)
+        let active = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 300))
+        let added = try engine.addExercise(exercise, to: active, context: context)
+        let previous = PreviousSetPerformance.lastCompletedSets(for: added, in: [past, active], ownerTokenIdentifier: nil)
+        XCTAssertEqual(previous.count, 2)
+        let summary = try XCTUnwrap(ExerciseHistorySummary.makeSummaries(from: [past]).first)
+        XCTAssertEqual(ExerciseHistorySessionGroup.makeGroups(from: [past], matching: summary).count, 1)
+        XCTAssertEqual(added.exercise?.id, past.loggedExercises.first?.exercise?.id)
+    }
+
     func testAddingExerciseToWorkoutStartedFromPastUsesLatestPerformance() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

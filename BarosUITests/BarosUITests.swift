@@ -4831,7 +4831,35 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["ExerciseLibraryRow-Aardvark Paused Row-Barbell"].waitForExistence(timeout: 3))
         app.buttons["ExerciseLibraryRow-Aardvark Paused Row-Barbell"].swipeLeft()
         app.buttons["Remove"].tap()
+        app.buttons["Remove"].tap()
         XCTAssertFalse(app.buttons["ExerciseLibraryRow-Aardvark Paused Row-Barbell"].waitForExistence(timeout: 1))
+    }
+
+    @MainActor
+    func testExerciseLibraryConfirmCancelArchiveAndRestore() {
+        let app = makeApp()
+        app.launch()
+        app.tabButton(.settings).tap()
+        app.buttons["SettingsExerciseLibraryLink"].tap()
+        let row = app.buttons["ExerciseLibraryRow-Back Squat-Barbell"]
+        XCTAssertTrue(row.waitForExistence(timeout: 3))
+        row.swipeLeft()
+        XCTAssertTrue(row.exists) // Swiping alone cannot remove.
+        app.buttons["Remove"].tap()
+        XCTAssertTrue(app.staticTexts["Remove Exercise?"].waitForExistence(timeout: 3))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(row.exists)
+        row.swipeLeft()
+        app.buttons["Remove"].tap()
+        app.buttons["Remove"].tap()
+        XCTAssertFalse(row.waitForExistence(timeout: 1))
+        app.segmentedControls.buttons["Archived"].tap()
+        let restore = app.buttons["Restore Back Squat"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 3))
+        restore.tap()
+        XCTAssertFalse(restore.waitForExistence(timeout: 1))
+        app.segmentedControls.buttons["Active"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 3))
     }
 
     @MainActor
