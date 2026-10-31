@@ -1071,6 +1071,83 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testHomeRingScrubPreviewOpensWhatItShowsFromTheEdgeOfALongName() {
+        let app = makeApp(extraArguments: ["--uitest-seed-home-ring-scrub-history"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 10))
+        let center = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        // Just below 9 o'clock is 8 days back, where the seed puts one long-named workout.
+        let nineOClock = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.53))
+        let previewed = NSPredicate(format: "value CONTAINS %@", "Upper Body Push/Pull Superset Session")
+        // Scrubbing turns on once the sweep finishes, so retry the drag until the preview appears.
+        for _ in 0..<5 where !previewed.evaluate(with: ring) {
+            center.press(forDuration: 0.05, thenDragTo: nineOClock)
+        }
+        XCTAssertTrue(previewed.evaluate(with: ring), String(describing: ring.value))
+
+        // Tapping out on the edge of the preview's text opens the previewed workout instead of
+        // the slot at that angle.
+        center.withOffset(CGVector(dx: ring.frame.width * 0.27, dy: 0)).tap()
+        let heading = app.descendants(matching: .any)["WorkoutHistoryHeading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 3))
+        XCTAssertTrue(heading.label.hasPrefix("Upper Body Push/Pull Superset Session"), heading.label)
+    }
+
+    @MainActor
+    func testHomeRingKeepsTheTappedSpokeSelectedWhileItsPickerIsOpen() {
+        let app = makeApp(extraArguments: ["--uitest-seed-home-ring-scrub-history"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 10))
+        // Just below 3 o'clock, out on the spokes, is 22 days back, where the seed puts three workouts.
+        let spoke = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.53))
+        let choice = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Mobility & Stretch")).firstMatch
+        // Taps do nothing until the sweep finishes, so retry until the picker opens.
+        for _ in 0..<5 where !choice.exists {
+            spoke.tap()
+            _ = choice.waitForExistence(timeout: 1)
+        }
+        XCTAssertTrue(choice.exists)
+
+        // The selection used to clear 0.6 s after opening, under the still-open picker.
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(choice.exists)
+        let held = NSPredicate(format: "value CONTAINS %@", "Push Day. Zone 2 Conditioning. Mobility & Stretch")
+        XCTAssertTrue(held.evaluate(with: ring), String(describing: ring.value))
+
+        // Tapping outside closes the picker and the selection together.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        XCTAssertTrue(choice.waitForNonExistence(timeout: 3))
+        let cleared = expectation(for: NSPredicate(format: "value == ''"), evaluatedWith: ring)
+        wait(for: [cleared], timeout: 3)
+    }
+
+    @MainActor
+    func testHomeRingIgnoresTapsOnPastYearTreeRings() {
+        let app = makeApp(extraArguments: ["--uitest-seed-home-ring-history"])
+        app.launch()
+        let ring = app.descendants(matching: .any)["HomeYearRing"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 10))
+        app.segmentedControls["HomeRingPeriodPicker"].buttons["Year"].tap()
+        let center = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let outerSpoke = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5))
+        let previewing = NSPredicate(format: "value != ''")
+        // Scrubbing turns on once the sweep finishes, so retry the drag until a preview appears.
+        for _ in 0..<5 where !previewing.evaluate(with: ring) {
+            center.press(forDuration: 0.05, thenDragTo: outerSpoke)
+        }
+        XCTAssertTrue(previewing.evaluate(with: ring))
+        wait(for: [expectation(for: NSPredicate(format: "value == ''"), evaluatedWith: ring)], timeout: 5)
+
+        // The seed's three years put tree rings just inside the track, where this tap lands.
+        ring.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)).tap()
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertEqual(ring.value as? String, "")
+        XCTAssertFalse(app.descendants(matching: .any)["WorkoutHistoryHeading"].exists)
+    }
+
+    @MainActor
     func testMinimizedStateDoesNotPersistAcrossRelaunch() {
         let app = makeDiskBackedResetApp()
         app.launch()

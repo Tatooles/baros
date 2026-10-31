@@ -25,7 +25,7 @@ final class HomeRingModelTests: XCTestCase {
         let session = WorkoutSession(title: "Workout", startedAt: date(hour: 7), durationSeconds: 3_600,
                                      status: .completed, source: .blank)
         XCTAssertEqual(RingWorkout.ringWorkouts(from: [session], now: date()),
-                       [RingWorkout(date: session.startedAt, duration: 3_600)])
+                       [RingWorkout(date: session.startedAt, duration: 3_600, id: session.id, title: "Workout")])
     }
 
     func testSessionAdaptationFallsBackToElapsedDuration() {
@@ -33,7 +33,7 @@ final class HomeRingModelTests: XCTestCase {
         let session = WorkoutSession(title: "Workout", startedAt: start, endedAt: start.addingTimeInterval(45 * 60),
                                      durationSeconds: 0, status: .completed, source: .blank)
         XCTAssertEqual(RingWorkout.ringWorkouts(from: [session], now: date()),
-                       [RingWorkout(date: start, duration: 2_700)])
+                       [RingWorkout(date: start, duration: 2_700, id: session.id, title: "Workout")])
     }
 
     func testSessionAdaptationExcludesFutureEndDate() {
@@ -281,7 +281,129 @@ final class HomeRingModelTests: XCTestCase {
         }
     }
 
+    // MARK: Scrubbing
+
+    private func named(_ date: Date, _ title: String, minutes: Double = 60, id: UUID = UUID()) -> RingWorkout {
+        RingWorkout(date: date, duration: minutes * 60, id: id, title: title)
+    }
+
+    private func preview(_ workouts: [RingWorkout], _ period: HomeRingPeriod, _ index: Int,
+                         exercises: [UUID: Int] = [:]) -> HomeRingSlotPreview {
+        HomeRingSlotPreview(model: HomeRingModel(workouts: workouts, now: date(), calendar: calendar),
+                            period: period, index: index, calendar: calendar, exerciseCount: { exercises[$0] })
+    }
+
+    func testScrubSlotsHoldWorkoutsOldestFirstAndOnlyTheOuterYearLap() {
+        let morning = named(date(hour: 7), "Lift")
+        let later = named(date(hour: 10), "Run")
+        let lastYear = named(calendar.date(byAdding: .weekOfYear, value: -53, to: date())!, "Old")
+        let model = HomeRingModel(workouts: [later, lastYear, morning], now: date(), calendar: calendar)
+        XCTAssertEqual(model.workouts(for: .month, at: 0), [morning, later])
+        XCTAssertEqual(model.workouts(for: .year, at: 0), [morning, later])
+        // Tree-ring workouts share an angle with the outer lap but are not scrubbable.
+        XCTAssertTrue(model.yearSpokes.contains { $0.angleIndex == 1 && $0.lap == 1 })
+        XCTAssertTrue(model.workouts(for: .year, at: 1).isEmpty)
+        XCTAssertEqual(model.slotStart(for: .month, at: 3, calendar: calendar), date(2026, 10, 6, hour: 0))
+        XCTAssertEqual(model.slotStart(for: .year, at: 2, calendar: calendar), date(2026, 9, 21, hour: 0))
+    }
+
+    func testMonthPreviewForOneWorkoutShowsNameDurationAndExerciseCount() {
+        let id = UUID()
+        let result = preview([named(date(hour: 7), "Push Day", minutes: 65, id: id)], .month, 0, exercises: [id: 5])
+        XCTAssertEqual(result.dateText, "Today")
+        XCTAssertEqual(result.title, "Push Day")
+        XCTAssertTrue(result.rows.isEmpty)
+        XCTAssertEqual(result.detail, "1 hr 5 min · 5 exercises")
+        XCTAssertEqual(result.workoutIDs, [id])
+        XCTAssertEqual(result.accessibilityValue, "Today. Push Day. 1 hr 5 min · 5 exercises")
+        // Value-only fixtures have no store identity, so they preview without exercises and never open.
+        let fixture = preview([RingWorkout(date: date(hour: 7), duration: 45 * 60)], .month, 0)
+        XCTAssertEqual(fixture.detail, "45 min")
+        XCTAssertTrue(fixture.workoutIDs.isEmpty)
+    }
+
+    func testMonthPreviewListsEveryWorkoutOnADoubleDayWithoutTotals() {
+        let first = named(date(2026, 10, 8, hour: 7), "Lift")
+        let second = named(date(2026, 10, 8, hour: 17), "Run")
+        let result = HomeRingSlotPreview(
+            model: HomeRingModel(workouts: [second, first], now: date(), calendar: calendar),
+            period: .month, index: 1, calendar: calendar,
+            exerciseCount: { _ in XCTFail("A list never loads logged exercises"); return nil }
+        )
+        XCTAssertEqual(result.dateText, "Yesterday")
+        XCTAssertNil(result.title)
+        XCTAssertEqual(result.rows, [.init(label: nil, title: "Lift"), .init(label: nil, title: "Run")])
+        XCTAssertNil(result.detail)
+        XCTAssertEqual(result.workoutIDs, [first.id!, second.id!])
+    }
+
+    func testRestSlotPreviewsStateOnlyTheDateAndNothingOpens() {
+        let month = preview([named(date(hour: 7), "Lift")], .month, 3)
+        XCTAssertTrue(month.dateText.contains("Oct 6"), month.dateText)
+        XCTAssertEqual(month.detail, "No workout")
+        XCTAssertTrue(month.workoutIDs.isEmpty)
+        let year = preview([named(date(hour: 7), "Lift")], .year, 5)
+        XCTAssertEqual(year.detail, "No workouts")
+        XCTAssertTrue(year.workoutIDs.isEmpty)
+        XCTAssertEqual(preview([], .year, 0).dateText, "This week")
+    }
+
+    func testYearPreviewListsWeekdayAndNameAndSummarizesOverflow() {
+        let titles = ["Push Day", "Lower Body Strength", "Pull Day", "Zone 2", "Upper", "Full Body", "Long Run"]
+        let week = titles.enumerated().map { offset, title in
+            named(calendar.date(byAdding: .day, value: offset, to: date(2026, 9, 28, hour: 7))!, title)
+        }
+        let full = preview(week, .year, 1)
+        XCTAssertTrue(full.dateText.contains("Sep 28"), full.dateText)
+        XCTAssertEqual(full.rows.map(\.label), ["Mon", "Tue", "Wed", "Thu"])
+        XCTAssertEqual(full.rows.map(\.title), Array(titles.prefix(4)))
+        XCTAssertEqual(full.hiddenCount, 3)
+        XCTAssertNil(full.detail)
+        XCTAssertEqual(full.workoutIDs.count, 7)
+        XCTAssertTrue(full.accessibilityValue.hasSuffix("Mon Push Day. Tue Lower Body Strength. Wed Pull Day. Thu Zone 2. 3 more"))
+
+        let five = preview(Array(week.prefix(5)), .year, 1)
+        XCTAssertEqual(five.rows.count, HomeRingSlotPreview.maximumRows)
+        XCTAssertEqual(five.hiddenCount, 0)
+    }
+
+    func testScrubAngleMapsToSlotsCounterclockwiseFromTwelve() {
+        func slot(_ x: CGFloat, _ y: CGFloat, _ count: Int) -> Int {
+            HomeRingScrubGeometry.slotIndex(at: CGPoint(x: x, y: y), center: CGPoint(x: 100, y: 100), slotCount: count)
+        }
+        // A Month quarter turn is 7.5 slots, so probe just past 9 and 3 o'clock instead of on a boundary.
+        XCTAssertEqual([slot(100, 0, 30), slot(0, 110, 30), slot(100, 200, 30), slot(200, 90, 30)], [0, 8, 15, 23])
+        XCTAssertEqual([slot(100, 0, 52), slot(0, 100, 52), slot(100, 200, 52), slot(200, 100, 52)], [0, 13, 26, 39])
+        // Left of 12 o'clock is yesterday; right of it wraps to the oldest slot.
+        XCTAssertEqual(slot(70, 0, 30), 1)
+        XCTAssertEqual(slot(130, 0, 30), 29)
+    }
+
+    func testPreviewDurationText() {
+        XCTAssertEqual(HomeRingSlotPreview.durationText(45 * 60), "45 min")
+        XCTAssertEqual(HomeRingSlotPreview.durationText(3_600), "1 hr")
+        XCTAssertEqual(HomeRingSlotPreview.durationText(3_660), "1 hr 1 min")
+        XCTAssertEqual(HomeRingSlotPreview.durationText(-5), "0 min")
+    }
+
     #if DEBUG
+    func testScrubHistorySeedsStressCasesAtStraightDragSlots() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        try UITestFixtureSeeder.seedHomeRingScrubHistory(ownerTokenIdentifier: nil, context: context,
+                                                         now: date(), calendar: calendar)
+        let firstCount = try context.fetchCount(FetchDescriptor<WorkoutSession>())
+        try UITestFixtureSeeder.seedHomeRingScrubHistory(ownerTokenIdentifier: nil, context: context,
+                                                         now: date(), calendar: calendar)
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        XCTAssertEqual(sessions.count, firstCount)
+        let model = HomeRingModel(workouts: RingWorkout.ringWorkouts(from: sessions, now: date()),
+                                  now: date(), calendar: calendar)
+        XCTAssertEqual([8, 15, 22].map { model.workouts(for: .month, at: $0).count }, [1, 2, 3])
+        XCTAssertEqual([13, 26, 39].map { model.workouts(for: .year, at: $0).count }, [7, 5, 6])
+        XCTAssertTrue(model.showsPeriodToggle)
+    }
+
     func testSaved500WorkoutHistoryIsIdempotentAndUsesLiveOwnerFiltering() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
