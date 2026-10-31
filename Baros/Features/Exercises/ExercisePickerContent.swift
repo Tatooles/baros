@@ -87,8 +87,9 @@ enum ExercisePickerContent {
             return rows.sorted { sorts($0, before: $1, using: sortOrder) }
         }
 
+        let search = ExerciseSearch(query: normalizedQuery)
         return rows.compactMap { row in
-            searchRank(for: row.exercise, query: normalizedQuery).map { rank in
+            search.rank(for: row.exercise).map { rank in
                 (row: row, rank: rank)
             }
         }
@@ -115,20 +116,6 @@ enum ExercisePickerContent {
         guard !hasExactNameMatch else { return nil }
 
         return ExercisePickerCreationSuggestion(name: trimmedQuery)
-    }
-
-    private static func searchRank(for exercise: Exercise, query: String) -> Int? {
-        if exercise.name.localizedCaseInsensitiveContains(query) {
-            return 0
-        }
-
-        if exercise.equipment.displayName.localizedCaseInsensitiveContains(query)
-            || exercise.primaryMuscleGroup.displayName.localizedCaseInsensitiveContains(query)
-        {
-            return 1
-        }
-
-        return nil
     }
 
     private static func sorts(

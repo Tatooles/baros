@@ -147,7 +147,7 @@ private struct ExercisePickerList: View {
                     beginCreation(name: "")
                 } label: {
                     Label("Create Exercise", systemImage: "plus.circle")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(AppTheme.brandAccentForeground)
                 }
                 .accessibilityIdentifier("ExercisePickerCreateExerciseButton")
@@ -194,7 +194,7 @@ private struct ExercisePickerList: View {
                         beginCreation(name: creationSuggestion.name)
                     } label: {
                         Label(creationSuggestion.title, systemImage: "plus.circle")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.body.weight(.semibold))
                             .foregroundStyle(AppTheme.brandAccentForeground)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 4)
@@ -220,7 +220,7 @@ private struct ExercisePickerList: View {
                             "Sort: \(sortOrder.displayName)",
                             systemImage: "arrow.up.arrow.down"
                         )
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(AppTheme.brandAccentForeground)
                     }
                     .accessibilityLabel("Sort: \(sortOrder.displayName)")
@@ -324,13 +324,13 @@ private struct ExercisePickerList: View {
     private func exerciseRow(_ row: ExercisePickerRowContent) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(row.exercise.name)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.body.weight(.semibold))
                 .foregroundStyle(AppTheme.textPrimary)
             Text(row.exercise.metadataDisplayText)
-                .font(.system(size: 13, weight: .medium))
+                .font(.footnote.weight(.medium))
                 .foregroundStyle(AppTheme.textSecondary)
             Text(mode.isAlreadyAdded(row.exercise) ? "Already added" : row.performanceSummaryText)
-                .font(.system(size: 12, weight: .medium))
+                .font(.caption.weight(.medium))
                 .foregroundStyle(AppTheme.textTertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
