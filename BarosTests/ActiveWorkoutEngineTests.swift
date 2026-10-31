@@ -4,6 +4,139 @@ import XCTest
 
 @MainActor
 final class ActiveWorkoutEngineTests: XCTestCase {
+    func testStructuralFailuresRestoreOnlyTouchedStateAndRetryPersistsOnDisk() throws {
+        enum Failure: Error { case injected }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("workout.store")
+        var sessionID: UUID!
+        var remainingExerciseID: UUID!
+        do {
+            let container = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: url)
+            let context = container.mainContext
+            context.autosaveEnabled = false
+            let engine = ActiveWorkoutEngine()
+            let session = try engine.startBlankWorkout(context: context)
+            sessionID = session.id
+            let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+            context.insert(exercise)
+            let first = try engine.addExercise(exercise, to: session, context: context)
+            let second = try engine.addExercise(exercise, to: session, context: context)
+            remainingExerciseID = second.id
+            try engine.changeSuperset(.joinNext, for: first, context: context)
+            let group = first.supersetGroupID
+            let originalSets = first.sortedSets
+            let originalDate = session.updatedAt
+            let exerciseDate = first.updatedAt
+            let fail: (ModelContext) throws -> Void = { _ in throw Failure.injected }
+            // A pending edit outside the action must survive every restoration.
+            second.notes = "Unrelated pending note"
+            XCTAssertThrowsError(try engine.addSet(to: first, context: context, save: fail))
+            XCTAssertEqual(first.sortedSets.map(\.id), originalSets.map(\.id))
+            XCTAssertEqual(first.updatedAt, exerciseDate)
+            XCTAssertEqual(session.updatedAt, originalDate)
+            XCTAssertEqual(second.notes, "Unrelated pending note")
+            var saves = 0
+            let save: (ModelContext) throws -> Void = { saves += 1; try $0.save() }
+            let added = try engine.addSet(to: first, context: context, save: save)
+            XCTAssertEqual(saves, 1)
+            let states = first.sortedSets.map { ($0.id, $0.orderIndex, $0.updatedAt) }
+            let beforeRemove = session.updatedAt
+            XCTAssertThrowsError(try engine.removeSet(originalSets[0], context: context, save: fail))
+            XCTAssertNil(originalSets[0].deletedAt)
+            XCTAssertEqual(first.sortedSets.map(\.id), states.map { $0.0 })
+            XCTAssertEqual(first.sortedSets.map(\.orderIndex), states.map { $0.1 })
+            XCTAssertEqual(first.sortedSets.map(\.updatedAt), states.map { $0.2 })
+            XCTAssertEqual(session.updatedAt, beforeRemove)
+            try engine.removeSet(added, context: context, save: save)
+            XCTAssertEqual(saves, 2)
+            second.notes = "Still pending"
+            let dates = session.sortedLoggedExercises.map(\.updatedAt)
+            let flags = session.sortedLoggedExercises.map(\.hasLocalSupersetChange)
+            XCTAssertThrowsError(try engine.removeLoggedExercise(first, context: context, save: fail))
+            XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [first.id, second.id])
+            XCTAssertEqual(session.sortedLoggedExercises.map(\.updatedAt), dates)
+            XCTAssertEqual(session.sortedLoggedExercises.map(\.hasLocalSupersetChange), flags)
+            XCTAssertEqual(first.supersetGroupID, group)
+            XCTAssertEqual(second.supersetGroupID, group)
+            XCTAssertEqual(second.notes, "Still pending")
+            XCTAssertTrue(originalSets.allSatisfy { !$0.isDeleted })
+            XCTAssertTrue(added.isDeleted)
+            try engine.removeLoggedExercise(first, context: context, save: save)
+            XCTAssertEqual(saves, 3)
+            XCTAssertNil(second.supersetGroupID)
+        }
+        let reopened = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: url)
+        let session = try XCTUnwrap(reopened.mainContext.fetch(FetchDescriptor<WorkoutSession>()).first { $0.id == sessionID })
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [remainingExerciseID!])
+        XCTAssertEqual(session.sortedLoggedExercises.first?.notes, "Still pending")
+        XCTAssertNil(session.sortedLoggedExercises.first?.supersetGroupID)
+    }
+
+    func testStructuralRemovalCancelsRestOnlyAfterSaveAndPendingEditBlocksChanges() throws {
+        enum Failure: Error { case injected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let timer = RestTimerCoordinator(notifications: SilentRestNotifications())
+        let engine = ActiveWorkoutEngine(restTimer: timer)
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let fail: (ModelContext) throws -> Void = { _ in throw Failure.injected }
+        timer.start(sessionID: session.id, setID: set.id, duration: 60)
+        let rest = timer.current?.rest
+        XCTAssertThrowsError(try engine.removeSet(set, context: context, save: fail))
+        XCTAssertEqual(timer.current?.rest, rest)
+        XCTAssertThrowsError(try engine.removeLoggedExercise(logged, context: context, save: fail))
+        XCTAssertEqual(timer.current?.rest, rest)
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        var saveCount = 0
+        let unexpectedSave: (ModelContext) throws -> Void = { _ in saveCount += 1 }
+        XCTAssertThrowsError(try engine.addSet(to: logged, context: context, save: unexpectedSave))
+        XCTAssertThrowsError(try engine.removeSet(set, context: context, save: unexpectedSave))
+        XCTAssertThrowsError(try engine.removeLoggedExercise(logged, context: context, save: unexpectedSave))
+        XCTAssertEqual(saveCount, 0)
+        XCTAssertFalse(set.isDeleted)
+        engine.discardSetSave()
+        try engine.removeSet(set, context: context)
+        XCTAssertNil(timer.current)
+    }
+
+    func testAddedAndRemovedSetRetrySurvivesReopeningStore() throws {
+        enum Failure: Error { case injected }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("sets.store")
+        var addedID: UUID!
+        var removedID: UUID!
+        do {
+            let container = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: url)
+            let context = container.mainContext
+            context.autosaveEnabled = false
+            let engine = ActiveWorkoutEngine()
+            let session = try engine.startBlankWorkout(context: context)
+            let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+            context.insert(exercise)
+            let logged = try engine.addExercise(exercise, to: session, context: context)
+            let fail: (ModelContext) throws -> Void = { _ in throw Failure.injected }
+            XCTAssertThrowsError(try engine.addSet(to: logged, context: context, save: fail))
+            addedID = try engine.addSet(to: logged, context: context).id
+            let first = try XCTUnwrap(logged.sortedSets.first)
+            removedID = first.id
+            XCTAssertThrowsError(try engine.removeSet(first, context: context, save: fail))
+            try engine.removeSet(first, context: context)
+        }
+        let reopened = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: url)
+        let sets = try reopened.mainContext.fetch(FetchDescriptor<LoggedSet>())
+        XCTAssertFalse(try XCTUnwrap(sets.first { $0.id == addedID }).isDeleted)
+        XCTAssertTrue(try XCTUnwrap(sets.first { $0.id == removedID }).isDeleted)
+        XCTAssertEqual(sets.filter { !$0.isDeleted }.map(\.orderIndex).sorted(), Array(0..<sets.filter { !$0.isDeleted }.count))
+    }
+
     func testStartingWorkoutRejectsHiddenActiveWorkoutAcrossOwnersAndRelaunch() throws {
         for destinationOwner: String? in [nil, "issuer|owner_b"] {
             for fromHistory in [false, true] {

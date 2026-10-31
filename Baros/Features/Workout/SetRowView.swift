@@ -23,6 +23,7 @@ struct SetRowView: View, @MainActor Equatable {
     let suggestions: ActiveWorkoutSetInput.Values
     let onPreviewChange: (ActiveWorkoutSetInput.Values?) -> Void
     let onEditRPE: (LoggedSet) -> Void
+    @State private var showsRemoveError = false
     @State private var input = ActiveWorkoutSetInput()
     @State private var commitRegistrationID: UUID?
 
@@ -48,13 +49,25 @@ struct SetRowView: View, @MainActor Equatable {
         ) {
             setInputRegistry.commit(focusedField.wrappedValue)
             guard !engine.hasPendingSetSave else { return }
-            try? engine.removeSet(set, context: modelContext)
+            removeSet()
         } content: {
             rowContent
+        }
+        .alert("Couldn’t remove set", isPresented: $showsRemoveError) {
+            Button("Retry") { removeSet() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your set was restored. Try removing it again.")
         }
         .sensoryFeedback(trigger: set.isCompleted) { _, isCompleted in
             isCompleted ? .impact(weight: .light) : nil
         }
+    }
+
+    private func removeSet() {
+        guard !engine.hasPendingSetSave else { return }
+        do { try engine.removeSet(set, context: modelContext) }
+        catch { showsRemoveError = true }
     }
 
     private var rowContent: some View {

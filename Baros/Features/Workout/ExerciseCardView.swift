@@ -25,6 +25,10 @@ struct ExerciseCardView: View {
     let onSwapExercise: () -> Void
     let onEditRPE: (LoggedSet) -> Void
     @State private var showsRemoveConfirmation = false
+    @State private var failedStructuralAction: StructuralAction?
+    @State private var showsStructuralError = false
+
+    private enum StructuralAction { case addSet, removeExercise }
     @State private var cachedSortedSets: [LoggedSet]?
     @State private var setPreviews: [UUID: ActiveWorkoutSetInput.Values] = [:]
 
@@ -161,7 +165,7 @@ struct ExerciseCardView: View {
                 ) {
                     Button("Remove Exercise", role: .destructive) {
                         guard !engine.hasPendingSetSave else { return }
-                        try? engine.removeLoggedExercise(loggedExercise, context: modelContext)
+                        performStructuralAction(.removeExercise)
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
@@ -261,6 +265,14 @@ struct ExerciseCardView: View {
                 }
             }
         }
+        .alert("Couldn’t save workout change", isPresented: $showsStructuralError) {
+            Button("Retry") {
+                if let action = failedStructuralAction { performStructuralAction(action) }
+            }
+            Button("Cancel", role: .cancel) { failedStructuralAction = nil }
+        } message: {
+            Text("Your workout was restored. Try saving this change again.")
+        }
         .onChange(of: setStructureKey, initial: true) { _, _ in
             cachedSortedSets = loggedExercise.sortedSets
         }
@@ -272,8 +284,22 @@ struct ExerciseCardView: View {
             accessibilityIdentifier: "AddSetButton-\(exerciseIndex)"
         ) {
             withAnimation(.spring(response: 0.26, dampingFraction: 0.85)) {
-                _ = try? engine.addSet(to: loggedExercise, context: modelContext)
+                performStructuralAction(.addSet)
             }
+        }
+    }
+
+    private func performStructuralAction(_ action: StructuralAction) {
+        guard !engine.hasPendingSetSave else { return }
+        do {
+            switch action {
+            case .addSet: _ = try engine.addSet(to: loggedExercise, context: modelContext)
+            case .removeExercise: try engine.removeLoggedExercise(loggedExercise, context: modelContext)
+            }
+            failedStructuralAction = nil
+        } catch {
+            failedStructuralAction = action
+            showsStructuralError = true
         }
     }
 
