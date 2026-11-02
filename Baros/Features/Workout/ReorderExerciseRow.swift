@@ -1,17 +1,35 @@
 import SwiftUI
 
+/// What one exercise row in `ReorderExercisesList` shows.
+protocol ReorderListExercise: Identifiable where ID == UUID {
+    var name: String { get }
+    var metadata: String? { get }
+    var supersetGroupID: UUID? { get }
+    /// Shown at the end of the detail line, such as set progress.
+    var trailingDetail: String? { get }
+    var isNew: Bool { get }
+    var accessibilityValue: String { get }
+}
+
 /// A stock edit-mode List, so the system owns the minus, Delete, and reorder
 /// grip along with their motion and accessibility. A superset is one row, so
 /// it moves as a block; its members keep their own remove buttons.
-struct ReorderExercisesList: View {
-    let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
+struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
+    let exercises: [Item]
     let reorder: ([UUID]) -> Void
     let remove: (Set<UUID>) -> Void
     var add: () -> Void = {}
+    /// Rows above the exercises that don't move or delete.
+    @ViewBuilder var header: Header
 
     var body: some View {
         let blocks = SupersetGrouping.blocks(exercises, groupID: \.supersetGroupID)
         List {
+            header
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .moveDisabled(true)
+                .deleteDisabled(true)
             ForEach(blocks) { block in
                 Group {
                     if block.isSuperset {
@@ -61,12 +79,27 @@ struct ReorderExercisesList: View {
     }
 }
 
+extension ReorderExercisesList where Header == EmptyView {
+    init(
+        exercises: [Item],
+        reorder: @escaping ([UUID]) -> Void,
+        remove: @escaping (Set<UUID>) -> Void,
+        add: @escaping () -> Void = {}
+    ) {
+        self.init(exercises: exercises, reorder: reorder, remove: remove, add: add) { EmptyView() }
+    }
+}
+
+extension WorkoutExerciseListSnapshot.ExerciseState: ReorderListExercise {
+    var trailingDetail: String? { progressText }
+}
+
 struct ReorderExerciseRow: View {
     static let cornerRadius: CGFloat = 20
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var titleSize = 16
     @ScaledMetric(relativeTo: .subheadline) private var detailSize = 13
-    let exercise: WorkoutExerciseListSnapshot.ExerciseState
+    let exercise: any ReorderListExercise
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -77,12 +110,12 @@ struct ReorderExerciseRow: View {
             // The progress shares the detail line so names keep the card's full width.
             if dynamicTypeSize.isAccessibilitySize {
                 if let metadata = exercise.metadata { detail(metadata) }
-                progress
+                trailing
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     if let metadata = exercise.metadata { detail(metadata).lineLimit(1) }
                     Spacer(minLength: 0)
-                    progress
+                    trailing
                 }
             }
         }
@@ -108,20 +141,23 @@ struct ReorderExerciseRow: View {
             .foregroundStyle(AppTheme.textSecondary)
     }
 
-    private var progress: some View {
-        detail(exercise.isNew ? "New · \(exercise.progressText)" : exercise.progressText)
-            .monospacedDigit()
-            .fixedSize(horizontal: true, vertical: false)
+    @ViewBuilder
+    private var trailing: some View {
+        if let text = exercise.trailingDetail {
+            detail(exercise.isNew ? "New · \(text)" : text)
+                .monospacedDigit()
+                .fixedSize(horizontal: true, vertical: false)
+        }
     }
 }
 
 /// A superset's members beside the rail. The system has no delete control for
 /// part of a row, so each member gets its own minus button, sized so the cards
 /// line up with single exercises.
-private struct ReorderSupersetRow: View {
+private struct ReorderSupersetRow<Item: ReorderListExercise>: View {
     /// Scales like the system minus, so members stay in line with single exercises.
     @ScaledMetric(relativeTo: .title2) private var removeColumnWidth = 28
-    let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
+    let exercises: [Item]
     let remove: (UUID) -> Void
 
     var body: some View {

@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		36B855821CA043F7F6FA0BB7 /* TemplateReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A662D1FEAAC0D79752C4F44F /* TemplateReviewView.swift */; };
+		E425598737F0291BF9B58703 /* TemplatesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1D83A57D2C3DA0757B4C5D /* TemplatesListView.swift */; };
+		ED959322E109B596CEE8790A /* TemplateEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61A85CCBE4504E1EEA2C786 /* TemplateEditorSheet.swift */; };
+		F97554B77838A4A524631346 /* WorkoutTemplateDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA83492B56E8477EED44035 /* WorkoutTemplateDraft.swift */; };
 		E9946A923C3A3F5A171D1C76 /* WorkoutTemplateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 974CD1227E888E46B43A5593 /* WorkoutTemplateTests.swift */; };
 		856C6641ECEFC46E852BC1A1 /* WorkoutTemplateMutationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43C58F6920F6F756DDFA0720 /* WorkoutTemplateMutationService.swift */; };
 		0081EFDC156E24F7AE54B5B8 /* AppUpdatePromptUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 197F6CD864E1DF3849FA237A /* AppUpdatePromptUITests.swift */; };
@@ -293,6 +297,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A662D1FEAAC0D79752C4F44F /* TemplateReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateReviewView.swift; sourceTree = "<group>"; };
+		3A1D83A57D2C3DA0757B4C5D /* TemplatesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplatesListView.swift; sourceTree = "<group>"; };
+		F61A85CCBE4504E1EEA2C786 /* TemplateEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateEditorSheet.swift; sourceTree = "<group>"; };
+		3FA83492B56E8477EED44035 /* WorkoutTemplateDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutTemplateDraft.swift; sourceTree = "<group>"; };
 		974CD1227E888E46B43A5593 /* WorkoutTemplateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutTemplateTests.swift; sourceTree = "<group>"; };
 		43C58F6920F6F756DDFA0720 /* WorkoutTemplateMutationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutTemplateMutationService.swift; sourceTree = "<group>"; };
 		01EF284AA0E3A57AA5A5386C /* ExerciseCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseCardView.swift; sourceTree = "<group>"; };
@@ -897,9 +905,21 @@
 			path = Settings;
 			sourceTree = "<group>";
 		};
+		DEF3E6AF4442BD99E16265F6 /* Templates */ = {
+			isa = PBXGroup;
+			children = (
+				A662D1FEAAC0D79752C4F44F /* TemplateReviewView.swift */,
+				3A1D83A57D2C3DA0757B4C5D /* TemplatesListView.swift */,
+				F61A85CCBE4504E1EEA2C786 /* TemplateEditorSheet.swift */,
+				3FA83492B56E8477EED44035 /* WorkoutTemplateDraft.swift */,
+			);
+			path = Templates;
+			sourceTree = "<group>";
+		};
 		B73EF48554168FF96F025686 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				DEF3E6AF4442BD99E16265F6 /* Templates */,
 				F30DBA140CD5A24606733AA6 /* Exercises */,
 				373E0F51D5A1E868F69C2A1F /* History */,
 				113AFCFACF27E2C7A15AB7EE /* Home */,
@@ -1266,6 +1286,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				36B855821CA043F7F6FA0BB7 /* TemplateReviewView.swift in Sources */,
+				E425598737F0291BF9B58703 /* TemplatesListView.swift in Sources */,
+				ED959322E109B596CEE8790A /* TemplateEditorSheet.swift in Sources */,
+				F97554B77838A4A524631346 /* WorkoutTemplateDraft.swift in Sources */,
 				856C6641ECEFC46E852BC1A1 /* WorkoutTemplateMutationService.swift in Sources */,
 				024088D9604EDD6CAB43BEA3 /* AccountDeletionCoordinator.swift in Sources */,
 				0A26468DAB35148EE53DC05D /* AccountDeletionFactory.swift in Sources */,
