@@ -1,6 +1,24 @@
 import SwiftData
 import SwiftUI
 
+struct ExerciseCreationRowLabel: View {
+    let title: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            Image(systemName: "plus.circle")
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .frame(minWidth: 24)
+                .accessibilityHidden(true)
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.body.weight(.semibold))
+        .foregroundStyle(AppTheme.brandAccentForeground)
+    }
+}
+
 enum ExercisePickerMode {
     case add(existingExerciseIDs: Set<UUID>)
     case swap(currentExerciseID: UUID?)
@@ -147,9 +165,7 @@ private struct ExercisePickerList: View {
                 Button {
                     beginCreation(name: "")
                 } label: {
-                    Label("Create Exercise", systemImage: "plus.circle")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(AppTheme.brandAccentForeground)
+                    ExerciseCreationRowLabel(title: "Create Exercise")
                 }
                 .accessibilityIdentifier("ExercisePickerCreateExerciseButton")
             }
@@ -194,11 +210,7 @@ private struct ExercisePickerList: View {
                     Button {
                         beginCreation(name: creationSuggestion.name)
                     } label: {
-                        Label(creationSuggestion.title, systemImage: "plus.circle")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(AppTheme.brandAccentForeground)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 4)
+                        ExerciseCreationRowLabel(title: creationSuggestion.title)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("ExercisePickerCreateExerciseFromSearchButton")

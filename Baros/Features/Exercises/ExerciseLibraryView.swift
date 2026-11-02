@@ -31,18 +31,18 @@ struct ExerciseLibraryView: View {
         )
         List {
             if matches.isEmpty && !creationSuggestion.name.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("No Matching Exercises")
-                        .font(.headline)
+                Section {
                     Button {
                         creationName = creationSuggestion.name
                         isCreatingExercise = true
                     } label: {
-                        Label(creationSuggestion.title, systemImage: "plus.circle")
+                        ExerciseCreationRowLabel(title: creationSuggestion.title)
                     }
                     .accessibilityIdentifier("ExerciseLibraryCreateExerciseFromSearchButton")
+                } header: {
+                    Text("No Matching Exercises")
+                        .textCase(nil)
                 }
-                .padding(.vertical, 8)
             }
             ForEach(matches) { exercise in
                 NavigationLink {
