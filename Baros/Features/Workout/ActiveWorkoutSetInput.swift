@@ -120,6 +120,13 @@ struct ActiveWorkoutSetInput {
         return Commit(values: values, shouldPersist: values != storedValues)
     }
 
+    /// Unmounted rows have no drafts or rejections and use the same fallback policy.
+    func preparedLinkedValues(current: Values, previous: PreviousSetPerformance?, suggestions: Values) -> Values {
+        var input = self
+        return input.preparedValuesForSetAction(current: current, weightUnit: .pounds,
+            completesSet: true, isCompleted: false, previous: previous, suggestions: suggestions)
+    }
+
     mutating func preparedValuesForSetAction(
         current: Values,
         weightUnit: MeasurementUnit,
@@ -183,7 +190,10 @@ struct ActiveWorkoutSetInput {
 
 @MainActor
 final class ActiveSetInputRegistry {
+    typealias LinkedPreparation = (ActiveWorkoutSetInput.Values, PreviousSetPerformance?, ActiveWorkoutSetInput.Values) -> ActiveWorkoutSetInput.Values
+
     private struct Registration {
+        var prepareLinked: LinkedPreparation?
         var fields: Set<WorkoutField>
         var commit: () -> Void
         var prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)?
@@ -196,7 +206,8 @@ final class ActiveSetInputRegistry {
     func register(
         fields: [WorkoutField],
         commit: @escaping () -> Void,
-        prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)? = nil
+        prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)? = nil,
+        prepareLinked: LinkedPreparation? = nil
     ) -> UUID {
         let id = UUID()
         guard !fields.isEmpty else { return id }
@@ -210,6 +221,7 @@ final class ActiveSetInputRegistry {
             registrationIDs[field] = id
         }
         registrations[id] = Registration(
+            prepareLinked: prepareLinked,
             fields: Set(fields),
             commit: commit,
             prepareForRPESelection: prepareForRPESelection
@@ -230,14 +242,22 @@ final class ActiveSetInputRegistry {
         return registrations[id]?.prepareForRPESelection?(completesSet)
     }
 
+    func prepareLinkedSet(id: UUID, current: ActiveWorkoutSetInput.Values,
+                          previous: PreviousSetPerformance?, suggestions: ActiveWorkoutSetInput.Values) -> ActiveWorkoutSetInput.Values? {
+        guard let registration = registrationIDs[.setReps(id)] else { return nil }
+        return registrations[registration]?.prepareLinked?(current, previous, suggestions)
+    }
+
     func updateRegistration(
         _ id: UUID,
         commit: @escaping () -> Void,
-        prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)?
+        prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)?,
+        prepareLinked: LinkedPreparation? = nil
     ) {
         // Live suggestions refresh this on every changed row. Lookup by ID
         // keeps that work independent of the number of fields in the workout.
         guard var registration = registrations[id] else { return }
+        registration.prepareLinked = prepareLinked
         registration.commit = commit
         registration.prepareForRPESelection = prepareForRPESelection
         registrations[id] = registration

@@ -253,6 +253,7 @@ struct WorkoutSessionView: View {
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
+            engine.setInputRegistry = setInputRegistry
             updateUIHangWorkoutContext(becameCurrent: true)
             focusTransitionCoordinator.synchronizeFocus(focusedField)
             onMinimizePreparationChanged {

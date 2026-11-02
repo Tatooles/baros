@@ -161,7 +161,7 @@ private struct ReorderSupersetRow<Item: ReorderListExercise>: View {
     let remove: (UUID) -> Void
 
     var body: some View {
-        SupersetRail(count: exercises.count, spacing: 12, reachesIntoMargin: false) {
+        SupersetRail(count: exercises.count, spacing: 12, reachesIntoMargin: false, balancesLabel: true) {
             ForEach(exercises) { exercise in
                 HStack(spacing: 2) {
                     Button {
