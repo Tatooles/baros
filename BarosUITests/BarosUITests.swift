@@ -3,6 +3,25 @@ import XCTest
 
 final class BarosUITests: XCTestCase {
     @MainActor
+    func testExistingRPEEnablesAutomaticPreferenceAndRemainsEditableWhenOff() {
+        let app = makeApp(extraArguments: ["--uitest-reset-rpe"],
+                          completedBenchWorkoutTitles: ["Rated workout"])
+        app.launch()
+        tapTab(.settings, in: app)
+        let toggle = app.switches["SettingsRPEToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        XCTAssertEqual(toggle.value as? String, "1")
+        toggle.switches.firstMatch.tap()
+        XCTAssertEqual(toggle.value as? String, "0")
+        tapTab(.history, in: app)
+        app.buttons["WorkoutHistoryButton-0"].tap()
+        app.buttons["EditWorkoutButton"].tap()
+        let rating = app.textFields["HistorySetRPEField-0-0"]
+        XCTAssertTrue(rating.waitForExistence(timeout: 3))
+        XCTAssertEqual(rating.value as? String, "8")
+    }
+
+    @MainActor
     func testRPEPreferenceHidesEntryAndPersistsExplicitChoice() {
         let app = makeApp(extraArguments: ["--uitest-reset-rpe"])
         app.launch()
