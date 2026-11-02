@@ -26,22 +26,18 @@ struct ExerciseLibraryView: View {
 
     var body: some View {
         let matches = filteredExercises
-        let creationSuggestion = ExercisePickerCreationSuggestion(
-            name: searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noMatchesSuggestion = ExercisePickerCreationSuggestion.noMatches(
+            query: searchText,
+            hasMatches: !matches.isEmpty
         )
         List {
-            if matches.isEmpty && !creationSuggestion.name.isEmpty {
-                Section {
-                    Button {
-                        creationName = creationSuggestion.name
-                        isCreatingExercise = true
-                    } label: {
-                        ExerciseCreationRowLabel(title: creationSuggestion.title)
-                    }
-                    .accessibilityIdentifier("ExerciseLibraryCreateExerciseFromSearchButton")
-                } header: {
-                    Text("No Matching Exercises")
-                        .textCase(nil)
+            if let noMatchesSuggestion {
+                ExerciseNoMatchesSection(
+                    suggestion: noMatchesSuggestion,
+                    accessibilityIdentifier: "ExerciseLibraryCreateExerciseFromSearchButton"
+                ) { name in
+                    creationName = name
+                    isCreatingExercise = true
                 }
             }
             ForEach(matches) { exercise in
