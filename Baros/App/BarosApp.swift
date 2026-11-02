@@ -38,6 +38,7 @@ struct BarosApp: App {
             "--uitest-delay-current-owner-start"
         )
         #if DEBUG
+        RPEPreference.applyUITestingOverrides(arguments: arguments)
         if arguments.contains("--uitest-disable-animations") {
             UIView.setAnimationsEnabled(false)
         }
@@ -96,6 +97,7 @@ struct BarosApp: App {
                 context: container.mainContext
             )
             #endif
+            RPEPreference.checkExistingRatingsOnce(context: container.mainContext)
             modelContainer = container
 
             let syncScheduler = SyncScheduler(observability: syncObservability)

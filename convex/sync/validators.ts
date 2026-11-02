@@ -16,6 +16,7 @@ export const entityKindValidator = v.union(
   v.literal("workoutSessions"),
   v.literal("loggedExercises"),
   v.literal("loggedSets"),
+  v.literal("workoutTemplates"),
 );
 
 export const userSettingsPayloadValidator = v.object({
@@ -91,4 +92,21 @@ export const loggedSetPayloadValidator = v.object({
   notes: v.string(),
   healthLinkID: nullableString,
   sourceLoggedSetID: v.optional(nullableString),
+});
+
+// Entries are stored inside the template, so the server merges them by id:
+// a field an older build leaves out keeps the stored value.
+export const workoutTemplateEntryValidator = v.object({
+  id: v.string(),
+  exerciseClientId: nullableString,
+  exerciseSnapshotName: v.string(),
+  exerciseSnapshotEquipmentRaw: v.string(),
+  exerciseSnapshotPrimaryMuscleGroupRaw: v.string(),
+  supersetGroupID: nullableString,
+});
+
+export const workoutTemplatePayloadValidator = v.object({
+  ...syncPayloadFields,
+  name: v.string(),
+  entries: v.array(workoutTemplateEntryValidator),
 });

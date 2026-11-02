@@ -125,6 +125,29 @@ export default defineSchema({
       "serverUpdatedAt",
     ]),
 
+  workoutTemplates: defineTable({
+    ...syncFields,
+    name: v.string(),
+    entries: v.array(
+      v.object({
+        id: v.string(),
+        exerciseClientId: nullableString,
+        exerciseSnapshotName: v.string(),
+        exerciseSnapshotEquipmentRaw: v.string(),
+        exerciseSnapshotPrimaryMuscleGroupRaw: v.string(),
+        supersetGroupID: nullableString,
+      }),
+    ),
+  })
+    .index("by_ownerTokenIdentifier_and_clientId", [
+      "ownerTokenIdentifier",
+      "clientId",
+    ])
+    .index("by_ownerTokenIdentifier_and_serverUpdatedAt", [
+      "ownerTokenIdentifier",
+      "serverUpdatedAt",
+    ]),
+
   loggedSets: defineTable({
     ...syncFields,
     loggedExerciseClientId: v.string(),

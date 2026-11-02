@@ -6,10 +6,12 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
     case accountTransitionInProgress
     case multipleActiveWorkouts
     case anotherOwnerHasActiveWorkout
+    case structuralChangeUnavailable
     case invalidExerciseReorder
     case invalidExerciseSwap
     case invalidSupersetChange
     case pastWorkoutUnavailable
+    case templateUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -19,6 +21,8 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
             return "More than one unfinished workout is saved on this iPhone. Resolve them in Settings before starting another."
         case .anotherOwnerHasActiveWorkout:
             return "An active workout from another account is saved on this iPhone. Resolve it before starting another workout."
+        case .structuralChangeUnavailable:
+            return "Resolve the unsaved set edit before changing this workout."
         case .invalidExerciseReorder:
             return "Workout exercises changed. Review the current order and try again."
         case .invalidExerciseSwap:
@@ -27,6 +31,8 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
             return "Workout exercises changed. Review the superset and try again."
         case .pastWorkoutUnavailable:
             return "That past workout is no longer available. Choose another workout and try again."
+        case .templateUnavailable:
+            return "That template is no longer available. Choose another template and try again."
         }
     }
 }
@@ -48,6 +54,9 @@ final class ActiveWorkoutEngine {
     var isStartingWorkout = false
     var isAccountTransitionInProgress = false
     var isAccountManagementPresented = false
+    /// Set when Finish saved the workout but not its template. The shell
+    /// shows the error, since the workout sheet is gone by then.
+    var failedToSaveTemplate = false
     var lastErrorMessage: String?
     private var pendingSetSave: PendingSetSave?
     #if DEBUG
@@ -59,6 +68,7 @@ final class ActiveWorkoutEngine {
     /// The Previous column's values, keyed by logged exercise. A linked round
     /// fills each partner's empty fields from them, as that partner's own check would.
     @ObservationIgnored var previousSetsByLoggedExerciseID: [UUID: [PreviousSetPerformance]] = [:]
+    @ObservationIgnored weak var setInputRegistry: ActiveSetInputRegistry?
     var pendingSetSaveID: UUID? { pendingSetSave?.id }
 
     func loadActiveSession(ownerTokenIdentifier: String? = nil, context: ModelContext) {
@@ -180,6 +190,83 @@ final class ActiveWorkoutEngine {
         return session
     }
 
+    /// Starts with the template's exercises in order. Each gets set rows the
+    /// way adding it would; an entry whose exercise is gone keeps its name.
+    @discardableResult
+    func startWorkout(
+        fromTemplate template: WorkoutTemplate,
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext,
+        now: Date = .now
+    ) throws -> WorkoutSession {
+        guard !template.isDeleted, template.isVisible(to: ownerTokenIdentifier) else {
+            throw ActiveWorkoutEngineError.templateUnavailable
+        }
+
+        try requireWorkoutStartAllowed(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        if let active = try currentActiveSession(ownerTokenIdentifier: ownerTokenIdentifier, context: context) {
+            activeSessionID = active.id
+            return active
+        }
+
+        isStartingWorkout = true
+        defer { isStartingWorkout = false }
+
+        let history = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let exercisesByID = Dictionary(
+            try context.fetch(FetchDescriptor<Exercise>())
+                .filter { !$0.isDeleted && $0.isVisible(to: ownerTokenIdentifier) }
+                .map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        let session = WorkoutSession(
+            title: template.name,
+            startedAt: now,
+            status: .active,
+            source: .template,
+            createdAt: now,
+            updatedAt: now,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier
+        )
+        context.insert(session)
+
+        let entries = template.entries
+        let copiedGroupIDs = SupersetGrouping.copied(entries.map(\.supersetGroupID))
+        for (index, (entry, supersetGroupID)) in zip(entries, copiedGroupIDs).enumerated() {
+            let exercise = entry.exerciseID.flatMap { exercisesByID[$0] }
+            let loggedExercise = LoggedExercise(
+                orderIndex: index,
+                exercise: exercise,
+                exerciseSnapshotName: exercise?.name ?? entry.exerciseSnapshotName,
+                exerciseSnapshotEquipmentRaw: exercise?.equipmentRaw ?? entry.exerciseSnapshotEquipmentRaw,
+                exerciseSnapshotPrimaryMuscleGroupRaw: exercise?.primaryMuscleGroupRaw
+                    ?? entry.exerciseSnapshotPrimaryMuscleGroupRaw,
+                supersetGroupID: supersetGroupID,
+                createdAt: now,
+                updatedAt: now
+            )
+            loggedExercise.session = session
+            context.insert(loggedExercise)
+
+            let kinds = exercise.map {
+                initialSetKinds(for: $0, ownerTokenIdentifier: ownerTokenIdentifier, sessions: history)
+            } ?? [.working]
+            for (setIndex, kind) in kinds.enumerated() {
+                let set = LoggedSet(orderIndex: setIndex, kind: kind, createdAt: now, updatedAt: now)
+                set.loggedExercise = loggedExercise
+                context.insert(set)
+                loggedExercise.sets.append(set)
+            }
+
+            session.loggedExercises.append(loggedExercise)
+        }
+
+        try context.save()
+        activeSessionID = session.id
+        return session
+    }
+
     @discardableResult
     func addExercise(
         _ exercise: Exercise,
@@ -274,19 +361,22 @@ final class ActiveWorkoutEngine {
         }
     }
 
-    func removeLoggedExercise(_ loggedExercise: LoggedExercise, context: ModelContext, now: Date = .now) throws {
-        let session = loggedExercise.session
-        loggedExercise.markDeleted(now: now)
-        for set in loggedExercise.sets {
-            set.markDeleted(now: now)
+    func removeLoggedExercise(
+        _ loggedExercise: LoggedExercise, context: ModelContext, now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        guard let session = loggedExercise.session, !loggedExercise.isDeleted else {
+            throw ActiveWorkoutEngineError.invalidExerciseReorder
         }
-        if let session {
-            reindexLoggedExercises(for: session, now: now)
-            normalizeSupersets(session.sortedLoggedExercises, now: now)
-            session.touch(now: now)
-        }
-        try context.save()
-        for set in loggedExercise.sets { restTimer.cancel(ifStartedBy: set.id) }
+        try applyExerciseListChanges(
+            in: session,
+            orderedIDs: session.sortedLoggedExercises.filter { $0.id != loggedExercise.id }.map(\.id),
+            baseline: WorkoutExerciseListSnapshot(session: session),
+            context: context, now: now,
+            save: { context in
+                try self.saveStructuralChange(context, action: "remove-exercise", save: save)
+            }
+        )
     }
 
     @discardableResult
@@ -552,31 +642,85 @@ final class ActiveWorkoutEngine {
     }
 
     @discardableResult
-    func addSet(to loggedExercise: LoggedExercise, context: ModelContext) throws -> LoggedSet {
+    func addSet(
+        to loggedExercise: LoggedExercise, context: ModelContext, now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws -> LoggedSet {
+        guard !hasPendingSetSave else { throw ActiveWorkoutEngineError.structuralChangeUnavailable }
+        let originalUpdatedAt = loggedExercise.updatedAt
+        let originalSessionUpdatedAt = loggedExercise.session?.updatedAt
         let sortedSets = loggedExercise.sortedSets
-        let previous = sortedSets.last
         let set = LoggedSet(
             orderIndex: (sortedSets.map(\.orderIndex).max() ?? -1) + 1,
-            kind: previous?.kind ?? .working,
-            isCompleted: false
+            kind: sortedSets.last?.kind ?? .working,
+            isCompleted: false, createdAt: now, updatedAt: now
         )
         set.loggedExercise = loggedExercise
         context.insert(set)
         loggedExercise.sets.append(set)
-        loggedExercise.touch()
-        try context.save()
+        loggedExercise.touch(now: now)
+        do {
+            try saveStructuralChange(context, action: "add-set", save: save)
+        } catch {
+            loggedExercise.sets.removeAll { $0.id == set.id }
+            set.loggedExercise = nil
+            context.delete(set)
+            loggedExercise.updatedAt = originalUpdatedAt
+            if let originalSessionUpdatedAt { loggedExercise.session?.updatedAt = originalSessionUpdatedAt }
+            throw error
+        }
         return set
     }
 
-    func removeSet(_ set: LoggedSet, context: ModelContext, now: Date = .now) throws {
+    func removeSet(
+        _ set: LoggedSet, context: ModelContext, now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        guard !hasPendingSetSave else { throw ActiveWorkoutEngineError.structuralChangeUnavailable }
         let loggedExercise = set.loggedExercise
+        let originalExerciseUpdatedAt = loggedExercise?.updatedAt
+        let originalSessionUpdatedAt = loggedExercise?.session?.updatedAt
+        let states = (loggedExercise?.sortedSets ?? [set]).map {
+            (set: $0, orderIndex: $0.orderIndex, updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
+        }
         set.markDeleted(now: now)
         if let loggedExercise {
             reindexSets(for: loggedExercise, now: now)
             loggedExercise.touch(now: now)
         }
-        try context.save()
+        do {
+            try saveStructuralChange(context, action: "remove-set", save: save)
+        } catch {
+            for state in states {
+                state.set.orderIndex = state.orderIndex
+                state.set.updatedAt = state.updatedAt
+                state.set.deletedAt = state.deletedAt
+            }
+            if let originalExerciseUpdatedAt { loggedExercise?.updatedAt = originalExerciseUpdatedAt }
+            if let originalSessionUpdatedAt { loggedExercise?.session?.updatedAt = originalSessionUpdatedAt }
+            throw error
+        }
         restTimer.cancel(ifStartedBy: set.id)
+    }
+
+    #if DEBUG
+    @ObservationIgnored private var injectedStructuralFailures: [String: Int] = [:]
+    #endif
+
+    private func saveStructuralChange(
+        _ context: ModelContext, action: String, save: (ModelContext) throws -> Void
+    ) throws {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        let failures = arguments.contains("--uitest-fail-\(action)-save-twice") ? 2
+            : (arguments.contains("--uitest-fail-\(action)-save-once") ? 1 : 0)
+        if arguments.contains("--uitest-in-memory-store"),
+           injectedStructuralFailures[action, default: 0] < failures {
+            injectedStructuralFailures[action, default: 0] += 1
+            throw CocoaError(.fileWriteUnknown)
+        }
+        #endif
+        try save(context)
     }
 
     /// Persists a focus-boundary weight/reps draft without turning a local
@@ -763,7 +907,8 @@ final class ActiveWorkoutEngine {
                     let settings = UserSettings.visibleSettingsRecords(from: records,
                         ownerTokenIdentifier: restSettingsOwnerTokenIdentifier ?? session.syncOwnerTokenIdentifier).first
                     restTimer.start(sessionID: session.id, setID: set.id,
-                        duration: RestDurationLookup.seconds(for: exercise, settings: settings))
+                        duration: RestDurationLookup.seconds(for: exercise, settings: settings),
+                        participatingSetIDs: roundSetIDs(for: set))
                 } else {
                     restTimer.cancel(ifStartedBy: set.id)
                 }
@@ -778,6 +923,19 @@ final class ActiveWorkoutEngine {
                 reportSetSaveFailure(ActiveWorkoutSetSaveFailure(operation: action.operation, error: error))
             }
             throw error
+        }
+    }
+
+    /// Membership is captured at rest start, so deleting or unchecking any
+    /// participating set cancels that round even if its grouping later changes.
+    private func roundSetIDs(for set: LoggedSet) -> [UUID] {
+        guard let exercise = set.loggedExercise, let session = exercise.session,
+              let position = exercise.sortedSets.firstIndex(where: { $0.id == set.id }),
+              let block = SupersetGrouping.blocks(session.sortedLoggedExercises, groupID: \.supersetGroupID)
+                .first(where: { $0.members.contains { $0.id == exercise.id } }) else { return [set.id] }
+        return block.members.compactMap { member in
+            let sets = member.sortedSets
+            return sets.indices.contains(position) && sets[position].isCompleted ? sets[position].id : nil
         }
     }
 
@@ -802,12 +960,14 @@ final class ActiveWorkoutEngine {
             let previous = previousSetsByLoggedExerciseID[partnerExercise.id].flatMap {
                 $0.indices.contains(position) ? $0[position] : nil
             }
-            partner.weight = WorkoutNumericInputPolicy.validatedWeight(partner.weight)
-                ?? WorkoutNumericInputPolicy.validatedWeight(above.weight)
-                ?? WorkoutNumericInputPolicy.validatedWeight(previous?.weight)
-            partner.reps = WorkoutNumericInputPolicy.validatedReps(partner.reps)
-                ?? WorkoutNumericInputPolicy.validatedReps(above.reps)
-                ?? WorkoutNumericInputPolicy.validatedReps(previous?.reps)
+            // A mounted row owns draft/rejection state. Use exactly the same
+            // preparation as its direct check; nil means there is no editor.
+            let values = setInputRegistry?.prepareLinkedSet(id: partner.id,
+                current: .init(weight: partner.weight, reps: partner.reps), previous: previous, suggestions: above)
+                ?? ActiveWorkoutSetInput().preparedLinkedValues(
+                    current: .init(weight: partner.weight, reps: partner.reps), previous: previous, suggestions: above)
+            partner.weight = values.weight
+            partner.reps = values.reps
             partner.isCompleted = true
             partner.completedAt = now
             partner.touch(now: now)

@@ -2,10 +2,10 @@ import XCTest
 @testable import Baros
 
 final class SyncConflictResolverTests: XCTestCase {
-    func testV1SyncScopeIncludesWorkoutGraphAndSettingsOnly() {
+    func testV1SyncScopeIncludesWorkoutGraphSettingsAndTemplates() {
         XCTAssertEqual(
             SyncEntityKind.v1Synced,
-            [.userSettings, .exercise, .workoutSession, .loggedExercise, .loggedSet]
+            [.userSettings, .exercise, .workoutSession, .loggedExercise, .loggedSet, .workoutTemplate]
         )
     }
 

@@ -45,6 +45,8 @@ struct SettingsTabView: View {
             switch route {
             case .exerciseLibrary:
                 ExerciseLibraryView()
+            case .templates:
+                TemplatesListView()
             case .deleteData(let mode):
                 DeleteDataDestination(mode: mode)
             #if DEBUG

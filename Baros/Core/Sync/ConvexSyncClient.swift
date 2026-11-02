@@ -45,6 +45,13 @@ struct ConvexSyncClient: SyncClient, @unchecked Sendable {
         )
     }
 
+    func upsertWorkoutTemplate(_ record: WorkoutTemplateSyncPayload) async throws -> SyncMutationResult {
+        return try await client.mutation(
+            "sync:upsertWorkoutTemplate",
+            with: ConvexSyncArgumentMapper.upsertWorkoutTemplateArgs(record)
+        )
+    }
+
     func tombstone(entityKind: SyncEntityKind, clientId: UUID, deletedAt: Date) async throws -> SyncMutationResult {
         return try await client.mutation(
             "sync:tombstone",
@@ -97,6 +104,10 @@ enum ConvexSyncArgumentMapper {
 
     static func upsertLoggedSetArgs(_ record: LoggedSetSyncPayload) -> [String: ConvexEncodable?] {
         ["record": loggedSetRecord(record)]
+    }
+
+    static func upsertWorkoutTemplateArgs(_ record: WorkoutTemplateSyncPayload) -> [String: ConvexEncodable?] {
+        ["record": workoutTemplateRecord(record)]
     }
 
     static func fetchChangesArgs(cursors: SyncChangeCursors, limit: Int) -> [String: ConvexEncodable?] {
@@ -176,6 +187,27 @@ enum ConvexSyncArgumentMapper {
         return args
     }
 
+    static func workoutTemplateRecord(_ record: WorkoutTemplateSyncPayload) -> [String: ConvexEncodable?] {
+        let entries: [ConvexEncodable?] = record.entries.map { entry in
+            [
+                "id": entry.id,
+                "exerciseClientId": entry.exerciseClientId,
+                "exerciseSnapshotName": entry.exerciseSnapshotName,
+                "exerciseSnapshotEquipmentRaw": entry.exerciseSnapshotEquipmentRaw,
+                "exerciseSnapshotPrimaryMuscleGroupRaw": entry.exerciseSnapshotPrimaryMuscleGroupRaw,
+                "supersetGroupID": entry.supersetGroupID,
+            ] as [String: ConvexEncodable?]
+        }
+        return [
+            "clientId": record.clientId,
+            "createdAt": record.createdAt,
+            "updatedAt": record.updatedAt,
+            "deletedAt": record.deletedAt,
+            "name": record.name,
+            "entries": entries,
+        ]
+    }
+
     static func loggedSetRecord(_ record: LoggedSetSyncPayload) -> [String: ConvexEncodable?] {
         [
             "clientId": record.clientId,
@@ -197,12 +229,16 @@ enum ConvexSyncArgumentMapper {
     }
 
     static func cursorRecord(_ cursors: SyncChangeCursors) -> [String: ConvexEncodable?] {
-        [
+        var record: [String: ConvexEncodable?] = [
             "userSettings": cursors.userSettings,
             "exercises": cursors.exercises,
             "workoutSessions": cursors.workoutSessions,
             "loggedExercises": cursors.loggedExercises,
             "loggedSets": cursors.loggedSets,
         ]
+        if let workoutTemplates = cursors.workoutTemplates {
+            record["workoutTemplates"] = workoutTemplates
+        }
+        return record
     }
 }

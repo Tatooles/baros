@@ -65,6 +65,7 @@ enum HistoryRoute: Hashable {
 
 enum SettingsRoute: Hashable {
     case exerciseLibrary
+    case templates
     case deleteData(DeleteDataMode)
     #if DEBUG
     case developerDiagnostics

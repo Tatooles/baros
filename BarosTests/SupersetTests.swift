@@ -179,6 +179,63 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertTrue(c.sortedSets[1].isCompleted)
     }
 
+    func testRoundRestSharesOnePeriodAndPartnerUncheckCancelsIt() throws {
+        let (context, session) = try makeWorkout(names: ["A", "B", "C"], groups: [0, 0, 0])
+        let timer = RestTimerCoordinator(schedulesTasks: false)
+        let engine = ActiveWorkoutEngine(restTimer: timer)
+        let sets = session.sortedLoggedExercises.map { $0.sortedSets[0] }
+        let slots = sets.map { timer.slot(for: $0.id) }
+        try engine.toggleSetCompletion(sets[0], context: context)
+        let period = try XCTUnwrap(timer.current)
+        XCTAssertTrue(slots.allSatisfy { $0.period === period })
+        let end = period.rest.endsAt
+        timer.adjust(by: 30)
+        XCTAssertTrue(slots.allSatisfy { $0.period?.rest.endsAt == end.addingTimeInterval(30) })
+        timer.reportInlineVisibility(true, restID: period.rest.id, setID: sets[0].id)
+        timer.reportInlineVisibility(false, restID: period.rest.id, setID: sets[1].id)
+        XCTAssertFalse(timer.showsHeaderFallback, "One visible partner suffices")
+        try engine.toggleSetCompletion(sets[1], context: context)
+        XCTAssertNil(timer.current)
+        XCTAssertTrue(slots.allSatisfy { $0.period == nil })
+        try engine.toggleSetCompletion(sets[1], context: context)
+        let snapshot = WorkoutLiveActivitySnapshot(session: session, restPeriod: timer.current)
+        XCTAssertEqual(snapshot.restEndsAt, timer.current?.rest.endsAt)
+        let saved = try JSONEncoder().encode(XCTUnwrap(timer.current).rest)
+        let restored = RestTimerCoordinator(restoredRest: try JSONDecoder().decode(WorkoutRest.self, from: saved), schedulesTasks: false)
+        restored.reconcile(with: session)
+        let restoredSlots = sets.map { restored.slot(for: $0.id) }
+        XCTAssertTrue(restoredSlots.allSatisfy { $0.period === restored.current })
+        timer.skip()
+        XCTAssertTrue(slots.allSatisfy { $0.period == nil })
+        try engine.toggleSetCompletion(sets[1], context: context)
+        try engine.toggleSetCompletion(sets[1], context: context)
+        try engine.removeSet(sets[2], context: context)
+        XCTAssertNil(timer.current, "Deleting a partner cancels round rest")
+        restored.reconcile(with: session)
+        XCTAssertNil(restored.current, "Restoration also rejects a removed participant")
+    }
+
+    func testLinkedCompletionPreservesRejectedPartnerInputAfterCommit() throws {
+        let (context, session) = try makeWorkout(names: ["A", "B"], groups: [0, 0])
+        let engine = ActiveWorkoutEngine()
+        let registry = ActiveSetInputRegistry()
+        engine.setInputRegistry = registry
+        let a = session.sortedLoggedExercises[0].sortedSets[0]
+        let b = session.sortedLoggedExercises[1].sortedSets[0]
+        var input = ActiveWorkoutSetInput()
+        input.update("1001", for: .reps, isFocused: true)
+        _ = input.commit(current: .init(weight: nil, reps: nil), weightUnit: .pounds)
+        registry.register(fields: [.setReps(b.id)], commit: {}, prepareLinked: { current, previous, suggestions in
+            input.preparedValuesForSetAction(current: current, weightUnit: .pounds,
+                completesSet: true, isCompleted: false, previous: previous, suggestions: suggestions)
+        })
+        engine.previousSetsByLoggedExerciseID = [session.sortedLoggedExercises[1].id: [.init(weight: 50, reps: 12)]]
+        try engine.toggleSetCompletion(a, context: context)
+        XCTAssertTrue(b.isCompleted, "Direct completion also permits a blank rejected field")
+        XCTAssertNil(b.reps, "Never replace rejected reps with history")
+        XCTAssertEqual(b.weight, 50, "Other empty fields still fill normally")
+    }
+
     func testExtraSetsAndUngroupedExercisesCompleteAlone() throws {
         let (context, session) = try makeWorkout(names: ["A", "B", "C"], groups: [0, 0, nil], setCount: 2)
         let engine = ActiveWorkoutEngine()

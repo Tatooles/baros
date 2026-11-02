@@ -4,6 +4,8 @@ import SwiftUI
 private enum HomeStartRoute: Hashable {
     case pastWorkouts
     case review(UUID)
+    case templates
+    case templateReview(UUID)
 }
 
 struct HomeStartWorkoutSheet: View {
@@ -13,6 +15,7 @@ struct HomeStartWorkoutSheet: View {
     let content: HomeContent
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     let onWorkoutStarted: (WorkoutSession) -> Void
+    @Query private var templates: [WorkoutTemplate]
     @State private var path: [HomeStartRoute] = []
     @State private var selectedDetent: PresentationDetent = .medium
     @State private var actionError: HomeStartWorkoutActionError?
@@ -47,6 +50,21 @@ struct HomeStartWorkoutSheet: View {
                                 title: "Workout Unavailable",
                                 message: "This workout is no longer available to reuse."
                             )
+                            .background(AppTheme.canvasBackground.ignoresSafeArea())
+                        }
+                    case .templates:
+                        TemplatesListView { template in
+                            path.append(.templateReview(template.id))
+                        }
+                    case .templateReview(let templateID):
+                        if let template = visibleTemplates.first(where: { $0.id == templateID }) {
+                            TemplateReviewView(template: template) { startWorkout(from: template) }
+                        } else {
+                            EmptyStateView(
+                                title: "Template Unavailable",
+                                message: "This template was deleted."
+                            )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(AppTheme.canvasBackground.ignoresSafeArea())
                         }
                     }
@@ -111,6 +129,17 @@ struct HomeStartWorkoutSheet: View {
             .accessibilityLabel("Use Past Workout")
             .accessibilityValue(content.completedSessions.isEmpty ? "None yet" : "")
             .accessibilityIdentifier("UsePastWorkoutButton")
+
+            Button { expand(to: .templates) } label: {
+                HomeStartChoiceRow(
+                    title: "Templates",
+                    detail: "Start from a saved list of exercises",
+                    systemImage: "list.bullet.clipboard",
+                    trailingText: nil
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("UseTemplateButton")
         }
         .padding(20)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -126,8 +155,16 @@ struct HomeStartWorkoutSheet: View {
         }
     }
 
+    private var visibleTemplates: [WorkoutTemplate] {
+        templates.visible(to: currentOwnerCoordinator.localDataOwnerTokenIdentifier)
+    }
+
     private func showPastWorkouts() {
-        pendingRoute = .pastWorkouts
+        expand(to: .pastWorkouts)
+    }
+
+    private func expand(to route: HomeStartRoute) {
+        pendingRoute = route
         pendingExpansionOriginHeight = selectedDetent == .large ? nil : sheetHeight
         selectedDetent = .large
         schedulePendingNavigation(afterSettlingAt: sheetHeight)
@@ -169,6 +206,16 @@ struct HomeStartWorkoutSheet: View {
         performStart {
             try activeWorkoutEngine.startWorkout(
                 fromPast: session,
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
+                context: modelContext
+            )
+        }
+    }
+
+    private func startWorkout(from template: WorkoutTemplate) {
+        performStart {
+            try activeWorkoutEngine.startWorkout(
+                fromTemplate: template,
                 ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                 context: modelContext
             )
