@@ -38,6 +38,13 @@ struct BarosApp: App {
             "--uitest-delay-current-owner-start"
         )
         #if DEBUG
+        if arguments.contains("--uitest-reset-rpe") {
+            UserDefaults.standard.removeObject(forKey: "Baros.RPE.preference")
+        } else if arguments.contains("--uitest-disable-rpe") {
+            UserDefaults.standard.set("off", forKey: "Baros.RPE.preference")
+        } else if arguments.contains("--uitest-enable-rpe") {
+            UserDefaults.standard.set("on", forKey: "Baros.RPE.preference")
+        }
         if arguments.contains("--uitest-disable-animations") {
             UIView.setAnimationsEnabled(false)
         }
