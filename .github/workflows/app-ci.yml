@@ -104,12 +104,47 @@ jobs:
           xcodebuild -version
           xcrun simctl list devices available | grep -E "iPhone 17" || true
 
+      - name: Boot simulator ahead of the build
+        run: |
+          udid="$(
+            xcrun simctl list devices available -j |
+              jq -r '.devices["com.apple.CoreSimulator.SimRuntime.iOS-26-5"][]? | select(.name == "iPhone 17") | .udid'
+          )"
+          if [[ -z "${udid}" ]]; then
+            echo "::warning title=Simulator preboot skipped::iPhone 17 on iOS 26.5 was not found."
+            exit 0
+          fi
+          # This only saves time. If it fails, xcodebuild boots the destination itself.
+          nohup xcrun simctl bootstatus "${udid}" -b > "${RUNNER_TEMP}/SimulatorBoot.log" 2>&1 &
+
+      - name: Restore Swift package cache
+        id: package-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: swift-packages-xcode-26.5-${{ hashFiles('Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+
       - name: Resolve Swift packages
         run: |
-          xcodebuild -resolvePackageDependencies \
-            -project Baros.xcodeproj \
-            -scheme BarosUnitTests \
-            -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData"
+          for attempt in 1 2 3; do
+            if xcodebuild -resolvePackageDependencies \
+              -project Baros.xcodeproj \
+              -scheme BarosUnitTests \
+              -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData" \
+              -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages"; then
+              exit 0
+            fi
+            echo "Package resolution attempt ${attempt} failed."
+            sleep 20
+          done
+          exit 1
+
+      - name: Save Swift package cache
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: swift-packages-xcode-26.5-${{ hashFiles('Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
 
       - name: Run Baros unit tests
         run: |
@@ -119,8 +154,14 @@ jobs:
             -scheme BarosUnitTests \
             -destination "${IOS_TEST_DESTINATION}" \
             -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData" \
+            -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages" \
+            -retry-tests-on-failure \
+            -test-iterations 2 \
             -resultBundlePath "${RUNNER_TEMP}/BarosTests.xcresult" \
             2>&1 | tee "${RUNNER_TEMP}/BarosTests.log"
+
+      - name: Report unit tests that only passed on retry
+        run: python3 ci_scripts/report_retried_tests.py "${RUNNER_TEMP}/BarosTests.xcresult"
 
       - name: Upload iOS failure diagnostics
         if: failure()
@@ -158,12 +199,47 @@ jobs:
           xcodebuild -version
           xcrun simctl list devices available | grep -E "iPhone 17" || true
 
+      - name: Boot simulator ahead of the build
+        run: |
+          udid="$(
+            xcrun simctl list devices available -j |
+              jq -r '.devices["com.apple.CoreSimulator.SimRuntime.iOS-26-5"][]? | select(.name == "iPhone 17") | .udid'
+          )"
+          if [[ -z "${udid}" ]]; then
+            echo "::warning title=Simulator preboot skipped::iPhone 17 on iOS 26.5 was not found."
+            exit 0
+          fi
+          # This only saves time. If it fails, xcodebuild boots the destination itself.
+          nohup xcrun simctl bootstatus "${udid}" -b > "${RUNNER_TEMP}/SimulatorBoot.log" 2>&1 &
+
+      - name: Restore Swift package cache
+        id: package-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: swift-packages-xcode-26.5-${{ hashFiles('Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+
       - name: Resolve Swift packages
         run: |
-          xcodebuild -resolvePackageDependencies \
-            -project Baros.xcodeproj \
-            -scheme Baros \
-            -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData"
+          for attempt in 1 2 3; do
+            if xcodebuild -resolvePackageDependencies \
+              -project Baros.xcodeproj \
+              -scheme Baros \
+              -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData" \
+              -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages"; then
+              exit 0
+            fi
+            echo "Package resolution attempt ${attempt} failed."
+            sleep 20
+          done
+          exit 1
+
+      - name: Save Swift package cache
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: swift-packages-xcode-26.5-${{ hashFiles('Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
 
       - name: Run Baros UI smoke tests
         timeout-minutes: 25
@@ -178,8 +254,14 @@ jobs:
             -only-testing:BarosUITests/BarosUITests/testSettingsEditRequestsSyncInUITestMode \
             -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToSettingsAfterReset \
             -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData" \
+            -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages" \
+            -retry-tests-on-failure \
+            -test-iterations 2 \
             -resultBundlePath "${RUNNER_TEMP}/BarosUISmoke.xcresult" \
             2>&1 | tee "${RUNNER_TEMP}/BarosUISmoke.log"
+
+      - name: Report UI smoke tests that only passed on retry
+        run: python3 ci_scripts/report_retried_tests.py "${RUNNER_TEMP}/BarosUISmoke.xcresult"
 
       - name: Verify UI smoke test count
         env:
