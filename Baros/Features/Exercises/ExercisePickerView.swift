@@ -19,6 +19,28 @@ struct ExerciseCreationRowLabel: View {
     }
 }
 
+struct ExerciseNoMatchesSection: View {
+    let suggestion: ExercisePickerCreationSuggestion
+    let accessibilityIdentifier: String
+    let onCreate: (String) -> Void
+
+    var body: some View {
+        Section {
+            Button {
+                onCreate(suggestion.name)
+            } label: {
+                ExerciseCreationRowLabel(title: suggestion.title)
+            }
+            .accessibilityIdentifier(accessibilityIdentifier)
+            .accessibilityLabel(suggestion.title)
+            .listRowBackground(AppTheme.groupedSurface)
+        } header: {
+            Text("No Matching Exercises")
+                .textCase(nil)
+        }
+    }
+}
+
 enum ExercisePickerMode {
     case add(existingExerciseIDs: Set<UUID>)
     case swap(currentExerciseID: UUID?)
@@ -159,96 +181,103 @@ private struct ExercisePickerList: View {
         return ExercisePickerContent.creationSuggestion(for: rows, query: searchText)
     }
 
+    private var noMatchesSuggestion: ExercisePickerCreationSuggestion? {
+        .noMatches(query: searchText, hasMatches: !rows.isEmpty)
+    }
+
     var body: some View {
         List {
-            Section {
-                Button {
-                    beginCreation(name: "")
-                } label: {
-                    ExerciseCreationRowLabel(title: "Create Exercise")
-                }
-                .accessibilityIdentifier("ExercisePickerCreateExerciseButton")
-            }
-
-            Section {
-                ForEach(rows) { row in
+            if let noMatchesSuggestion {
+                ExerciseNoMatchesSection(
+                    suggestion: noMatchesSuggestion,
+                    accessibilityIdentifier: "ExercisePickerCreateExerciseFromSearchButton",
+                    onCreate: beginCreation
+                )
+            } else {
+                Section {
                     Button {
-                        if mode.isAddExercise {
-                            toggleSelection(row.exercise)
-                        } else {
-                            onSelect([row.exercise])
-                        }
+                        beginCreation(name: "")
                     } label: {
-                        HStack(spacing: 12) {
-                            exerciseRow(row)
+                        ExerciseCreationRowLabel(title: "Create Exercise")
+                    }
+                    .accessibilityIdentifier("ExercisePickerCreateExerciseButton")
+                }
 
+                Section {
+                    ForEach(rows) { row in
+                        Button {
                             if mode.isAddExercise {
-                                Image(systemName: selectionSymbol(for: row.exercise))
-                                    .font(.system(size: 24))
-                                    .foregroundStyle(
-                                        isSelected(row.exercise)
-                                            ? AppTheme.brandAccentForeground
-                                            : AppTheme.textTertiary
-                                    )
-                                    .accessibilityHidden(true)
-                            } else if mode.isCurrent(row.exercise) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(AppTheme.brandAccentForeground)
-                                    .accessibilityLabel("Current exercise")
+                                toggleSelection(row.exercise)
+                            } else {
+                                onSelect([row.exercise])
+                            }
+                        } label: {
+                            HStack(spacing: 12) {
+                                exerciseRow(row)
+
+                                if mode.isAddExercise {
+                                    Image(systemName: selectionSymbol(for: row.exercise))
+                                        .font(.system(size: 24))
+                                        .foregroundStyle(
+                                            isSelected(row.exercise)
+                                                ? AppTheme.brandAccentForeground
+                                                : AppTheme.textTertiary
+                                        )
+                                        .accessibilityHidden(true)
+                                } else if mode.isCurrent(row.exercise) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(AppTheme.brandAccentForeground)
+                                        .accessibilityLabel("Current exercise")
+                                }
                             }
                         }
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(mode.isCurrent(row.exercise) || mode.isAlreadyAdded(row.exercise))
-                    .accessibilityAddTraits(isSelected(row.exercise) ? .isSelected : [])
-                    .accessibilityIdentifier(
-                        "ExercisePickerRow-\(row.exercise.name)-\(row.exercise.equipment.displayName)"
-                    )
-                }
-
-                if let creationSuggestion {
-                    Button {
-                        beginCreation(name: creationSuggestion.name)
-                    } label: {
-                        ExerciseCreationRowLabel(title: creationSuggestion.title)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("ExercisePickerCreateExerciseFromSearchButton")
-                    .accessibilityLabel(creationSuggestion.title)
-                }
-            } header: {
-                let layout = dynamicTypeSize.isAccessibilitySize
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-                    : AnyLayout(HStackLayout())
-                layout {
-                    Text("Exercises")
-
-                    if !dynamicTypeSize.isAccessibilitySize {
-                        Spacer()
-                    }
-
-                    Menu {
-                        Picker("Sort exercises", selection: $sortOrder) {
-                            ForEach(ExercisePickerSortOrder.allCases) { option in
-                                Text(option.displayName).tag(option)
-                            }
-                        }
-                    } label: {
-                        Label(
-                            "Sort: \(sortOrder.displayName)",
-                            systemImage: "arrow.up.arrow.down"
+                        .buttonStyle(.plain)
+                        .disabled(mode.isCurrent(row.exercise) || mode.isAlreadyAdded(row.exercise))
+                        .accessibilityAddTraits(isSelected(row.exercise) ? .isSelected : [])
+                        .accessibilityIdentifier(
+                            "ExercisePickerRow-\(row.exercise.name)-\(row.exercise.equipment.displayName)"
                         )
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(AppTheme.brandAccentForeground)
                     }
-                    .accessibilityLabel("Sort: \(sortOrder.displayName)")
-                    .accessibilityIdentifier("ExercisePickerSortMenu")
+
+                    if let creationSuggestion {
+                        Button {
+                            beginCreation(name: creationSuggestion.name)
+                        } label: {
+                            ExerciseCreationRowLabel(title: creationSuggestion.title)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("ExercisePickerCreateExerciseFromSearchButton")
+                        .accessibilityLabel(creationSuggestion.title)
+                    }
+                } header: {
+                    HStack {
+                        if !dynamicTypeSize.isAccessibilitySize {
+                            Spacer()
+                        }
+
+                        Menu {
+                            Picker("Sort exercises", selection: $sortOrder) {
+                                ForEach(ExercisePickerSortOrder.allCases) { option in
+                                    Text(option.displayName).tag(option)
+                                }
+                            }
+                        } label: {
+                            Label(
+                                "Sort: \(sortOrder.displayName)",
+                                systemImage: "arrow.up.arrow.down"
+                            )
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(AppTheme.brandAccentForeground)
+                        }
+                        .accessibilityLabel("Sort: \(sortOrder.displayName)")
+                        .accessibilityIdentifier("ExercisePickerSortMenu")
+                    }
+                    .textCase(nil)
                 }
-                .textCase(nil)
             }
         }
         .scrollContentBackground(.hidden)
-        .contentMargins(.top, mode.isAddExercise ? 8 : nil, for: .scrollContent)
+        .contentMargins(.top, mode.isAddExercise && noMatchesSuggestion == nil ? 8 : nil, for: .scrollContent)
         .contentMargins(.bottom, 24, for: .scrollContent)
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle(mode.navigationTitle)

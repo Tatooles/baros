@@ -49,6 +49,17 @@ final class ExercisePickerModeTests: XCTestCase {
 }
 
 final class ExercisePickerContentTests: XCTestCase {
+    func testSharedNoMatchesSuggestionRequiresNonblankQueryAndNoResults() {
+        XCTAssertNil(ExercisePickerCreationSuggestion.noMatches(query: " \n\t", hasMatches: false))
+        XCTAssertNil(ExercisePickerCreationSuggestion.noMatches(query: "Novel Press", hasMatches: true))
+        let suggestion = ExercisePickerCreationSuggestion.noMatches(
+            query: "  Novel Press \n",
+            hasMatches: false
+        )
+        XCTAssertEqual(suggestion?.name, "Novel Press")
+        XCTAssertEqual(suggestion?.title, "Create new exercise “Novel Press”")
+    }
+
     func testSearchRequiresEveryWordAcrossNameEquipmentAndTargetAreaInEitherOrder() {
         let bench = exercise(named: "Bench Press", equipment: .dumbbell, muscleGroup: .chest)
         let barbellBench = exercise(named: "Bench Press", equipment: .barbell, muscleGroup: .chest)

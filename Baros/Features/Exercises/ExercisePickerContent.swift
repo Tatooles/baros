@@ -37,6 +37,12 @@ struct ExercisePickerCreationSuggestion: Equatable {
     var title: String {
         "Create new exercise “\(name)”"
     }
+
+    static func noMatches(query: String, hasMatches: Bool) -> Self? {
+        let name = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !hasMatches, !name.isEmpty else { return nil }
+        return Self(name: name)
+    }
 }
 
 enum ExercisePickerContent {
