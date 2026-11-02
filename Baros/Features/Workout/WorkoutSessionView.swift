@@ -17,7 +17,7 @@ extension Animation {
 }
 
 struct WorkoutSessionView: View {
-    @RPEPreference private var rpeEnabled
+    @AppStorage(RPEPreference.storageKey) private var rpeEnabled = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize

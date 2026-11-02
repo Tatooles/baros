@@ -1,50 +1,38 @@
+import Foundation
 import SwiftData
-import SwiftUI
 
-/// An unset preference follows visible workout data, including data restored by sync.
-/// Only an explicit choice is saved, so an early empty store cannot lock RPE off.
-@MainActor
-@propertyWrapper
-struct RPEPreference: DynamicProperty {
-    @AppStorage("Baros.RPE.preference") private var selection = "automatic"
-    @Environment(CurrentOwnerCoordinator.self) private var owner
-    @Query(filter: #Predicate<LoggedSet> { $0.rpe != nil && $0.deletedAt == nil })
-    private var ratedSets: [LoggedSet]
+/// RPE entry is off until someone chooses it, unless they already have ratings:
+/// those on this device are checked once ever, and synced ones turn it on as they
+/// arrive. A choice in Settings is never overridden.
+enum RPEPreference {
+    static let storageKey = "Baros.RPE.enabled"
+    private static let didCheckExistingRatingsKey = "Baros.RPE.didCheckExistingRatings"
 
-    var wrappedValue: Bool {
-        get {
-            // Explicit choices avoid walking history during workout input updates.
-            if selection == "on" { return true }
-            if selection == "off" { return false }
-            return RPEPreferencePolicy.isEnabled(selection: selection, hasLoggedRPE: ratedSets.contains {
-                RPEPreferencePolicy.isVisibleRatedSet(
-                    $0, ownerTokenIdentifier: owner.localDataOwnerTokenIdentifier
-                )
-            })
+    static func checkExistingRatingsOnce(context: ModelContext, defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: didCheckExistingRatingsKey) else { return }
+        var descriptor = FetchDescriptor<LoggedSet>(predicate: #Predicate { $0.rpe != nil && $0.deletedAt == nil })
+        descriptor.fetchLimit = 1
+        // A failed read tries again next launch.
+        guard let ratedSets = try? context.fetch(descriptor) else { return }
+        if !ratedSets.isEmpty {
+            enableIfUndecided(defaults: defaults)
         }
-        nonmutating set { selection = newValue ? "on" : "off" }
+        defaults.set(true, forKey: didCheckExistingRatingsKey)
     }
 
-    var projectedValue: Binding<Bool> {
-        Binding(get: { wrappedValue }, set: { wrappedValue = $0 })
+    static func enableIfUndecided(defaults: UserDefaults = .standard) {
+        guard defaults.object(forKey: storageKey) == nil else { return }
+        defaults.set(true, forKey: storageKey)
     }
-}
 
-enum RPEPreferencePolicy {
-    static func isEnabled(selection: String, hasLoggedRPE: Bool) -> Bool {
-        switch selection {
-        case "on": true
-        case "off": false
-        default: hasLoggedRPE
+    static func applyUITestingOverrides(arguments: [String], defaults: UserDefaults = .standard) {
+        if arguments.contains("--uitest-reset-rpe") {
+            defaults.removeObject(forKey: storageKey)
+            defaults.removeObject(forKey: didCheckExistingRatingsKey)
+        } else if arguments.contains("--uitest-disable-rpe") {
+            defaults.set(false, forKey: storageKey)
+        } else if arguments.contains("--uitest-enable-rpe") {
+            defaults.set(true, forKey: storageKey)
         }
-    }
-
-    static func isVisibleRatedSet(_ set: LoggedSet, ownerTokenIdentifier: String?) -> Bool {
-        guard set.deletedAt == nil,
-              WorkoutNumericInputPolicy.validatedRPE(set.rpe) != nil,
-              let exercise = set.loggedExercise, exercise.deletedAt == nil,
-              let session = exercise.session, !session.isDeleted,
-              session.status == .active || session.status == .completed else { return false }
-        return session.allowsHistoryMutation(ownerTokenIdentifier: ownerTokenIdentifier)
     }
 }

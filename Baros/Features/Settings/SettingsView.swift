@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 struct SettingsView: View {
-    @RPEPreference private var rpeEnabled
+    @AppStorage(RPEPreference.storageKey) private var rpeEnabled = false
     @Environment(\.modelContext) private var modelContext
     @Environment(AppAppearancePreferenceStore.self) private var appAppearanceStore
     @Environment(RestTimerCoordinator.self) private var restTimer

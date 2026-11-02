@@ -38,13 +38,7 @@ struct BarosApp: App {
             "--uitest-delay-current-owner-start"
         )
         #if DEBUG
-        if arguments.contains("--uitest-reset-rpe") {
-            UserDefaults.standard.removeObject(forKey: "Baros.RPE.preference")
-        } else if arguments.contains("--uitest-disable-rpe") {
-            UserDefaults.standard.set("off", forKey: "Baros.RPE.preference")
-        } else if arguments.contains("--uitest-enable-rpe") {
-            UserDefaults.standard.set("on", forKey: "Baros.RPE.preference")
-        }
+        RPEPreference.applyUITestingOverrides(arguments: arguments)
         if arguments.contains("--uitest-disable-animations") {
             UIView.setAnimationsEnabled(false)
         }
@@ -103,6 +97,7 @@ struct BarosApp: App {
                 context: container.mainContext
             )
             #endif
+            RPEPreference.checkExistingRatingsOnce(context: container.mainContext)
             modelContainer = container
 
             let syncScheduler = SyncScheduler(observability: syncObservability)

@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct CompletedWorkoutEditView: View {
-    @RPEPreference private var rpeEnabled
+    @AppStorage(RPEPreference.storageKey) private var rpeEnabled = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator

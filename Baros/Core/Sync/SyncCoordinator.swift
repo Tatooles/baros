@@ -6,17 +6,20 @@ final class SyncCoordinator {
     private let client: any SyncClient & Sendable
     private let maxPendingPushEntriesPerRun: Int
     private let observability: any SyncObserving
+    private let rpeDefaults: UserDefaults
     private let recorder = SyncOutboxRecorder()
     private var isRunning = false
 
     init(
         client: any SyncClient & Sendable,
         maxPendingPushEntriesPerRun: Int = 50,
-        observability: any SyncObserving = DisabledSyncObservability.shared
+        observability: any SyncObserving = DisabledSyncObservability.shared,
+        rpeDefaults: UserDefaults = .standard
     ) {
         self.client = client
         self.maxPendingPushEntriesPerRun = maxPendingPushEntriesPerRun
         self.observability = observability
+        self.rpeDefaults = rpeDefaults
     }
 
     @discardableResult
@@ -1449,6 +1452,9 @@ final class SyncCoordinator {
         }
 
         for record in records {
+            if record.deletedAt == nil, WorkoutNumericInputPolicy.validatedRPE(record.rpe) != nil {
+                RPEPreference.enableIfUndecided(defaults: rpeDefaults)
+            }
             guard let id = UUID(uuidString: record.clientId) else {
                 recordAppliedCursor(record.serverUpdatedAt)
                 continue
