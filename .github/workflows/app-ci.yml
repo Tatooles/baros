@@ -117,34 +117,19 @@ jobs:
           # This only saves time. If it fails, xcodebuild boots the destination itself.
           nohup xcrun simctl bootstatus "${udid}" -b > "${RUNNER_TEMP}/SimulatorBoot.log" 2>&1 &
 
-      - name: Restore Swift package cache
-        id: package-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/SourcePackages
-          key: swift-packages-xcode-26.5-${{ hashFiles('Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-
       - name: Resolve Swift packages
         run: |
           for attempt in 1 2 3; do
             if xcodebuild -resolvePackageDependencies \
               -project Baros.xcodeproj \
               -scheme BarosUnitTests \
-              -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData" \
-              -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages"; then
+              -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData"; then
               exit 0
             fi
             echo "Package resolution attempt ${attempt} failed."
             sleep 20
           done
           exit 1
-
-      - name: Save Swift package cache
-        if: steps.package-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/SourcePackages
-          key: swift-packages-xcode-26.5-${{ hashFiles('Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
 
       - name: Run Baros unit tests
         run: |
@@ -154,7 +139,6 @@ jobs:
             -scheme BarosUnitTests \
             -destination "${IOS_TEST_DESTINATION}" \
             -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData" \
-            -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages" \
             -retry-tests-on-failure \
             -test-iterations 2 \
             -resultBundlePath "${RUNNER_TEMP}/BarosTests.xcresult" \
@@ -212,34 +196,19 @@ jobs:
           # This only saves time. If it fails, xcodebuild boots the destination itself.
           nohup xcrun simctl bootstatus "${udid}" -b > "${RUNNER_TEMP}/SimulatorBoot.log" 2>&1 &
 
-      - name: Restore Swift package cache
-        id: package-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/SourcePackages
-          key: swift-packages-xcode-26.5-${{ hashFiles('Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-
       - name: Resolve Swift packages
         run: |
           for attempt in 1 2 3; do
             if xcodebuild -resolvePackageDependencies \
               -project Baros.xcodeproj \
               -scheme Baros \
-              -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData" \
-              -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages"; then
+              -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData"; then
               exit 0
             fi
             echo "Package resolution attempt ${attempt} failed."
             sleep 20
           done
           exit 1
-
-      - name: Save Swift package cache
-        if: steps.package-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/SourcePackages
-          key: swift-packages-xcode-26.5-${{ hashFiles('Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
 
       - name: Run Baros UI smoke tests
         timeout-minutes: 25
@@ -254,7 +223,6 @@ jobs:
             -only-testing:BarosUITests/BarosUITests/testSettingsEditRequestsSyncInUITestMode \
             -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToSettingsAfterReset \
             -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData" \
-            -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages" \
             -retry-tests-on-failure \
             -test-iterations 2 \
             -resultBundlePath "${RUNNER_TEMP}/BarosUISmoke.xcresult" \

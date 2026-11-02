@@ -97,24 +97,6 @@ test("required iOS gates retry failed tests and report retries that passed", asy
   }
 });
 
-test("required iOS gates share one Swift package location with their tests", async () => {
-  const workflow = await readWorkflow("app-ci.yml");
-  const packageFlag = /-clonedSourcePackagesDirPath "\$\{RUNNER_TEMP\}\/SourcePackages"/;
-
-  for (const jobName of ["ios-unit-tests", "ios-ui-smoke"]) {
-    const steps = workflow.jobs[jobName].steps;
-    const restore = steps.find((step) => step.uses === "actions/cache/restore@v4");
-    const save = steps.find((step) => step.uses === "actions/cache/save@v4");
-    const resolve = steps.find((step) => step.name === "Resolve Swift packages");
-    const test = steps.find((step) => step.run?.includes("xcodebuild test"));
-
-    assert.equal(restore.with.path, "${{ runner.temp }}/SourcePackages");
-    assert.deepEqual(save.with, restore.with);
-    assert.match(resolve.run, packageFlag);
-    assert.match(test.run, packageFlag);
-  }
-});
-
 test("app classification uses the correct comparison for pull requests and pushes", async () => {
   const workflow = await readWorkflow("app-ci.yml");
   const classifier = workflow.jobs["app-changes"].steps.find((step) => step.id === "detect");
