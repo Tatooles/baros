@@ -161,7 +161,7 @@ struct ExerciseLibraryView: View {
 
     private func mutate(_ exercise: Exercise, restoring: Bool) {
         pendingRemoval = nil
-        removalErrorTitle = "Couldn't Restore Exercise"
+        removalErrorTitle = restoring ? "Couldn't Restore Exercise" : "Couldn't Remove Exercise"
         do {
             let service = ExerciseMutationService(syncScheduler: syncScheduler)
             let owner = currentOwnerCoordinator.localDataOwnerTokenIdentifier
