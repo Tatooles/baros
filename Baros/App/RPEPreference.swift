@@ -13,6 +13,9 @@ struct RPEPreference: DynamicProperty {
 
     var wrappedValue: Bool {
         get {
+            // Explicit choices avoid walking history during workout input updates.
+            if selection == "on" { return true }
+            if selection == "off" { return false }
             return RPEPreferencePolicy.isEnabled(selection: selection, hasLoggedRPE: ratedSets.contains {
                 RPEPreferencePolicy.isVisibleRatedSet(
                     $0, ownerTokenIdentifier: owner.localDataOwnerTokenIdentifier
