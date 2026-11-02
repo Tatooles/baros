@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 
 struct SettingsView: View {
+    @AppStorage(RPEPreference.storageKey) private var rpeEnabled = false
     @Environment(\.modelContext) private var modelContext
     @Environment(AppAppearancePreferenceStore.self) private var appAppearanceStore
     @Environment(RestTimerCoordinator.self) private var restTimer
@@ -48,6 +49,16 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("SettingsRestTimerStepper")
                 }
+
+                Toggle(isOn: $rpeEnabled) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("RPE")
+                        Text("Rate how hard each set felt.")
+                            .font(.footnote)
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                }
+                .accessibilityIdentifier("SettingsRPEToggle")
             }
 
             Section {

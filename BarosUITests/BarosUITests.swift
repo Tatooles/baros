@@ -3,6 +3,52 @@ import XCTest
 
 final class BarosUITests: XCTestCase {
     @MainActor
+    func testExistingRPEEnablesAutomaticPreferenceAndRemainsEditableWhenOff() {
+        let app = makeApp(extraArguments: ["--uitest-reset-rpe"],
+                          completedBenchWorkoutTitles: ["Rated workout"])
+        app.launch()
+        tapTab(.settings, in: app)
+        let toggle = app.switches["SettingsRPEToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        XCTAssertEqual(toggle.value as? String, "1")
+        toggle.switches.firstMatch.tap()
+        XCTAssertEqual(toggle.value as? String, "0")
+        tapTab(.history, in: app)
+        app.buttons["WorkoutHistoryButton-0"].tap()
+        app.buttons["EditWorkoutButton"].tap()
+        let rating = app.textFields["HistorySetRPEField-0-0"]
+        XCTAssertTrue(rating.waitForExistence(timeout: 3))
+        XCTAssertEqual(rating.value as? String, "8")
+    }
+
+    @MainActor
+    func testRPEPreferenceHidesEntryAndPersistsExplicitChoice() {
+        let app = makeApp(extraArguments: ["--uitest-reset-rpe"])
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        app.textFields["SetRepsField-0-0"].tap()
+        XCTAssertTrue(app.buttons["DismissKeyboardButton"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["RPEToolbarButton"].exists)
+        app.buttons["DismissKeyboardButton"].tap()
+        minimizeActiveWorkout(in: app)
+        tapTab(.settings, in: app)
+        let toggle = app.switches["SettingsRPEToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        XCTAssertEqual(toggle.value as? String, "0")
+        toggle.switches.firstMatch.tap()
+        XCTAssertEqual(toggle.value as? String, "1")
+        app.buttons["ActiveWorkoutAccessory"].tap()
+        app.textFields["SetRepsField-0-0"].tap()
+        XCTAssertTrue(app.buttons["RPEToolbarButton"].waitForExistence(timeout: 3))
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--uitest-enable-rpe" || $0 == "--uitest-reset-rpe" }
+        app.launch()
+        tapTab(.settings, in: app)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        XCTAssertEqual(toggle.value as? String, "1")
+    }
+
+    @MainActor
     func testAccountWorkoutGateCancelThenFinish() {
         let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth", "--uitest-sync-owner", "issuer|ui_owner",
             "--uitest-seed-large-active-workout"])
@@ -202,7 +248,7 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testAddingExerciseDoesNotLeaveBottomGap() {
         let app = XCUIApplication()
-        app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout"]
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout"]
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
         for _ in 0..<4 { app.swipeUp() }
@@ -225,7 +271,7 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testEditWorkoutAddAndReorderWalkthrough() {
         let app = XCUIApplication()
-        app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout"]
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout"]
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
         app.swipeUp()
@@ -271,7 +317,7 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testEditWorkoutDraftCancelRemoveAndRetry() {
         let app = XCUIApplication()
-        app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout", "--uitest-fail-reorder-exercises-save-once"]
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout", "--uitest-fail-reorder-exercises-save-once"]
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
         openReorderSheet(in: app)
@@ -322,7 +368,7 @@ final class BarosUITests: XCTestCase {
     func testMinimizedAccessoryShowsRestCountdownFinishedWindowThenElapsed() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store", "--uitest-force-signed-out-auth",
+            "--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience", "--uitest-rest-30-seconds",
             "--uitest-seed-large-active-workout",
         ]
@@ -357,7 +403,7 @@ final class BarosUITests: XCTestCase {
     func testMinimizedRestAccessoryAtAccessibilityTextSizeAndAfterSkip() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store", "--uitest-force-signed-out-auth",
+            "--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience", "--uitest-seed-large-active-workout",
             "--uitest-accessibility-dynamic-type",
         ]
@@ -2089,7 +2135,7 @@ final class BarosUITests: XCTestCase {
     func testOneFourUpgradeToUnannouncedReleaseSkipsWhatsNew() {
         let firstLaunch = makeDiskBackedApp(
             extraArguments: [
-                "--uitest-in-memory-store",
+                "--uitest-in-memory-store", "--uitest-enable-rpe",
                 "-Baros.FirstRunExperience.hasSeenWelcome", "YES",
                 "-Baros.FirstRunExperience.lastProcessedAppVersion", "1.4",
                 "-Baros.FirstRunExperience.lastSeenWhatsNewVersion", "1.4",
@@ -2105,7 +2151,7 @@ final class BarosUITests: XCTestCase {
 
         let secondLaunch = makeDiskBackedApp(
             extraArguments: [
-                "--uitest-in-memory-store",
+                "--uitest-in-memory-store", "--uitest-enable-rpe",
                 "-Baros.FirstRunExperience.hasSeenWelcome", "YES",
             ],
             skipsFirstRunExperience: false
@@ -4088,7 +4134,7 @@ final class BarosUITests: XCTestCase {
     func testPreviousOverridesSuggestionsInLaterRowsOfLargeWorkout() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
             "--uitest-seed-large-active-workout",
@@ -4138,7 +4184,7 @@ final class BarosUITests: XCTestCase {
     func testSuggestionsRemainAccessibleAtAccessibilityTextSize() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL",
@@ -4167,7 +4213,7 @@ final class BarosUITests: XCTestCase {
     func testEarlierSetSuggestionsStayUnrecordedUntilCheckmarkOrRPE() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
         ]
@@ -4234,7 +4280,7 @@ final class BarosUITests: XCTestCase {
         // also run on a physical phone without resetting its workout store.
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
             "--uitest-seed-completed-bench-workout", "Past Push",
@@ -4283,7 +4329,7 @@ final class BarosUITests: XCTestCase {
     func testClearingRPEKeepsEditingTheSameField() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
             "--uitest-seed-completed-bench-workout", "Past Push",
@@ -5313,7 +5359,7 @@ final class BarosUITests: XCTestCase {
             ? []
             : ["--uitest-force-signed-out-auth"]
         var launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-reset-exercise-picker-sort",
             "--uitest-reset-app-appearance",
         ] + fixtureArguments + authArguments
