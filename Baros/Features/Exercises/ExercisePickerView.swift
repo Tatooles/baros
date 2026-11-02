@@ -159,15 +159,21 @@ private struct ExercisePickerList: View {
         return ExercisePickerContent.creationSuggestion(for: rows, query: searchText)
     }
 
+    private var showsNoMatches: Bool {
+        rows.isEmpty && creationSuggestion != nil
+    }
+
     var body: some View {
         List {
-            Section {
-                Button {
-                    beginCreation(name: "")
-                } label: {
-                    ExerciseCreationRowLabel(title: "Create Exercise")
+            if !showsNoMatches {
+                Section {
+                    Button {
+                        beginCreation(name: "")
+                    } label: {
+                        ExerciseCreationRowLabel(title: "Create Exercise")
+                    }
+                    .accessibilityIdentifier("ExercisePickerCreateExerciseButton")
                 }
-                .accessibilityIdentifier("ExercisePickerCreateExerciseButton")
             }
 
             Section {
@@ -217,36 +223,34 @@ private struct ExercisePickerList: View {
                     .accessibilityLabel(creationSuggestion.title)
                 }
             } header: {
-                let layout = dynamicTypeSize.isAccessibilitySize
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-                    : AnyLayout(HStackLayout())
-                layout {
-                    if rows.isEmpty && creationSuggestion != nil {
-                        Text("No Matching Exercises")
-                    }
-
-                    if !dynamicTypeSize.isAccessibilitySize {
-                        Spacer()
-                    }
-
-                    Menu {
-                        Picker("Sort exercises", selection: $sortOrder) {
-                            ForEach(ExercisePickerSortOrder.allCases) { option in
-                                Text(option.displayName).tag(option)
-                            }
+                if showsNoMatches {
+                    Text("No Matching Exercises")
+                        .textCase(nil)
+                } else {
+                    HStack {
+                        if !dynamicTypeSize.isAccessibilitySize {
+                            Spacer()
                         }
-                    } label: {
-                        Label(
-                            "Sort: \(sortOrder.displayName)",
-                            systemImage: "arrow.up.arrow.down"
-                        )
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(AppTheme.brandAccentForeground)
+
+                        Menu {
+                            Picker("Sort exercises", selection: $sortOrder) {
+                                ForEach(ExercisePickerSortOrder.allCases) { option in
+                                    Text(option.displayName).tag(option)
+                                }
+                            }
+                        } label: {
+                            Label(
+                                "Sort: \(sortOrder.displayName)",
+                                systemImage: "arrow.up.arrow.down"
+                            )
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(AppTheme.brandAccentForeground)
+                        }
+                        .accessibilityLabel("Sort: \(sortOrder.displayName)")
+                        .accessibilityIdentifier("ExercisePickerSortMenu")
                     }
-                    .accessibilityLabel("Sort: \(sortOrder.displayName)")
-                    .accessibilityIdentifier("ExercisePickerSortMenu")
+                    .textCase(nil)
                 }
-                .textCase(nil)
             }
         }
         .scrollContentBackground(.hidden)

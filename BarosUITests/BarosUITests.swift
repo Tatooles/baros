@@ -2343,11 +2343,14 @@ final class BarosUITests: XCTestCase {
         replaceText(in: search, with: "Novel Incline Dumbbell Press")
         XCTAssertTrue(noMatches.waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["ExercisePickerCreateExerciseFromSearchButton"].exists)
+        XCTAssertFalse(app.buttons["ExercisePickerCreateExerciseButton"].exists)
+        XCTAssertFalse(app.buttons["ExercisePickerSortMenu"].exists)
 
         replaceText(in: search, with: "barbell bench")
         XCTAssertTrue(app.buttons["ExercisePickerRow-Bench Press-Barbell"].waitForExistence(timeout: 3))
         XCTAssertFalse(noMatches.exists)
         XCTAssertTrue(app.buttons["ExercisePickerSortMenu"].exists)
+        XCTAssertTrue(app.buttons["ExercisePickerCreateExerciseButton"].exists)
     }
 
     @MainActor
