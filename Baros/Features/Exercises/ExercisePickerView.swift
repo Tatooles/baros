@@ -1,6 +1,24 @@
 import SwiftData
 import SwiftUI
 
+struct ExerciseCreationRowLabel: View {
+    let title: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            Image(systemName: "plus.circle")
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .frame(minWidth: 24)
+                .accessibilityHidden(true)
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.body.weight(.semibold))
+        .foregroundStyle(AppTheme.brandAccentForeground)
+    }
+}
+
 enum ExercisePickerMode {
     case add(existingExerciseIDs: Set<UUID>)
     case swap(currentExerciseID: UUID?)
@@ -86,6 +104,7 @@ private struct ExercisePickerList: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dismissSearch) private var dismissSearch
     @Environment(\.isSearching) private var isSearching
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let baseRows: [ExercisePickerRowContent]
     let mode: ExercisePickerMode
     var showsCancel = true
@@ -146,9 +165,7 @@ private struct ExercisePickerList: View {
                 Button {
                     beginCreation(name: "")
                 } label: {
-                    Label("Create Exercise", systemImage: "plus.circle")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(AppTheme.brandAccentForeground)
+                    ExerciseCreationRowLabel(title: "Create Exercise")
                 }
                 .accessibilityIdentifier("ExercisePickerCreateExerciseButton")
             }
@@ -193,21 +210,22 @@ private struct ExercisePickerList: View {
                     Button {
                         beginCreation(name: creationSuggestion.name)
                     } label: {
-                        Label(creationSuggestion.title, systemImage: "plus.circle")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(AppTheme.brandAccentForeground)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 4)
+                        ExerciseCreationRowLabel(title: creationSuggestion.title)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("ExercisePickerCreateExerciseFromSearchButton")
                     .accessibilityLabel(creationSuggestion.title)
                 }
             } header: {
-                HStack {
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                    : AnyLayout(HStackLayout())
+                layout {
                     Text("Exercises")
 
-                    Spacer()
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        Spacer()
+                    }
 
                     Menu {
                         Picker("Sort exercises", selection: $sortOrder) {
@@ -220,7 +238,7 @@ private struct ExercisePickerList: View {
                             "Sort: \(sortOrder.displayName)",
                             systemImage: "arrow.up.arrow.down"
                         )
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(AppTheme.brandAccentForeground)
                     }
                     .accessibilityLabel("Sort: \(sortOrder.displayName)")
@@ -324,13 +342,13 @@ private struct ExercisePickerList: View {
     private func exerciseRow(_ row: ExercisePickerRowContent) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(row.exercise.name)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.body.weight(.semibold))
                 .foregroundStyle(AppTheme.textPrimary)
             Text(row.exercise.metadataDisplayText)
-                .font(.system(size: 13, weight: .medium))
+                .font(.footnote.weight(.medium))
                 .foregroundStyle(AppTheme.textSecondary)
             Text(mode.isAlreadyAdded(row.exercise) ? "Already added" : row.performanceSummaryText)
-                .font(.system(size: 12, weight: .medium))
+                .font(.caption.weight(.medium))
                 .foregroundStyle(AppTheme.textTertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
