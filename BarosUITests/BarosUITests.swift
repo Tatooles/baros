@@ -5034,6 +5034,11 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(app.textFields["ExerciseNameField"].value as? String, "No")
         app.buttons["ExerciseEditorSaveButton"].tap()
         XCTAssertTrue(app.buttons["ExerciseLibraryRow-No-Barbell"].waitForExistence(timeout: 3))
+        app.segmentedControls.buttons["Archived"].tap()
+        XCTAssertTrue(app.staticTexts["No Matching Exercises"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ExerciseLibraryCreateExerciseFromSearchButton"].exists)
+        app.segmentedControls.buttons["Active"].tap()
+        XCTAssertTrue(app.buttons["ExerciseLibraryRow-No-Barbell"].waitForExistence(timeout: 3))
     }
 
     @MainActor
