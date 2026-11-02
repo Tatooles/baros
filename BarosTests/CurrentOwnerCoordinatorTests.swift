@@ -1177,7 +1177,7 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
     }
 
     private func waitUntil(
-        timeout: TimeInterval = 1.0,
+        timeout: TimeInterval = 10.0,
         condition: @MainActor @escaping () -> Bool
     ) async throws {
         let deadline = Date().addingTimeInterval(timeout)

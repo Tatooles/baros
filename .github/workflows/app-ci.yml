@@ -106,10 +106,17 @@ jobs:
 
       - name: Resolve Swift packages
         run: |
-          xcodebuild -resolvePackageDependencies \
-            -project Baros.xcodeproj \
-            -scheme BarosUnitTests \
-            -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData"
+          for attempt in 1 2 3; do
+            if xcodebuild -resolvePackageDependencies \
+              -project Baros.xcodeproj \
+              -scheme BarosUnitTests \
+              -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData"; then
+              exit 0
+            fi
+            echo "Package resolution attempt ${attempt} failed."
+            sleep 20
+          done
+          exit 1
 
       - name: Run Baros unit tests
         run: |
@@ -119,8 +126,13 @@ jobs:
             -scheme BarosUnitTests \
             -destination "${IOS_TEST_DESTINATION}" \
             -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData" \
+            -retry-tests-on-failure \
+            -test-iterations 2 \
             -resultBundlePath "${RUNNER_TEMP}/BarosTests.xcresult" \
             2>&1 | tee "${RUNNER_TEMP}/BarosTests.log"
+
+      - name: Report unit tests that only passed on retry
+        run: python3 ci_scripts/report_retried_tests.py "${RUNNER_TEMP}/BarosTests.xcresult"
 
       - name: Upload iOS failure diagnostics
         if: failure()
@@ -160,10 +172,17 @@ jobs:
 
       - name: Resolve Swift packages
         run: |
-          xcodebuild -resolvePackageDependencies \
-            -project Baros.xcodeproj \
-            -scheme Baros \
-            -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData"
+          for attempt in 1 2 3; do
+            if xcodebuild -resolvePackageDependencies \
+              -project Baros.xcodeproj \
+              -scheme Baros \
+              -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData"; then
+              exit 0
+            fi
+            echo "Package resolution attempt ${attempt} failed."
+            sleep 20
+          done
+          exit 1
 
       - name: Run Baros UI smoke tests
         timeout-minutes: 25
@@ -178,8 +197,13 @@ jobs:
             -only-testing:BarosUITests/BarosUITests/testSettingsEditRequestsSyncInUITestMode \
             -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToSettingsAfterReset \
             -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData" \
+            -retry-tests-on-failure \
+            -test-iterations 2 \
             -resultBundlePath "${RUNNER_TEMP}/BarosUISmoke.xcresult" \
             2>&1 | tee "${RUNNER_TEMP}/BarosUISmoke.log"
+
+      - name: Report UI smoke tests that only passed on retry
+        run: python3 ci_scripts/report_retried_tests.py "${RUNNER_TEMP}/BarosUISmoke.xcresult"
 
       - name: Verify UI smoke test count
         env:

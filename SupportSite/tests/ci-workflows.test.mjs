@@ -81,6 +81,22 @@ test("required iOS gates fail closed when app-change classification fails or is 
   requireFailClosedGate(workflow.jobs["ios-ui-smoke"]);
 });
 
+test("required iOS gates retry failed tests and report retries that passed", async () => {
+  const workflow = await readWorkflow("app-ci.yml");
+
+  for (const jobName of ["ios-unit-tests", "ios-ui-smoke"]) {
+    const steps = workflow.jobs[jobName].steps;
+    const testIndex = steps.findIndex((step) => step.run?.includes("xcodebuild test"));
+    const reportIndex = steps.findIndex((step) =>
+      step.run?.includes("ci_scripts/report_retried_tests.py"),
+    );
+
+    assert.match(steps[testIndex].run, /-retry-tests-on-failure/);
+    assert.match(steps[testIndex].run, /-test-iterations 2/);
+    assert.equal(reportIndex, testIndex + 1);
+  }
+});
+
 test("app classification uses the correct comparison for pull requests and pushes", async () => {
   const workflow = await readWorkflow("app-ci.yml");
   const classifier = workflow.jobs["app-changes"].steps.find((step) => step.id === "detect");
