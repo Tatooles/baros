@@ -51,6 +51,37 @@ enum UITestFixtureSeeder {
         ownerTokenIdentifier: String? = nil,
         context: ModelContext
     ) throws {
+        // Disposable reproduction: repeated A, with an independently added exercise from B.
+        if arguments.contains("--uitest-seed-previous-missing-source"),
+           arguments.contains("--uitest-in-memory-store") {
+            let sourceExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                sets: [LoggedSet(orderIndex: 0, weight: 185, reps: 5, isCompleted: true)])
+            let source = WorkoutSession(title: "Source A", startedAt: .now.addingTimeInterval(-7200),
+                status: .completed, source: .blank, syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                loggedExercises: [sourceExercise])
+            let independent = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Back Squat",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                sets: [LoggedSet(orderIndex: 0, weight: 225, reps: 8, isCompleted: true)])
+            let history = WorkoutSession(title: "Surviving B", startedAt: .now.addingTimeInterval(-3600),
+                status: .completed, source: .blank, syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                loggedExercises: [independent])
+            let linked = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                sourceLoggedExerciseID: sourceExercise.id,
+                sets: [LoggedSet(orderIndex: 0, sourceLoggedSetID: sourceExercise.sets[0].id)])
+            let added = LoggedExercise(orderIndex: 1, exerciseSnapshotName: "Back Squat",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                sets: [LoggedSet(orderIndex: 0)])
+            let active = WorkoutSession(title: "Repeated A + added squat", startedAt: .now, status: .active,
+                source: .pastWorkout, sourceSessionID: source.id,
+                syncOwnerTokenIdentifier: ownerTokenIdentifier, loggedExercises: [linked, added])
+            context.insert(source)
+            context.insert(history)
+            context.insert(active)
+            try context.save()
+        }
+
         if arguments.contains("--uitest-seed-owner-loss-workout") {
             context.insert(WorkoutSession(title: "Private expired-session workout", startedAt: .now,
                 status: .active, source: .blank,
