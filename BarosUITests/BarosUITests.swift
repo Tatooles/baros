@@ -2324,6 +2324,33 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testExercisePickerNoMatchesHeaderTracksSearchResults() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkout(in: app)
+        app.buttons["AddExerciseButton"].tap()
+        XCTAssertTrue(app.navigationBars["Add Exercises"].waitForExistence(timeout: 3))
+        let noMatches = app.staticTexts["No Matching Exercises"]
+        XCTAssertFalse(noMatches.exists)
+        XCTAssertFalse(app.staticTexts["Exercises"].exists)
+
+        let search = app.searchFields.firstMatch
+        search.tap()
+        search.typeText("   ")
+        XCTAssertFalse(noMatches.exists)
+        XCTAssertFalse(app.buttons["ExercisePickerCreateExerciseFromSearchButton"].exists)
+
+        replaceText(in: search, with: "Novel Incline Dumbbell Press")
+        XCTAssertTrue(noMatches.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ExercisePickerCreateExerciseFromSearchButton"].exists)
+
+        replaceText(in: search, with: "barbell bench")
+        XCTAssertTrue(app.buttons["ExercisePickerRow-Bench Press-Barbell"].waitForExistence(timeout: 3))
+        XCTAssertFalse(noMatches.exists)
+        XCTAssertTrue(app.buttons["ExercisePickerSortMenu"].exists)
+    }
+
+    @MainActor
     func testExercisePickerCreationEndsSearchAndCancelPreservesPicks() {
         let app = makeApp()
         app.launch()

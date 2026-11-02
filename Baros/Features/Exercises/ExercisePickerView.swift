@@ -221,7 +221,9 @@ private struct ExercisePickerList: View {
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
                     : AnyLayout(HStackLayout())
                 layout {
-                    Text("Exercises")
+                    if rows.isEmpty && creationSuggestion != nil {
+                        Text("No Matching Exercises")
+                    }
 
                     if !dynamicTypeSize.isAccessibilitySize {
                         Spacer()
