@@ -91,6 +91,27 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(entry.operation, .update)
     }
 
+    func testRemovalPreviewDoesNotMutateAndNewHistoryChangesDeleteToArchive() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscle: "Biceps")
+        context.insert(exercise)
+        try context.save()
+        let updated = exercise.updatedAt
+        XCTAssertEqual(try exercise.removalOutcome(context: context), .deleted)
+        XCTAssertFalse(exercise.isArchived)
+        XCTAssertFalse(exercise.isDeleted)
+        XCTAssertEqual(exercise.updatedAt, updated)
+        XCTAssertTrue(try fetchEntries(context).isEmpty)
+        context.insert(LoggedExercise(orderIndex: 0, exercise: exercise))
+        try ExerciseMutationService().removeExercise(exercise, context: context)
+        XCTAssertTrue(exercise.isArchived)
+        XCTAssertFalse(exercise.isDeleted)
+        let seeded = Exercise(name: "Seed", category: .strength, equipment: .barbell, primaryMuscle: "Back", isSeeded: true)
+        context.insert(seeded)
+        XCTAssertEqual(try seeded.removalOutcome(context: context), .archived)
+    }
+
     func testLibraryRestorePreservesIdentityAndHistoryAndRejectsCollision() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

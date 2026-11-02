@@ -12,7 +12,14 @@ struct ExerciseLibraryView: View {
     @State private var removalErrorMessage: String?
 
     @State private var showArchived = false
-    @State private var pendingRemoval: Exercise?
+    @State private var pendingRemoval: RemovalConfirmation?
+    @State private var removalTitle = ""
+    @State private var removalErrorTitle = "Couldn't Remove Exercise"
+
+    private struct RemovalConfirmation {
+        let exercise: Exercise
+        let outcome: ExerciseRemovalOutcome
+    }
 
     private var filteredExercises: [Exercise] {
         let search = ExerciseSearch(query: searchText)
@@ -74,7 +81,7 @@ struct ExerciseLibraryView: View {
                     }
                     .accessibilityIdentifier("ExerciseLibraryRow-\(exercise.name)-\(exercise.equipment.displayName)")
                     .swipeActions(allowsFullSwipe: false) {
-                        Button(role: .destructive) { pendingRemoval = exercise } label: {
+                        Button(role: .destructive) { confirmRemoval(exercise) } label: {
                             Label("Remove", systemImage: "trash")
                         }
                         .tint(AppTheme.destructive)
@@ -100,20 +107,25 @@ struct ExerciseLibraryView: View {
         .navigationDestination(isPresented: $isCreatingExercise) {
             ExerciseEditorView(initialName: creationName)
         }
-        .alert("Remove Exercise?", isPresented: Binding(
+        .alert(removalTitle, isPresented: Binding(
             get: { pendingRemoval != nil },
             set: { if !$0 { pendingRemoval = nil } }
-        )) {
-            Button("Remove", role: .destructive) {
-                if let exercise = pendingRemoval { mutate(exercise, restoring: false) }
-                pendingRemoval = nil
+        ), presenting: pendingRemoval) { confirmation in
+            if confirmation.outcome == .archived {
+                Button("Archive") { mutate(confirmation.exercise, restoring: false) }
+            } else {
+                Button("Delete", role: .destructive) { mutate(confirmation.exercise, restoring: false) }
             }
             Button("Cancel", role: .cancel) { pendingRemoval = nil }
-        } message: {
-            Text("Remove this exercise from the workout picker? Past workouts stay unchanged. Seeded exercises and exercises used in workouts can be restored from Archived. Unused custom exercises are permanently removed.")
+        } message: { confirmation in
+            if confirmation.outcome == .archived {
+                Text("It won't appear when you add exercises. Past workouts stay the same, and you can restore it from Archived.")
+            } else {
+                Text("You haven't used it in a workout, so no history is lost. This can't be undone.")
+            }
         }
         .alert(
-            "Couldn't Change Exercise",
+            removalErrorTitle,
             isPresented: Binding(
                 get: { removalErrorMessage != nil },
                 set: { isPresented in
@@ -136,13 +148,30 @@ struct ExerciseLibraryView: View {
         }
     }
 
+    private func confirmRemoval(_ exercise: Exercise) {
+        do {
+            let outcome = try exercise.removalOutcome(context: modelContext)
+            removalTitle = "\(outcome == .archived ? "Archive" : "Delete") \(exercise.name)?"
+            pendingRemoval = RemovalConfirmation(exercise: exercise, outcome: outcome)
+        } catch {
+            removalErrorTitle = "Couldn't Remove Exercise"
+            removalErrorMessage = error.localizedDescription
+        }
+    }
+
     private func mutate(_ exercise: Exercise, restoring: Bool) {
+        pendingRemoval = nil
+        removalErrorTitle = "Couldn't Restore Exercise"
         do {
             let service = ExerciseMutationService(syncScheduler: syncScheduler)
             let owner = currentOwnerCoordinator.localDataOwnerTokenIdentifier
             if restoring {
                 try service.restoreExercise(exercise, ownerTokenIdentifier: owner, context: modelContext)
             } else {
+                // History can arrive while the alert is open. Recheck before mutation;
+                // archiveOrDelete also checks so new history is never deleted.
+                let outcome = try exercise.removalOutcome(context: modelContext)
+                removalErrorTitle = outcome == .archived ? "Couldn't Archive Exercise" : "Couldn't Delete Exercise"
                 try service.removeExercise(exercise, ownerTokenIdentifier: owner, context: modelContext)
             }
             removalErrorMessage = nil

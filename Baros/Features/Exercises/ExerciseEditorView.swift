@@ -99,7 +99,7 @@ struct ExerciseEditorView: View {
                 && existing.hasSameActiveIdentity(name: trimmedName, equipment: equipment)
         }
         guard !duplicate else {
-            validationMessage = "An active exercise with that name and equipment already exists."
+            validationMessage = "You already have an exercise with this name and equipment."
             return
         }
 

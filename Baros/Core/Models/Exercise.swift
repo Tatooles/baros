@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-enum ExerciseRemovalOutcome {
+enum ExerciseRemovalOutcome: Equatable {
     case archived
     case deleted
 }
@@ -197,19 +197,22 @@ final class Exercise: Identifiable {
         touch(now: now)
     }
 
-    @discardableResult
-    func archiveOrDelete(context: ModelContext, now: Date = .now) throws -> ExerciseRemovalOutcome {
+    func removalOutcome(context: ModelContext) throws -> ExerciseRemovalOutcome {
+        if isSeeded { return .archived }
         let exerciseID = id
         let hasLoggedHistory = try context.fetch(FetchDescriptor<LoggedExercise>())
             .contains { $0.exercise?.id == exerciseID }
+        return hasLoggedHistory ? .archived : .deleted
+    }
 
-        if isSeeded || hasLoggedHistory {
-            archive(now: now)
-            return .archived
-        } else {
-            markDeleted(now: now)
-            return .deleted
+    @discardableResult
+    func archiveOrDelete(context: ModelContext, now: Date = .now) throws -> ExerciseRemovalOutcome {
+        let outcome = try removalOutcome(context: context)
+        switch outcome {
+        case .archived: archive(now: now)
+        case .deleted: markDeleted(now: now)
         }
+        return outcome
     }
 
     func touch(now: Date = .now) {

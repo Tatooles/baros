@@ -197,7 +197,7 @@ struct ExerciseMutationService {
     private enum LibraryError: LocalizedError {
         case activeDuplicate
         var errorDescription: String? {
-            "An active exercise already has this name and equipment. Rename that exercise in Active, then try Restore again. Their histories will stay separate."
+            "You already have an exercise with this name and equipment. Rename or remove it, then try again. The two histories won't be combined."
         }
     }
 

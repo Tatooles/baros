@@ -5061,7 +5061,13 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["ExerciseLibraryRow-Aardvark Paused Row-Barbell"].waitForExistence(timeout: 3))
         app.buttons["ExerciseLibraryRow-Aardvark Paused Row-Barbell"].swipeLeft()
         app.buttons["Remove"].tap()
+        XCTAssertTrue(app.alerts["Delete Aardvark Paused Row?"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["You haven't used it in a workout, so no history is lost. This can't be undone."].exists)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["ExerciseLibraryRow-Aardvark Paused Row-Barbell"].exists)
+        app.buttons["ExerciseLibraryRow-Aardvark Paused Row-Barbell"].swipeLeft()
         app.buttons["Remove"].tap()
+        app.alerts.buttons["Delete"].tap()
         XCTAssertFalse(app.buttons["ExerciseLibraryRow-Aardvark Paused Row-Barbell"].waitForExistence(timeout: 1))
     }
 
@@ -5076,12 +5082,12 @@ final class BarosUITests: XCTestCase {
         row.swipeLeft()
         XCTAssertTrue(row.exists) // Swiping alone cannot remove.
         app.buttons["Remove"].tap()
-        XCTAssertTrue(app.staticTexts["Remove Exercise?"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Archive Back Squat?"].waitForExistence(timeout: 3))
         app.buttons["Cancel"].tap()
         XCTAssertTrue(row.exists)
         row.swipeLeft()
         app.buttons["Remove"].tap()
-        app.buttons["Remove"].tap()
+        app.alerts.buttons["Archive"].tap()
         XCTAssertFalse(row.waitForExistence(timeout: 1))
         app.segmentedControls.buttons["Archived"].tap()
         let restore = app.buttons["Restore Back Squat"]
@@ -5125,7 +5131,7 @@ final class BarosUITests: XCTestCase {
         selectPickerValue(identifier: "ExercisePrimaryMuscleGroupPicker", value: "Chest", in: app)
         app.buttons["ExerciseEditorSaveButton"].tap()
 
-        XCTAssertTrue(app.staticTexts["An active exercise with that name and equipment already exists."].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["You already have an exercise with this name and equipment."].waitForExistence(timeout: 3))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.navigationBars["Exercises"].waitForExistence(timeout: 3))
 
