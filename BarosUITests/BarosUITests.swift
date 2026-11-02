@@ -3,6 +3,52 @@ import XCTest
 
 final class BarosUITests: XCTestCase {
     @MainActor
+    func testExistingRPEEnablesAutomaticPreferenceAndRemainsEditableWhenOff() {
+        let app = makeApp(extraArguments: ["--uitest-reset-rpe"],
+                          completedBenchWorkoutTitles: ["Rated workout"])
+        app.launch()
+        tapTab(.settings, in: app)
+        let toggle = app.switches["SettingsRPEToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        XCTAssertEqual(toggle.value as? String, "1")
+        toggle.switches.firstMatch.tap()
+        XCTAssertEqual(toggle.value as? String, "0")
+        tapTab(.history, in: app)
+        app.buttons["WorkoutHistoryButton-0"].tap()
+        app.buttons["EditWorkoutButton"].tap()
+        let rating = app.textFields["HistorySetRPEField-0-0"]
+        XCTAssertTrue(rating.waitForExistence(timeout: 3))
+        XCTAssertEqual(rating.value as? String, "8")
+    }
+
+    @MainActor
+    func testRPEPreferenceHidesEntryAndPersistsExplicitChoice() {
+        let app = makeApp(extraArguments: ["--uitest-reset-rpe"])
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        app.textFields["SetRepsField-0-0"].tap()
+        XCTAssertTrue(app.buttons["DismissKeyboardButton"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["RPEToolbarButton"].exists)
+        app.buttons["DismissKeyboardButton"].tap()
+        minimizeActiveWorkout(in: app)
+        tapTab(.settings, in: app)
+        let toggle = app.switches["SettingsRPEToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        XCTAssertEqual(toggle.value as? String, "0")
+        toggle.switches.firstMatch.tap()
+        XCTAssertEqual(toggle.value as? String, "1")
+        app.buttons["ActiveWorkoutAccessory"].tap()
+        app.textFields["SetRepsField-0-0"].tap()
+        XCTAssertTrue(app.buttons["RPEToolbarButton"].waitForExistence(timeout: 3))
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--uitest-enable-rpe" || $0 == "--uitest-reset-rpe" }
+        app.launch()
+        tapTab(.settings, in: app)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        XCTAssertEqual(toggle.value as? String, "1")
+    }
+
+    @MainActor
     func testAccountWorkoutGateCancelThenFinish() {
         let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth", "--uitest-sync-owner", "issuer|ui_owner",
             "--uitest-seed-large-active-workout"])
@@ -202,7 +248,7 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testAddingExerciseDoesNotLeaveBottomGap() {
         let app = XCUIApplication()
-        app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout"]
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout"]
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
         for _ in 0..<4 { app.swipeUp() }
@@ -225,7 +271,7 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testEditWorkoutAddAndReorderWalkthrough() {
         let app = XCUIApplication()
-        app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout"]
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout"]
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
         app.swipeUp()
@@ -271,7 +317,7 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testEditWorkoutDraftCancelRemoveAndRetry() {
         let app = XCUIApplication()
-        app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout", "--uitest-fail-reorder-exercises-save-once"]
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout", "--uitest-fail-reorder-exercises-save-once"]
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
         openReorderSheet(in: app)
@@ -322,7 +368,7 @@ final class BarosUITests: XCTestCase {
     func testMinimizedAccessoryShowsRestCountdownFinishedWindowThenElapsed() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store", "--uitest-force-signed-out-auth",
+            "--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience", "--uitest-rest-30-seconds",
             "--uitest-seed-large-active-workout",
         ]
@@ -357,7 +403,7 @@ final class BarosUITests: XCTestCase {
     func testMinimizedRestAccessoryAtAccessibilityTextSizeAndAfterSkip() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store", "--uitest-force-signed-out-auth",
+            "--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience", "--uitest-seed-large-active-workout",
             "--uitest-accessibility-dynamic-type",
         ]
@@ -987,6 +1033,154 @@ final class BarosUITests: XCTestCase {
         discardButton.tap()
         XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
+    }
+
+    @MainActor
+    func testCreatingATemplateAndStartingAWorkoutFromIt() {
+        let app = makeApp()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        app.buttons["StartWorkoutButton"].tap()
+        XCTAssertTrue(app.buttons["UseTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["UseTemplateButton"].tap()
+
+        XCTAssertTrue(app.buttons["EmptyNewTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["EmptyNewTemplateButton"].tap()
+        fillNewTemplate(named: "Legs", in: app)
+        XCTAssertFalse(app.buttons["SaveTemplateButton"].isEnabled, "A template needs an exercise")
+        addExercisesToTemplate(in: app)
+        moveReorderExercise(named: "Back Squat", before: "Bench Press", in: app)
+        app.buttons["SaveTemplateButton"].tap()
+
+        let row = app.buttons["TemplateRow-Legs"]
+        XCTAssertTrue(row.waitForExistence(timeout: 3))
+        row.tap()
+        XCTAssertTrue(app.staticTexts["TemplateReviewTitle"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.staticTexts["TemplateReviewTitle"].label, "Legs")
+        app.buttons["StartFromTemplateButton"].tap()
+
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.textFields["WorkoutTitle"].value as? String, "Legs")
+        assertActiveWorkoutExerciseOrder(["Back Squat", "Bench Press"], in: app)
+    }
+
+    @MainActor
+    func testDeletingATemplateAsksFirst() {
+        let app = makeApp()
+        app.launch()
+        app.tabButton(.settings).tap()
+        XCTAssertTrue(app.buttons["SettingsTemplatesLink"].waitForExistence(timeout: 3))
+        app.buttons["SettingsTemplatesLink"].tap()
+        XCTAssertTrue(app.buttons["EmptyNewTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["EmptyNewTemplateButton"].tap()
+        fillNewTemplate(named: "Legs", in: app)
+        addExercisesToTemplate(in: app)
+        app.buttons["SaveTemplateButton"].tap()
+
+        let row = app.buttons["TemplateRow-Legs"]
+        XCTAssertTrue(row.waitForExistence(timeout: 3))
+        let confirmation = app.alerts["Delete \u{201C}Legs\u{201D}?"]
+
+        row.swipeLeft()
+        XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3))
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertTrue(waitForAbsence(confirmation, timeout: 3))
+        XCTAssertTrue(row.waitForExistence(timeout: 3), "Cancel keeps the template")
+
+        if app.buttons["Delete"].exists { row.swipeRight() }
+        row.press(forDuration: 1)
+        XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3))
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
+        confirmation.buttons["Delete"].tap()
+        XCTAssertTrue(app.buttons["EmptyNewTemplateButton"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testFinishCanSaveTheWorkoutAsATemplate() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        openFinishWorkoutSheet(in: app)
+        let title = app.textFields["FinishWorkoutTitleField"]
+        replaceText(in: title, with: "Push Day")
+        app.buttons["Done"].tap()
+        turnOnSaveAsTemplate(in: app)
+        app.buttons["SaveWorkoutButton"].tap()
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+
+        // Finishing a workout started from that template doesn't offer another.
+        app.buttons["StartWorkoutButton"].tap()
+        XCTAssertTrue(app.buttons["UseTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["UseTemplateButton"].tap()
+        let row = app.buttons["TemplateRow-Push Day"]
+        XCTAssertTrue(row.waitForExistence(timeout: 3))
+        row.tap()
+        XCTAssertTrue(app.buttons["StartFromTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["StartFromTemplateButton"].tap()
+        assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
+        openFinishWorkoutSheet(in: app)
+        XCTAssertFalse(app.switches["SaveAsTemplateToggle"].exists)
+    }
+
+    @MainActor
+    func testFinishWithTheToggleOffMakesNoTemplate() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        openFinishWorkoutSheet(in: app)
+        XCTAssertEqual(app.switches["SaveAsTemplateToggle"].value as? String, "0")
+        app.buttons["SaveWorkoutButton"].tap()
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+
+        app.tabButton(.settings).tap()
+        XCTAssertTrue(app.buttons["SettingsTemplatesLink"].waitForExistence(timeout: 3))
+        app.buttons["SettingsTemplatesLink"].tap()
+        XCTAssertTrue(app.buttons["EmptyNewTemplateButton"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testTemplateSaveFailureStillSavesTheWorkout() {
+        let app = makeApp(extraArguments: ["--uitest-fail-template-save"])
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        openFinishWorkoutSheet(in: app)
+        turnOnSaveAsTemplate(in: app)
+        app.buttons["SaveWorkoutButton"].tap()
+
+        let alert = app.alerts["Couldn't Save Template"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["OK"].tap()
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
+        app.tabButton(.history).tap()
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testHistoryCanSaveAWorkoutAsATemplateAfterRenamingIt() {
+        let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
+        app.launch()
+        app.tabButton(.history).tap()
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["WorkoutHistoryButton-0"].tap()
+        app.buttons["WorkoutHistoryActionsMenu"].tap()
+        XCTAssertTrue(app.buttons["SaveAsTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["SaveAsTemplateButton"].tap()
+
+        let nameField = app.textFields["TemplateNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 3))
+        XCTAssertEqual(nameField.value as? String, "Past Push")
+        replaceText(in: nameField, with: "Renamed Push")
+        app.buttons["SaveTemplateButton"].tap()
+        XCTAssertTrue(waitForAbsence(nameField, timeout: 3))
+
+        app.tabButton(.settings).tap()
+        XCTAssertTrue(app.buttons["SettingsTemplatesLink"].waitForExistence(timeout: 3))
+        app.buttons["SettingsTemplatesLink"].tap()
+        XCTAssertTrue(app.buttons["TemplateRow-Renamed Push"].waitForExistence(timeout: 3))
     }
 
     @MainActor
@@ -1941,7 +2135,7 @@ final class BarosUITests: XCTestCase {
     func testOneFourUpgradeToUnannouncedReleaseSkipsWhatsNew() {
         let firstLaunch = makeDiskBackedApp(
             extraArguments: [
-                "--uitest-in-memory-store",
+                "--uitest-in-memory-store", "--uitest-enable-rpe",
                 "-Baros.FirstRunExperience.hasSeenWelcome", "YES",
                 "-Baros.FirstRunExperience.lastProcessedAppVersion", "1.4",
                 "-Baros.FirstRunExperience.lastSeenWhatsNewVersion", "1.4",
@@ -1957,7 +2151,7 @@ final class BarosUITests: XCTestCase {
 
         let secondLaunch = makeDiskBackedApp(
             extraArguments: [
-                "--uitest-in-memory-store",
+                "--uitest-in-memory-store", "--uitest-enable-rpe",
                 "-Baros.FirstRunExperience.hasSeenWelcome", "YES",
             ],
             skipsFirstRunExperience: false
@@ -3940,7 +4134,7 @@ final class BarosUITests: XCTestCase {
     func testPreviousOverridesSuggestionsInLaterRowsOfLargeWorkout() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
             "--uitest-seed-large-active-workout",
@@ -3990,7 +4184,7 @@ final class BarosUITests: XCTestCase {
     func testSuggestionsRemainAccessibleAtAccessibilityTextSize() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL",
@@ -4019,7 +4213,7 @@ final class BarosUITests: XCTestCase {
     func testEarlierSetSuggestionsStayUnrecordedUntilCheckmarkOrRPE() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
         ]
@@ -4086,7 +4280,7 @@ final class BarosUITests: XCTestCase {
         // also run on a physical phone without resetting its workout store.
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
             "--uitest-seed-completed-bench-workout", "Past Push",
@@ -4135,7 +4329,7 @@ final class BarosUITests: XCTestCase {
     func testClearingRPEKeepsEditingTheSameField() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
             "--uitest-seed-completed-bench-workout", "Past Push",
@@ -5187,7 +5381,7 @@ final class BarosUITests: XCTestCase {
             ? []
             : ["--uitest-force-signed-out-auth"]
         var launchArguments = [
-            "--uitest-in-memory-store",
+            "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-reset-exercise-picker-sort",
             "--uitest-reset-app-appearance",
         ] + fixtureArguments + authArguments
@@ -5589,6 +5783,35 @@ final class BarosUITests: XCTestCase {
     private func addBenchPress(in app: XCUIApplication) {
         addExercise("ExercisePickerRow-Bench Press-Barbell", in: app)
         XCTAssertTrue(app.textFields["SetWeightField-0-0"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    private func fillNewTemplate(named name: String, in app: XCUIApplication) {
+        let nameField = app.textFields["TemplateNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 3))
+        XCTAssertTrue(waitForKeyboardFocus(on: nameField))
+        nameField.typeText(name)
+    }
+
+    @MainActor
+    private func addExercisesToTemplate(in app: XCUIApplication) {
+        let add = app.buttons["EditWorkoutAddExercisesButton"]
+        XCTAssertTrue(add.waitForExistence(timeout: 3))
+        add.tap()
+        let bench = app.buttons["ExercisePickerRow-Bench Press-Barbell"]
+        XCTAssertTrue(bench.waitForExistence(timeout: 3))
+        bench.tap()
+        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        app.buttons["ExercisePickerAddSelectedButton"].tap()
+        XCTAssertTrue(app.buttons["SaveTemplateButton"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    private func turnOnSaveAsTemplate(in app: XCUIApplication) {
+        let toggle = app.switches["SaveAsTemplateToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        toggle.switches.firstMatch.tap()
+        XCTAssertEqual(toggle.value as? String, "1")
     }
 
     @MainActor

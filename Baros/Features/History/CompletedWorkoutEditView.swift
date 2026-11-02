@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct CompletedWorkoutEditView: View {
+    @AppStorage(RPEPreference.storageKey) private var rpeEnabled = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
@@ -30,6 +31,12 @@ struct CompletedWorkoutEditView: View {
         initialDurationSelection = CompletedWorkoutDurationSelection(seconds: draft.durationSeconds)
         _draft = State(initialValue: draft)
         _durationSelection = State(initialValue: CompletedWorkoutDurationSelection(seconds: draft.durationSeconds))
+    }
+
+    private var showsRPE: Bool {
+        rpeEnabled || session.sortedLoggedExercises.contains { exercise in
+            exercise.sortedSets.contains { WorkoutNumericInputPolicy.validatedRPE($0.rpe) != nil }
+        }
     }
 
     var body: some View {
@@ -237,7 +244,7 @@ struct CompletedWorkoutEditView: View {
                         Color.clear.frame(width: 18)
                         WorkoutSetColumnHeader(title: weightUnit.fieldLabel)
                         WorkoutSetColumnHeader(title: "REPS")
-                        WorkoutSetColumnHeader(title: "RPE")
+                        if showsRPE { WorkoutSetColumnHeader(title: "RPE") }
                         Color.clear.frame(width: 44)
                         Color.clear.frame(width: 34)
                     }
@@ -315,14 +322,16 @@ struct CompletedWorkoutEditView: View {
                     accessibilityIdentifier: "HistorySetRepsField-\(exerciseIndex)-\(visibleIndex)"
                 )
 
-                WorkoutNumericTextField(
-                    placeholder: "RPE",
-                    text: rpeBinding(exerciseIndex: exerciseIndex, setIndex: setIndex),
-                    keyboard: .decimalPad,
-                    focusTarget: .setRPE(exerciseIndex, setIndex),
-                    focusedField: $focusedField,
-                    accessibilityIdentifier: "HistorySetRPEField-\(exerciseIndex)-\(visibleIndex)"
-                )
+                if showsRPE {
+                    WorkoutNumericTextField(
+                        placeholder: "RPE",
+                        text: rpeBinding(exerciseIndex: exerciseIndex, setIndex: setIndex),
+                        keyboard: .decimalPad,
+                        focusTarget: .setRPE(exerciseIndex, setIndex),
+                        focusedField: $focusedField,
+                        accessibilityIdentifier: "HistorySetRPEField-\(exerciseIndex)-\(visibleIndex)"
+                    )
+                }
 
                 Button {
                     updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in

@@ -6,6 +6,7 @@ protocol SyncClient {
     func upsertWorkoutSession(_ record: WorkoutSessionSyncPayload) async throws -> SyncMutationResult
     func upsertLoggedExercise(_ record: LoggedExerciseSyncPayload) async throws -> SyncMutationResult
     func upsertLoggedSet(_ record: LoggedSetSyncPayload) async throws -> SyncMutationResult
+    func upsertWorkoutTemplate(_ record: WorkoutTemplateSyncPayload) async throws -> SyncMutationResult
     func tombstone(entityKind: SyncEntityKind, clientId: UUID, deletedAt: Date) async throws -> SyncMutationResult
     func fetchChanges(cursors: SyncChangeCursors, limit: Int) async throws -> SyncFetchChangesResponse
     func deleteAccountData(cancellationToken: UUID) async throws -> AccountDataDeletionResult

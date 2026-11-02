@@ -82,6 +82,24 @@ struct LoggedSetSyncPayload: Codable, Equatable {
     let sourceLoggedSetID: String?
 }
 
+struct WorkoutTemplateEntrySyncPayload: Codable, Equatable {
+    let id: String
+    let exerciseClientId: String?
+    let exerciseSnapshotName: String
+    let exerciseSnapshotEquipmentRaw: String
+    let exerciseSnapshotPrimaryMuscleGroupRaw: String
+    let supersetGroupID: String?
+}
+
+struct WorkoutTemplateSyncPayload: Codable, Equatable {
+    let clientId: String
+    let createdAt: Double
+    let updatedAt: Double
+    let deletedAt: Double?
+    let name: String
+    let entries: [WorkoutTemplateEntrySyncPayload]
+}
+
 enum SyncPayloadMapper {
     static func userSettingsPayload(from settings: UserSettings) -> UserSettingsSyncPayload {
         UserSettingsSyncPayload(
@@ -153,6 +171,26 @@ enum SyncPayloadMapper {
         )
     }
 
+    static func workoutTemplatePayload(from template: WorkoutTemplate) -> WorkoutTemplateSyncPayload {
+        WorkoutTemplateSyncPayload(
+            clientId: template.id.uuidString.lowercased(),
+            createdAt: template.createdAt.timeIntervalSince1970,
+            updatedAt: template.updatedAt.timeIntervalSince1970,
+            deletedAt: template.deletedAt?.timeIntervalSince1970,
+            name: template.name,
+            entries: template.entries.map { entry in
+                WorkoutTemplateEntrySyncPayload(
+                    id: entry.id.uuidString.lowercased(),
+                    exerciseClientId: entry.exerciseID?.uuidString.lowercased(),
+                    exerciseSnapshotName: entry.exerciseSnapshotName,
+                    exerciseSnapshotEquipmentRaw: entry.exerciseSnapshotEquipmentRaw,
+                    exerciseSnapshotPrimaryMuscleGroupRaw: entry.exerciseSnapshotPrimaryMuscleGroupRaw,
+                    supersetGroupID: entry.supersetGroupID?.uuidString.lowercased()
+                )
+            }
+        )
+    }
+
     static func loggedSetPayload(from set: LoggedSet) -> LoggedSetSyncPayload {
         LoggedSetSyncPayload(
             clientId: set.id.uuidString.lowercased(),
@@ -180,6 +218,8 @@ struct SyncChangeCursors: Codable, Equatable {
     var workoutSessions: Double = 0
     var loggedExercises: Double = 0
     var loggedSets: Double = 0
+    /// Sent only by builds with templates; older servers reject it.
+    var workoutTemplates: Double? = nil
 }
 
 struct SyncHasMore: Codable, Equatable {
@@ -188,6 +228,7 @@ struct SyncHasMore: Codable, Equatable {
     var workoutSessions: Bool = false
     var loggedExercises: Bool = false
     var loggedSets: Bool = false
+    var workoutTemplates: Bool? = nil
 }
 
 struct UserSettingsSyncRecord: Codable, Equatable {
@@ -274,12 +315,24 @@ struct LoggedSetSyncRecord: Codable, Equatable {
     let sourceLoggedSetID: String?
 }
 
+struct WorkoutTemplateSyncRecord: Codable, Equatable {
+    let clientId: String
+    let createdAt: Double
+    let updatedAt: Double
+    let deletedAt: Double?
+    let serverUpdatedAt: Double
+    let name: String
+    let entries: [WorkoutTemplateEntrySyncPayload]
+}
+
 struct SyncFetchChangesResponse: Codable, Equatable {
     let userSettings: [UserSettingsSyncRecord]
     let exercises: [ExerciseSyncRecord]
     let workoutSessions: [WorkoutSessionSyncRecord]
     let loggedExercises: [LoggedExerciseSyncRecord]
     let loggedSets: [LoggedSetSyncRecord]
+    /// Present only when the request sent a template cursor.
+    var workoutTemplates: [WorkoutTemplateSyncRecord]? = nil
     let cursors: SyncChangeCursors
     let hasMore: SyncHasMore
 }
