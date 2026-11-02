@@ -26,16 +26,19 @@ struct ExerciseLibraryView: View {
 
     var body: some View {
         let matches = filteredExercises
+        let creationSuggestion = ExercisePickerCreationSuggestion(
+            name: searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
         List {
-            if matches.isEmpty && !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if matches.isEmpty && !creationSuggestion.name.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("No Matching Exercises")
                         .font(.headline)
                     Button {
-                        creationName = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        creationName = creationSuggestion.name
                         isCreatingExercise = true
                     } label: {
-                        Label("Create Exercise", systemImage: "plus.circle")
+                        Label(creationSuggestion.title, systemImage: "plus.circle")
                     }
                     .accessibilityIdentifier("ExerciseLibraryCreateExerciseFromSearchButton")
                 }
