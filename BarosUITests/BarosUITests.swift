@@ -1053,6 +1053,91 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testFinishCanSaveTheWorkoutAsATemplate() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        openFinishWorkoutSheet(in: app)
+        let title = app.textFields["FinishWorkoutTitleField"]
+        replaceText(in: title, with: "Push Day")
+        app.buttons["Done"].tap()
+        turnOnSaveAsTemplate(in: app)
+        app.buttons["SaveWorkoutButton"].tap()
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+
+        // Finishing a workout started from that template doesn't offer another.
+        app.buttons["StartWorkoutButton"].tap()
+        XCTAssertTrue(app.buttons["UseTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["UseTemplateButton"].tap()
+        let row = app.buttons["TemplateRow-Push Day"]
+        XCTAssertTrue(row.waitForExistence(timeout: 3))
+        row.tap()
+        XCTAssertTrue(app.buttons["StartFromTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["StartFromTemplateButton"].tap()
+        assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
+        openFinishWorkoutSheet(in: app)
+        XCTAssertFalse(app.switches["SaveAsTemplateToggle"].exists)
+    }
+
+    @MainActor
+    func testFinishWithTheToggleOffMakesNoTemplate() {
+        let app = makeApp()
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        openFinishWorkoutSheet(in: app)
+        XCTAssertEqual(app.switches["SaveAsTemplateToggle"].value as? String, "0")
+        app.buttons["SaveWorkoutButton"].tap()
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+
+        app.tabButton(.settings).tap()
+        XCTAssertTrue(app.buttons["SettingsTemplatesLink"].waitForExistence(timeout: 3))
+        app.buttons["SettingsTemplatesLink"].tap()
+        XCTAssertTrue(app.buttons["EmptyNewTemplateButton"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testTemplateSaveFailureStillSavesTheWorkout() {
+        let app = makeApp(extraArguments: ["--uitest-fail-template-save"])
+        app.launch()
+        startBlankWorkoutWithBenchPress(in: app)
+        openFinishWorkoutSheet(in: app)
+        turnOnSaveAsTemplate(in: app)
+        app.buttons["SaveWorkoutButton"].tap()
+
+        let alert = app.alerts["Couldn't Save Template"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["OK"].tap()
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
+        app.tabButton(.history).tap()
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testHistoryCanSaveAWorkoutAsATemplateAfterRenamingIt() {
+        let app = makeApp(completedBenchWorkoutTitles: ["Past Push"])
+        app.launch()
+        app.tabButton(.history).tap()
+        XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitForExistence(timeout: 3))
+        app.buttons["WorkoutHistoryButton-0"].tap()
+        app.buttons["WorkoutHistoryActionsMenu"].tap()
+        XCTAssertTrue(app.buttons["SaveAsTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["SaveAsTemplateButton"].tap()
+
+        let nameField = app.textFields["TemplateNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 3))
+        XCTAssertEqual(nameField.value as? String, "Past Push")
+        replaceText(in: nameField, with: "Renamed Push")
+        app.buttons["SaveTemplateButton"].tap()
+        XCTAssertTrue(waitForAbsence(nameField, timeout: 3))
+
+        app.tabButton(.settings).tap()
+        XCTAssertTrue(app.buttons["SettingsTemplatesLink"].waitForExistence(timeout: 3))
+        app.buttons["SettingsTemplatesLink"].tap()
+        XCTAssertTrue(app.buttons["TemplateRow-Renamed Push"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
     func testHomeRingRecentHistoryHidesToggleAndStartRemainsAvailable() {
         let app = makeApp(extraArguments: ["--home-ring-fixture", "twoWeeks"])
         app.launch()
@@ -5651,6 +5736,14 @@ final class BarosUITests: XCTestCase {
         app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
         app.buttons["ExercisePickerAddSelectedButton"].tap()
         XCTAssertTrue(app.buttons["SaveTemplateButton"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    private func turnOnSaveAsTemplate(in app: XCUIApplication) {
+        let toggle = app.switches["SaveAsTemplateToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        toggle.switches.firstMatch.tap()
+        XCTAssertEqual(toggle.value as? String, "1")
     }
 
     @MainActor

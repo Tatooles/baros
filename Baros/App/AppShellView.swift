@@ -117,6 +117,11 @@ struct AppShellView: View {
             }
             .tint(AppTheme.brandAccentForeground)
             .tabBarMinimizeBehavior(.never)
+            .alert("Couldn't Save Template", isPresented: $activeWorkoutEngine.failedToSaveTemplate) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Your workout was saved. Save it as a template from History.")
+            }
             .safeAreaInset(edge: .bottom) {
                 if shouldShowGlobalSyncFailureBanner {
                     GlobalSyncFailureBanner(

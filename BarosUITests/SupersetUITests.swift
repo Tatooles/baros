@@ -81,6 +81,31 @@ final class SupersetUITests: XCTestCase {
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
     }
 
+    func testSavingAWorkoutAsATemplateKeepsItsSupersets() {
+        let app = launch(seedsSupersets: true)
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
+        app.buttons["FinishWorkoutButton"].tap()
+        let toggle = app.switches["SaveAsTemplateToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        toggle.switches.firstMatch.tap()
+        app.buttons["SaveWorkoutButton"].tap()
+
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        app.buttons["StartWorkoutButton"].tap()
+        XCTAssertTrue(app.buttons["UseTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["UseTemplateButton"].tap()
+        let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "TemplateRow-")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 3))
+        row.tap()
+        XCTAssertTrue(app.buttons["StartFromTemplateButton"].waitForExistence(timeout: 3))
+        attachScreenshot("Template review with supersets", app: app)
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
+        app.buttons["StartFromTemplateButton"].tap()
+
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
+    }
+
     /// A partner fills from what's typed in its own set above, even before that field loses focus.
     func testRoundFillsPartnersFromATypedDraftInAnotherExercise() {
         let app = launch(seedsSupersets: true)

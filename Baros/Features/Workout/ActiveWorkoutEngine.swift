@@ -54,6 +54,9 @@ final class ActiveWorkoutEngine {
     var isStartingWorkout = false
     var isAccountTransitionInProgress = false
     var isAccountManagementPresented = false
+    /// Set when Finish saved the workout but not its template. The shell
+    /// shows the error, since the workout sheet is gone by then.
+    var failedToSaveTemplate = false
     var lastErrorMessage: String?
     private var pendingSetSave: PendingSetSave?
     #if DEBUG

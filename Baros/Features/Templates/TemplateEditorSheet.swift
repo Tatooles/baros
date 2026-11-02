@@ -10,14 +10,25 @@ struct TemplateEditorSheet: View {
     @Query private var exercises: [Exercise]
     /// Nil for a new template.
     let template: WorkoutTemplate?
+    private let original: WorkoutTemplateDraft
     @State private var draft: WorkoutTemplateDraft
     @State private var showsPicker = false
     @State private var showsSaveError = false
     @FocusState private var isNameFocused: Bool
 
     init(template: WorkoutTemplate?) {
+        self.init(template: template, draft: WorkoutTemplateDraft(template: template))
+    }
+
+    /// A new template that starts filled in, such as from a past workout.
+    init(newDraft: WorkoutTemplateDraft) {
+        self.init(template: nil, draft: newDraft)
+    }
+
+    private init(template: WorkoutTemplate?, draft: WorkoutTemplateDraft) {
         self.template = template
-        _draft = State(initialValue: WorkoutTemplateDraft(template: template))
+        original = draft
+        _draft = State(initialValue: draft)
     }
 
     private var exercisesByID: [UUID: Exercise] {
@@ -60,14 +71,14 @@ struct TemplateEditorSheet: View {
             }
         }
         .onAppear {
-            if template == nil { isNameFocused = true }
+            if draft.name.isEmpty { isNameFocused = true }
         }
         .alert("Couldn't Save Template", isPresented: $showsSaveError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Your changes are still here. Tap Save to try again.")
         }
-        .interactiveDismissDisabled(draft != WorkoutTemplateDraft(template: template))
+        .interactiveDismissDisabled(draft != original)
         .presentationDragIndicator(.visible)
     }
 

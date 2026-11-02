@@ -97,4 +97,24 @@ struct WorkoutTemplateEntry: Codable, Hashable, Identifiable {
             supersetGroupID: supersetGroupID
         )
     }
+
+    /// A workout's exercises in order, for saving it as a template. Superset
+    /// groups get fresh ids so the template doesn't share them with the
+    /// workout. An exercise deleted from the library keeps its logged name.
+    static func entries(copying session: WorkoutSession) -> [WorkoutTemplateEntry] {
+        let loggedExercises = session.sortedLoggedExercises
+        let groupIDs = SupersetGrouping.copied(loggedExercises.map(\.supersetGroupID))
+        return zip(loggedExercises, groupIDs).map { loggedExercise, groupID in
+            if let exercise = loggedExercise.exercise, !exercise.isDeleted {
+                return WorkoutTemplateEntry(exercise: exercise, supersetGroupID: groupID)
+            }
+            return WorkoutTemplateEntry(
+                exerciseID: nil,
+                exerciseSnapshotName: loggedExercise.exerciseSnapshotName,
+                exerciseSnapshotEquipmentRaw: loggedExercise.effectiveSnapshotEquipmentRaw,
+                exerciseSnapshotPrimaryMuscleGroupRaw: loggedExercise.effectiveSnapshotPrimaryMuscleGroupRaw,
+                supersetGroupID: groupID
+            )
+        }
+    }
 }

@@ -471,6 +471,119 @@ final class WorkoutTemplateTests: XCTestCase {
         XCTAssertEqual(items[1].metadata, "Cable • Lats")
     }
 
+    // MARK: - Save as template
+
+    func testSavingAWorkoutCopiesItsExercisesInOrderWithFreshGroups() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let bench = makeExercise("Bench Press", owner: owner)
+        let row = makeExercise("Row", owner: owner)
+        let curl = makeExercise("Curl", owner: owner)
+        let fly = makeExercise("Fly", owner: owner)
+        [bench, row, curl, fly].forEach(context.insert)
+        let group = UUID()
+        let session = WorkoutSession(title: "Upper Day", startedAt: .now, status: .completed, source: .blank, syncOwnerTokenIdentifier: owner)
+        context.insert(session)
+        // Inserted out of order, with a removed exercise in the middle.
+        for loggedExercise in [
+            LoggedExercise(orderIndex: 3, exercise: curl, supersetGroupID: group),
+            LoggedExercise(orderIndex: 0, exercise: bench),
+            LoggedExercise(orderIndex: 1, exercise: fly, deletedAt: .now),
+            LoggedExercise(orderIndex: 2, exercise: row, supersetGroupID: group),
+        ] {
+            loggedExercise.session = session
+            session.loggedExercises.append(loggedExercise)
+            context.insert(loggedExercise)
+        }
+
+        let entries = WorkoutTemplateEntry.entries(copying: session)
+
+        XCTAssertEqual(entries.map(\.exerciseSnapshotName), ["Bench Press", "Row", "Curl"])
+        XCTAssertEqual(entries.map(\.exerciseID), [bench.id, row.id, curl.id])
+        XCTAssertNil(entries[0].supersetGroupID)
+        XCTAssertNotNil(entries[1].supersetGroupID)
+        XCTAssertEqual(entries[1].supersetGroupID, entries[2].supersetGroupID)
+        XCTAssertNotEqual(entries[1].supersetGroupID, group, "the template gets its own group id")
+        XCTAssertEqual(Set(entries.map(\.id)).count, 3)
+    }
+
+    func testSavingAWorkoutUsesCurrentLibraryNamesAndKeepsDeletedExercisesByName() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let renamed = makeExercise("Incline Press", owner: owner)
+        let deleted = makeExercise("Hack Squat", owner: owner)
+        deleted.deletedAt = .now
+        [renamed, deleted].forEach(context.insert)
+        let session = WorkoutSession(title: "Mixed", startedAt: .now, status: .completed, source: .blank, syncOwnerTokenIdentifier: owner)
+        context.insert(session)
+        for loggedExercise in [
+            LoggedExercise(orderIndex: 0, exercise: renamed, exerciseSnapshotName: "Incline Bench"),
+            LoggedExercise(
+                orderIndex: 1, exercise: deleted, exerciseSnapshotName: "Hack Squat",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.machine.rawValue,
+                exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.quads.rawValue
+            ),
+        ] {
+            loggedExercise.session = session
+            session.loggedExercises.append(loggedExercise)
+            context.insert(loggedExercise)
+        }
+
+        let entries = WorkoutTemplateEntry.entries(copying: session)
+
+        XCTAssertEqual(entries[0].exerciseID, renamed.id)
+        XCTAssertEqual(entries[0].exerciseSnapshotName, "Incline Press")
+        XCTAssertNil(entries[1].exerciseID)
+        XCTAssertEqual(entries[1].exerciseSnapshotName, "Hack Squat")
+        XCTAssertEqual(entries[1].exerciseSnapshotEquipmentRaw, ExerciseEquipment.machine.rawValue)
+        XCTAssertEqual(entries[1].exerciseSnapshotPrimaryMuscleGroupRaw, ExerciseMuscleGroup.quads.rawValue)
+    }
+
+    func testSavingALegacyWorkoutKeepsMetadataResolvedFromADeletedExercise() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let deleted = makeExercise("Hack Squat", owner: owner)
+        deleted.deletedAt = .now
+        context.insert(deleted)
+        let session = WorkoutSession(title: "Old", startedAt: .now, status: .completed, source: .blank, syncOwnerTokenIdentifier: owner)
+        context.insert(session)
+        // Logged before snapshots stored metadata: the raw fields hold defaults.
+        let legacy = LoggedExercise(
+            orderIndex: 0, exercise: deleted, exerciseSnapshotName: "Hack Squat",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.other.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.other.rawValue
+        )
+        legacy.hasSnapshotMetadata = false
+        legacy.session = session
+        session.loggedExercises.append(legacy)
+        context.insert(legacy)
+
+        let entry = try XCTUnwrap(WorkoutTemplateEntry.entries(copying: session).first)
+
+        XCTAssertNil(entry.exerciseID)
+        XCTAssertEqual(entry.exerciseSnapshotEquipmentRaw, deleted.equipmentRaw)
+        XCTAssertEqual(entry.exerciseSnapshotPrimaryMuscleGroupRaw, deleted.primaryMuscleGroupRaw)
+    }
+
+    func testHistorysSaveAsTemplateStartsANamedDraft() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let bench = makeExercise("Bench Press", owner: owner)
+        context.insert(bench)
+        let session = WorkoutSession(title: "Push Day", startedAt: .now, status: .completed, source: .blank, syncOwnerTokenIdentifier: owner)
+        context.insert(session)
+        let loggedExercise = LoggedExercise(orderIndex: 0, exercise: bench)
+        loggedExercise.session = session
+        session.loggedExercises.append(loggedExercise)
+        context.insert(loggedExercise)
+
+        let draft = NewTemplateFromWorkout(session: session).draft
+
+        XCTAssertEqual(draft.name, "Push Day")
+        XCTAssertEqual(draft.entries.map(\.exerciseID), [bench.id])
+        XCTAssertTrue(draft.canSave)
+    }
+
     // MARK: - Helpers
 
     private func makeExercise(_ name: String, owner: String?, seedIdentifier: String? = nil) -> Exercise {
