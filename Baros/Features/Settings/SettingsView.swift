@@ -43,22 +43,22 @@ struct SettingsView: View {
                 Toggle("Rest Timer", isOn: restTimerEnabledBinding)
                     .accessibilityIdentifier("SettingsRestTimerToggle")
 
-                Toggle(isOn: $rpeEnabled) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("RPE")
-                        Text("Track how hard each set feels on a scale of 1–10.")
-                            .font(.footnote)
-                            .foregroundStyle(AppTheme.textSecondary)
-                    }
-                }
-                .accessibilityIdentifier("SettingsRPEToggle")
-
                 if restTimer.isEnabled {
                     Stepper(value: restTimerBinding, in: 30...300, step: 15) {
                         LabeledContent("Rest Duration", value: "\(settings.defaultRestTimerSeconds) seconds")
                     }
                     .accessibilityIdentifier("SettingsRestTimerStepper")
                 }
+
+                Toggle(isOn: $rpeEnabled) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("RPE")
+                        Text("Rate how hard each set felt.")
+                            .font(.footnote)
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                }
+                .accessibilityIdentifier("SettingsRPEToggle")
             }
 
             Section {
