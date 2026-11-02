@@ -5021,13 +5021,15 @@ final class BarosUITests: XCTestCase {
         search.typeText("  barbell bench chest  ")
         XCTAssertTrue(app.buttons["ExerciseLibraryRow-Bench Press-Barbell"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["ExerciseLibraryRow-Back Squat-Barbell"].exists)
-        replaceText(in: search, with: "  Novel Press  ")
+        replaceText(in: search, with: "  No  ")
         XCTAssertTrue(app.staticTexts["No Matching Exercises"].waitForExistence(timeout: 3))
-        app.buttons["ExerciseLibraryCreateExerciseFromSearchButton"].tap()
+        // The entire card must respond, including blank space outside the short label.
+        app.buttons["ExerciseLibraryCreateExerciseFromSearchButton"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         XCTAssertTrue(app.textFields["ExerciseNameField"].waitForExistence(timeout: 3))
-        XCTAssertEqual(app.textFields["ExerciseNameField"].value as? String, "Novel Press")
+        XCTAssertEqual(app.textFields["ExerciseNameField"].value as? String, "No")
         app.buttons["ExerciseEditorSaveButton"].tap()
-        XCTAssertTrue(app.buttons["ExerciseLibraryRow-Novel Press-Barbell"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ExerciseLibraryRow-No-Barbell"].waitForExistence(timeout: 3))
     }
 
     @MainActor

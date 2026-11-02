@@ -31,7 +31,6 @@ struct ExerciseNoMatchesSection: View {
             } label: {
                 ExerciseCreationRowLabel(title: suggestion.title)
             }
-            .buttonStyle(.plain)
             .accessibilityIdentifier(accessibilityIdentifier)
             .accessibilityLabel(suggestion.title)
             .listRowBackground(AppTheme.groupedSurface)
