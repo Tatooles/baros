@@ -10,6 +10,11 @@ struct WorkoutTemplateDraft: Equatable {
         entries = template?.entries ?? []
     }
 
+    init(name: String, entries: [WorkoutTemplateEntry]) {
+        self.name = name
+        self.entries = entries
+    }
+
     var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -97,5 +102,16 @@ extension Array where Element == WorkoutTemplate {
     func visible(to ownerTokenIdentifier: String?) -> [WorkoutTemplate] {
         filter { !$0.isDeleted && $0.isVisible(to: ownerTokenIdentifier) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+}
+
+/// History's Save as Template: a new template named after the workout, to
+/// rename before saving.
+struct NewTemplateFromWorkout: Identifiable {
+    let id = UUID()
+    let draft: WorkoutTemplateDraft
+
+    init(session: WorkoutSession) {
+        draft = WorkoutTemplateDraft(name: session.title, entries: WorkoutTemplateEntry.entries(copying: session))
     }
 }

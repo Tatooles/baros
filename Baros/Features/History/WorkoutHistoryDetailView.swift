@@ -42,6 +42,7 @@ struct WorkoutHistoryDetailView: View {
     @State private var deleteErrorMessage: String?
     @State private var showsDeleteConfirmation = false
     @State private var editPresentation: CompletedWorkoutEditPresentation?
+    @State private var templateDraft: NewTemplateFromWorkout?
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -122,6 +123,12 @@ struct WorkoutHistoryDetailView: View {
                     .accessibilityIdentifier("EditWorkoutButton")
 
                     Menu {
+                        if session.visibleExerciseCount > 0 {
+                            Button("Save as Template", systemImage: "list.bullet.clipboard") {
+                                templateDraft = NewTemplateFromWorkout(session: session)
+                            }
+                            .accessibilityIdentifier("SaveAsTemplateButton")
+                        }
                         Button("Delete Workout", systemImage: "trash", role: .destructive) {
                             showsDeleteConfirmation = true
                         }
@@ -132,6 +139,9 @@ struct WorkoutHistoryDetailView: View {
                     .accessibilityIdentifier("WorkoutHistoryActionsMenu")
                 }
             }
+        }
+        .sheet(item: $templateDraft) { presentation in
+            TemplateEditorSheet(newDraft: presentation.draft)
         }
         .sheet(item: $editPresentation) { presentation in
             CompletedWorkoutEditView(
