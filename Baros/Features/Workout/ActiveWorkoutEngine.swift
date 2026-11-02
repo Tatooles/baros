@@ -6,6 +6,7 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
     case accountTransitionInProgress
     case multipleActiveWorkouts
     case anotherOwnerHasActiveWorkout
+    case structuralChangeUnavailable
     case invalidExerciseReorder
     case invalidExerciseSwap
     case invalidSupersetChange
@@ -19,6 +20,8 @@ enum ActiveWorkoutEngineError: LocalizedError, Equatable {
             return "More than one unfinished workout is saved on this iPhone. Resolve them in Settings before starting another."
         case .anotherOwnerHasActiveWorkout:
             return "An active workout from another account is saved on this iPhone. Resolve it before starting another workout."
+        case .structuralChangeUnavailable:
+            return "Resolve the unsaved set edit before changing this workout."
         case .invalidExerciseReorder:
             return "Workout exercises changed. Review the current order and try again."
         case .invalidExerciseSwap:
@@ -274,19 +277,22 @@ final class ActiveWorkoutEngine {
         }
     }
 
-    func removeLoggedExercise(_ loggedExercise: LoggedExercise, context: ModelContext, now: Date = .now) throws {
-        let session = loggedExercise.session
-        loggedExercise.markDeleted(now: now)
-        for set in loggedExercise.sets {
-            set.markDeleted(now: now)
+    func removeLoggedExercise(
+        _ loggedExercise: LoggedExercise, context: ModelContext, now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        guard let session = loggedExercise.session, !loggedExercise.isDeleted else {
+            throw ActiveWorkoutEngineError.invalidExerciseReorder
         }
-        if let session {
-            reindexLoggedExercises(for: session, now: now)
-            normalizeSupersets(session.sortedLoggedExercises, now: now)
-            session.touch(now: now)
-        }
-        try context.save()
-        for set in loggedExercise.sets { restTimer.cancel(ifStartedBy: set.id) }
+        try applyExerciseListChanges(
+            in: session,
+            orderedIDs: session.sortedLoggedExercises.filter { $0.id != loggedExercise.id }.map(\.id),
+            baseline: WorkoutExerciseListSnapshot(session: session),
+            context: context, now: now,
+            save: { context in
+                try self.saveStructuralChange(context, action: "remove-exercise", save: save)
+            }
+        )
     }
 
     @discardableResult
@@ -552,31 +558,85 @@ final class ActiveWorkoutEngine {
     }
 
     @discardableResult
-    func addSet(to loggedExercise: LoggedExercise, context: ModelContext) throws -> LoggedSet {
+    func addSet(
+        to loggedExercise: LoggedExercise, context: ModelContext, now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws -> LoggedSet {
+        guard !hasPendingSetSave else { throw ActiveWorkoutEngineError.structuralChangeUnavailable }
+        let originalUpdatedAt = loggedExercise.updatedAt
+        let originalSessionUpdatedAt = loggedExercise.session?.updatedAt
         let sortedSets = loggedExercise.sortedSets
-        let previous = sortedSets.last
         let set = LoggedSet(
             orderIndex: (sortedSets.map(\.orderIndex).max() ?? -1) + 1,
-            kind: previous?.kind ?? .working,
-            isCompleted: false
+            kind: sortedSets.last?.kind ?? .working,
+            isCompleted: false, createdAt: now, updatedAt: now
         )
         set.loggedExercise = loggedExercise
         context.insert(set)
         loggedExercise.sets.append(set)
-        loggedExercise.touch()
-        try context.save()
+        loggedExercise.touch(now: now)
+        do {
+            try saveStructuralChange(context, action: "add-set", save: save)
+        } catch {
+            loggedExercise.sets.removeAll { $0.id == set.id }
+            set.loggedExercise = nil
+            context.delete(set)
+            loggedExercise.updatedAt = originalUpdatedAt
+            if let originalSessionUpdatedAt { loggedExercise.session?.updatedAt = originalSessionUpdatedAt }
+            throw error
+        }
         return set
     }
 
-    func removeSet(_ set: LoggedSet, context: ModelContext, now: Date = .now) throws {
+    func removeSet(
+        _ set: LoggedSet, context: ModelContext, now: Date = .now,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        guard !hasPendingSetSave else { throw ActiveWorkoutEngineError.structuralChangeUnavailable }
         let loggedExercise = set.loggedExercise
+        let originalExerciseUpdatedAt = loggedExercise?.updatedAt
+        let originalSessionUpdatedAt = loggedExercise?.session?.updatedAt
+        let states = (loggedExercise?.sortedSets ?? [set]).map {
+            (set: $0, orderIndex: $0.orderIndex, updatedAt: $0.updatedAt, deletedAt: $0.deletedAt)
+        }
         set.markDeleted(now: now)
         if let loggedExercise {
             reindexSets(for: loggedExercise, now: now)
             loggedExercise.touch(now: now)
         }
-        try context.save()
+        do {
+            try saveStructuralChange(context, action: "remove-set", save: save)
+        } catch {
+            for state in states {
+                state.set.orderIndex = state.orderIndex
+                state.set.updatedAt = state.updatedAt
+                state.set.deletedAt = state.deletedAt
+            }
+            if let originalExerciseUpdatedAt { loggedExercise?.updatedAt = originalExerciseUpdatedAt }
+            if let originalSessionUpdatedAt { loggedExercise?.session?.updatedAt = originalSessionUpdatedAt }
+            throw error
+        }
         restTimer.cancel(ifStartedBy: set.id)
+    }
+
+    #if DEBUG
+    @ObservationIgnored private var injectedStructuralFailures: [String: Int] = [:]
+    #endif
+
+    private func saveStructuralChange(
+        _ context: ModelContext, action: String, save: (ModelContext) throws -> Void
+    ) throws {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        let failures = arguments.contains("--uitest-fail-\(action)-save-twice") ? 2
+            : (arguments.contains("--uitest-fail-\(action)-save-once") ? 1 : 0)
+        if arguments.contains("--uitest-in-memory-store"),
+           injectedStructuralFailures[action, default: 0] < failures {
+            injectedStructuralFailures[action, default: 0] += 1
+            throw CocoaError(.fileWriteUnknown)
+        }
+        #endif
+        try save(context)
     }
 
     /// Persists a focus-boundary weight/reps draft without turning a local
