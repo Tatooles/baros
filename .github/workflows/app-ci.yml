@@ -104,19 +104,6 @@ jobs:
           xcodebuild -version
           xcrun simctl list devices available | grep -E "iPhone 17" || true
 
-      - name: Boot simulator ahead of the build
-        run: |
-          udid="$(
-            xcrun simctl list devices available -j |
-              jq -r '.devices["com.apple.CoreSimulator.SimRuntime.iOS-26-5"][]? | select(.name == "iPhone 17") | .udid'
-          )"
-          if [[ -z "${udid}" ]]; then
-            echo "::warning title=Simulator preboot skipped::iPhone 17 on iOS 26.5 was not found."
-            exit 0
-          fi
-          # This only saves time. If it fails, xcodebuild boots the destination itself.
-          nohup xcrun simctl bootstatus "${udid}" -b > "${RUNNER_TEMP}/SimulatorBoot.log" 2>&1 &
-
       - name: Resolve Swift packages
         run: |
           for attempt in 1 2 3; do
@@ -182,19 +169,6 @@ jobs:
         run: |
           xcodebuild -version
           xcrun simctl list devices available | grep -E "iPhone 17" || true
-
-      - name: Boot simulator ahead of the build
-        run: |
-          udid="$(
-            xcrun simctl list devices available -j |
-              jq -r '.devices["com.apple.CoreSimulator.SimRuntime.iOS-26-5"][]? | select(.name == "iPhone 17") | .udid'
-          )"
-          if [[ -z "${udid}" ]]; then
-            echo "::warning title=Simulator preboot skipped::iPhone 17 on iOS 26.5 was not found."
-            exit 0
-          fi
-          # This only saves time. If it fails, xcodebuild boots the destination itself.
-          nohup xcrun simctl bootstatus "${udid}" -b > "${RUNNER_TEMP}/SimulatorBoot.log" 2>&1 &
 
       - name: Resolve Swift packages
         run: |
