@@ -990,6 +990,69 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testCreatingATemplateAndStartingAWorkoutFromIt() {
+        let app = makeApp()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+        app.buttons["StartWorkoutButton"].tap()
+        XCTAssertTrue(app.buttons["UseTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["UseTemplateButton"].tap()
+
+        XCTAssertTrue(app.buttons["EmptyNewTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["EmptyNewTemplateButton"].tap()
+        fillNewTemplate(named: "Legs", in: app)
+        XCTAssertFalse(app.buttons["SaveTemplateButton"].isEnabled, "A template needs an exercise")
+        addExercisesToTemplate(in: app)
+        moveReorderExercise(named: "Back Squat", before: "Bench Press", in: app)
+        app.buttons["SaveTemplateButton"].tap()
+
+        let row = app.buttons["TemplateRow-Legs"]
+        XCTAssertTrue(row.waitForExistence(timeout: 3))
+        row.tap()
+        XCTAssertTrue(app.staticTexts["TemplateReviewTitle"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.staticTexts["TemplateReviewTitle"].label, "Legs")
+        app.buttons["StartFromTemplateButton"].tap()
+
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.textFields["WorkoutTitle"].value as? String, "Legs")
+        assertActiveWorkoutExerciseOrder(["Back Squat", "Bench Press"], in: app)
+    }
+
+    @MainActor
+    func testDeletingATemplateAsksFirst() {
+        let app = makeApp()
+        app.launch()
+        app.tabButton(.settings).tap()
+        XCTAssertTrue(app.buttons["SettingsTemplatesLink"].waitForExistence(timeout: 3))
+        app.buttons["SettingsTemplatesLink"].tap()
+        XCTAssertTrue(app.buttons["EmptyNewTemplateButton"].waitForExistence(timeout: 3))
+        app.buttons["EmptyNewTemplateButton"].tap()
+        fillNewTemplate(named: "Legs", in: app)
+        addExercisesToTemplate(in: app)
+        app.buttons["SaveTemplateButton"].tap()
+
+        let row = app.buttons["TemplateRow-Legs"]
+        XCTAssertTrue(row.waitForExistence(timeout: 3))
+        let confirmation = app.alerts["Delete \u{201C}Legs\u{201D}?"]
+
+        row.swipeLeft()
+        XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3))
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertTrue(waitForAbsence(confirmation, timeout: 3))
+        XCTAssertTrue(row.waitForExistence(timeout: 3), "Cancel keeps the template")
+
+        if app.buttons["Delete"].exists { row.swipeRight() }
+        row.press(forDuration: 1)
+        XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3))
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
+        confirmation.buttons["Delete"].tap()
+        XCTAssertTrue(app.buttons["EmptyNewTemplateButton"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
     func testHomeRingRecentHistoryHidesToggleAndStartRemainsAvailable() {
         let app = makeApp(extraArguments: ["--home-ring-fixture", "twoWeeks"])
         app.launch()
@@ -5567,6 +5630,27 @@ final class BarosUITests: XCTestCase {
     private func addBenchPress(in app: XCUIApplication) {
         addExercise("ExercisePickerRow-Bench Press-Barbell", in: app)
         XCTAssertTrue(app.textFields["SetWeightField-0-0"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    private func fillNewTemplate(named name: String, in app: XCUIApplication) {
+        let nameField = app.textFields["TemplateNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 3))
+        XCTAssertTrue(waitForKeyboardFocus(on: nameField))
+        nameField.typeText(name)
+    }
+
+    @MainActor
+    private func addExercisesToTemplate(in app: XCUIApplication) {
+        let add = app.buttons["EditWorkoutAddExercisesButton"]
+        XCTAssertTrue(add.waitForExistence(timeout: 3))
+        add.tap()
+        let bench = app.buttons["ExercisePickerRow-Bench Press-Barbell"]
+        XCTAssertTrue(bench.waitForExistence(timeout: 3))
+        bench.tap()
+        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        app.buttons["ExercisePickerAddSelectedButton"].tap()
+        XCTAssertTrue(app.buttons["SaveTemplateButton"].waitForExistence(timeout: 3))
     }
 
     @MainActor

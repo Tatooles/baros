@@ -26,6 +26,11 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("SettingsExerciseLibraryLink")
 
+                NavigationLink(value: SettingsRoute.templates) {
+                    Label("Templates", systemImage: "list.bullet.clipboard")
+                }
+                .accessibilityIdentifier("SettingsTemplatesLink")
+
                 Picker("Weight Unit", selection: weightUnitBinding) {
                     ForEach(MeasurementUnit.allCases) { unit in
                         Text(unit.displayName).tag(unit)

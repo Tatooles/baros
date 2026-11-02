@@ -379,6 +379,98 @@ final class WorkoutTemplateTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutSession>()).isEmpty)
     }
 
+    // MARK: - Editor draft
+
+    func testDraftNeedsANameAndAnExercise() {
+        let bench = makeExercise("Bench Press", owner: owner)
+        var draft = WorkoutTemplateDraft(template: nil)
+        XCTAssertFalse(draft.canSave)
+
+        draft.name = "   "
+        draft.append([bench])
+        XCTAssertFalse(draft.canSave)
+
+        draft.name = "  Push Day "
+        XCTAssertTrue(draft.canSave)
+        XCTAssertEqual(draft.trimmedName, "Push Day")
+
+        draft.remove([draft.entries[0].id])
+        XCTAssertFalse(draft.canSave)
+    }
+
+    func testDraftReorderKeepsEntriesAndGrouping() {
+        let group = UUID()
+        let entries = ["A", "B", "C"].map {
+            WorkoutTemplateEntry(
+                exerciseID: UUID(), exerciseSnapshotName: $0, exerciseSnapshotEquipmentRaw: "barbell",
+                exerciseSnapshotPrimaryMuscleGroupRaw: "chest", supersetGroupID: $0 == "C" ? nil : group
+            )
+        }
+        var draft = WorkoutTemplateDraft(template: WorkoutTemplate(name: "T", entries: entries))
+
+        draft.reorder([entries[2].id, entries[0].id, entries[1].id])
+
+        XCTAssertEqual(draft.entries, [entries[2], entries[0], entries[1]])
+    }
+
+    func testDraftRefreshesSnapshotsFromTheLibraryAndKeepsMissingExercises() {
+        let bench = makeExercise("Bench Press", owner: owner)
+        let group = UUID()
+        var draft = WorkoutTemplateDraft(template: nil)
+        draft.append([bench])
+        draft.entries[0].supersetGroupID = group
+        draft.entries.append(WorkoutTemplateEntry(
+            exerciseID: UUID(), exerciseSnapshotName: "Deleted Lift",
+            exerciseSnapshotEquipmentRaw: "cable", exerciseSnapshotPrimaryMuscleGroupRaw: "lats"
+        ))
+        bench.name = "Paused Bench Press"
+
+        let refreshed = draft.refreshedEntries(exercisesByID: [bench.id: bench])
+
+        XCTAssertEqual(refreshed[0].id, draft.entries[0].id)
+        XCTAssertEqual(refreshed[0].exerciseSnapshotName, "Paused Bench Press")
+        XCTAssertEqual(refreshed[0].supersetGroupID, group)
+        XCTAssertEqual(refreshed[1], draft.entries[1])
+    }
+
+    func testVisibleTemplatesHideOtherOwnersAndDeletedAndSortNaturally() {
+        let templates = [
+            WorkoutTemplate(name: "Week 10", syncOwnerTokenIdentifier: owner),
+            WorkoutTemplate(name: "week 2", syncOwnerTokenIdentifier: owner),
+            WorkoutTemplate(name: "Deleted", syncOwnerTokenIdentifier: owner, deletedAt: .now),
+            WorkoutTemplate(name: "Theirs", syncOwnerTokenIdentifier: "issuer|other"),
+        ]
+
+        XCTAssertEqual(templates.visible(to: owner).map(\.name), ["week 2", "Week 10"])
+    }
+
+    func testTemplateLookupsSkipDeletedExercisesAndOtherOwners() {
+        let bench = makeExercise("Bench Press", owner: owner)
+        let deleted = makeExercise("Hack Squat", owner: owner)
+        deleted.deletedAt = .now
+        let otherOwners = makeExercise("Curl", owner: "issuer|owner_b")
+
+        let visible = [bench, deleted, otherOwners].visibleByID(to: owner)
+
+        XCTAssertEqual(Set(visible.keys), [bench.id])
+    }
+
+    func testTemplateRowUsesTheLibraryNameAndFallsBackToTheSnapshot() {
+        let bench = makeExercise("Bench Press", owner: owner)
+        let entry = WorkoutTemplateEntry(exercise: bench)
+        bench.name = "Close-Grip Bench"
+        let missing = WorkoutTemplateEntry(
+            exerciseID: UUID(), exerciseSnapshotName: "Deleted Lift",
+            exerciseSnapshotEquipmentRaw: "cable", exerciseSnapshotPrimaryMuscleGroupRaw: "lats"
+        )
+
+        let items = TemplateExerciseItem.items(for: [entry, missing], exercisesByID: [bench.id: bench])
+
+        XCTAssertEqual(items.map(\.name), ["Close-Grip Bench", "Deleted Lift"])
+        XCTAssertNil(items[0].trailingDetail)
+        XCTAssertEqual(items[1].metadata, "Cable • Lats")
+    }
+
     // MARK: - Helpers
 
     private func makeExercise(_ name: String, owner: String?, seedIdentifier: String? = nil) -> Exercise {
