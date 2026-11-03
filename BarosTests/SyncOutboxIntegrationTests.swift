@@ -91,6 +91,109 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(entry.operation, .update)
     }
 
+    func testRemovalPreviewDoesNotMutateAndNewHistoryChangesDeleteToArchive() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscle: "Biceps")
+        context.insert(exercise)
+        try context.save()
+        let updated = exercise.updatedAt
+        XCTAssertEqual(try exercise.removalOutcome(context: context), .deleted)
+        XCTAssertFalse(exercise.isArchived)
+        XCTAssertFalse(exercise.isDeleted)
+        XCTAssertEqual(exercise.updatedAt, updated)
+        XCTAssertTrue(try fetchEntries(context).isEmpty)
+        context.insert(LoggedExercise(orderIndex: 0, exercise: exercise))
+        try ExerciseMutationService().removeExercise(exercise, context: context)
+        XCTAssertTrue(exercise.isArchived)
+        XCTAssertFalse(exercise.isDeleted)
+        let seeded = Exercise(name: "Seed", category: .strength, equipment: .barbell, primaryMuscle: "Back", isSeeded: true)
+        context.insert(seeded)
+        XCTAssertEqual(try seeded.removalOutcome(context: context), .archived)
+    }
+
+    func testLibraryRestorePreservesIdentityAndHistoryAndRejectsCollision() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let service = ExerciseMutationService()
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        let logged = LoggedExercise(orderIndex: 0, exercise: exercise)
+        context.insert(exercise)
+        context.insert(logged)
+        try context.save()
+        let id = exercise.id
+        try service.removeExercise(exercise, context: context)
+        XCTAssertTrue(exercise.isArchived)
+        XCTAssertFalse(exercise.isDeleted)
+        let duplicate = Exercise(name: " bench ", category: .strength, equipment: .barbell, primaryMuscle: "Chest")
+        context.insert(duplicate)
+        try context.save()
+        XCTAssertThrowsError(try service.restoreExercise(exercise, context: context))
+        XCTAssertTrue(exercise.isArchived)
+        duplicate.name = "Other Bench"
+        try service.restoreExercise(exercise, context: context)
+        XCTAssertEqual(exercise.id, id)
+        XCTAssertEqual(logged.exercise?.id, id)
+        XCTAssertFalse(exercise.isArchived)
+        XCTAssertEqual(try fetchEntries(context).filter { $0.entityID == id }.first?.operation, .update)
+    }
+
+    func testLibraryOwnerBoundaryAndTombstoneCannotBeRestored() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let service = ExerciseMutationService()
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell,
+            primaryMuscle: "Chest", isArchived: true, syncOwnerTokenIdentifier: "owner")
+        context.insert(exercise)
+        try context.save()
+        XCTAssertThrowsError(try service.restoreExercise(exercise, context: context))
+        XCTAssertThrowsError(try service.restoreExercise(exercise, ownerTokenIdentifier: "other", context: context))
+        try service.restoreExercise(exercise, ownerTokenIdentifier: "owner", context: context)
+        try service.removeExercise(exercise, ownerTokenIdentifier: "owner", context: context)
+        XCTAssertTrue(exercise.isDeleted)
+        XCTAssertThrowsError(try service.restoreExercise(exercise, ownerTokenIdentifier: "owner", context: context))
+    }
+
+    func testLibraryFailureRestoresOnlyItsStateAndOutboxThenRetryWorks() throws {
+        for seeded in [false, true] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let service = ExerciseMutationService()
+            let exercise = try service.createExercise(name: "Bench", category: .strength,
+                equipment: .barbell, primaryMuscle: "Chest", notes: "", context: context)
+            exercise.isSeeded = seeded
+            let unrelated = Exercise(name: "Other", category: .strength, equipment: .barbell, primaryMuscle: "Back")
+            context.insert(unrelated)
+            try context.save()
+            unrelated.notes = "Unsaved unrelated edit"
+            let entry = try XCTUnwrap(fetchEntries(context).first)
+            let timestamp = exercise.updatedAt
+            let entryTimestamp = entry.updatedAt
+            XCTAssertThrowsError(try service.removeExercise(exercise, context: context,
+                save: { _ in throw CocoaError(.fileWriteUnknown) }))
+            XCTAssertFalse(exercise.isArchived)
+            XCTAssertFalse(exercise.isDeleted)
+            XCTAssertEqual(exercise.updatedAt, timestamp)
+            XCTAssertEqual(unrelated.notes, "Unsaved unrelated edit")
+            XCTAssertEqual(try fetchEntries(context).count, 1)
+            let restoredEntry = try XCTUnwrap(fetchEntries(context).first)
+            XCTAssertEqual(restoredEntry.id, entry.id)
+            XCTAssertEqual(restoredEntry.operation, .create)
+            XCTAssertEqual(restoredEntry.updatedAt, entryTimestamp)
+            try service.removeExercise(exercise, context: context)
+            if seeded {
+                XCTAssertThrowsError(try service.restoreExercise(exercise, context: context,
+                    save: { _ in throw CocoaError(.fileWriteUnknown) }))
+                XCTAssertTrue(exercise.isArchived)
+                try service.restoreExercise(exercise, context: context)
+                XCTAssertFalse(exercise.isArchived)
+            } else {
+                XCTAssertTrue(exercise.isDeleted)
+                XCTAssertTrue(try fetchEntries(context).isEmpty)
+            }
+        }
+    }
+
     func testSettingsWeightUnitChangeRecordsOnlySettingsUpdate() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
