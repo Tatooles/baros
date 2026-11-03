@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// What one exercise row in `ReorderExercisesList` shows.
 protocol ReorderListExercise: Identifiable where ID == UUID {
@@ -11,7 +12,7 @@ protocol ReorderListExercise: Identifiable where ID == UUID {
     var accessibilityValue: String { get }
 }
 
-/// A stock edit-mode List, so the system owns the minus, Delete, and reorder
+/// System edit-mode lists own the minus, Delete, and reorder
 /// grip along with their motion and accessibility. A superset is one row, so
 /// it moves as a block; its members keep their own remove buttons.
 struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
@@ -24,6 +25,24 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
 
     var body: some View {
         let blocks = SupersetGrouping.blocks(exercises, groupID: \.supersetGroupID)
+        Group {
+            if blocks.contains(where: \.isSuperset) {
+                NativeGroupedReorderList(blocks: blocks, reorder: reorder, remove: remove, add: add, header: header)
+            } else {
+                ungroupedList(blocks)
+            }
+        }
+        #if DEBUG
+        .overlay(alignment: .bottomLeading) {
+            if ProcessInfo.processInfo.arguments.contains("--uitest-in-memory-store"),
+               ProcessInfo.processInfo.arguments.contains("--uitest-reorder-stability-probe") {
+                ReorderStabilityProbe().frame(width: 180, height: 12)
+            }
+        }
+        #endif
+    }
+
+    private func ungroupedList(_ blocks: [SupersetGrouping.Block<Item>]) -> some View {
         List {
             header
                 .listRowSeparator(.hidden)
@@ -154,7 +173,7 @@ struct ReorderExerciseRow: View {
 /// A superset's members beside the rail. The system has no delete control for
 /// part of a row, so each member gets its own minus button, sized so the cards
 /// line up with single exercises.
-private struct ReorderSupersetRow<Item: ReorderListExercise>: View {
+struct ReorderSupersetRow<Item: ReorderListExercise>: View {
     /// Scales like the system minus, so members stay in line with single exercises.
     @ScaledMetric(relativeTo: .title2) private var removeColumnWidth = 28
     let exercises: [Item]
@@ -186,3 +205,45 @@ private struct ReorderSupersetRow<Item: ReorderListExercise>: View {
         .contentShape(.dragPreview, Rectangle())
     }
 }
+
+#if DEBUG
+/// Test-only sampling of native cell model frames, without animating or resizing the list.
+/// A stationary hover must not repeatedly swap a neighboring block between two slots.
+private struct ReorderStabilityProbe: UIViewRepresentable {
+    func makeUIView(context: Context) -> UILabel {
+        let label = UILabel()
+        label.accessibilityIdentifier = "ReorderStabilityProbe"
+        label.text = "Reorder probe"
+        label.font = .systemFont(ofSize: 8)
+        label.textColor = .clear
+        let coordinator = context.coordinator
+        coordinator.timer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { [weak label, weak coordinator] _ in
+            MainActor.assumeIsolated {
+                @MainActor func findCollection(_ view: UIView) -> UIScrollView? {
+                    if let collection = view as? UICollectionView, view.accessibilityIdentifier == "ReorderExercisesList" { return collection }
+                    if let table = view as? UITableView, view.accessibilityIdentifier == "ReorderExercisesList" { return table }
+                    return view.subviews.lazy.compactMap { findCollection($0) }.first
+                }
+                guard let coordinator, let window = label?.window, let list = findCollection(window) else { return }
+                let cells: [UIView] = (list as? UICollectionView)?.visibleCells ?? (list as? UITableView)?.visibleCells ?? []
+                let order = cells.sorted { $0.frame.midY < $1.frame.midY }.map(ObjectIdentifier.init)
+                let common = Set(order).intersection(coordinator.lastOrder)
+                if common.count > 1, order.filter(common.contains) != coordinator.lastOrder.filter(common.contains) {
+                    coordinator.moves += 1
+                }
+                coordinator.lastOrder = order
+                label?.accessibilityValue = String(coordinator.moves)
+            }
+        }
+        return label
+    }
+    func updateUIView(_ view: UILabel, context: Context) {}
+    static func dismantleUIView(_ view: UILabel, coordinator: Coordinator) { coordinator.timer?.invalidate() }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    @MainActor final class Coordinator {
+        var timer: Timer?
+        var lastOrder: [ObjectIdentifier] = []
+        var moves = 0
+    }
+}
+#endif
