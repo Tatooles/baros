@@ -54,7 +54,7 @@ final class SupersetUITests: XCTestCase {
         let app = launch(seedsSupersets: true)
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
         openEditor(in: app)
-        let list = app.collectionViews["ReorderExercisesList"]
+        let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
         XCTAssertEqual(list.cells.count, 4, "Single, pair, giant set and Add Exercises")
         attachScreenshot("Edit Workout with supersets", app: app)
 
@@ -99,6 +99,16 @@ final class SupersetUITests: XCTestCase {
         row.tap()
         XCTAssertTrue(app.buttons["StartFromTemplateButton"].waitForExistence(timeout: 3))
         attachScreenshot("Template review with supersets", app: app)
+        // The grouped native list also hosts the template name above its movable rows.
+        app.buttons["EditTemplateButton"].tap()
+        let name = app.textFields["TemplateNameField"]
+        XCTAssertTrue(name.waitForExistence(timeout: 3))
+        name.tap()
+        name.typeText(" Edited\n")
+        drag(cellContaining: "Pull-Up", above: "Bench Press", in: app)
+        app.buttons["SaveTemplateButton"].tap()
+        XCTAssertTrue(app.staticTexts["TemplateReviewTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["TemplateReviewTitle"].label.contains("Edited"))
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
         app.buttons["StartFromTemplateButton"].tap()
 
@@ -134,6 +144,52 @@ final class SupersetUITests: XCTestCase {
         attachScreenshot("Rejected partner reps stay empty", app: app)
     }
 
+    func testSupersetReorderDoesNotOscillateWhileHovering() { runHoverProbe(grouped: true) }
+    func testNormalReorderDoesNotOscillateWhileHovering() { runHoverProbe(grouped: false) }
+
+    private func runHoverProbe(grouped: Bool) {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth",
+            "--uitest-reset-app-appearance", "--uitest-skip-first-run-experience",
+            "--uitest-seed-long-name-active-workout", "--uitest-reorder-stability-probe", "--uitest-reorder-minimal"] + (grouped ? ["--uitest-seed-supersets"] : [])
+        app.launch()
+        XCTAssertTrue(app.buttons["ActiveWorkoutEditButton"].waitForExistence(timeout: 8))
+        openEditor(in: app)
+        let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
+        let source = list.cells.containing(NSPredicate(format: "label == %@", "Slingshot Pause Bench Press")).firstMatch
+        let grip = source.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+        let target = grip.withOffset(CGVector(dx: 0, dy: 150))
+        grip.press(forDuration: 0.6, thenDragTo: target, withVelocity: .slow, thenHoldForDuration: 4)
+        attachScreenshot("Reorder after hovering", app: app)
+        let label = app.staticTexts["ReorderStabilityProbe"].value as? String ?? ""
+        print("Native reorder slot changes: \(label)")
+        let moves = Int(label) ?? -1
+        XCTAssertGreaterThanOrEqual(moves, 0, "The probe must report its measurement")
+        XCTAssertLessThan(moves, 6, "One row boundary must not repeatedly rearrange cells")
+        let partner = list.cells.containing(NSPredicate(format: "label == %@", "Pull-Up")).firstMatch
+        if source.frame.minY < partner.frame.minY {
+            let sourceGrip = source.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+            let belowPartner = sourceGrip.withOffset(CGVector(dx: 0, dy: partner.frame.maxY - source.frame.midY + 12))
+            sourceGrip.press(forDuration: 0.6, thenDragTo: belowPartner, withVelocity: .slow, thenHoldForDuration: 0.4)
+        }
+        XCTAssertGreaterThan(source.frame.minY, partner.frame.minY, "A full boundary crossing must still reorder")
+
+    }
+
+    func testRemovingLastSupersetPartnerKeepsCancelSemantics() {
+        let app = launch(seedsSupersets: true)
+        // Remove the members of each group until only single exercises remain.
+        openEditor(in: app)
+        for name in ["Incline Dumbbell Press", "Cable Overhead Triceps Extension", "Single-Arm Cable Lateral Raise"] {
+            app.buttons.matching(NSPredicate(format: "label == %@", "Remove \(name)")).firstMatch.tap()
+        }
+        let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
+        XCTAssertTrue(list.exists)
+        XCTAssertEqual(list.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 0)
+        app.buttons["CancelReorderExercisesButton"].tap()
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
+    }
+
     // MARK: Helpers
 
     private func launch(seedsSupersets: Bool = false) -> XCUIApplication {
@@ -159,12 +215,12 @@ final class SupersetUITests: XCTestCase {
         let edit = app.buttons["ActiveWorkoutEditButton"]
         XCTAssertTrue(edit.waitForExistence(timeout: 3))
         edit.tap()
-        XCTAssertTrue(app.collectionViews["ReorderExercisesList"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch.waitForExistence(timeout: 3))
     }
 
     /// Drags a row by its grip until it sits above the destination row.
     private func drag(cellContaining name: String, above destinationName: String, in app: XCUIApplication) {
-        let list = app.collectionViews["ReorderExercisesList"]
+        let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
         func cell(_ name: String) -> XCUIElement {
             list.cells.containing(NSPredicate(format: "label == %@", name)).firstMatch
         }

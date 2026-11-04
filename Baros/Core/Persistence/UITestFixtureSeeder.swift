@@ -183,6 +183,11 @@ enum UITestFixtureSeeder {
             if arguments.contains(supersetsArgument) {
                 try groupLongNameActiveWorkout(context: context)
             }
+            if arguments.contains("--uitest-reorder-minimal"),
+               let session = try context.fetch(FetchDescriptor<WorkoutSession>()).first(where: { $0.status == .active }) {
+                for exercise in session.sortedLoggedExercises.dropFirst(3) { exercise.deletedAt = .now }
+                try context.save()
+            }
         }
 
         if arguments.contains("--uitest-rest-30-seconds"),
