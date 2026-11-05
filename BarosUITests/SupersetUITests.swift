@@ -409,10 +409,23 @@ final class SupersetUITests: XCTestCase {
         XCTAssertTrue(member.exists)
         XCTAssertGreaterThan(delete.frame.minX, member.frame.maxX - 1, "Delete sits trailing of the member")
         attachScreenshot("Superset member Delete revealed", app: app)
-
         // The minus again, the card, or another row closes it without removing anything.
         minus.tap()
         XCTAssertTrue(waitForAbsence(delete))
+
+        // A long name truncates beside Delete rather than wrapping, so the row keeps its height.
+        let longName = "Cable Overhead Triceps Extension"
+        let long = list.descendants(matching: .any).matching(NSPredicate(format: "label == %@", longName)).firstMatch
+        let longDelete = app.buttons.matching(NSPredicate(format: "label == %@", "Delete \(longName)")).firstMatch
+        let restingHeight = long.frame.height
+        app.buttons.matching(NSPredicate(format: "label == %@", "Remove \(longName)")).firstMatch.tap()
+        XCTAssertTrue(longDelete.waitForExistence(timeout: 3))
+        XCTAssertEqual(long.frame.height, restingHeight, accuracy: 1)
+        attachScreenshot("Long name truncates beside Delete", app: app)
+        long.tap()
+        XCTAssertTrue(waitForAbsence(longDelete))
+        XCTAssertEqual(long.frame.height, restingHeight, accuracy: 1)
+
         minus.tap()
         XCTAssertTrue(delete.waitForExistence(timeout: 3))
         member.tap()

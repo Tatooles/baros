@@ -264,6 +264,9 @@ struct ReorderExerciseRow: View {
     @ScaledMetric(relativeTo: .subheadline) private var detailSize = 13
     let exercise: any ReorderListExercise
     var memory: ReorderListMemory?
+    /// Truncates each line of text to the height it had at rest instead of wrapping,
+    /// so the card keeps its height while a Delete narrows it.
+    var keepsRestingLines = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -271,6 +274,7 @@ struct ReorderExerciseRow: View {
                 .font(.system(size: titleSize, weight: .semibold))
                 .foregroundStyle(AppTheme.textPrimary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                .modifier(RestingHeight(isKept: keepsRestingLines))
             // The progress shares the detail line so names keep the card's full width.
             if dynamicTypeSize.isAccessibilitySize {
                 if let metadata = exercise.metadata { detail(metadata) }
@@ -306,6 +310,7 @@ struct ReorderExerciseRow: View {
         Text(text)
             .font(.system(size: detailSize, weight: .medium))
             .foregroundStyle(AppTheme.textSecondary)
+            .modifier(RestingHeight(isKept: keepsRestingLines))
     }
 
     @ViewBuilder
@@ -315,6 +320,21 @@ struct ReorderExerciseRow: View {
                 .monospacedDigit()
                 .fixedSize(horizontal: true, vertical: false)
         }
+    }
+}
+
+/// Holds text at the height it measured while not kept, so a narrower frame
+/// truncates it instead of adding lines.
+private struct RestingHeight: ViewModifier {
+    let isKept: Bool
+    @State private var height: CGFloat?
+
+    func body(content: Content) -> some View {
+        content
+            .frame(height: isKept ? height : nil, alignment: .topLeading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measured in
+                if !isKept { height = measured }
+            }
     }
 }
 
@@ -331,6 +351,7 @@ struct ReorderExerciseRow: View {
 struct ReorderSupersetRow<Item: ReorderListExercise>: View {
     /// Scales like the system minus, so members stay in line with single exercises.
     @ScaledMetric(relativeTo: .title2) private var removeColumnWidth = 28
+    /// Capped so large text sizes leave the card room for its name.
     @ScaledMetric(relativeTo: .body) private var deleteWidth = 64
     let exercises: [Item]
     let memory: ReorderListMemory
@@ -359,7 +380,7 @@ struct ReorderSupersetRow<Item: ReorderListExercise>: View {
                     .accessibilityLabel("Remove \(exercise.name)")
                     .accessibilityIdentifier("ReorderRemoveSupersetMember-\(exercise.id.uuidString)")
 
-                    ReorderExerciseRow(exercise: exercise, memory: memory)
+                    ReorderExerciseRow(exercise: exercise, memory: memory, keepsRestingLines: isRevealed)
 
                     if isRevealed {
                         Button {
@@ -369,7 +390,7 @@ struct ReorderSupersetRow<Item: ReorderListExercise>: View {
                             Image(systemName: "trash.fill")
                                 .font(.body.weight(.semibold))
                                 .foregroundStyle(.white)
-                                .frame(width: deleteWidth)
+                                .frame(width: min(deleteWidth, 80))
                                 .frame(maxHeight: .infinity)
                                 .background(.red, in: RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous))
                                 .contentShape(Rectangle())
