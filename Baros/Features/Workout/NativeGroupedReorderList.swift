@@ -10,6 +10,7 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
     let add: () -> Void
     let link: (() -> Void)?
     let memory: ReorderListMemory
+    let memberReveal: ReorderMemberReveal
     let header: Header
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -27,6 +28,10 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
         table.dataSource = context.coordinator
         table.delegate = context.coordinator
         table.setEditing(true, animated: false)
+        let closesMemberDelete = UITapGestureRecognizer()
+        closesMemberDelete.cancelsTouchesInView = false
+        closesMemberDelete.delegate = context.coordinator
+        table.addGestureRecognizer(closesMemberDelete)
         table.accessibilityIdentifier = "ReorderExercisesList"
         if let offset = memory.offsetToRestore {
             memory.offsetToRestore = nil
@@ -61,7 +66,7 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
             metadata: $0.metadata, group: $0.supersetGroupID, detail: $0.trailingDetail, isNew: $0.isNew) } }
     }
 
-    final class Coordinator: NSObject, UITableViewDataSource, UITableViewDelegate {
+    final class Coordinator: NSObject, UITableViewDataSource, UITableViewDelegate, UIGestureRecognizerDelegate {
         var parent: NativeGroupedReorderList
         fileprivate var signature: [Presentation]
         private var firstBlockRow: Int { Header.self == EmptyView.self ? 0 : 1 }
@@ -87,9 +92,10 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
             if let block = block(at: indexPath.row) {
                 let remove = parent.remove
                 let memory = parent.memory
+                let reveal = parent.memberReveal
                 cell.contentConfiguration = UIHostingConfiguration {
                     if block.isSuperset {
-                        ReorderSupersetRow(exercises: block.members, memory: memory, remove: { remove([$0]) })
+                        ReorderSupersetRow(exercises: block.members, memory: memory, reveal: reveal, remove: { remove([$0]) })
                     } else {
                         ReorderExerciseRow(exercise: block.members[0], memory: memory)
                     }
@@ -108,6 +114,18 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
                 }.margins(.horizontal, 20).margins(.top, 8).margins(.bottom, 12)
             }
             return cell
+        }
+        /// Only watches touches: one outside the content of the row showing a member's
+        /// Delete closes it, including scrolls, other rows, and the reorder grip.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard let id = parent.memberReveal.id, let table = gestureRecognizer.view as? UITableView else { return false }
+            let cell = table.visibleCells.first { cell in
+                guard let row = table.indexPath(for: cell)?.row else { return false }
+                return block(at: row)?.members.contains { $0.id == id } == true
+            }
+            if let content = cell?.contentView, content.bounds.contains(touch.location(in: content)) { return false }
+            parent.memberReveal.id = nil
+            return false
         }
         func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {
             block(at: indexPath.row) != nil

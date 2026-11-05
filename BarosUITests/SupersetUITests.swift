@@ -59,7 +59,7 @@ final class SupersetUITests: XCTestCase {
         attachScreenshot("Edit Workout with supersets", app: app)
 
         // Removing a pair member leaves its partner single, as a draft only.
-        app.buttons.matching(NSPredicate(format: "label == %@", "Remove Incline Dumbbell Press")).firstMatch.tap()
+        removeSupersetMember("Incline Dumbbell Press", in: app)
         XCTAssertFalse(list.cells.containing(NSPredicate(format: "label == %@", "Incline Dumbbell Press")).firstMatch.exists)
         XCTAssertEqual(list.cells.count, 4, "Pull-Up becomes its own row")
         XCTAssertEqual(list.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 1)
@@ -333,7 +333,7 @@ final class SupersetUITests: XCTestCase {
         // Remove the members of each group until only single exercises remain.
         openEditor(in: app)
         for name in ["Incline Dumbbell Press", "Cable Overhead Triceps Extension", "Single-Arm Cable Lateral Raise"] {
-            app.buttons.matching(NSPredicate(format: "label == %@", "Remove \(name)")).firstMatch.tap()
+            removeSupersetMember(name, in: app)
         }
         let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
         XCTAssertTrue(list.exists)
@@ -394,6 +394,43 @@ final class SupersetUITests: XCTestCase {
         XCTAssertEqual(labels.element(boundBy: 1).label, "Superset of 2 exercises")
     }
 
+    /// A member's minus asks first, like a single exercise's minus.
+    func testSupersetMemberMinusRevealsDeleteBeforeRemoving() {
+        let app = launch(seedsSupersets: true)
+        openEditor(in: app)
+        let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
+        let member = list.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Incline Dumbbell Press")).firstMatch
+        let minus = app.buttons.matching(NSPredicate(format: "label == %@", "Remove Incline Dumbbell Press")).firstMatch
+        let delete = app.buttons.matching(NSPredicate(format: "label == %@", "Delete Incline Dumbbell Press")).firstMatch
+        XCTAssertTrue(minus.waitForExistence(timeout: 3))
+
+        minus.tap()
+        XCTAssertTrue(delete.waitForExistence(timeout: 3), "The first tap only reveals Delete")
+        XCTAssertTrue(member.exists)
+        XCTAssertGreaterThan(delete.frame.minX, member.frame.maxX - 1, "Delete sits trailing of the member")
+        attachScreenshot("Superset member Delete revealed", app: app)
+
+        // The minus again, the card, or another row closes it without removing anything.
+        minus.tap()
+        XCTAssertTrue(waitForAbsence(delete))
+        minus.tap()
+        XCTAssertTrue(delete.waitForExistence(timeout: 3))
+        member.tap()
+        XCTAssertTrue(waitForAbsence(delete))
+        minus.tap()
+        XCTAssertTrue(delete.waitForExistence(timeout: 3))
+        list.cells.containing(NSPredicate(format: "label == %@", "Slingshot Pause Bench Press")).firstMatch.tap()
+        XCTAssertTrue(waitForAbsence(delete))
+        XCTAssertTrue(member.exists)
+
+        minus.tap()
+        XCTAssertTrue(delete.waitForExistence(timeout: 3))
+        delete.tap()
+        XCTAssertTrue(waitForAbsence(member))
+        app.buttons["CancelReorderExercisesButton"].tap()
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
+    }
+
     // MARK: Helpers
 
     private func launch(seedsSupersets: Bool = false) -> XCUIApplication {
@@ -413,6 +450,13 @@ final class SupersetUITests: XCTestCase {
         for _ in 0..<4 where !menu.isHittable { app.swipeDown() }
         menu.tap()
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-\(index)"].waitForExistence(timeout: 3))
+    }
+
+    private func removeSupersetMember(_ name: String, in app: XCUIApplication) {
+        app.buttons.matching(NSPredicate(format: "label == %@", "Remove \(name)")).firstMatch.tap()
+        let delete = app.buttons.matching(NSPredicate(format: "label == %@", "Delete \(name)")).firstMatch
+        XCTAssertTrue(delete.waitForExistence(timeout: 3))
+        delete.tap()
     }
 
     private func openEditor(in app: XCUIApplication) {

@@ -14,7 +14,7 @@ protocol ReorderListExercise: Identifiable where ID == UUID {
 
 /// System edit-mode lists own the minus, Delete, and reorder
 /// grip along with their motion and accessibility. A superset is one row, so
-/// it moves as a block; its members keep their own remove buttons.
+/// it moves as a block; its members keep their own minus and Delete.
 struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
     let exercises: [Item]
     let reorder: ([UUID]) -> Void
@@ -27,6 +27,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
     @State private var isLinking = false
     /// Carries card positions and the scroll offset between the regular list and link mode.
     @State private var memory = ReorderListMemory()
+    @State private var memberReveal = ReorderMemberReveal()
 
     init(
         exercises: [Item],
@@ -66,7 +67,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                     if blocks.contains(where: \.isSuperset) {
                         NativeGroupedReorderList(
                             blocks: blocks, reorder: reorder, remove: remove, add: add,
-                            link: linkAction, memory: memory, header: header
+                            link: linkAction, memory: memory, memberReveal: memberReveal, header: header
                         )
                     } else {
                         ungroupedList(blocks)
@@ -114,7 +115,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
             ForEach(blocks) { block in
                 Group {
                     if block.isSuperset {
-                        ReorderSupersetRow(exercises: block.members, memory: memory, remove: { remove([$0]) })
+                        ReorderSupersetRow(exercises: block.members, memory: memory, reveal: memberReveal, remove: { remove([$0]) })
                     } else {
                         ReorderExerciseRow(exercise: block.members[0], memory: memory)
                             // Lifts only the card while dragging, not the whole row rectangle.
@@ -317,27 +318,39 @@ struct ReorderExerciseRow: View {
     }
 }
 
+/// The superset member whose Delete is showing, shared by every row in the list
+/// so a touch on any other row can close it.
+@MainActor @Observable final class ReorderMemberReveal {
+    var id: UUID?
+}
+
 /// A superset's members beside the rail. The system has no delete control for
 /// part of a row, so each member gets its own minus button, sized so the cards
-/// line up with single exercises.
+/// line up with single exercises. Like the system minus, it turns and reveals a
+/// Delete beside the card; the next tap anywhere else closes it.
 struct ReorderSupersetRow<Item: ReorderListExercise>: View {
     /// Scales like the system minus, so members stay in line with single exercises.
     @ScaledMetric(relativeTo: .title2) private var removeColumnWidth = 28
+    @ScaledMetric(relativeTo: .body) private var deleteWidth = 64
     let exercises: [Item]
     let memory: ReorderListMemory
+    let reveal: ReorderMemberReveal
     let remove: (UUID) -> Void
 
     var body: some View {
+        let revealedHere = exercises.contains { $0.id == reveal.id }
         SupersetRail(count: exercises.count, spacing: 12, reachesIntoMargin: false, balancesLabel: true) {
             ForEach(exercises) { exercise in
+                let isRevealed = reveal.id == exercise.id
                 HStack(spacing: 5.5) {
                     Button {
-                        remove(exercise.id)
+                        reveal.id = isRevealed ? nil : exercise.id
                     } label: {
                         Image(systemName: "minus.circle.fill")
                             .font(.title2)
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(.white, .red)
+                            .rotationEffect(.degrees(isRevealed ? -90 : 0))
                             .frame(width: removeColumnWidth)
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
@@ -347,10 +360,35 @@ struct ReorderSupersetRow<Item: ReorderListExercise>: View {
                     .accessibilityIdentifier("ReorderRemoveSupersetMember-\(exercise.id.uuidString)")
 
                     ReorderExerciseRow(exercise: exercise, memory: memory)
+
+                    if isRevealed {
+                        Button {
+                            reveal.id = nil
+                            remove(exercise.id)
+                        } label: {
+                            Image(systemName: "trash.fill")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: deleteWidth)
+                                .frame(maxHeight: .infinity)
+                                .background(.red, in: RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        .padding(.leading, 6)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .accessibilityLabel("Delete \(exercise.name)")
+                        .accessibilityIdentifier("ReorderConfirmRemoveSupersetMember-\(exercise.id.uuidString)")
+                    }
                 }
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .contentShape(.dragPreview, Rectangle())
+        .contentShape(.interaction, Rectangle())
+        // Buttons keep their taps; a tap anywhere else in the row closes its Delete.
+        .gesture(TapGesture().onEnded { reveal.id = nil }, including: revealedHere ? .all : .subviews)
+        .animation(.snappy(duration: 0.3), value: reveal.id)
     }
 }
 
