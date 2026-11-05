@@ -481,6 +481,7 @@ final class ActiveWorkoutEngine {
         orderedIDs: [UUID],
         baseline: WorkoutExerciseListSnapshot,
         additions: [WorkoutExerciseListDraft.Addition] = [],
+        supersetGroupIDs: [UUID: UUID]? = nil,
         ownerTokenIdentifier: String? = nil,
         context: ModelContext,
         now: Date = .now,
@@ -533,9 +534,19 @@ final class ActiveWorkoutEngine {
                 }
             }
 
+            var didChangeGrouping = false
+            if let supersetGroupIDs {
+                for id in orderedIDs {
+                    guard let exercise = exercisesByID[id], exercise.supersetGroupID != supersetGroupIDs[id] else { continue }
+                    exercise.supersetGroupID = supersetGroupIDs[id]
+                    exercise.hasLocalSupersetChange = true
+                    exercise.touch(now: now)
+                    didChangeGrouping = true
+                }
+            }
             // The sheet moves supersets as blocks. Removals can still leave one
             // exercise alone, and other callers may split a run.
-            let didChangeGrouping = normalizeSupersets(orderedIDs.compactMap { exercisesByID[$0] }, now: now)
+            if normalizeSupersets(orderedIDs.compactMap { exercisesByID[$0] }, now: now) { didChangeGrouping = true }
             guard didChangeOrder || didChangeGrouping || !removedExercises.isEmpty || !inserted.isEmpty else { return }
             for exercise in removedExercises { exercise.markDeleted(now: now) }
             for set in removedSets { set.markDeleted(now: now) }

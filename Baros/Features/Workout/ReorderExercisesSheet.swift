@@ -42,7 +42,8 @@ struct ReorderExercisesSheet: View {
                 add: {
                     detent = .large
                     showsPicker = true
-                }
+                },
+                regroup: { draft.regroup($0) }
             )
             .background(AppTheme.canvasBackground.ignoresSafeArea())
             .overlay {
@@ -54,14 +55,12 @@ struct ReorderExercisesSheet: View {
                 }
             }
             .navigationDestination(isPresented: $showsPicker) {
-                ExercisePickerView(mode: .add(existingExerciseIDs: existingExerciseIDs), showsCancel: false) { exercises in
-                    draft.append(exercises) {
-                        engine.initialSetKinds(for: $0,
-                            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
-                            sessions: sessions)
-                    }
-                    showsPicker = false
-                }
+                ExercisePickerView(
+                    mode: .add(existingExerciseIDs: existingExerciseIDs),
+                    showsCancel: false,
+                    onSelectAsSuperset: { append($0, asSuperset: true) },
+                    onSelect: { append($0, asSuperset: false) }
+                )
             }
             .navigationTitle("Edit Workout")
             .navigationBarTitleDisplayMode(.inline)
@@ -107,6 +106,15 @@ struct ReorderExercisesSheet: View {
         .presentationDragIndicator(.visible)
     }
 
+    private func append(_ exercises: [Exercise], asSuperset: Bool) {
+        draft.append(exercises, asSuperset: asSuperset) {
+            engine.initialSetKinds(for: $0,
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
+                sessions: sessions)
+        }
+        showsPicker = false
+    }
+
     private var existingExerciseIDs: Set<UUID> {
         let remaining = Set(draft.orderedIDs)
         return Set(session.sortedLoggedExercises.filter { remaining.contains($0.id) }.compactMap { $0.exercise?.id }
@@ -137,7 +145,7 @@ struct ReorderExercisesSheet: View {
         do {
             try engine.applyExerciseListChanges(
                 in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline,
-                additions: draft.additions,
+                additions: draft.additions, supersetGroupIDs: draft.supersetGroupIDs,
                 ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                 context: modelContext
             )

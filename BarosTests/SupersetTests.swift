@@ -313,6 +313,101 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertNil(result[4].supersetGroupID, "Additions don't join a superset")
     }
 
+    func testTogglingALinkJoinsMergesAndSplits() {
+        let (a, b) = (UUID(), UUID())
+        var fresh = (0..<20).map { _ in UUID() }.makeIterator()
+        func toggled(_ ids: [UUID?], below upper: Int) -> [UUID?] {
+            SupersetGrouping.togglingLink(ids, below: upper, makeID: { fresh.next()! })
+        }
+
+        let pair = toggled([nil, nil, nil], below: 0)
+        XCTAssertNotNil(pair[0])
+        XCTAssertEqual(pair[0], pair[1])
+        XCTAssertNil(pair[2])
+        XCTAssertEqual(toggled([a, a, nil], below: 1), [a, a, a], "A single joins the superset above it")
+        XCTAssertEqual(toggled([a, a, b, b], below: 1), [a, a, a, a], "The upper superset's id wins a merge")
+
+        // Splitting: the upper side keeps its id, and a lone side is ungrouped.
+        XCTAssertEqual(toggled([a, a], below: 0), [nil, nil])
+        let splitTrio = toggled([a, a, a, a], below: 1)
+        XCTAssertEqual(Array(splitTrio[0...1]), [a, a])
+        XCTAssertNotNil(splitTrio[2])
+        XCTAssertNotEqual(splitTrio[2], a)
+        XCTAssertEqual(splitTrio[2], splitTrio[3])
+        XCTAssertEqual(toggled([a, a, a], below: 1), [a, a, nil])
+        let splitFirst = toggled([a, a, a], below: 0)
+        XCTAssertNil(splitFirst[0])
+        XCTAssertNotNil(splitFirst[1])
+        XCTAssertEqual(splitFirst[1], splitFirst[2])
+    }
+
+    func testSheetSavesLinksWithAdditionsOrderAndRemovalsInOneChange() throws {
+        let (context, session) = try makeWorkout(names: ["A", "B", "C", "D"], groups: [0, 0, nil, nil])
+        let engine = ActiveWorkoutEngine()
+        let curl = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        let raise = Exercise(name: "Raise", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .shoulders)
+        context.insert(curl)
+        context.insert(raise)
+        try context.save()
+        let ids = session.sortedLoggedExercises.map(\.id)
+
+        var draft = WorkoutExerciseListDraft(session: session)
+        draft.append([curl, raise], asSuperset: true)
+        XCTAssertEqual(draft.exercises[4].supersetGroupID, draft.exercises[5].supersetGroupID)
+        XCTAssertNotNil(draft.exercises[4].supersetGroupID)
+        draft.orderedIDs.removeAll { $0 == ids[3] }
+        // Split A–B, then join C to the new superset below it.
+        draft.regroup(SupersetGrouping.togglingLink(draft.exercises.map(\.supersetGroupID), below: 0))
+        XCTAssertNil(draft.exercises[0].supersetGroupID)
+        draft.regroup(SupersetGrouping.togglingLink(draft.exercises.map(\.supersetGroupID), below: 2))
+        XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), draft.baseline, "Linking only touches the draft")
+
+        try engine.applyExerciseListChanges(
+            in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline,
+            additions: draft.additions, supersetGroupIDs: draft.supersetGroupIDs, context: context
+        )
+
+        let result = session.sortedLoggedExercises
+        XCTAssertEqual(result.map(\.exerciseSnapshotName), ["A", "B", "C", "Curl", "Raise"])
+        XCTAssertNil(result[0].supersetGroupID)
+        XCTAssertNil(result[1].supersetGroupID)
+        XCTAssertTrue(grouped(session, [2, 3, 4]))
+        XCTAssertTrue(result[0].hasLocalSupersetChange, "Clearing a group must sync")
+        XCTAssertTrue(result[2].hasLocalSupersetChange)
+        XCTAssertTrue(result[4].hasLocalSupersetChange)
+    }
+
+    func testSheetWithoutLinkChangesLeavesExercisesUntouched() throws {
+        let (context, session) = try makeWorkout(names: ["A", "B", "C"], groups: [0, 0, nil])
+        let engine = ActiveWorkoutEngine()
+        let before = WorkoutExerciseListSnapshot(session: session)
+        let draft = WorkoutExerciseListDraft(session: session)
+
+        try engine.applyExerciseListChanges(
+            in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline,
+            supersetGroupIDs: draft.supersetGroupIDs, context: context
+        )
+
+        XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), before)
+        XCTAssertFalse(session.sortedLoggedExercises[0].hasLocalSupersetChange)
+    }
+
+    func testSheetFailedSaveRestoresLinks() throws {
+        let (context, session) = try makeWorkout(names: ["A", "B", "C"])
+        let engine = ActiveWorkoutEngine()
+        var draft = WorkoutExerciseListDraft(session: session)
+        draft.regroup(SupersetGrouping.togglingLink([nil, nil, nil], below: 0))
+
+        XCTAssertThrowsError(try engine.applyExerciseListChanges(
+            in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline,
+            supersetGroupIDs: draft.supersetGroupIDs, context: context,
+            save: { _ in throw CocoaError(.fileWriteUnknown) }
+        ))
+
+        XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), draft.baseline)
+        XCTAssertFalse(session.sortedLoggedExercises[0].hasLocalSupersetChange)
+    }
+
     func testSheetFailedSaveRestoresGroupingAndStaleGroupingRejectsTheDraft() throws {
         let (context, session) = try makeWorkout(names: ["A", "B", "C"], groups: [0, 0, nil])
         let engine = ActiveWorkoutEngine()

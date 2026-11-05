@@ -7,6 +7,7 @@ struct SupersetRail<Content: View>: View {
     static var railSpacing: CGFloat { 6 }
     /// How far the rail reaches into the leading margin.
     static var marginWidth: CGFloat { railWidth + railSpacing }
+    static var labelSpacing: CGFloat { 6 }
 
     let count: Int
     var spacing: CGFloat = 8
@@ -17,7 +18,7 @@ struct SupersetRail<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Self.labelSpacing) {
             SupersetLabel(count: count)
                 .padding(.leading, 12)
             VStack(spacing: spacing) { content }

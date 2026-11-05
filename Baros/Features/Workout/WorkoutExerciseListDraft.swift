@@ -38,7 +38,7 @@ struct WorkoutExerciseListSnapshot: Equatable {
         let orderIndex: Int
         let notes: String
         let referenceNotes: String?
-        let supersetGroupID: UUID?
+        var supersetGroupID: UUID?
         let updatedAt: Date
         let sets: [SetState]
         var isNew = false
@@ -110,16 +110,23 @@ struct WorkoutExerciseListDraft {
 
     let baseline: WorkoutExerciseListSnapshot
     var orderedIDs: [UUID]
+    /// Superset ids by exercise, including pending additions.
+    private(set) var supersetGroupIDs: [UUID: UUID]
 
     init(session: WorkoutSession) {
         baseline = WorkoutExerciseListSnapshot(session: session)
         orderedIDs = baseline.exercises.map(\.id)
+        supersetGroupIDs = baseline.exercises.reduce(into: [:]) { $0[$1.id] = $1.supersetGroupID }
     }
 
     var exercises: [WorkoutExerciseListSnapshot.ExerciseState] {
         let pending = additions.map(WorkoutExerciseListSnapshot.ExerciseState.init(addition:))
         let byID = Dictionary(uniqueKeysWithValues: (baseline.exercises + pending).map { ($0.id, $0) })
-        return orderedIDs.compactMap { byID[$0] }
+        return orderedIDs.compactMap { id in
+            var exercise = byID[id]
+            exercise?.supersetGroupID = supersetGroupIDs[id]
+            return exercise
+        }
     }
 
     var removedExercises: [WorkoutExerciseListSnapshot.ExerciseState] {
@@ -127,10 +134,23 @@ struct WorkoutExerciseListDraft {
         return baseline.exercises.filter { !remaining.contains($0.id) }
     }
 
-    mutating func append(_ exercises: [Exercise], initialSetKinds: (Exercise) -> [SetKind] = { _ in [.working] }) {
+    mutating func append(
+        _ exercises: [Exercise],
+        asSuperset: Bool = false,
+        initialSetKinds: (Exercise) -> [SetKind] = { _ in [.working] }
+    ) {
         let pending = exercises.map { Addition(exercise: $0, initialSetKinds: initialSetKinds($0)) }
         additions.append(contentsOf: pending)
         orderedIDs.append(contentsOf: pending.map(\.id))
+        if asSuperset, pending.count > 1 {
+            let group = UUID()
+            for addition in pending { supersetGroupIDs[addition.id] = group }
+        }
+    }
+
+    /// Replaces the superset ids, given in the order of `exercises`.
+    mutating func regroup(_ groupIDs: [UUID?]) {
+        supersetGroupIDs = zip(orderedIDs, groupIDs).reduce(into: [:]) { $0[$1.0] = $1.1 }
     }
 
     var needsRemovalConfirmation: Bool { removedExercises.contains { $0.loggedSetCount > 0 } }

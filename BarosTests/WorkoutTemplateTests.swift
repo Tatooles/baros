@@ -413,6 +413,21 @@ final class WorkoutTemplateTests: XCTestCase {
         XCTAssertEqual(draft.entries, [entries[2], entries[0], entries[1]])
     }
 
+    func testDraftAddsAsASupersetAndRegroups() {
+        let exercises = ["A", "B", "C"].map { makeExercise($0, owner: owner) }
+        var draft = WorkoutTemplateDraft(template: nil)
+
+        draft.append(Array(exercises[..<1]), asSuperset: true)
+        XCTAssertNil(draft.entries[0].supersetGroupID, "One exercise is never a superset")
+        draft.append(Array(exercises[1...]), asSuperset: true)
+        XCTAssertNotNil(draft.entries[1].supersetGroupID)
+        XCTAssertEqual(draft.entries[1].supersetGroupID, draft.entries[2].supersetGroupID)
+
+        draft.regroup(SupersetGrouping.togglingLink(draft.entries.map(\.supersetGroupID), below: 0))
+        XCTAssertEqual(Set(draft.entries.map(\.supersetGroupID)).count, 1, "A joins B and C")
+        XCTAssertNotNil(draft.entries[0].supersetGroupID)
+    }
+
     func testDraftRefreshesSnapshotsFromTheLibraryAndKeepsMissingExercises() {
         let bench = makeExercise("Bench Press", owner: owner)
         let group = UUID()
