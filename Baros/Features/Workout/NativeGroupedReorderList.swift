@@ -8,6 +8,8 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
     let reorder: ([UUID]) -> Void
     let remove: (Set<UUID>) -> Void
     let add: () -> Void
+    let link: (() -> Void)?
+    let memory: ReorderListMemory
     let header: Header
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -26,6 +28,13 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
         table.delegate = context.coordinator
         table.setEditing(true, animated: false)
         table.accessibilityIdentifier = "ReorderExercisesList"
+        if let offset = memory.offsetToRestore {
+            memory.offsetToRestore = nil
+            DispatchQueue.main.async {
+                table.layoutIfNeeded()
+                table.contentOffset.y = offset - table.adjustedContentInset.top
+            }
+        }
         return table
     }
 
@@ -64,6 +73,9 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
             let index = row - firstBlockRow
             return parent.blocks.indices.contains(index) ? parent.blocks[index] : nil
         }
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            parent.memory.offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+        }
         func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
             firstBlockRow + parent.blocks.count + 1
         }
@@ -74,30 +86,25 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
             cell.showsReorderControl = block(at: indexPath.row) != nil
             if let block = block(at: indexPath.row) {
                 let remove = parent.remove
+                let memory = parent.memory
                 cell.contentConfiguration = UIHostingConfiguration {
                     if block.isSuperset {
-                        ReorderSupersetRow(exercises: block.members, remove: { remove([$0]) })
+                        ReorderSupersetRow(exercises: block.members, memory: memory, remove: { remove([$0]) })
                     } else {
-                        ReorderExerciseRow(exercise: block.members[0])
+                        ReorderExerciseRow(exercise: block.members[0], memory: memory)
                     }
                 }
                 .margins(.vertical, 6)
                 .margins(.leading, 4)
                 .margins(.trailing, 8)
             } else if indexPath.row < firstBlockRow {
-                cell.contentConfiguration = UIHostingConfiguration { parent.header }.margins(.all, 0)
+                cell.contentConfiguration = UIHostingConfiguration { parent.header }
+                    .margins(.horizontal, 20).margins(.top, 6).margins(.bottom, 14)
             } else {
                 let add = parent.add
+                let link = parent.link
                 cell.contentConfiguration = UIHostingConfiguration {
-                    Button(action: add) {
-                        Label("Add Exercises", systemImage: "plus")
-                            .font(.headline)
-                            .foregroundStyle(AppTheme.brandAccentForeground)
-                            .frame(maxWidth: .infinity, minHeight: 50)
-                            .background(AppTheme.brandAccentMuted, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("EditWorkoutAddExercisesButton")
+                    ReorderListActions(add: add, link: link)
                 }.margins(.horizontal, 20).margins(.top, 8).margins(.bottom, 12)
             }
             return cell

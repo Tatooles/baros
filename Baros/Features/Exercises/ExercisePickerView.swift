@@ -66,6 +66,8 @@ struct ExercisePickerView: View {
     @Query private var sessions: [WorkoutSession]
     let mode: ExercisePickerMode
     var showsCancel = true
+    /// Offers Add as Superset beside the add button when set.
+    let onSelectAsSuperset: (([Exercise]) -> Void)?
     let onSelect: ([Exercise]) -> Void
     private let sortPreferenceStore: ExercisePickerSortPreferenceStore
 
@@ -73,11 +75,13 @@ struct ExercisePickerView: View {
         mode: ExercisePickerMode,
         showsCancel: Bool = true,
         sortPreferenceStore: ExercisePickerSortPreferenceStore = ExercisePickerSortPreferenceStore(),
+        onSelectAsSuperset: (([Exercise]) -> Void)? = nil,
         onSelect: @escaping ([Exercise]) -> Void
     ) {
         self.mode = mode
         self.showsCancel = showsCancel
         self.sortPreferenceStore = sortPreferenceStore
+        self.onSelectAsSuperset = onSelectAsSuperset
         self.onSelect = onSelect
     }
 
@@ -91,6 +95,7 @@ struct ExercisePickerView: View {
             mode: mode,
             showsCancel: showsCancel,
             sortPreferenceStore: sortPreferenceStore,
+            onSelectAsSuperset: onSelectAsSuperset,
             onSelect: onSelect
         )
     }
@@ -102,6 +107,7 @@ private struct SearchableExercisePicker: View {
     let mode: ExercisePickerMode
     var showsCancel = true
     let sortPreferenceStore: ExercisePickerSortPreferenceStore
+    let onSelectAsSuperset: (([Exercise]) -> Void)?
     let onSelect: ([Exercise]) -> Void
     @State private var searchText = ""
 
@@ -112,6 +118,7 @@ private struct SearchableExercisePicker: View {
             showsCancel: showsCancel,
             sortPreferenceStore: sortPreferenceStore,
             searchText: $searchText,
+            onSelectAsSuperset: onSelectAsSuperset,
             onSelect: onSelect
         )
         .searchable(
@@ -131,6 +138,7 @@ private struct ExercisePickerList: View {
     let mode: ExercisePickerMode
     var showsCancel = true
     let onSelect: ([Exercise]) -> Void
+    let onSelectAsSuperset: (([Exercise]) -> Void)?
     @State private var selectedExerciseIDs: [UUID] = []
     @Binding private var searchText: String
     @State private var creationRequest: ExerciseCreationRequest?
@@ -144,8 +152,10 @@ private struct ExercisePickerList: View {
         showsCancel: Bool = true,
         sortPreferenceStore: ExercisePickerSortPreferenceStore,
         searchText: Binding<String>,
+        onSelectAsSuperset: (([Exercise]) -> Void)? = nil,
         onSelect: @escaping ([Exercise]) -> Void
     ) {
+        self.onSelectAsSuperset = onSelectAsSuperset
         self.baseRows = baseRows
         self.mode = mode
         self.showsCancel = showsCancel
@@ -295,18 +305,37 @@ private struct ExercisePickerList: View {
         }
         .safeAreaBar(edge: .bottom, spacing: 0) {
             if mode.isAddExercise {
-                Button {
-                    onSelect(selectedExercises)
-                } label: {
-                    Text(addButtonTitle)
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+                HStack(spacing: 10) {
+                    if let onSelectAsSuperset {
+                        Button {
+                            onSelectAsSuperset(selectedExercises)
+                        } label: {
+                            Text("Add as Superset")
+                                .font(.headline)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.glass)
+                        .disabled(selectedExercises.count < 2)
+                        .accessibilityIdentifier("ExercisePickerAddAsSupersetButton")
+                    }
+                    Button {
+                        onSelect(selectedExercises)
+                    } label: {
+                        Text(addButtonTitle)
+                            .font(.headline)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(AppTheme.brandAccentFill)
+                    .disabled(selectedExercises.isEmpty)
+                    .accessibilityIdentifier("ExercisePickerAddSelectedButton")
                 }
-                .buttonStyle(.glassProminent)
-                .tint(AppTheme.brandAccentFill)
-                .disabled(selectedExercises.isEmpty)
-                .accessibilityIdentifier("ExercisePickerAddSelectedButton")
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
             }

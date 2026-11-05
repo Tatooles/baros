@@ -44,16 +44,25 @@ struct TemplateEditorSheet: View {
                 add: {
                     isNameFocused = false
                     showsPicker = true
-                }
+                },
+                regroup: { draft.regroup($0) }
             ) {
                 nameField
             }
             .background(AppTheme.canvasBackground.ignoresSafeArea())
             .navigationDestination(isPresented: $showsPicker) {
-                ExercisePickerView(mode: .add(existingExerciseIDs: draft.exerciseIDs), showsCancel: false) { exercises in
-                    draft.append(exercises)
-                    showsPicker = false
-                }
+                ExercisePickerView(
+                    mode: .add(existingExerciseIDs: draft.exerciseIDs),
+                    showsCancel: false,
+                    onSelectAsSuperset: { exercises in
+                        draft.append(exercises, asSuperset: true)
+                        showsPicker = false
+                    },
+                    onSelect: { exercises in
+                        draft.append(exercises)
+                        showsPicker = false
+                    }
+                )
             }
             .navigationTitle(template == nil ? "New Template" : "Edit Template")
             .navigationBarTitleDisplayMode(.inline)

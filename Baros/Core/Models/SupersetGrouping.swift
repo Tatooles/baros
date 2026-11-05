@@ -69,6 +69,25 @@ enum SupersetGrouping {
         return result
     }
 
+    /// Flips the link between the exercises at `upper` and `upper + 1`: joins
+    /// them as `linking` does, or cuts their superset in two. The upper side
+    /// keeps its id, and a side left with one exercise is ungrouped.
+    static func togglingLink(
+        _ groupIDs: [UUID?],
+        below upper: Int,
+        makeID: () -> UUID = UUID.init
+    ) -> [UUID?] {
+        let lower = upper + 1
+        var result = normalized(groupIDs, makeID: makeID)
+        guard areGrouped(result, upper, lower) else {
+            return linking(result, upper, with: lower, makeID: makeID)
+        }
+        guard let run = runRanges(result).first(where: { $0.contains(lower) }) else { return result }
+        let fresh = makeID()
+        for position in lower..<run.upperBound { result[position] = fresh }
+        return normalized(result, makeID: makeID)
+    }
+
     /// Ungroups one exercise. A side left with one exercise is ungrouped too,
     /// and removing a middle exercise leaves the two sides as separate supersets.
     static func removing(_ groupIDs: [UUID?], at index: Int, makeID: () -> UUID = UUID.init) -> [UUID?] {

@@ -85,6 +85,7 @@
 		49F9EA1CFDE22D2EDC068483 /* SeedDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82BCC51ACFFB60A56B4FED0 /* SeedDataService.swift */; };
 		4BEBCFE6F1D25EEC83F31602 /* ConvexConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5149C1CB36191BD8869DA3C7 /* ConvexConfiguration.swift */; };
 		EBCB094A6E93167C6841FEED /* NativeGroupedReorderList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72A675DA33EED3402F188F59 /* NativeGroupedReorderList.swift */; };
+		A1C340B2E5D04F7A9C340001 /* ReorderLinkList.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C340B2E5D04F7A9C340002 /* ReorderLinkList.swift */; };
 		4EAA8B77042AC0DAB4A6FDE9 /* ReorderExerciseRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC3EE9597A8BD9057976931 /* ReorderExerciseRow.swift */; };
 		1010A0B1C2D3E4F5A6B7C803 /* SupersetRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1010A0B1C2D3E4F5A6B7C804 /* SupersetRail.swift */; };
 		4EE82F1BE09E267AD7B9EA99 /* WorkoutLiveActivityReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F6F8F4E46996A4ABF63257 /* WorkoutLiveActivityReconciler.swift */; };
@@ -474,6 +475,7 @@
 		BDE4314AD2B27E0C681BD5D7 /* StateViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateViews.swift; sourceTree = "<group>"; };
 		BF2386D026311F4720EF90CE /* WorkoutHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutHeaderView.swift; sourceTree = "<group>"; };
 		72A675DA33EED3402F188F59 /* NativeGroupedReorderList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeGroupedReorderList.swift; sourceTree = "<group>"; };
+		A1C340B2E5D04F7A9C340002 /* ReorderLinkList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorderLinkList.swift; sourceTree = "<group>"; };
 		BFC3EE9597A8BD9057976931 /* ReorderExerciseRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorderExerciseRow.swift; sourceTree = "<group>"; };
 		1010A0B1C2D3E4F5A6B7C804 /* SupersetRail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupersetRail.swift; sourceTree = "<group>"; };
 		C0C0EA53E504BE5333F9B619 /* SetKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetKind.swift; sourceTree = "<group>"; };
@@ -854,6 +856,7 @@
 				CB96C3C4C51E842A3BFC40B5 /* PreviousSetPerformance.swift */,
 				72A675DA33EED3402F188F59 /* NativeGroupedReorderList.swift */,
 				BFC3EE9597A8BD9057976931 /* ReorderExerciseRow.swift */,
+				A1C340B2E5D04F7A9C340002 /* ReorderLinkList.swift */,
 				1010A0B1C2D3E4F5A6B7C804 /* SupersetRail.swift */,
 				26E301A1ADE94900178B7D4F /* ReorderExercisesSheet.swift */,
 				A8BA79E3D56FF2BBB6C088A1 /* RestTimerAlerts.swift */,
@@ -1397,6 +1400,7 @@
 				2ECD33907C8A5FABCC5EF1C3 /* RPEChipRow.swift in Sources */,
 				EBCB094A6E93167C6841FEED /* NativeGroupedReorderList.swift in Sources */,
 				4EAA8B77042AC0DAB4A6FDE9 /* ReorderExerciseRow.swift in Sources */,
+				A1C340B2E5D04F7A9C340001 /* ReorderLinkList.swift in Sources */,
 				1010A0B1C2D3E4F5A6B7C803 /* SupersetRail.swift in Sources */,
 				745C0A0414A80A63A13A218A /* ReorderExercisesSheet.swift in Sources */,
 				90549B1D069028EFCE819C36 /* RestTimerAlerts.swift in Sources */,

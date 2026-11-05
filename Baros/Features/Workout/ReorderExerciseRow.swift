@@ -19,18 +19,66 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
     let exercises: [Item]
     let reorder: ([UUID]) -> Void
     let remove: (Set<UUID>) -> Void
-    var add: () -> Void = {}
+    let add: () -> Void
+    /// Takes the exercises' new superset ids, in the order of `exercises`.
+    let regroup: ([UUID?]) -> Void
     /// Rows above the exercises that don't move or delete.
-    @ViewBuilder var header: Header
+    let header: Header
+    @State private var isLinking = false
+    /// Carries card positions and the scroll offset between the regular list and link mode.
+    @State private var memory = ReorderListMemory()
+
+    init(
+        exercises: [Item],
+        reorder: @escaping ([UUID]) -> Void,
+        remove: @escaping (Set<UUID>) -> Void,
+        add: @escaping () -> Void = {},
+        regroup: @escaping ([UUID?]) -> Void,
+        @ViewBuilder header: () -> Header
+    ) {
+        self.exercises = exercises
+        self.reorder = reorder
+        self.remove = remove
+        self.add = add
+        self.regroup = regroup
+        self.header = header()
+    }
 
     var body: some View {
         let blocks = SupersetGrouping.blocks(exercises, groupID: \.supersetGroupID)
-        Group {
-            if blocks.contains(where: \.isSuperset) {
-                NativeGroupedReorderList(blocks: blocks, reorder: reorder, remove: remove, add: add, header: header)
+        // The two lists crossfade because the system animates its edit controls
+        // on its own clock, so changing them in place visibly jumps.
+        ZStack {
+            if isLinking {
+                ReorderLinkList(
+                    exercises: exercises,
+                    regroup: regroup,
+                    finish: {
+                        memory.offsetToRestore = memory.offset
+                        withAnimation(Self.modeAnimation) { isLinking = false }
+                    },
+                    header: header,
+                    memory: memory
+                )
+                .transition(.opacity)
             } else {
-                ungroupedList(blocks)
+                Group {
+                    if blocks.contains(where: \.isSuperset) {
+                        NativeGroupedReorderList(
+                            blocks: blocks, reorder: reorder, remove: remove, add: add,
+                            link: linkAction, memory: memory, header: header
+                        )
+                    } else {
+                        ungroupedList(blocks)
+                    }
+                }
+                .transition(.opacity)
             }
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { memory.listFrame = $0 }
+        .onChange(of: canLink) { _, canLink in
+            // A workout reloaded by sync can drop below two exercises.
+            if !canLink { isLinking = false }
         }
         #if DEBUG
         .overlay(alignment: .bottomLeading) {
@@ -42,7 +90,21 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         #endif
     }
 
+    private static var modeAnimation: Animation { .easeInOut(duration: 0.2) }
+
+    private var canLink: Bool { exercises.count >= 2 }
+
+    private var linkAction: (() -> Void)? {
+        guard canLink else { return nil }
+        return { withAnimation(Self.modeAnimation) { isLinking = true } }
+    }
+
     private func ungroupedList(_ blocks: [SupersetGrouping.Block<Item>]) -> some View {
+        ungroupedRows(blocks)
+            .rememberingScrollOffset(in: memory)
+    }
+
+    private func ungroupedRows(_ blocks: [SupersetGrouping.Block<Item>]) -> some View {
         List {
             header
                 .listRowSeparator(.hidden)
@@ -52,9 +114,9 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
             ForEach(blocks) { block in
                 Group {
                     if block.isSuperset {
-                        ReorderSupersetRow(exercises: block.members, remove: { remove([$0]) })
+                        ReorderSupersetRow(exercises: block.members, memory: memory, remove: { remove([$0]) })
                     } else {
-                        ReorderExerciseRow(exercise: block.members[0])
+                        ReorderExerciseRow(exercise: block.members[0], memory: memory)
                             // Lifts only the card while dragging, not the whole row rectangle.
                             .contentShape(
                                 .dragPreview,
@@ -62,10 +124,14 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                             )
                     }
                 }
-                .listRowInsets(EdgeInsets(top: 6, leading: 4, bottom: 6, trailing: 8))
+                // Lines the cards up with the superset list's, so they stay put when it swaps in.
+                .listRowInsets(EdgeInsets(top: 6, leading: 7.5, bottom: 6, trailing: 14))
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
                 .deleteDisabled(block.isSuperset)
+                .background {
+                    if block.id == blocks.first?.id { ReorderScrollRestorer(memory: memory) }
+                }
             }
             .onMove { source, destination in
                 var reordered = blocks
@@ -75,15 +141,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
             .onDelete { offsets in
                 remove(Set(offsets.flatMap { blocks[$0].members.map(\.id) }))
             }
-            Button(action: add) {
-                Label("Add Exercises", systemImage: "plus")
-                    .font(.headline)
-                    .foregroundStyle(AppTheme.brandAccentForeground)
-                    .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(AppTheme.brandAccentMuted, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("EditWorkoutAddExercisesButton")
+            ReorderListActions(add: add, link: linkAction)
             .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 12, trailing: 20))
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
@@ -92,7 +150,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .contentMargins(.top, 8, for: .scrollContent)
+        .contentMargins(.vertical, 8, for: .scrollContent)
         .environment(\.editMode, .constant(.active))
         .accessibilityIdentifier("ReorderExercisesList")
     }
@@ -103,9 +161,94 @@ extension ReorderExercisesList where Header == EmptyView {
         exercises: [Item],
         reorder: @escaping ([UUID]) -> Void,
         remove: @escaping (Set<UUID>) -> Void,
-        add: @escaping () -> Void = {}
+        add: @escaping () -> Void = {},
+        regroup: @escaping ([UUID?]) -> Void
     ) {
-        self.init(exercises: exercises, reorder: reorder, remove: remove, add: add) { EmptyView() }
+        self.init(exercises: exercises, reorder: reorder, remove: remove, add: add, regroup: regroup) { EmptyView() }
+    }
+}
+
+/// What link mode needs from the regular list to keep every card where it was. A
+/// reference, so scrolling and layout don't redraw the list.
+final class ReorderListMemory {
+    var listFrame: CGRect = .zero
+    /// Measured, since the system decides how much room its edit controls take.
+    var cardFrames: [UUID: CGRect] = [:]
+    /// How far down the exercises are scrolled.
+    var offset: CGFloat = 0
+    /// Set on leaving link mode, for the regular list that takes its place.
+    /// Held apart because a new list reports its own starting offset right away.
+    var offsetToRestore: CGFloat?
+}
+
+/// SwiftUI's List ignores `scrollPosition`, so this reaches the scroll view around
+/// its row. The row is recreated as it scrolls back into view, hence the one-shot flag.
+private struct ReorderScrollRestorer: UIViewRepresentable {
+    let memory: ReorderListMemory
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        guard let offset = memory.offsetToRestore else { return view }
+        memory.offsetToRestore = nil
+        DispatchQueue.main.async { [weak view] in
+            var ancestor = view?.superview
+            while let current = ancestor, !(current is UIScrollView) { ancestor = current.superview }
+            guard let scrollView = ancestor as? UIScrollView else { return }
+            scrollView.contentOffset.y = offset - scrollView.adjustedContentInset.top
+        }
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {}
+}
+
+extension View {
+    func rememberingScrollOffset(in memory: ReorderListMemory) -> some View {
+        onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, offset in
+            memory.offset = offset
+        }
+    }
+}
+
+/// The list's last row. Link Exercises needs two exercises to link.
+struct ReorderListActions: View {
+    let add: () -> Void
+    let link: (() -> Void)?
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) { buttons }
+            VStack(spacing: 10) { buttons }
+        }
+    }
+
+    @ViewBuilder
+    private var buttons: some View {
+        action("Add Exercises", systemImage: "plus", identifier: "EditWorkoutAddExercisesButton", perform: add)
+        if let link {
+            action("Link Exercises", systemImage: "link", identifier: "EditWorkoutLinkExercisesButton", perform: link)
+        }
+    }
+
+    private func action(
+        _ title: String, systemImage: String, identifier: String, perform: @escaping () -> Void
+    ) -> some View {
+        Button(action: perform) {
+            // Fixed width: the row stacks the buttons rather than truncating a title.
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                Text(title).lineLimit(1)
+            }
+            .font(.headline)
+            .foregroundStyle(AppTheme.brandAccentForeground)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .background(AppTheme.brandAccentMuted, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -119,6 +262,7 @@ struct ReorderExerciseRow: View {
     @ScaledMetric(relativeTo: .body) private var titleSize = 16
     @ScaledMetric(relativeTo: .subheadline) private var detailSize = 13
     let exercise: any ReorderListExercise
+    var memory: ReorderListMemory?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -152,6 +296,9 @@ struct ReorderExerciseRow: View {
         .accessibilityLabel(exercise.name)
         .accessibilityValue(exercise.accessibilityValue)
         .accessibilityIdentifier("ReorderExerciseRow-\(exercise.id.uuidString)")
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+            memory?.cardFrames[exercise.id] = frame
+        }
     }
 
     private func detail(_ text: String) -> some View {
@@ -177,12 +324,13 @@ struct ReorderSupersetRow<Item: ReorderListExercise>: View {
     /// Scales like the system minus, so members stay in line with single exercises.
     @ScaledMetric(relativeTo: .title2) private var removeColumnWidth = 28
     let exercises: [Item]
+    let memory: ReorderListMemory
     let remove: (UUID) -> Void
 
     var body: some View {
         SupersetRail(count: exercises.count, spacing: 12, reachesIntoMargin: false, balancesLabel: true) {
             ForEach(exercises) { exercise in
-                HStack(spacing: 2) {
+                HStack(spacing: 5.5) {
                     Button {
                         remove(exercise.id)
                     } label: {
@@ -198,7 +346,7 @@ struct ReorderSupersetRow<Item: ReorderListExercise>: View {
                     .accessibilityLabel("Remove \(exercise.name)")
                     .accessibilityIdentifier("ReorderRemoveSupersetMember-\(exercise.id.uuidString)")
 
-                    ReorderExerciseRow(exercise: exercise)
+                    ReorderExerciseRow(exercise: exercise, memory: memory)
                 }
             }
         }

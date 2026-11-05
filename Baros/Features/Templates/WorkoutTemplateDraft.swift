@@ -36,8 +36,14 @@ struct WorkoutTemplateDraft: Equatable {
         entries.removeAll { ids.contains($0.id) }
     }
 
-    mutating func append(_ exercises: [Exercise]) {
-        entries += exercises.map { WorkoutTemplateEntry(exercise: $0) }
+    mutating func append(_ exercises: [Exercise], asSuperset: Bool = false) {
+        let group = asSuperset && exercises.count > 1 ? UUID() : nil
+        entries += exercises.map { WorkoutTemplateEntry(exercise: $0, supersetGroupID: group) }
+    }
+
+    /// Replaces the superset ids, given in the order of `entries`.
+    mutating func regroup(_ groupIDs: [UUID?]) {
+        for (index, group) in zip(entries.indices, groupIDs) { entries[index].supersetGroupID = group }
     }
 
     /// Entries with their snapshots refreshed from the library, so a renamed
