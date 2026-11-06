@@ -989,6 +989,11 @@ final class SyncCoordinator {
                     )
                     if !hasLocalIntent {
                         apply(record, to: settings, ownerTokenIdentifier: ownerTokenIdentifier)
+                    } else if settings.defaultRestTimerSeconds == UserSettings.seededRestTimerSeconds {
+                        // The pending change is a choice made before sign-in, such
+                        // as the onboarding weight unit. A rest duration still at
+                        // its seed was never chosen, so keep the account's.
+                        settings.defaultRestTimerSeconds = record.defaultRestTimerSeconds
                     }
                     continue
                 }

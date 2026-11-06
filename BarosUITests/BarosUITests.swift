@@ -1975,11 +1975,17 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(firstLaunch.staticTexts["No account needed"].exists)
 
         firstLaunch.buttons["LaunchExperiencePrimaryButton"].tap()
+        XCTAssertTrue(firstLaunch.staticTexts["OnboardingPreferencesTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(firstLaunch.staticTexts["How do you lift?"].exists)
+        firstLaunch.buttons["OnboardingPreferencesContinueButton"].tap()
         XCTAssertTrue(firstLaunch.staticTexts["OnboardingSignInTitle"].waitForExistence(timeout: 3))
 
         firstLaunch.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(firstLaunch.staticTexts["OnboardingPreferencesTitle"].waitForExistence(timeout: 3))
+        firstLaunch.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
         firstLaunch.buttons["LaunchExperiencePrimaryButton"].tap()
+        continuePastOnboardingPreferences(in: firstLaunch)
 
         XCTAssertTrue(firstLaunch.staticTexts["OnboardingSignInTitle"].waitForExistence(timeout: 3))
         XCTAssertTrue(firstLaunch.staticTexts["Back up your workouts"].exists)
@@ -2006,6 +2012,7 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(firstLaunch.buttons["LaunchExperiencePrimaryButton"].waitForExistence(timeout: 3))
         firstLaunch.buttons["LaunchExperiencePrimaryButton"].tap()
+        continuePastOnboardingPreferences(in: firstLaunch)
         let signInButton = firstLaunch.buttons["OnboardingSignInButton"]
         XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
         signInButton.tap()
@@ -2035,6 +2042,7 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(firstLaunch.buttons["LaunchExperiencePrimaryButton"].waitForExistence(timeout: 3))
         firstLaunch.buttons["LaunchExperiencePrimaryButton"].tap()
+        continuePastOnboardingPreferences(in: firstLaunch)
         let signInButton = firstLaunch.buttons["OnboardingSignInButton"]
         XCTAssertTrue(signInButton.waitForExistence(timeout: 3))
         signInButton.tap()
@@ -2052,6 +2060,90 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(relaunchedApp.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
         XCTAssertFalse(relaunchedApp.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 1))
+    }
+
+    @MainActor
+    func testOnboardingPreferencesSaveTappedChoicesThatSettingsCanChange() {
+        let app = makeApp(extraArguments: ["--uitest-reset-first-run-experience", "--uitest-reset-rpe"])
+        app.launch()
+
+        XCTAssertTrue(app.buttons["LaunchExperiencePrimaryButton"].waitForExistence(timeout: readyTimeout))
+        app.buttons["LaunchExperiencePrimaryButton"].tap()
+        XCTAssertTrue(app.staticTexts["OnboardingPreferencesTitle"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Pick what fits. You can change these anytime in Settings."].exists)
+        XCTAssertTrue(app.staticTexts["Rate how hard each set felt, from 6 to 10. A 10 means you couldn't do another rep."].exists)
+
+        let pounds = app.buttons["OnboardingWeightUnitPounds"]
+        let kilograms = app.buttons["OnboardingWeightUnitKilograms"]
+        let restOn = app.buttons["OnboardingRestTimerOn"]
+        let restOff = app.buttons["OnboardingRestTimerOff"]
+        let rpeOn = app.buttons["OnboardingRPEOn"]
+        let rpeOff = app.buttons["OnboardingRPEOff"]
+        // Defaults: pounds, rest timers on, RPE off.
+        XCTAssertTrue(pounds.isSelected)
+        XCTAssertFalse(kilograms.isSelected)
+        XCTAssertTrue(restOn.isSelected)
+        XCTAssertTrue(rpeOff.isSelected)
+        // Each choice names its question for VoiceOver, since two say "On".
+        XCTAssertEqual(kilograms.label, "Weight unit, Kilograms")
+        XCTAssertEqual(rpeOn.label, "Rate your effort (RPE), On")
+
+        kilograms.tap()
+        restOff.tap()
+        rpeOn.tap()
+        XCTAssertTrue(kilograms.isSelected)
+        XCTAssertFalse(pounds.isSelected)
+        XCTAssertTrue(restOff.isSelected)
+        XCTAssertTrue(rpeOn.isSelected)
+
+        app.buttons["OnboardingPreferencesContinueButton"].tap()
+        XCTAssertTrue(app.buttons["OnboardingContinueWithoutAccountButton"].waitForExistence(timeout: 3))
+        app.buttons["OnboardingContinueWithoutAccountButton"].tap()
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+
+        tapTab(.settings, in: app)
+        let units = app.segmentedControls["WeightUnitPicker"]
+        let restToggle = app.switches["SettingsRestTimerToggle"]
+        let rpeToggle = app.switches["SettingsRPEToggle"]
+        XCTAssertTrue(units.waitForExistence(timeout: 3))
+        XCTAssertTrue(units.buttons["Kilograms"].isSelected)
+        XCTAssertEqual(restToggle.value as? String, "0")
+        XCTAssertFalse(app.steppers["SettingsRestTimerStepper"].exists)
+        XCTAssertEqual(rpeToggle.value as? String, "1")
+
+        // Settings stays the place to change them.
+        units.buttons["Pounds"].tap()
+        restToggle.switches.firstMatch.tap()
+        rpeToggle.switches.firstMatch.tap()
+        XCTAssertTrue(units.buttons["Pounds"].isSelected)
+        XCTAssertEqual(restToggle.value as? String, "1")
+        XCTAssertTrue(app.steppers["SettingsRestTimerStepper"].waitForExistence(timeout: 3))
+        XCTAssertEqual(rpeToggle.value as? String, "0")
+    }
+
+    @MainActor
+    func testOnboardingPreferencesLeftUntouchedKeepDefaults() {
+        let app = makeApp(extraArguments: ["--uitest-reset-first-run-experience", "--uitest-reset-rpe"])
+        app.launch()
+
+        XCTAssertTrue(app.buttons["LaunchExperiencePrimaryButton"].waitForExistence(timeout: readyTimeout))
+        app.buttons["LaunchExperiencePrimaryButton"].tap()
+        continuePastOnboardingPreferences(in: app)
+        XCTAssertTrue(app.buttons["OnboardingContinueWithoutAccountButton"].waitForExistence(timeout: 3))
+        app.buttons["OnboardingContinueWithoutAccountButton"].tap()
+
+        tapTab(.settings, in: app)
+        let units = app.segmentedControls["WeightUnitPicker"]
+        XCTAssertTrue(units.waitForExistence(timeout: 3))
+        XCTAssertTrue(units.buttons["Pounds"].isSelected)
+        XCTAssertEqual(app.switches["SettingsRestTimerToggle"].value as? String, "1")
+        XCTAssertEqual(app.switches["SettingsRPEToggle"].value as? String, "0")
+    }
+
+    @MainActor
+    private func continuePastOnboardingPreferences(in app: XCUIApplication) {
+        XCTAssertTrue(app.staticTexts["OnboardingPreferencesTitle"].waitForExistence(timeout: 3))
+        app.buttons["OnboardingPreferencesContinueButton"].tap()
     }
 
     @MainActor
@@ -2122,6 +2214,20 @@ final class BarosUITests: XCTestCase {
         }
         XCTAssertTrue(continueButton.isHittable)
         continueButton.tap()
+
+        XCTAssertTrue(app.staticTexts["OnboardingPreferencesTitle"].waitForExistence(timeout: 3))
+        // At accessibility sizes the choices stack, so each keeps its full width.
+        let pounds = app.buttons["OnboardingWeightUnitPounds"]
+        let kilograms = app.buttons["OnboardingWeightUnitKilograms"]
+        XCTAssertTrue(pounds.exists)
+        XCTAssertLessThan(pounds.frame.maxY, kilograms.frame.minY)
+        let preferencesContinueButton = app.buttons["OnboardingPreferencesContinueButton"]
+        for _ in 0..<8 where !preferencesContinueButton.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(app.buttons["OnboardingRPEOn"].isHittable)
+        XCTAssertTrue(preferencesContinueButton.isHittable)
+        preferencesContinueButton.tap()
 
         XCTAssertTrue(app.staticTexts["OnboardingSignInTitle"].waitForExistence(timeout: 3))
         let continueWithoutAccountButton = app.buttons["OnboardingContinueWithoutAccountButton"]

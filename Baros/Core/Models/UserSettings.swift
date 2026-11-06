@@ -12,10 +12,12 @@ final class UserSettings: Identifiable {
     var updatedAt: Date
     var deletedAt: Date?
 
+    static let seededRestTimerSeconds = 90
+
     init(
         id: UUID = UUID(),
         weightUnit: MeasurementUnit = .pounds,
-        defaultRestTimerSeconds: Int = 90,
+        defaultRestTimerSeconds: Int = UserSettings.seededRestTimerSeconds,
         hasCompletedOnboarding: Bool = true,
         syncOwnerTokenIdentifier: String? = nil,
         createdAt: Date = .now,

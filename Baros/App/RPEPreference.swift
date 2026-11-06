@@ -20,6 +20,11 @@ enum RPEPreference {
         defaults.set(true, forKey: didCheckExistingRatingsKey)
     }
 
+    /// A choice the person made; nothing turns it back on or off for them.
+    static func choose(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: storageKey)
+    }
+
     static func enableIfUndecided(defaults: UserDefaults = .standard) {
         guard defaults.object(forKey: storageKey) == nil else { return }
         defaults.set(true, forKey: storageKey)

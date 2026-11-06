@@ -4,28 +4,42 @@ import SwiftUI
 
 /// The stable launch-experience boundary for onboarding.
 ///
-/// A short introduction followed by an optional sign-in invitation. Every exit
-/// that reaches the app calls `onCompleted`: continuing without an account, or
-/// finishing sign-in. Cancelling sign-in returns to the invitation instead.
+/// A short introduction, workout preferences, then an optional sign-in
+/// invitation. Preferences come before sign-in because they don't need an
+/// account, and a choice made there wins over the settings a sign-in restores.
+/// Every exit that reaches the app calls `onCompleted`: continuing without an
+/// account, or finishing sign-in. Cancelling sign-in returns to the invitation.
 struct OnboardingFlow: View {
     let onCompleted: () -> Void
 
-    @State private var showsSignInInvitation = false
+    @State private var path: [OnboardingStep] = []
 
     var body: some View {
-        NavigationStack {
-            // Both pages force the same inline navigation bar (see
+        NavigationStack(path: $path) {
+            // Every page forces the same inline navigation bar (see
             // LaunchExperiencePage) so its geometry does not change mid-push,
-            // which would nudge page 2's content down after it lands.
+            // which would nudge the next page's content down after it lands.
             OnboardingIntroductionPage {
-                showsSignInInvitation = true
+                path.append(.preferences)
             }
-            .navigationDestination(isPresented: $showsSignInInvitation) {
-                OnboardingSignInInvitationPage(onCompleted: onCompleted)
+            .navigationDestination(for: OnboardingStep.self) { step in
+                switch step {
+                case .preferences:
+                    OnboardingPreferencesPage {
+                        path.append(.signInInvitation)
+                    }
+                case .signInInvitation:
+                    OnboardingSignInInvitationPage(onCompleted: onCompleted)
+                }
             }
         }
         .interactiveDismissDisabled()
     }
+}
+
+private enum OnboardingStep: Hashable {
+    case preferences
+    case signInInvitation
 }
 
 private struct OnboardingIntroductionPage: View {

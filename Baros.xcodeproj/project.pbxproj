@@ -58,6 +58,7 @@
 		2786D08BE698998D8DACAE88 /* WhatsNewVersion1_2View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8746E9D6BAEBDF7062B16003 /* WhatsNewVersion1_2View.swift */; };
 		29B5A9964E5182409F3969FE /* AppAppearancePreferenceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E98A1FADF01A5D331676FFC /* AppAppearancePreferenceStoreTests.swift */; };
 		D9500C722907455CB8CA3941 /* RPEPreferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59447A7336D492C80963B7D /* RPEPreferenceTests.swift */; };
+		1F93AA32F4F0C1B5CF19C5C1 /* OnboardingWorkoutPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 503C4859A78B16E37B08BC99 /* OnboardingWorkoutPreferencesTests.swift */; };
 		2A7B70976DE4621BB2C53644 /* AppReleaseCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1618E93838C0B4F83088CAA9 /* AppReleaseCatalogTests.swift */; };
 		2B70C69B718D87766A92C5FC /* AccountDeletionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94B8B5C17E2C5AAC211AD023 /* AccountDeletionCoordinatorTests.swift */; };
 		2B783EA966521A85C385ED72 /* WorkoutLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82450D0B1348AED3BE0B547 /* WorkoutLiveActivityWidget.swift */; };
@@ -150,6 +151,8 @@
 		920C6FE31D76F085CA3A6293 /* BarosBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC0941499EC84B7040CE8EDF /* BarosBrand.swift */; };
 		938D96AFF51E6A9ADC7C8F39 /* AppUpdateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53ACF4138F734FA696F1E985 /* AppUpdateServiceTests.swift */; };
 		9648E59EF3C2727A04EAC646 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD824F36A386212D32C34A33 /* OnboardingFlow.swift */; };
+		8164DA23018D3360026DF72A /* OnboardingWorkoutPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F35428EB7EFE910246C48C8 /* OnboardingWorkoutPreferences.swift */; };
+		7FAB3891D8987EEB4AEC52B9 /* OnboardingPreferencesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC71E0E57B22679D69EA00A /* OnboardingPreferencesPage.swift */; };
 		97177B48C539CCF5C870FCAC /* FirstRunExperienceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9193656A64D413E72988A43 /* FirstRunExperienceStore.swift */; };
 		97B994C20A18495D414D987F /* SyncOutboxRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5EECD7D24DA02F3A4711161 /* SyncOutboxRecorderTests.swift */; };
 		994BD0F86EF99DEFF21D1F04 /* SyncSchedulerStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E473C28433DFA64E0656D3 /* SyncSchedulerStatusTests.swift */; };
@@ -394,6 +397,7 @@
 		5DDD6E8B921BB2D16D2D64E0 /* SyncPayloads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncPayloads.swift; sourceTree = "<group>"; };
 		5E98A1FADF01A5D331676FFC /* AppAppearancePreferenceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearancePreferenceStoreTests.swift; sourceTree = "<group>"; };
 		C59447A7336D492C80963B7D /* RPEPreferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RPEPreferenceTests.swift; sourceTree = "<group>"; };
+		503C4859A78B16E37B08BC99 /* OnboardingWorkoutPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingWorkoutPreferencesTests.swift; sourceTree = "<group>"; };
 		60B82293267E557A062BB1F1 /* PrivacyDataSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyDataSection.swift; sourceTree = "<group>"; };
 		62D75149FBAE878C25D0D614 /* ExerciseHistoryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryRow.swift; sourceTree = "<group>"; };
 		63D053CC597AD0865A0C84D5 /* WhatsNewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewSheet.swift; sourceTree = "<group>"; };
@@ -509,6 +513,8 @@
 		DCF0AAACFE6DEE697191BFBA /* UIHangContextObservability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIHangContextObservability.swift; sourceTree = "<group>"; };
 		DD2BF38D6F76C8271E2051F5 /* SurfaceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurfaceCard.swift; sourceTree = "<group>"; };
 		DD824F36A386212D32C34A33 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
+		5F35428EB7EFE910246C48C8 /* OnboardingWorkoutPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingWorkoutPreferences.swift; sourceTree = "<group>"; };
+		DFC71E0E57B22679D69EA00A /* OnboardingPreferencesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPreferencesPage.swift; sourceTree = "<group>"; };
 		DDAF79438867AE4B03C833D2 /* SyncObservabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncObservabilityTests.swift; sourceTree = "<group>"; };
 		DF18349C45B491C4A98201DB /* Baros.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Baros.entitlements; sourceTree = "<group>"; };
 		E0800BEE55FAC603B1A30047 /* CurrentOwnerLaunchConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentOwnerLaunchConfigurationTests.swift; sourceTree = "<group>"; };
@@ -783,6 +789,7 @@
 				32C5120F60D07F48C41C040D /* ActiveWorkoutStructureRecoveryTests.swift */,
 				5E98A1FADF01A5D331676FFC /* AppAppearancePreferenceStoreTests.swift */,
 				C59447A7336D492C80963B7D /* RPEPreferenceTests.swift */,
+				503C4859A78B16E37B08BC99 /* OnboardingWorkoutPreferencesTests.swift */,
 				F91EC9A9A2151AAECCF22118 /* AppInitializationOrderTests.swift */,
 				44D18B715F04028777E92CDA /* AppLinksTests.swift */,
 				24D93E6500956F3496B2557B /* AppNavigationStateTests.swift */,
@@ -1029,6 +1036,8 @@
 				D9A12F32B32E1C9F1C6A850D /* LaunchExperiencePage.swift */,
 				4405F3FDFB5966393FCD31C4 /* LaunchExperienceSheet.swift */,
 				DD824F36A386212D32C34A33 /* OnboardingFlow.swift */,
+				5F35428EB7EFE910246C48C8 /* OnboardingWorkoutPreferences.swift */,
+				DFC71E0E57B22679D69EA00A /* OnboardingPreferencesPage.swift */,
 				63D053CC597AD0865A0C84D5 /* WhatsNewSheet.swift */,
 				C290FBB2CA7EF425B4E16FCA /* WhatsNewVersion1_0View.swift */,
 				8746E9D6BAEBDF7062B16003 /* WhatsNewVersion1_2View.swift */,
@@ -1391,6 +1400,8 @@
 				EA35DA5903089C90B7AE4BE6 /* ModelContainerFactory.swift in Sources */,
 				16F0691C3A8982157BDD1190 /* NetworkPathObserver.swift in Sources */,
 				9648E59EF3C2727A04EAC646 /* OnboardingFlow.swift in Sources */,
+				8164DA23018D3360026DF72A /* OnboardingWorkoutPreferences.swift in Sources */,
+				7FAB3891D8987EEB4AEC52B9 /* OnboardingPreferencesPage.swift in Sources */,
 				5EE76A66385854FB0DA95FAA /* OwnerlessWorkoutGraphBootstrapPolicy.swift in Sources */,
 				A3BE1F16C51C2DC505A0628D /* PreviousSetPerformance.swift in Sources */,
 				40FF979E029CAD7AF6E5941C /* PrivacyDataSection.swift in Sources */,
@@ -1486,6 +1497,7 @@
 				77B17EC95CAFDCFBCDBE17F9 /* ActiveWorkoutStructureRecoveryTests.swift in Sources */,
 				29B5A9964E5182409F3969FE /* AppAppearancePreferenceStoreTests.swift in Sources */,
 				D9500C722907455CB8CA3941 /* RPEPreferenceTests.swift in Sources */,
+				1F93AA32F4F0C1B5CF19C5C1 /* OnboardingWorkoutPreferencesTests.swift in Sources */,
 				AD4FE5279A4B6D32CE0987ED /* AppInitializationOrderTests.swift in Sources */,
 				D204D15EC70CFCD0E4657F3D /* AppLinksTests.swift in Sources */,
 				BDD006935D0653A210EC4A2B /* AppNavigationStateTests.swift in Sources */,
