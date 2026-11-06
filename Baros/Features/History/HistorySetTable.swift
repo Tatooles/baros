@@ -209,10 +209,11 @@ struct HistorySetCountPill: View {
     var body: some View {
         Text(count == 1 ? "1 set" : "\(count) sets")
             .font(.caption.weight(.medium))
-            .foregroundStyle(AppTheme.brandAccentForeground)
+            // Informational, so neutral: cobalt is reserved for interaction and state.
+            .foregroundStyle(AppTheme.textSecondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(AppTheme.brandAccentMuted, in: Capsule())
+            .background(AppTheme.recessedSurface, in: Capsule())
             .fixedSize()
     }
 }

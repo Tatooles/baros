@@ -31,14 +31,24 @@ struct SettingsView: View {
                     Label("Templates", systemImage: "list.bullet.clipboard")
                 }
                 .accessibilityIdentifier("SettingsTemplatesLink")
+            }
 
-                Picker("Weight Unit", selection: weightUnitBinding) {
-                    ForEach(MeasurementUnit.allCases) { unit in
-                        Text(unit.displayName).tag(unit)
+            // Logging preferences are controls, not destinations, so they sit
+            // apart from the icon-led navigation rows above.
+            Section("Logging") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Weight Unit")
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .accessibilityHidden(true)
+                    Picker("Weight Unit", selection: weightUnitBinding) {
+                        ForEach(MeasurementUnit.allCases) { unit in
+                            Text(unit.displayName).tag(unit)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("WeightUnitPicker")
                 }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("WeightUnitPicker")
+                .padding(.vertical, 4)
 
                 Toggle("Rest Timer", isOn: restTimerEnabledBinding)
                     .accessibilityIdentifier("SettingsRestTimerToggle")
@@ -46,6 +56,7 @@ struct SettingsView: View {
                 if restTimer.isEnabled {
                     Stepper(value: restTimerBinding, in: 30...300, step: 15) {
                         LabeledContent("Rest Duration", value: "\(settings.defaultRestTimerSeconds) seconds")
+                            .padding(.trailing, 12)
                     }
                     .accessibilityIdentifier("SettingsRestTimerStepper")
                 }
@@ -62,15 +73,10 @@ struct SettingsView: View {
             }
 
             Section {
+                // An HStack, not LabeledContent, so the menu keeps its own
+                // accessibility element and only the trailing control opens it.
                 HStack(spacing: 12) {
-                    Image(systemName: appAppearanceStore.appearance.systemImage)
-                        .imageScale(.medium)
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .frame(width: 24, alignment: .leading)
-                        .accessibilityHidden(true)
-
-                    Text("App Appearance")
-                        .foregroundStyle(AppTheme.textPrimary)
+                    Label("App Appearance", systemImage: appAppearanceStore.appearance.systemImage)
 
                     Spacer(minLength: 12)
 
@@ -110,6 +116,7 @@ struct SettingsView: View {
 
             appInfoSection
         }
+        .labelStyle(SettingsRowLabelStyle())
         .scrollContentBackground(.hidden)
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .alert(item: $alert) { alert in
@@ -147,14 +154,15 @@ struct SettingsView: View {
 
     private var appInfoSection: some View {
         Section("App") {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Version")
-                Spacer(minLength: 16)
-                Text(AppBuildInfo.current.settingsVersionText)
+            LabeledContent {
+                // The row title already says "Version".
+                Text(AppBuildInfo.current.versionAndBuild)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.trailing)
                     .textSelection(.enabled)
                     .accessibilityIdentifier("SettingsAppVersionValue")
+            } label: {
+                Label("Version", systemImage: "info.circle")
             }
 
             if let whatsNew = AppReleaseCatalog.latestWhatsNew(upTo: AppBuildInfo.current.version) {
@@ -340,6 +348,22 @@ enum CopyAppInfoFeedbackState: Equatable {
             "doc.on.doc"
         case .copied:
             "checkmark"
+        }
+    }
+}
+
+
+/// Settings rows read as rows rather than links: the title uses the primary
+/// label color and the tinted icon carries the interaction cue. Titles that set
+/// their own color, such as destructive rows, keep it.
+struct SettingsRowLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Label {
+            configuration.title
+                .foregroundStyle(AppTheme.textPrimary)
+        } icon: {
+            configuration.icon
+                .foregroundStyle(AppTheme.brandAccentForeground)
         }
     }
 }

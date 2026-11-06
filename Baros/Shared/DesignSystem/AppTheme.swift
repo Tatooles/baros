@@ -28,9 +28,9 @@ enum AppTheme {
     )
     static let surfaceShadow = BarosAdaptiveColor.dynamic(
         light: 0x000000,
-        lightAlpha: 0.07,
+        lightAlpha: 0.045,
         dark: 0x000000,
-        darkAlpha: 0.18
+        darkAlpha: 0
     )
 
     static let focusSurface = LinearGradient(
@@ -50,7 +50,15 @@ enum AppTheme {
     static let brandAccentForeground = BarosBrand.brandAccentForeground
     static let brandAccentMuted = BarosBrand.brandAccentMuted
     static let brandFocus = brandAccentForeground
-    static let brandAccentGlow = BarosBrand.brandAccentGlow
+    /// Row wash behind a completed set; the checkmark still carries the state.
+    static let completedSetFill = brandAccentMuted
+    /// Resting well behind an open set's weight and reps fields.
+    static let setFieldWell = BarosAdaptiveColor.dynamic(
+        light: 0x09121D,
+        lightAlpha: 0.045,
+        dark: 0xFFFFFF,
+        darkAlpha: 0.06
+    )
     static let destructive = Color(.systemRed)
     /// Destructive button fill with at least 4.5:1 contrast against white labels.
     static let destructiveFill = BarosAdaptiveColor.dynamic(
