@@ -11,6 +11,11 @@ struct OnboardingFlow: View {
     let onCompleted: () -> Void
 
     @State private var showsSignInInvitation = false
+    #if DEBUG
+    // PROTOTYPE (#358): throwaway preferences step between Welcome and Back up.
+    @State private var showsPreferencesPrototype = false
+    @State private var showsSignInAfterPrototype = false
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -18,8 +23,24 @@ struct OnboardingFlow: View {
             // LaunchExperiencePage) so its geometry does not change mid-push,
             // which would nudge page 2's content down after it lands.
             OnboardingIntroductionPage {
+                #if DEBUG
+                if OnboardingPreferencesPrototype.initialVariant != nil {
+                    showsPreferencesPrototype = true
+                    return
+                }
+                #endif
                 showsSignInInvitation = true
             }
+            #if DEBUG
+            .navigationDestination(isPresented: $showsPreferencesPrototype) {
+                OnboardingPreferencesPrototypePage {
+                    showsSignInAfterPrototype = true
+                }
+                .navigationDestination(isPresented: $showsSignInAfterPrototype) {
+                    OnboardingSignInInvitationPage(onCompleted: onCompleted)
+                }
+            }
+            #endif
             .navigationDestination(isPresented: $showsSignInInvitation) {
                 OnboardingSignInInvitationPage(onCompleted: onCompleted)
             }
