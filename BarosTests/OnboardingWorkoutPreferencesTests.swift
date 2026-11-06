@@ -95,8 +95,13 @@ final class OnboardingWorkoutPreferencesTests: XCTestCase {
         let remoteID = UUID()
         let client = FakeSyncClient()
         client.fetchResponses = [
-            settingsResponse(remoteID: remoteID, weightUnitRaw: "kilograms", updatedAt: 20),
-            settingsResponse(remoteID: remoteID, weightUnitRaw: "pounds", updatedAt: settings.updatedAt.timeIntervalSince1970),
+            settingsResponse(remoteID: remoteID, weightUnitRaw: "kilograms", restSeconds: 120, updatedAt: 20),
+            settingsResponse(
+                remoteID: remoteID,
+                weightUnitRaw: "pounds",
+                restSeconds: 120,
+                updatedAt: settings.updatedAt.timeIntervalSince1970
+            ),
         ]
 
         try await SyncCoordinator(client: client, rpeDefaults: defaults).run(ownerTokenIdentifier: owner, context: context)
@@ -104,8 +109,25 @@ final class OnboardingWorkoutPreferencesTests: XCTestCase {
         let synced = try XCTUnwrap(context.fetch(FetchDescriptor<UserSettings>()).first)
         XCTAssertEqual(synced.id, remoteID)
         XCTAssertEqual(synced.weightUnit, .pounds, "The synced unit must not overwrite a new choice")
+        XCTAssertEqual(synced.defaultRestTimerSeconds, 120, "The page never asks for a rest duration")
         XCTAssertEqual(client.upsertedSettings.map(\.clientId), [remoteID.uuidString.lowercased()])
         XCTAssertEqual(client.upsertedSettings.map(\.weightUnitRaw), ["pounds"])
+        XCTAssertEqual(client.upsertedSettings.map(\.defaultRestTimerSeconds), [120])
+    }
+
+    func testSignInKeepsARestDurationChangedBeforeSigningIn() async throws {
+        let (context, settings) = try makeSignedOutSettings()
+        try SettingsMutationService().updateDefaultRestTimerSeconds(150, settings: settings, context: context)
+
+        let remoteID = UUID()
+        let client = FakeSyncClient()
+        client.fetchResponses = [settingsResponse(remoteID: remoteID, weightUnitRaw: "pounds", restSeconds: 120, updatedAt: 20)]
+
+        try await SyncCoordinator(client: client, rpeDefaults: defaults).run(ownerTokenIdentifier: owner, context: context)
+
+        let synced = try XCTUnwrap(context.fetch(FetchDescriptor<UserSettings>()).first)
+        XCTAssertEqual(synced.defaultRestTimerSeconds, 150)
+        XCTAssertEqual(client.upsertedSettings.map(\.defaultRestTimerSeconds), [150])
     }
 
     func testUntouchedRPEStillTurnsOnWhenRatedSetsArrive() throws {
@@ -182,7 +204,12 @@ final class OnboardingWorkoutPreferencesTests: XCTestCase {
         )
     }
 
-    private func settingsResponse(remoteID: UUID, weightUnitRaw: String, updatedAt: Double) -> SyncFetchChangesResponse {
+    private func settingsResponse(
+        remoteID: UUID,
+        weightUnitRaw: String,
+        restSeconds: Int = 90,
+        updatedAt: Double
+    ) -> SyncFetchChangesResponse {
         SyncFetchChangesResponse(
             userSettings: [
                 UserSettingsSyncRecord(
@@ -192,7 +219,7 @@ final class OnboardingWorkoutPreferencesTests: XCTestCase {
                     deletedAt: nil,
                     serverUpdatedAt: updatedAt + 1,
                     weightUnitRaw: weightUnitRaw,
-                    defaultRestTimerSeconds: 90,
+                    defaultRestTimerSeconds: restSeconds,
                     hasCompletedOnboarding: true
                 )
             ],
