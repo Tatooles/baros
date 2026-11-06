@@ -185,9 +185,10 @@ struct WorkoutSessionView: View {
                 }
             }
             // Replaces a `.keyboard` toolbar, whose full-width strip swallows taps
-            // between its buttons. As a safe-area inset, the system's keyboard
-            // reveal clears the bar, and only the buttons themselves take touches.
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            // between its buttons. As a safe-area bar, the system's keyboard
+            // reveal clears the bar, only the buttons themselves take touches,
+            // and the scroll-edge effect keeps sets from showing between them.
+            .safeAreaBar(edge: .bottom, spacing: 0) {
                 if focusedField != nil, !isChildPresentationActive {
                     keyboardAccessory
                 }
