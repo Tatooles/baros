@@ -65,20 +65,23 @@ struct SettingsAccountSection: View {
     }
 
     private var syncStatusRow: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: displayState.systemImage)
-                .foregroundStyle(displayTint)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(displayState.title)
-                Text(displayState.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let detailText = displayState.detailText {
-                    Text(detailText)
-                        .font(.caption2)
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            // A Label keeps the icon in the Form's shared icon column.
+            Label {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(displayState.title)
+                    Text(displayState.subtitle)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
+                    if let detailText = displayState.detailText {
+                        Text(detailText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+            } icon: {
+                Image(systemName: displayState.systemImage)
+                    .foregroundStyle(displayTint)
             }
 
             Spacer()

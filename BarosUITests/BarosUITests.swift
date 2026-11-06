@@ -2351,7 +2351,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Appearance"].exists)
 
         let appearancePicker = app.descendants(matching: .any)["AppAppearancePicker"]
-        XCTAssertTrue(appearancePicker.waitForExistence(timeout: 3))
+        revealSettingsRow(appearancePicker, in: app)
         XCTAssertEqual(appearancePicker.value as? String, "Dark")
         XCTAssertLessThan(
             appearancePicker.frame.width,
@@ -3442,11 +3442,15 @@ final class BarosUITests: XCTestCase {
         app.launch()
         startBlankWorkoutWithBenchPress(in: app)
 
+        let lastSetCompletion = app.buttons["SetCompletionButton-0-0"]
         let addSetButton = app.buttons["AddSetButton-0"]
         let addNoteButton = app.buttons["AddExerciseNoteButton-0"]
         XCTAssertTrue(addSetButton.waitForExistence(timeout: 3))
         XCTAssertTrue(addNoteButton.exists)
-        XCTAssertGreaterThanOrEqual(addNoteButton.frame.minY, addSetButton.frame.maxY)
+        // The note action shares the footer row with Add Set, after the sets.
+        XCTAssertGreaterThanOrEqual(addNoteButton.frame.minY, lastSetCompletion.frame.maxY)
+        XCTAssertEqual(addNoteButton.frame.midY, addSetButton.frame.midY, accuracy: 2)
+        XCTAssertGreaterThan(addNoteButton.frame.minX, addSetButton.frame.minX)
     }
 
     @MainActor

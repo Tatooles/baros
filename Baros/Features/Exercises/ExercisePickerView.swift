@@ -205,15 +205,6 @@ private struct ExercisePickerList: View {
                 )
             } else {
                 Section {
-                    Button {
-                        beginCreation(name: "")
-                    } label: {
-                        ExerciseCreationRowLabel(title: "Create Exercise")
-                    }
-                    .accessibilityIdentifier("ExercisePickerCreateExerciseButton")
-                }
-
-                Section {
                     ForEach(rows) { row in
                         Button {
                             if mode.isAddExercise {
@@ -247,6 +238,7 @@ private struct ExercisePickerList: View {
                         .accessibilityIdentifier(
                             "ExercisePickerRow-\(row.exercise.name)-\(row.exercise.equipment.displayName)"
                         )
+                        .listRowBackground(AppTheme.groupedSurface)
                     }
 
                     if let creationSuggestion {
@@ -258,9 +250,28 @@ private struct ExercisePickerList: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("ExercisePickerCreateExerciseFromSearchButton")
                         .accessibilityLabel(creationSuggestion.title)
+                        .listRowBackground(AppTheme.groupedSurface)
                     }
                 } header: {
-                    HStack {
+                    // Creating is the exception; selection is the job, so the
+                    // create action shares the sort row instead of taking a
+                    // section of its own above the list.
+                    let headerLayout = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                        : AnyLayout(HStackLayout())
+                    headerLayout {
+                        Button {
+                            beginCreation(name: "")
+                        } label: {
+                            Label("Create Exercise", systemImage: "plus")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(AppTheme.brandAccentForeground)
+                                .frame(minHeight: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("ExercisePickerCreateExerciseButton")
+
                         if !dynamicTypeSize.isAccessibilitySize {
                             Spacer()
                         }
@@ -272,12 +283,15 @@ private struct ExercisePickerList: View {
                                 }
                             }
                         } label: {
-                            Label(
-                                "Sort: \(sortOrder.displayName)",
-                                systemImage: "arrow.up.arrow.down"
-                            )
+                            Label {
+                                Text("Sort: \(sortOrder.displayName)")
+                                    .foregroundStyle(AppTheme.textSecondary)
+                            } icon: {
+                                Image(systemName: "arrow.up.arrow.down")
+                                    .foregroundStyle(AppTheme.brandAccentForeground)
+                            }
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(AppTheme.brandAccentForeground)
+                            .frame(minHeight: 44)
                         }
                         .accessibilityLabel("Sort: \(sortOrder.displayName)")
                         .accessibilityIdentifier("ExercisePickerSortMenu")

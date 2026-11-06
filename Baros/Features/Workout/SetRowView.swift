@@ -129,7 +129,7 @@ struct SetRowView: View, @MainActor Equatable {
         HStack(spacing: 10) {
             Text("\(index + 1)")
                 .font(.subheadline.weight(.semibold).monospacedDigit())
-                .foregroundStyle(AppTheme.textTertiary)
+                .foregroundStyle(AppTheme.textSecondary)
                 .frame(width: 28)
 
             previousColumn()
@@ -147,6 +147,15 @@ struct SetRowView: View, @MainActor Equatable {
             repsField
 
             completionButton
+        }
+        .background {
+            // A completed set reads at a glance down the column without
+            // relying on the checkmark color alone.
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(AppTheme.completedSetFill)
+                .padding(.horizontal, -8)
+                .padding(.vertical, 3)
+                .opacity(set.isCompleted ? 1 : 0)
         }
     }
 
@@ -218,7 +227,7 @@ struct SetRowView: View, @MainActor Equatable {
         } label: {
             Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
                 .font(.title2)
-                .foregroundStyle(set.isCompleted ? AppTheme.brandAccentFill : AppTheme.textTertiary)
+                .foregroundStyle(set.isCompleted ? AppTheme.brandAccentFill : AppTheme.textSecondary)
                 .symbolEffect(.bounce, value: set.isCompleted)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
@@ -259,7 +268,7 @@ struct SetRowView: View, @MainActor Equatable {
         } label: {
             Text(previousText)
                 .font(.footnote.weight(.medium).monospacedDigit())
-                .foregroundStyle(AppTheme.textTertiary)
+                .foregroundStyle(previous == nil ? AppTheme.textTertiary : AppTheme.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
@@ -331,7 +340,7 @@ struct SetRowView: View, @MainActor Equatable {
         isFocused: Bool,
         accessibilityIdentifier: String
     ) -> some View {
-        TextField(placeholder, text: text, prompt: Text(suggestion ?? placeholder))
+        TextField(placeholder, text: text, prompt: fieldPrompt(placeholder: placeholder, suggestion: suggestion))
             .keyboardType(keyboard)
             .multilineTextAlignment(.center)
             .font(.body.weight(.semibold))
@@ -349,15 +358,16 @@ struct SetRowView: View, @MainActor Equatable {
                 focusedField.wrappedValue = focusTarget
             }
             .background {
-                Rectangle()
-                    .fill(isFocused ? AppTheme.brandAccentMuted : .clear)
-                    .overlay(alignment: .bottom) {
-                        if isFocused {
-                            Rectangle()
-                                .fill(AppTheme.brandFocus)
-                                .frame(height: 2)
-                        }
+                // Open sets show a quiet well so the editable region is clear
+                // at rest; completed sets drop it and read as recorded values.
+                let well = RoundedRectangle(cornerRadius: 10, style: .continuous)
+                well
+                    .fill(isFocused ? AppTheme.brandAccentMuted
+                        : (set.isCompleted ? Color.clear : AppTheme.setFieldWell))
+                    .overlay {
+                        well.strokeBorder(isFocused ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
                     }
+                    .padding(.vertical, 4)
             }
             .animation(.easeOut(duration: 0.15), value: isFocused)
             .accessibilityLabel(placeholder)
@@ -365,6 +375,20 @@ struct SetRowView: View, @MainActor Equatable {
                 ?? (text.wrappedValue.isEmpty ? placeholder : text.wrappedValue))
             .accessibilityHint(suggestion == nil ? "" : "Complete the set or select an RPE to use this value.")
             .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    /// A suggestion previews a real value, so it keeps the field's size. The
+    /// unit placeholder only marks an empty field and stays quieter than the
+    /// column header above it.
+    private func fieldPrompt(placeholder: String, suggestion: String?) -> Text {
+        if let suggestion {
+            // Readable but still distinct from an entered value.
+            return Text(suggestion)
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        return Text(placeholder)
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(AppTheme.textSecondary)
     }
 
     private func suggestionText(for field: ActiveWorkoutSetInput.Field) -> String? {

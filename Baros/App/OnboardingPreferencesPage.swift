@@ -63,6 +63,7 @@ struct OnboardingPreferencesPage: View {
         } actions: {
             Button(action: saveAndContinue) {
                 Text("Continue")
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassProminent)

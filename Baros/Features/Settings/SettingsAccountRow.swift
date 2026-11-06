@@ -64,23 +64,18 @@ struct SettingsAccountRow: View {
             }
         } label: {
             rowLayout {
-                avatar
+                if dynamicTypeSize.isAccessibilitySize {
+                    avatar
+                    identity
+                } else {
+                    // A Label puts the avatar in the Form's shared icon column,
+                    // so the account text lines up with the rows below it.
+                    Label {
+                        identity
+                    } icon: {
+                        avatar
+                    }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(displayState.title)
-                        .font(.headline)
-                        .foregroundStyle(AppTheme.textPrimary)
-                        .accessibilityIdentifier("SettingsAccountTitle")
-
-                    Text(displayState.subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .lineLimit(displayState.isSignedIn ? 1 : nil)
-                        .truncationMode(.middle)
-                        .accessibilityIdentifier("SettingsAccountSubtitle")
-                }
-
-                if !dynamicTypeSize.isAccessibilitySize {
                     Spacer(minLength: 8)
                 }
 
@@ -156,6 +151,22 @@ struct SettingsAccountRow: View {
         }
     }
 
+    private var identity: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(displayState.title)
+                .font(.headline)
+                .foregroundStyle(AppTheme.textPrimary)
+                .accessibilityIdentifier("SettingsAccountTitle")
+
+            Text(displayState.subtitle)
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.textSecondary)
+                .lineLimit(displayState.isSignedIn ? 1 : nil)
+                .truncationMode(.middle)
+                .accessibilityIdentifier("SettingsAccountSubtitle")
+        }
+    }
+
     /// Accessibility sizes stack the row so the name and copy keep the full row width.
     private var rowLayout: AnyLayout {
         dynamicTypeSize.isAccessibilitySize
@@ -165,7 +176,7 @@ struct SettingsAccountRow: View {
 
     @ViewBuilder
     private var avatar: some View {
-        let size: CGFloat = 44
+        let size: CGFloat = dynamicTypeSize.isAccessibilitySize ? 44 : 32
 
         if displayState.isSignedIn, let imageURL = clerk.user.flatMap({ URL(string: $0.imageUrl) }) {
             AsyncImage(url: imageURL) { image in
