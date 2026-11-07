@@ -172,9 +172,10 @@ struct WorkoutHistoryRow: View {
 
     @ViewBuilder
     private func listMetrics(separated: Bool) -> some View {
+        let duration = AppTheme.formatDuration(metrics.durationSeconds)
         let items = [
             listYearText,
-            AppTheme.formatDuration(metrics.durationSeconds),
+            duration,
             WorkoutFormatters.exerciseCount(session.visibleExerciseCount),
             WorkoutFormatters.setCount(metrics.totalSetCount),
         ].compactMap { $0 }
@@ -184,8 +185,19 @@ struct WorkoutHistoryRow: View {
                     .foregroundStyle(AppTheme.textTertiary)
                     .accessibilityHidden(true)
             }
-            Text(item)
-                .monospacedDigit()
+            if item == duration {
+                // Beside a date tile, a bare "20:00" reads as a time of day.
+                HStack(spacing: 3) {
+                    Image(systemName: "timer")
+                        .imageScale(.small)
+                        .accessibilityHidden(true)
+                    Text(item)
+                        .monospacedDigit()
+                }
+            } else {
+                Text(item)
+                    .monospacedDigit()
+            }
         }
     }
 

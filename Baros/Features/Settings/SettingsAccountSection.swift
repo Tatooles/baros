@@ -47,7 +47,7 @@ struct SettingsAccountSection: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Developer Diagnostics")
                         Text("Environment and Convex auth checks.")
-                            .font(.caption)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 } icon: {
@@ -71,7 +71,7 @@ struct SettingsAccountSection: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(displayState.title)
                     Text(displayState.subtitle)
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                     if let detailText = displayState.detailText {
                         Text(detailText)
