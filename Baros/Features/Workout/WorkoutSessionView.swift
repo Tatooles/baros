@@ -368,7 +368,7 @@ struct WorkoutSessionView: View {
             // The grouped surface sits a step darker than the glass pills in
             // dark mode, and the soft shadow feathers its top edge over rows.
             Capsule()
-                .fill(AppTheme.groupedSurface.opacity(0.96))
+                .fill(AppTheme.groupedSurface)
                 .shadow(color: AppTheme.keyboardBandShadow, radius: 10, y: -2)
                 .opacity(rpeEditingSetID == nil ? 1 : 0)
                 .allowsHitTesting(false)
