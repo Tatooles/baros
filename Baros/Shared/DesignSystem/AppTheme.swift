@@ -52,6 +52,11 @@ enum AppTheme {
     static let brandFocus = brandAccentForeground
     /// Row wash behind a completed set; the checkmark still carries the state.
     static let completedSetFill = brandAccentMuted
+    /// Opaque band behind the keyboard bar's glass RPE and Done pills.
+    static let keyboardBandFill = BarosAdaptiveColor.dynamic(
+        light: 0xECECF0,
+        dark: 0x1C1C1E
+    )
     /// Feathers the top edge of the keyboard bar's band over set rows.
     static let keyboardBandShadow = BarosAdaptiveColor.dynamic(
         light: 0x000000,
