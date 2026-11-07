@@ -6,30 +6,38 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testRecordsStayInformationalAndMarkTheirSourceSets() {
+    func testRecordsRevealAndMarkTheirSourceSets() {
         let app = openRecords()
-        let heaviest = app.descendants(matching: .any)["ExerciseRecord-heaviestRep"]
-        let estimate = app.descendants(matching: .any)["ExerciseRecord-estimated1RM"]
+        let heaviest = app.buttons["ExerciseRecord-heaviestRep"]
+        let estimate = app.buttons["ExerciseRecord-estimated1RM"]
         XCTAssertTrue(heaviest.waitForExistence(timeout: 5))
         XCTAssertTrue(estimate.exists)
-        XCTAssertFalse(app.buttons["ExerciseRecord-heaviestRep"].exists)
-        XCTAssertFalse(app.buttons["ExerciseRecord-estimated1RM"].exists)
-        XCTAssertTrue(heaviest.label.contains("Heaviest Rep, 225 lbs, from 225 lbs for 1 rep, Set 3,"))
-        XCTAssertTrue(estimate.label.contains("Estimated 1RM, 245 lbs, from 210 lbs for 5 reps, Set 2,"))
+        XCTAssertTrue(heaviest.label.hasPrefix("Heaviest Rep, 225 pounds, from 225 pounds for 1 rep, Set 3,"), heaviest.label)
+        XCTAssertTrue(estimate.label.hasPrefix("Estimated 1RM, about 245 pounds, from 210 pounds for 5 reps, Set 2,"), estimate.label)
+        // Two workouts are too few for a progression chart.
+        XCTAssertFalse(app.descendants(matching: .any)["ExerciseRecordEstimateChart"].exists)
         attachScreenshot(named: "Strength records summary", app: app)
 
         let info = app.buttons["AboutStrengthRecordsButton"]
         info.tap()
         XCTAssertTrue(app.navigationBars["About strength records"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["The estimate does not account for effort."].exists)
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "A trophy marks a set")).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Tap a record to see the set")).firstMatch.exists)
         attachScreenshot(named: "Strength records explanation", app: app)
         app.buttons["Done"].tap()
 
         let values = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"))
         let heaviestValue = values.matching(NSPredicate(format: "label CONTAINS %@", "225 pounds, 1 rep")).firstMatch
         let estimateValue = values.matching(NSPredicate(format: "label CONTAINS %@", "210 pounds, 5 reps")).firstMatch
-        for _ in 0..<5 where !estimateValue.isHittable { app.swipeUp() }
+        // Tapping a record scrolls its source set into view.
+        XCTAssertTrue(estimate.isHittable)
+        estimate.tap()
+        let deadline = Date().addingTimeInterval(3)
+        while !estimateValue.isHittable, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTAssertTrue(estimateValue.isHittable)
+        attachScreenshot(named: "Revealed estimate source", app: app)
         XCTAssertEqual(heaviestValue.label, "Set 3, 225 pounds, 1 rep, Heaviest Rep")
         XCTAssertEqual(estimateValue.label, "Set 2, 210 pounds, 5 reps, Estimated 1RM")
         XCTAssertEqual(values.count, 6)
@@ -155,9 +163,9 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             XCTAssertTrue(record.label.contains("Set 2,"))
             XCTAssertTrue(record.label.contains("2025"))
             let estimate = app.descendants(matching: .any)["ExerciseRecord-estimated1RM"]
+            // Full-width rows: the estimate sits below Heaviest Rep at the same width.
             XCTAssertEqual(record.frame.width, estimate.frame.width, accuracy: 1)
-            XCTAssertEqual(record.frame.height, estimate.frame.height, accuracy: 1)
-            XCTAssertEqual(record.frame.minY, estimate.frame.minY, accuracy: 1)
+            XCTAssertGreaterThanOrEqual(estimate.frame.minY, record.frame.maxY - 1)
             attachScreenshot(named: "review-record-source-\(unit)", app: app)
 
             let values = app.descendants(matching: .any).matching(NSPredicate(

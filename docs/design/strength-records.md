@@ -4,6 +4,12 @@ Issue: [#175](https://github.com/Tatooles/baros/issues/175)
 
 Status: design approved on 2026-09-06, including the calculation and comparison rules, informational Records card, and inline gold source-set badges. The final visual review confirmed “Heaviest Rep” naming and badge placement immediately to the left of the weight and reps. Ready for implementation when requested.
 
+> **2026-11 redesign.** The calculation, equipment, tie-breaking, and lifecycle
+> rules below still apply unchanged. The presentation was reworked after a
+> design council review; see [Revised presentation](#revised-presentation-2026-11),
+> which supersedes "Presentation elaboration", "Source set badges", and
+> "Information text" where they conflict.
+
 ## Outcome and scope
 
 Exercise History should show the heaviest weight actually recorded and the best estimated one-repetition maximum, with enough source context to understand each. Add one restrained Records card below the exercise heading and above the existing workout cards.
@@ -91,6 +97,58 @@ Do not present the value as a recommended training load or a measurement of curr
 | Weight preference or Current Owner changes | Refresh the display and eligible history under existing visibility rules. |
 
 Do not retain a deleted record as a historical achievement. Derive records from the full matching history, not only a recent-workout preview or visible scroll region. Avoid a new persistence, migration, or sync contract.
+
+## Revised presentation (2026-11)
+
+The first version answered "what are my two highest numbers?" but not "how is
+my lifting going?", and it asked people to match set numbers and dates by hand.
+The revision keeps the calculation and changes how the screen tells the story.
+
+- **Records surface.** One full-width card below the heading, with
+  "Records" and the information button as its section header. When the history
+  mixes equipment, the header adds a caption such as "Barbell sets only".
+- **Heaviest Rep leads.** It is a recorded lift, so it is the largest number on
+  the screen. Its source line reads `reps · date · workout`, with the year only
+  outside the current year.
+- **Estimated 1RM follows, deliberately smaller.** It keeps the `≈` marker and
+  rounds to a whole pound or half kilogram after the winner is chosen, so it
+  never reads more exact than the inference behind it. Its source reads
+  `From weight × reps · date · workout`, or "From the same set" when one set
+  holds both records. The card ends with "Estimates come from logged sets and
+  don't account for effort."
+- **Records reveal their source.** Each record row is a button. Tapping it
+  scrolls the source workout into view in the log below, washes that row with
+  `brandAccentMuted` for about 1.6 seconds, and moves VoiceOver focus to it.
+  Scrolling is not animated with Reduce Motion. This replaces the original "no
+  tap action" rule; there is still no separate record destination.
+- **Progression chart.** With at least three workouts that have an eligible
+  estimate, the card shows "Estimated 1RM by workout": the best eligible
+  estimate from each workout as points joined by a line, on a real date axis.
+  There is no trend line, smoothing, projection, or "now" label. The current
+  record point is larger and a "Record" legend names it. Dragging selects a
+  workout and shows `date · ≈ value from weight × reps`. VoiceOver reads a
+  summary and exposes an audio graph.
+- **No estimate / no records.** "No estimate yet — Needs a completed set of 1–10
+  reps with weight." and "No records yet — Log a weight and reps on a completed
+  set to see records here." No zeros, no extra explanation in the card; the
+  information sheet holds the full rules.
+- **Source markers.** In the Exercise History log, the source set carries a
+  neutral chip with a trophy glyph and the record's name ("Heaviest rep",
+  "Est. 1RM", or both joined by "·"). Chips use `recessedSurface` and primary
+  text, not cobalt or gold: they are informational, not interactive.
+- **Exercise History log.** Each Exercise Performance is one row in a single
+  grouped list: the History date tile, workout title and set count as the
+  button that opens the workout, then every completed set as a `weight × reps`
+  token with optional `@RPE`. Occurrence boundaries, other-equipment identity
+  labels, and exercise notes are preserved.
+- **Information sheet.** Opens at a medium detent. It leads with "Records
+  describe sets you've saved. They aren't a measure of what you can lift
+  today.", explains both records, notes that warmup and drop sets don't count
+  toward the estimate, and says that tapping a record shows its set.
+- **Accessibility.** Numbers never wrap between digits: the unit moves to its
+  own line first, then the number scales down. At accessibility sizes the row's
+  trailing arrow becomes a "Show set" label below the source. Record labels
+  speak "about" for the estimate and full unit names.
 
 ## Implementation verification targets
 

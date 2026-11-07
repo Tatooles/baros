@@ -44,7 +44,7 @@ struct HistoryView: View {
         .navigationDestination(for: HistoryRoute.self) { route in
             switch route {
             case .workout(let sessionID):
-                WorkoutHistoryDestinationView(sessionID: sessionID)
+                WorkoutHistoryDestinationView(sessionID: sessionID, linksExercises: true)
             case .exercise(let exerciseRoute):
                 if let summary = exerciseHistorySnapshot.resolvedHistory.summary(for: exerciseRoute) {
                     ExerciseHistoryDetailView(summary: summary)
@@ -76,6 +76,11 @@ private struct HistorySearchContent: View {
     let completedSessions: [WorkoutSession]
     let workoutSearchIndex: WorkoutHistorySearchIndex
     let exerciseHistorySnapshot: ExerciseHistoryViewSnapshot
+    @AppStorage("Baros.History.exerciseSort") private var exerciseSortRaw = HistoryExerciseSort.recent.rawValue
+
+    private var exerciseSort: HistoryExerciseSort {
+        HistoryExerciseSort(rawValue: exerciseSortRaw) ?? .recent
+    }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -151,18 +156,37 @@ private struct HistorySearchContent: View {
                 message: "Try a workout title or exercise name."
             )
         } else {
-            SurfaceCard(padding: 0) {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(filteredCompletedSessions.enumerated()), id: \.element.id) { index, session in
-                        NavigationLink(value: HistoryRoute.workout(session.id)) {
-                            WorkoutHistoryRow(
-                                session: session,
-                                presentation: .historyList,
-                                showsDivider: index < filteredCompletedSessions.count - 1
-                            )
+            LazyVStack(alignment: .leading, spacing: 20) {
+                ForEach(HistoryMonthSection.sections(from: filteredCompletedSessions)) { section in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(section.title)
+                                .font(.headline)
+                                .foregroundStyle(AppTheme.textPrimary)
+                                .accessibilityAddTraits(.isHeader)
+                            Spacer(minLength: 8)
+                            Text(section.countLabel)
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(AppTheme.textSecondary)
                         }
-                        .buttonStyle(HistoryOverviewRowButtonStyle())
-                        .accessibilityIdentifier("WorkoutHistoryButton-\(index)")
+                        .padding(.horizontal, 4)
+                        .accessibilityElement(children: .combine)
+
+                        SurfaceCard(padding: 0) {
+                            LazyVStack(spacing: 0) {
+                                ForEach(section.items, id: \.session.id) { item in
+                                    NavigationLink(value: HistoryRoute.workout(item.session.id)) {
+                                        WorkoutHistoryRow(
+                                            session: item.session,
+                                            presentation: .historyList,
+                                            showsDivider: item.session.id != section.items.last?.session.id
+                                        )
+                                    }
+                                    .buttonStyle(HistoryOverviewRowButtonStyle())
+                                    .accessibilityIdentifier("WorkoutHistoryButton-\(item.index)")
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -185,13 +209,35 @@ private struct HistorySearchContent: View {
                 message: "Try an exercise name, equipment, or muscle group."
             )
         } else {
+            let sortedSummaries = exerciseSort.sorted(filteredSummaries)
+            HStack {
+                Spacer()
+                Menu {
+                    Picker("Sort", selection: $exerciseSortRaw) {
+                        ForEach(HistoryExerciseSort.allCases) { sort in
+                            Text(sort.title).tag(sort.rawValue)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Sort: \(exerciseSort.title)")
+                        Image(systemName: "chevron.up.chevron.down")
+                            .imageScale(.small)
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .accessibilityIdentifier("HistoryExerciseSortMenu")
+            }
+            .padding(.vertical, -8)
             SurfaceCard(padding: 0) {
                 VStack(spacing: 0) {
-                    ForEach(Array(filteredSummaries.enumerated()), id: \.element.id) { index, summary in
+                    ForEach(Array(sortedSummaries.enumerated()), id: \.element.id) { index, summary in
                         NavigationLink(value: HistoryRoute.exercise(ExerciseHistoryRoute(summary: summary))) {
                             ExerciseHistoryRow(
                                 summary: summary,
-                                showsDivider: index < filteredSummaries.count - 1
+                                showsDivider: index < sortedSummaries.count - 1
                             )
                         }
                         .buttonStyle(HistoryOverviewRowButtonStyle())
@@ -200,6 +246,70 @@ private struct HistorySearchContent: View {
                 }
             }
         }
+    }
+}
+
+enum HistoryExerciseSort: String, CaseIterable, Identifiable {
+    case recent
+    case name
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .recent: "Recent"
+        case .name: "A–Z"
+        }
+    }
+
+    func sorted(_ summaries: [ExerciseHistorySummary]) -> [ExerciseHistorySummary] {
+        switch self {
+        case .recent:
+            summaries
+        case .name:
+            summaries.sorted { lhs, rhs in
+                let order = lhs.name.localizedStandardCompare(rhs.name)
+                return order == .orderedSame ? lhs.id < rhs.id : order == .orderedAscending
+            }
+        }
+    }
+}
+
+/// Workouts grouped by calendar month, keeping each row's position in the
+/// full list for stable identifiers.
+struct HistoryMonthSection: Identifiable {
+    struct Item {
+        let index: Int
+        let session: WorkoutSession
+    }
+
+    let id: DateComponents
+    let title: String
+    var items: [Item]
+
+    var countLabel: String {
+        items.count == 1 ? "1 workout" : "\(items.count) workouts"
+    }
+
+    static func sections(
+        from sessions: [WorkoutSession],
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [HistoryMonthSection] {
+        var sections: [HistoryMonthSection] = []
+        for (index, session) in sessions.enumerated() {
+            let month = calendar.dateComponents([.year, .month], from: session.startedAt)
+            if sections.last?.id == month {
+                sections[sections.count - 1].items.append(Item(index: index, session: session))
+            } else {
+                let sameYear = calendar.isDate(session.startedAt, equalTo: now, toGranularity: .year)
+                let title = session.startedAt.formatted(
+                    sameYear ? .dateTime.month(.wide) : .dateTime.month(.wide).year()
+                )
+                sections.append(HistoryMonthSection(id: month, title: title, items: [Item(index: index, session: session)]))
+            }
+        }
+        return sections
     }
 }
 

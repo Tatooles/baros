@@ -49,7 +49,6 @@ struct ExerciseHistorySessionGroupCard: View {
     let group: ExerciseHistorySessionGroup
     let headingIdentity: ExerciseHistoryDisplayIdentity
     var weightUnit: MeasurementUnit = .pounds
-    var records: ExerciseHistoryRecords? = nil
     var showsExerciseNotes: Bool = true
     var openWorkout: (() -> Void)? = nil
 
@@ -113,7 +112,6 @@ struct ExerciseHistorySessionGroupCard: View {
                         HistorySetTable.Row(
                             set: item.set,
                             number: item.displaySetNumber,
-                            recordKinds: records?.kinds(for: item.id) ?? [],
                             accessibilityIdentifier: "ExerciseHistorySetValue-\(item.id.uuidString)"
                         )
                     }, weightUnit: weightUnit)

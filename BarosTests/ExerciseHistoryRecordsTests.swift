@@ -196,6 +196,47 @@ final class ExerciseHistoryRecordsTests: XCTestCase {
         XCTAssertEqual(MeasurementUnit.kilograms.displayWeight(fromCanonicalPounds: winner.value) ?? 0, 45.360145, accuracy: 0.00001)
     }
 
+    func testEstimateHistoryKeepsEachWorkoutsBestEligibleSetInDateOrder() throws {
+        let older = makeSession(sets: [
+            LoggedSet(orderIndex: 0, weight: 200, reps: 5, isCompleted: true),
+            LoggedSet(orderIndex: 1, weight: 205, reps: 3, isCompleted: true),
+        ])
+        older.startedAt = Date(timeIntervalSince1970: 1_000)
+        let ineligible = makeSession(sets: [LoggedSet(orderIndex: 0, weight: 150, reps: 12, isCompleted: true)])
+        ineligible.startedAt = Date(timeIntervalSince1970: 2_000)
+        let newer = makeSession(sets: [
+            LoggedSet(orderIndex: 0, weight: 225, reps: 1, kind: .warmup, isCompleted: true),
+            LoggedSet(orderIndex: 1, weight: 210, reps: 6, isCompleted: true),
+        ])
+        newer.startedAt = Date(timeIntervalSince1970: 3_000)
+
+        let result = try records(from: [newer, ineligible, older])
+
+        // A workout without an eligible set adds no point rather than a zero.
+        XCTAssertEqual(result.estimateHistory.map(\.id), [older.id, newer.id])
+        XCTAssertEqual(try XCTUnwrap(result.estimateHistory.first?.value), 233.333333, accuracy: 0.000001)
+        XCTAssertEqual(result.estimateHistory.last?.value, 252)
+        XCTAssertEqual(result.estimateHistory.last?.record.setID, result.estimated1RM?.setID)
+        XCTAssertFalse(result.recordsShareSource)
+    }
+
+    func testRecordNumbersRoundOnlyEstimatesAndGroupThousands() {
+        XCTAssertEqual(MeasurementUnit.pounds.recordNumber(fromCanonicalPounds: 215.83, isEstimate: true), "216")
+        XCTAssertEqual(MeasurementUnit.pounds.recordNumber(fromCanonicalPounds: 262.5, isEstimate: true), "263")
+        XCTAssertEqual(MeasurementUnit.pounds.recordNumber(fromCanonicalPounds: 9_999.99, isEstimate: false), "9,999.99")
+        XCTAssertEqual(MeasurementUnit.pounds.recordNumber(fromCanonicalPounds: 10_000, isEstimate: false), "10,000")
+        // 252 lb = 114.31 kg, shown to the nearest half kilogram.
+        XCTAssertEqual(MeasurementUnit.kilograms.recordNumber(fromCanonicalPounds: 252, isEstimate: true), "114.5")
+        XCTAssertEqual(MeasurementUnit.kilograms.recordNumber(fromCanonicalPounds: 235, isEstimate: false), "106.59")
+    }
+
+    func testOneSetHoldingBothRecordsSharesItsSource() throws {
+        let set = LoggedSet(orderIndex: 0, weight: 225, reps: 5, isCompleted: true)
+        let result = try records(from: [makeSession(sets: [set])])
+        XCTAssertTrue(result.recordsShareSource)
+        XCTAssertEqual(result.estimateHistory.count, 1)
+    }
+
     private func makeSession(sets: [LoggedSet]) -> WorkoutSession {
         WorkoutSession(
             title: "Upper Body",
