@@ -1,120 +1,414 @@
+import Charts
 import SwiftUI
 
+/// The Exercise History summary: the two all-time records, each traceable to
+/// its source set, and how the best estimate changed across workouts.
 struct ExerciseHistoryRecordsCard: View {
     let records: ExerciseHistoryRecords
     let weightUnit: MeasurementUnit
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    var showSource: (ExerciseHistoryRecord) -> Void = { _ in }
     @State private var showsInformation = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        journalRecords
-            .sheet(isPresented: $showsInformation) {
-                StrengthRecordsInformationView()
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            SurfaceCard(padding: 0) {
+                content
             }
+        }
+        .sheet(isPresented: $showsInformation) {
+            StrengthRecordsInformationView()
+        }
     }
 
-    private var journalRecords: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Records").font(.headline)
-                Spacer()
-                Button { showsInformation = true } label: {
-                    Image(systemName: "info.circle")
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Records")
+                    .font(.title3.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                if records.hasMixedEquipment {
+                    Text("\(records.equipment.displayName) sets only")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(AppTheme.textSecondary)
                 }
-                .accessibilityLabel("About strength records")
-                .accessibilityIdentifier("AboutStrengthRecordsButton")
             }
-            .padding(.vertical, -8)
+            Spacer(minLength: 8)
+            Button { showsInformation = true } label: {
+                Image(systemName: "info.circle")
+                    .font(.body)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("About strength records")
+            .accessibilityIdentifier("AboutStrengthRecordsButton")
+        }
+        .padding(.leading, 4)
+        .frame(minHeight: 44)
+    }
 
-            if records.hasMixedEquipment {
-                Text("\(records.equipment.displayName) records")
-                    .font(.caption)
+    @ViewBuilder
+    private var content: some View {
+        if let heaviest = records.heaviestRep {
+            VStack(alignment: .leading, spacing: 0) {
+                recordRow(heaviest, kind: .heaviestRep)
+                divider
+                if let estimate = records.estimated1RM {
+                    recordRow(estimate, kind: .estimated1RM)
+                } else {
+                    missingEstimate
+                }
+                if records.estimateHistory.count >= ExerciseHistoryEstimateChart.minimumPoints {
+                    divider
+                    ExerciseHistoryEstimateChart(
+                        points: records.estimateHistory,
+                        recordWorkoutID: records.estimated1RM?.workoutID,
+                        weightUnit: weightUnit
+                    )
+                    .padding(16)
+                }
+                if records.estimated1RM != nil {
+                    Text("Estimates come from logged sets and don't account for effort.")
+                        .font(.footnote)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                        .padding(.top, records.estimateHistory.count >= ExerciseHistoryEstimateChart.minimumPoints ? 0 : 4)
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("No records yet")
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.textPrimary)
+                Text("Log a weight and reps on a completed set to see records here.")
+                    .font(.subheadline)
                     .foregroundStyle(AppTheme.textSecondary)
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+        }
+    }
 
-            if let heaviest = records.heaviestRep {
-                let layout = dynamicTypeSize.isAccessibilitySize
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
-                    : AnyLayout(HStackLayout(alignment: .top, spacing: 8))
-                layout {
-                    journalRecord(heaviest, kind: .heaviestRep)
-                    if let estimated = records.estimated1RM {
-                        journalRecord(estimated, kind: .estimated1RM)
-                    } else {
-                        recordTile { estimatedRecord }
+    private var divider: some View {
+        Rectangle()
+            .fill(AppTheme.subtleBorder)
+            .frame(height: 1)
+            .padding(.leading, 16)
+            .accessibilityHidden(true)
+    }
+
+    private func recordRow(_ record: ExerciseHistoryRecord, kind: ExerciseHistoryRecordKind) -> some View {
+        let isEstimate = kind == .estimated1RM
+        let value = weightUnit.recordNumber(fromCanonicalPounds: record.value, isEstimate: isEstimate)
+        let source = sourceText(record, kind: kind)
+        return Button {
+            showSource(record)
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(kind.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.textSecondary)
+                    RecordValue(
+                        number: isEstimate ? "≈\u{2009}\(value)" : value,
+                        unit: weightUnit.shortUnitLabel,
+                        isHero: !isEstimate
+                    )
+                    Text(source)
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Label("Show set", systemImage: "arrow.down.circle")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(AppTheme.brandAccentForeground)
+                            .padding(.top, 4)
                     }
                 }
-                // Size the row to its tallest tile, then let both backgrounds fill it.
-                .fixedSize(horizontal: false, vertical: true)
-            } else {
-                recordTile {
-                    emptyState(title: "No records yet", message: "Requires a completed set with weight and reps in a finished workout.")
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(AppTheme.brandAccentForeground)
+                        .accessibilityHidden(true)
                 }
             }
-        }
-    }
-
-    private func recordTile<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .frame(maxWidth: .infinity, maxHeight: dynamicTypeSize.isAccessibilitySize ? nil : .infinity, alignment: .topLeading)
             .padding(16)
-            .background(AppTheme.groupedSurface, in: RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
-    }
-
-    private func journalRecord(_ record: ExerciseHistoryRecord, kind: ExerciseHistoryRecordKind) -> some View {
-        let displayValue = weightUnit.displayWeight(fromCanonicalPounds: record.value) ?? 0
-        let value = WorkoutFormatters.number(displayValue)
-        let unit = weightUnit.fieldLabel.lowercased()
-        let weight = WorkoutFormatters.number(weightUnit.displayWeight(fromCanonicalPounds: record.weight) ?? 0)
-        let reps = record.reps == 1 ? "1 rep" : "\(record.reps) reps"
-        let date = WorkoutFormatters.compactDate(record.workoutDate)
-        let number = Text("\(kind == .estimated1RM ? "≈ " : "")\(value)")
-            .font(.title.bold().monospacedDigit())
-            .foregroundColor(AppTheme.textPrimary)
-        let unitLabel = Text(unit).font(.caption).foregroundColor(AppTheme.textSecondary)
-        return recordTile {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(kind.title)
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.textSecondary)
-                Text("\(number) \(unitLabel)")
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("\(weight) \(unit) × \(reps) · Set \(record.displaySetNumber) · \(record.workoutTitle) · \(date)")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(HistoryOverviewRowButtonStyle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            "\(kind.title), \(value) \(unit), from \(weight) \(unit) for \(reps), "
-                + "Set \(record.displaySetNumber), \(record.workoutTitle), \(WorkoutFormatters.compactDate(record.workoutDate))"
-        )
+        .accessibilityLabel(accessibilityLabel(record, kind: kind))
+        .accessibilityHint("Shows the source set in your workouts below.")
+        .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("ExerciseRecord-\(kind.rawValue)")
     }
 
-    private var estimatedRecord: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Estimated 1RM")
-                .font(.subheadline)
+    private var missingEstimate: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(ExerciseHistoryRecordKind.estimated1RM.title)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppTheme.textSecondary)
-            emptyState(
-                title: "No estimate yet",
-                message: "Requires a completed working or failure set of 1–10 reps with weight."
-            )
-        }
-    }
-
-    private func emptyState(title: String, message: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.headline)
-            Text(message)
-                .font(.footnote)
+            Text("No estimate yet")
+                .font(.headline)
+                .foregroundStyle(AppTheme.textPrimary)
+            Text("Needs a completed set of 1–10 reps with weight.")
+                .font(.subheadline)
                 .foregroundStyle(AppTheme.textSecondary)
         }
         .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func sourceText(_ record: ExerciseHistoryRecord, kind: ExerciseHistoryRecordKind) -> String {
+        let date = WorkoutFormatters.historyDate(record.workoutDate)
+        if kind == .estimated1RM, records.recordsShareSource {
+            return "From the same set"
+        }
+        let reps = record.reps == 1 ? "1 rep" : "\(record.reps) reps"
+        let lift = kind == .heaviestRep
+            ? reps
+            : "From \(weightUnit.recordNumber(fromCanonicalPounds: record.weight, isEstimate: false)) \(weightUnit.shortUnitLabel) × \(record.reps)"
+        return "\(lift) · \(date) · \(record.workoutTitle)"
+    }
+
+    private func accessibilityLabel(_ record: ExerciseHistoryRecord, kind: ExerciseHistoryRecordKind) -> String {
+        let unit = weightUnit.displayName.lowercased()
+        let value = weightUnit.recordNumber(fromCanonicalPounds: record.value, isEstimate: kind == .estimated1RM)
+        let weight = weightUnit.recordNumber(fromCanonicalPounds: record.weight, isEstimate: false)
+        let reps = record.reps == 1 ? "1 rep" : "\(record.reps) reps"
+        let amount = kind == .estimated1RM ? "about \(value) \(unit)" : "\(value) \(unit)"
+        return "\(kind.title), \(amount), from \(weight) \(unit) for \(reps), "
+            + "Set \(record.displaySetNumber), \(record.workoutTitle), \(WorkoutFormatters.compactDate(record.workoutDate))"
+    }
+}
+
+/// A record number with its unit on the same baseline, moving the unit to its
+/// own line before the number would ever wrap between digits.
+private struct RecordValue: View {
+    let number: String
+    let unit: String
+    let isHero: Bool
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                numberText
+                unitText
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                numberText
+                unitText
+            }
+        }
+    }
+
+    private var numberText: some View {
+        Text(number)
+            .font((isHero ? Font.largeTitle : .title2).bold().monospacedDigit())
+            .fontDesign(.rounded)
+            .foregroundStyle(AppTheme.textPrimary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+    }
+
+    private var unitText: some View {
+        Text(unit)
+            .font((isHero ? Font.title3 : .body).weight(.semibold))
+            .fontDesign(.rounded)
+            .foregroundStyle(AppTheme.textSecondary)
+            .lineLimit(1)
+    }
+}
+
+/// Best Estimated 1RM per workout. Points only, no trend or projection, so the
+/// series stays a record of logged performance rather than a forecast.
+struct ExerciseHistoryEstimateChart: View {
+    static let minimumPoints = 3
+
+    let points: [ExerciseHistoryEstimatePoint]
+    let recordWorkoutID: UUID?
+    let weightUnit: MeasurementUnit
+    @State private var selectedDate: Date?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var chartHeight = 150.0
+
+    private func display(_ point: ExerciseHistoryEstimatePoint) -> Double {
+        weightUnit.displayWeight(fromCanonicalPounds: point.value) ?? 0
+    }
+
+    private var selectedPoint: ExerciseHistoryEstimatePoint? {
+        guard let selectedDate else { return nil }
+        return points.min { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }
+    }
+
+    private var spanMonths: Int {
+        guard let first = points.first?.date, let last = points.last?.date else { return 0 }
+        return Calendar.current.dateComponents([.month], from: first, to: last).month ?? 0
+    }
+
+    private var monthStride: Int {
+        spanMonths > 6 || dynamicTypeSize.isAccessibilitySize ? 2 : 1
+    }
+
+    private var yDomain: ClosedRange<Double> {
+        let values = points.map(display)
+        let low = values.min() ?? 0, high = values.max() ?? 1
+        let pad = max((high - low) * 0.25, high * 0.02)
+        return (low - pad)...(high + pad)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Estimated 1RM by workout")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.textSecondary)
+                Spacer(minLength: 8)
+                if let selectedPoint {
+                    Text(selectionText(selectedPoint))
+                        .font(.footnote.weight(.medium).monospacedDigit())
+                        .foregroundStyle(AppTheme.textPrimary)
+                } else if recordWorkoutID != nil {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(AppTheme.brandAccentForeground)
+                            .frame(width: 8, height: 8)
+                        Text("Record")
+                    }
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(AppTheme.textSecondary)
+                }
+            }
+            .frame(minHeight: 20)
+
+            chart
+                .frame(height: chartHeight)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Estimated 1RM by workout")
+        .accessibilityValue(summary)
+        .accessibilityChartDescriptor(self)
+        .accessibilityIdentifier("ExerciseRecordEstimateChart")
+    }
+
+    private var chart: some View {
+        Chart {
+            ForEach(points) { point in
+                LineMark(
+                    x: .value("Date", point.date, unit: .day),
+                    y: .value("Estimated 1RM", display(point))
+                )
+                .foregroundStyle(AppTheme.brandAccentForeground.opacity(0.55))
+                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+
+                if point.id == recordWorkoutID {
+                    PointMark(
+                        x: .value("Date", point.date, unit: .day),
+                        y: .value("Estimated 1RM", display(point))
+                    )
+                    .symbolSize(90)
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                } else {
+                    PointMark(
+                        x: .value("Date", point.date, unit: .day),
+                        y: .value("Estimated 1RM", display(point))
+                    )
+                    .symbolSize(28)
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                }
+            }
+
+            if let selectedPoint {
+                RuleMark(x: .value("Date", selectedPoint.date, unit: .day))
+                    .foregroundStyle(AppTheme.textTertiary)
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+            }
+        }
+        .chartYScale(domain: yDomain)
+        .chartYAxis {
+            AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in
+                AxisGridLine().foregroundStyle(AppTheme.subtleBorder)
+                AxisValueLabel()
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+        }
+        .chartXAxis {
+            if spanMonths <= 12 {
+                // One label per month (or every other), never the same month twice.
+                AxisMarks(values: .stride(by: .month, count: monthStride)) { _ in
+                    AxisValueLabel(format: .dateTime.month(.abbreviated), collisionResolution: .greedy)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+            } else {
+                AxisMarks(values: .automatic(desiredCount: dynamicTypeSize.isAccessibilitySize ? 2 : 4)) { _ in
+                    AxisValueLabel(format: .dateTime.month(.abbreviated).year(.twoDigits), collisionResolution: .greedy)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+            }
+        }
+        .chartXSelection(value: $selectedDate)
+    }
+
+    private func selectionText(_ point: ExerciseHistoryEstimatePoint) -> String {
+        let value = weightUnit.recordNumber(fromCanonicalPounds: point.value, isEstimate: true)
+        let weight = weightUnit.recordNumber(fromCanonicalPounds: point.record.weight, isEstimate: false)
+        return "\(WorkoutFormatters.historyDate(point.date)) · ≈\u{2009}\(value) from \(weight) × \(point.record.reps)"
+    }
+
+    private var summary: String {
+        guard let first = points.first, let last = points.last else { return "" }
+        let unit = weightUnit.displayName.lowercased()
+        let values = points.map { weightUnit.recordNumber(fromCanonicalPounds: $0.value, isEstimate: true) }
+        let sorted = points.sorted { $0.value < $1.value }
+        let low = weightUnit.recordNumber(fromCanonicalPounds: sorted.first?.value ?? 0, isEstimate: true)
+        let high = sorted.last.map { weightUnit.recordNumber(fromCanonicalPounds: $0.value, isEstimate: true) } ?? ""
+        return "\(points.count) workouts from \(WorkoutFormatters.compactDate(first.date)) to "
+            + "\(WorkoutFormatters.compactDate(last.date)), about \(low) to \(high) \(unit). "
+            + "Most recent about \(values.last ?? "") \(unit)."
+    }
+}
+
+extension ExerciseHistoryEstimateChart: @MainActor AXChartDescriptorRepresentable {
+    func makeChartDescriptor() -> AXChartDescriptor {
+        let dates = points.map(\.date.timeIntervalSince1970)
+        let values = points.map(display)
+        let xAxis = AXNumericDataAxisDescriptor(
+            title: "Workout date",
+            range: (dates.min() ?? 0)...(dates.max() ?? 1),
+            gridlinePositions: []
+        ) { WorkoutFormatters.compactDate(Date(timeIntervalSince1970: $0)) }
+        let yAxis = AXNumericDataAxisDescriptor(
+            title: "Estimated 1RM (\(weightUnit.displayName.lowercased()))",
+            range: (values.min() ?? 0)...(values.max() ?? 1),
+            gridlinePositions: []
+        ) { "about \(WorkoutFormatters.groupedNumber($0.rounded())) \(weightUnit.displayName.lowercased())" }
+        let series = AXDataSeriesDescriptor(
+            name: "Estimated 1RM",
+            isContinuous: false,
+            dataPoints: points.map { point in
+                AXDataPoint(x: point.date.timeIntervalSince1970, y: display(point))
+            }
+        )
+        return AXChartDescriptor(
+            title: "Estimated 1RM by workout",
+            summary: summary,
+            xAxis: xAxis,
+            yAxis: yAxis,
+            additionalAxes: [],
+            series: [series]
+        )
     }
 }
 
@@ -125,22 +419,27 @@ private struct StrengthRecordsInformationView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
+                    Text("Records describe sets you've saved. They aren't a measure of what you can lift today.")
+                        .font(.body)
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
                     section("Heaviest Rep") {
-                        Text("Your heaviest recorded weight for at least one completed rep in a finished workout. Includes warmup, working, drop, and failure sets.")
+                        Text("The heaviest weight you've recorded for at least one completed rep in a finished workout.")
                     }
                     section("Estimated 1RM") {
-                        Text("An estimate from completed working and failure sets of 1–10 reps. For 2–10 reps, we use the Epley formula:")
+                        Text("An estimate from your completed sets of 1–10 reps. For 2–10 reps, we use the Epley formula:")
                         Text("Weight × (1 + reps ÷ 30)")
                             .font(.body.monospacedDigit())
                             .foregroundStyle(AppTheme.textPrimary)
-                        Text("A single rep uses its recorded weight.")
+                        Text("A single rep uses its recorded weight. Warmup and drop sets don't count.")
                         Text("The estimate does not account for effort.")
+                        Text("The chart shows the best estimate from each workout.")
                     }
                     section("Matching equipment") {
                         Text("Records use matching equipment. Bodyweight and resistance-band exercises are not included. Weight means the load you recorded.")
                     }
-                    section("Find the set in your history") {
-                        Text("A trophy marks a set behind one or both of your current records. Match the set number and workout date to the record above. For equal records, the most recent workout is shown. Records and trophy markers update when your saved workouts change.")
+                    section("Source sets") {
+                        Text("Tap a record to see the set behind it in your workouts. That set is marked with the record's name. For equal records, the most recent workout counts. Records update when your saved workouts change.")
                     }
                 }
                 .padding(AppTheme.shellPadding)
@@ -154,7 +453,7 @@ private struct StrengthRecordsInformationView: View {
                 }
             }
         }
-        .presentationDetents([.large])
+        .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
 

@@ -20,6 +20,9 @@ enum UITestFixtureSeeder {
     static let homeRingHistoryArgument = "--uitest-seed-home-ring-history"
     /// Fourteen months of named workouts with varied exercises and double days, for scrub previews.
     static let homeRingScrubHistoryArgument = "--uitest-seed-home-ring-scrub-history"
+    /// Twelve weeks of progressive push/pull/leg training with linked library exercises,
+    /// for reviewing History and Records against believable data.
+    static let historyShowcaseArgument = "--uitest-seed-history-showcase"
     /// Seeds fixtures for an owner who is no longer signed in, as after an expired session.
     static let signedOutOwnerArgument = "--uitest-seed-signed-out-owner"
 
@@ -199,6 +202,10 @@ enum UITestFixtureSeeder {
             try context.save()
         }
 
+        if arguments.contains(historyShowcaseArgument) {
+            try seedHistoryShowcase(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
         if arguments.contains("--uitest-seed-strength-records") {
             try seedStrengthRecords(
                 scenario: values(after: "--uitest-strength-records-scenario", in: arguments).first,
@@ -345,6 +352,85 @@ enum UITestFixtureSeeder {
                 notes: accessory.2,
                 sets: (0..<3).map { LoggedSet(orderIndex: $0, weight: 40, reps: 10, isCompleted: true) }
             ))
+        }
+        try context.save()
+    }
+
+    static func seedHistoryShowcase(
+        ownerTokenIdentifier: String?, context: ModelContext, now: Date = .now, calendar: Calendar = .current
+    ) throws {
+        let library = Exercise.visibleActiveExercises(
+            from: try context.fetch(FetchDescriptor<Exercise>()),
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
+        // (seed, set count, starting weight, weekly increment, reps)
+        typealias Lift = (seed: String, sets: Int, start: Double, step: Double, reps: Int)
+        let plans: [(title: String, weekday: Int, lifts: [Lift])] = [
+            ("Push Day", 2, [("bench-press", 3, 185, 2.5, 5), ("overhead-press", 3, 105, 1.25, 6),
+                             ("incline-dumbbell-press", 3, 60, 1, 10), ("triceps-pushdown", 3, 50, 1, 12)]),
+            ("Pull Day", 4, [("conventional-deadlift", 2, 275, 5, 5), ("barbell-row", 3, 135, 2.5, 8),
+                             ("lat-pulldown", 3, 120, 2.5, 10), ("biceps-curl", 3, 25, 0.5, 12)]),
+            ("Leg Day", 6, [("back-squat", 3, 225, 5, 5), ("romanian-deadlift", 3, 185, 2.5, 8),
+                            ("leg-press", 3, 270, 10, 10), ("calf-raise", 3, 140, 5, 12)]),
+        ]
+        let today = calendar.startOfDay(for: now)
+        let thisWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
+        var index = 0
+        for week in 0..<12 {
+            let weeksBack = 11 - week
+            guard let weekStart = calendar.date(byAdding: .day, value: -7 * weeksBack, to: thisWeek) else { continue }
+            for plan in plans {
+                defer { index += 1 }
+                guard let day = calendar.date(byAdding: .day, value: plan.weekday - 1, to: weekStart),
+                      let startedAt = calendar.date(bySettingHour: 18, minute: 10, second: 0, of: day),
+                      startedAt < now else { continue }
+                let durationSeconds = (48 + (index * 7) % 22) * 60
+                let endedAt = startedAt.addingTimeInterval(TimeInterval(durationSeconds))
+                // A deload in week 7 keeps the progression believable.
+                let progress = Double(week >= 7 ? week - 2 : week)
+                let occurrences = plan.lifts.enumerated().compactMap { order, lift -> LoggedExercise? in
+                    guard let exercise = library.first(where: { $0.seedIdentifier == lift.seed }) else { return nil }
+                    let increment = lift.start < 60 ? 2.5 : 5
+                    let weight = ((lift.start + lift.step * progress) / increment).rounded() * increment
+                    var sets = (0..<lift.sets).map { setIndex in
+                        LoggedSet(
+                            orderIndex: setIndex,
+                            weight: weight,
+                            reps: setIndex == lift.sets - 1 && week % 3 == 2 ? lift.reps + 1 : lift.reps,
+                            rpe: setIndex == lift.sets - 1 && order == 0 ? 8 + Double(week % 3) * 0.5 : nil,
+                            isCompleted: true,
+                            completedAt: endedAt,
+                            createdAt: startedAt,
+                            updatedAt: endedAt
+                        )
+                    }
+                    // One heavy single sets Heaviest Rep apart from the best estimate.
+                    if lift.seed == "bench-press", week == 9 {
+                        sets.append(LoggedSet(orderIndex: sets.count, weight: 235, reps: 1, rpe: 9.5,
+                                              isCompleted: true, completedAt: endedAt,
+                                              createdAt: startedAt, updatedAt: endedAt))
+                    }
+                    return LoggedExercise(
+                        orderIndex: order,
+                        exercise: exercise,
+                        exerciseSnapshotName: exercise.name,
+                        exerciseSnapshotEquipmentRaw: exercise.equipmentRaw,
+                        exerciseSnapshotPrimaryMuscleGroupRaw: exercise.primaryMuscleGroupRaw,
+                        notes: lift.seed == "bench-press" && week == 9 ? "Worked up to a heavy single. Felt fast." : "",
+                        createdAt: startedAt,
+                        updatedAt: endedAt,
+                        sets: sets
+                    )
+                }
+                context.insert(WorkoutSession(
+                    id: stableUUID(String(format: "00000368-0000-4000-8000-%012d", index)),
+                    title: plan.title, startedAt: startedAt, endedAt: endedAt,
+                    durationSeconds: durationSeconds, status: .completed, source: .blank,
+                    createdAt: startedAt, updatedAt: endedAt,
+                    syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                    loggedExercises: occurrences
+                ))
+            }
         }
         try context.save()
     }

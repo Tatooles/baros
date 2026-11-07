@@ -1924,13 +1924,11 @@ final class BarosUITests: XCTestCase {
             exercise.tap()
             let estimate = app.descendants(matching: .any)["ExerciseRecord-estimated1RM"]
             XCTAssertTrue(estimate.waitForExistence(timeout: 5))
-            XCTAssertTrue(estimate.label.contains("215.83 lbs"))
-            if !accessible {
-                let heaviest = app.descendants(matching: .any)["ExerciseRecord-heaviestRep"]
-                XCTAssertEqual(heaviest.frame.width, estimate.frame.width, accuracy: 1)
-                XCTAssertEqual(heaviest.frame.height, estimate.frame.height, accuracy: 1)
-                XCTAssertEqual(heaviest.frame.minY, estimate.frame.minY, accuracy: 1)
-            }
+            // 185 × (1 + 5/30) = 215.83, shown as a whole pound so it doesn't read as exact.
+            XCTAssertTrue(estimate.label.contains("about 216 pounds"), estimate.label)
+            let heaviest = app.descendants(matching: .any)["ExerciseRecord-heaviestRep"]
+            XCTAssertEqual(heaviest.frame.width, estimate.frame.width, accuracy: 1)
+            XCTAssertGreaterThanOrEqual(estimate.frame.minY, heaviest.frame.maxY - 1)
             let sources = app.buttons.matching(NSPredicate(
                 format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-"
             ))
@@ -4588,7 +4586,7 @@ final class BarosUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
         XCTAssertFalse(keyboard.exists)
-        XCTAssertTrue(historyHeading.label.contains("· 1 workout · 1 set"))
+        XCTAssertTrue(historyHeading.label.contains("1 workout · Last "), historyHeading.label)
         XCTAssertTrue(app.buttons["Done"].exists)
         XCTAssertTrue(app.buttons["Full History"].exists)
         XCTAssertFalse(app.staticTexts["QuickHistoryLimitFooter"].exists)
@@ -4770,7 +4768,7 @@ final class BarosUITests: XCTestCase {
             .firstMatch
         XCTAssertTrue(historyHeading.waitForExistence(timeout: 3))
         guard historyHeading.exists else { return }
-        XCTAssertTrue(historyHeading.label.contains("· 1 workout · 1 set"))
+        XCTAssertTrue(historyHeading.label.contains("1 workout · Last "), historyHeading.label)
     }
 
     @MainActor

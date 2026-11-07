@@ -105,6 +105,29 @@ enum WorkoutFormatters {
         return formatter.string(from: NSNumber(value: value)) ?? String(value)
     }
 
+    private static let groupedNumberFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = true
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+
+    /// Like `number(_:)`, but always groups thousands, so display values such
+    /// as records read "10,000" next to "9,999.99".
+    static func groupedNumber(_ value: Double) -> String {
+        guard value.isFinite else { return "-" }
+        return groupedNumberFormatter.string(from: NSNumber(value: value)) ?? String(value)
+    }
+
+    /// Month and day, adding the year only outside the current year.
+    static func historyDate(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
+        calendar.isDate(date, equalTo: now, toGranularity: .year)
+            ? date.formatted(.dateTime.month(.abbreviated).day())
+            : compactDate(date)
+    }
+
     static func volume(canonicalPounds: Double, unit: MeasurementUnit) -> String {
         number(unit.displayWeight(fromCanonicalPounds: canonicalPounds) ?? canonicalPounds)
     }

@@ -29,6 +29,12 @@ struct ExerciseHistorySummary: Identifiable, Hashable {
         return "\(performanceSummaryLabel) · \(completedSetCount) \(setLabel)"
     }
 
+    /// The Exercise History heading: how much history there is, then recency.
+    var exerciseHistoryHeadingLabel: String {
+        let workoutLabel = performanceCount == 1 ? "workout" : "workouts"
+        return "\(performanceCount) \(workoutLabel) · Last \(WorkoutFormatters.historyDate(lastPerformedAt))"
+    }
+
     var metadataDisplayText: String? {
         guard let equipmentRaw, let primaryMuscleGroupRaw else {
             return nil

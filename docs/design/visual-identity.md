@@ -161,8 +161,10 @@ another rounded rectangle.
 Set rows follow the same rule: an open set shows its weight and reps as quiet
 `setFieldWell` regions with a small unit placeholder, a completed set drops the
 wells and takes a `completedSetFill` wash, and no rule is drawn between rows.
-Informational counts, such as "3 sets", and repeated row icons stay neutral;
-cobalt remains for interaction and state.
+Informational counts, such as "3 sets", record-source chips such as
+"Heaviest rep", and repeated row icons stay neutral; cobalt remains for
+interaction and state. A row revealed by a record tap may take a brief
+`brandAccentMuted` wash, because it shows a transient state.
 
 On the Active Workout surface, optional Workout Notes and Exercise Notes use
 progressive disclosure. When empty, each is represented by its named add-note

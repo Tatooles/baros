@@ -143,6 +143,12 @@ struct WorkoutHistoryRow: View {
                 Text(session.title)
                     .font(.headline)
                     .foregroundStyle(AppTheme.textPrimary)
+                if let exercisePreview {
+                    Text(exercisePreview)
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                }
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) {
                         listMetrics(separated: true)
@@ -156,6 +162,12 @@ struct WorkoutHistoryRow: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    /// Names tell otherwise identical "4 exercises · 12 sets" rows apart.
+    private var exercisePreview: String? {
+        let names = session.sortedLoggedExercises.map(\.exerciseSnapshotName)
+        return names.isEmpty ? nil : names.joined(separator: ", ")
     }
 
     /// The tile shows month and day; other years need the year spelled out.
