@@ -62,26 +62,28 @@ struct FinishWorkoutSheet: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                MetricSummaryCard(title: "Duration", value: AppTheme.formatDuration(metrics.durationSeconds))
-                MetricSummaryCard(title: "Sets Done", value: "\(metrics.completedSetCount)/\(metrics.totalSetCount)")
-                MetricSummaryCard(
-                    title: "Volume (\(weightUnit.fieldLabel))",
+            // One aligned row of figures; the sheet already bounds them, so
+            // they need no wells of their own. Accessibility sizes stack them
+            // so long values keep their full width.
+            metricsLayout {
+                MetricSummaryColumn(title: "Duration", value: AppTheme.formatDuration(metrics.durationSeconds))
+                metricDivider
+                MetricSummaryColumn(title: "Sets Done", value: "\(metrics.completedSetCount)/\(metrics.totalSetCount)")
+                metricDivider
+                MetricSummaryColumn(
+                    title: "Volume (\(weightUnit.fieldLabel.lowercased()))",
                     value: WorkoutFormatters.volume(canonicalPounds: metrics.completedVolume, unit: weightUnit)
                 )
             }
+            .fixedSize(horizontal: false, vertical: true)
 
             if offersSaveAsTemplate {
                 Toggle("Save as Template", isOn: $savesAsTemplate)
-                    .font(.body.weight(.semibold))
+                    .font(.body.weight(.medium))
                     .foregroundStyle(AppTheme.textPrimary)
                     .tint(AppTheme.brandAccentFill)
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 52)
-                    .background(
-                        AppTheme.recessedSurface,
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    )
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
                     .accessibilityIdentifier("SaveAsTemplateToggle")
             }
 
@@ -113,12 +115,20 @@ struct FinishWorkoutSheet: View {
             .tint(AppTheme.brandAccentFill)
             .accessibilityIdentifier("SaveWorkoutButton")
 
-            Button("Keep Going") {
+            Button {
                 commitWorkoutTitle()
                 dismiss()
+            } label: {
+                // A neutral fill keeps the secondary action's full-width
+                // shape visible on the sheet in both appearances.
+                Text("Keep Going")
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(AppTheme.fieldSurface, in: Capsule())
+                    .contentShape(Capsule())
             }
-            .font(.callout.weight(.medium))
-            .foregroundStyle(AppTheme.textSecondary)
+            .buttonStyle(.plain)
             .accessibilityIdentifier("KeepGoingButton")
 
             Button(role: .destructive) {
@@ -131,6 +141,29 @@ struct FinishWorkoutSheet: View {
             .padding(.bottom, 8)
         }
         .padding(.horizontal, 20)
+    }
+
+    private var metricsLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 0))
+            : AnyLayout(HStackLayout(spacing: 0))
+    }
+
+    @ViewBuilder
+    private var metricDivider: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Rectangle()
+                .fill(AppTheme.subtleBorder)
+                .frame(height: 1)
+                .padding(.horizontal, 24)
+                .accessibilityHidden(true)
+        } else {
+            Rectangle()
+                .fill(AppTheme.subtleBorder)
+                .frame(width: 1)
+                .padding(.vertical, 6)
+                .accessibilityHidden(true)
+        }
     }
 
     var body: some View {

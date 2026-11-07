@@ -228,40 +228,29 @@ struct ExerciseCardView: View {
                                     timer: engine.restTimer)
                             }
 
-                            addSetButton
+                            // Add Set and the optional note share one footer row;
+                            // a visible note or accessibility text stacks them.
+                            if isNoteVisible || dynamicTypeSize.isAccessibilitySize {
+                                addSetButton
+                                    .padding(.horizontal, 4)
+                                noteControl
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 8)
+                            } else {
+                                HStack(spacing: 8) {
+                                    addSetButton
+                                    noteControl
+                                        .fixedSize()
+                                        .padding(.trailing, 12)
+                                }
                                 .padding(.horizontal, 4)
-
-                            Divider()
-                                .overlay(AppTheme.subtleBorder)
-                        }
-
-                        WorkoutProgressiveNoteControl(
-                            notes: .constant(loggedExercise.notes),
-                            addTitle: "Add exercise note",
-                            addSystemImage: "note.text.badge.plus",
-                            placeholder: "Exercise notes...",
-                            accessibilityLabel: "Exercise note",
-                            addAccessibilityIdentifier: "AddExerciseNoteButton-\(exerciseIndex)",
-                            fieldAccessibilityIdentifier: "ExerciseNotesField-\(exerciseIndex)",
-                            addAccessibilityHint: nil,
-                            addButtonHorizontalPadding: 0,
-                            focusTarget: .exerciseNotes(loggedExercise.id),
-                            isRevealed: $isNoteRevealed,
-                            focusedField: focusedField,
-                            commitOnFocusLoss: { draft in
-                                try? engine.updateExerciseNotes(
-                                    draft,
-                                    loggedExercise: loggedExercise,
-                                    context: modelContext
-                                )
                             }
-                        )
-                        .padding(.horizontal, 16)
+                        }
                     }
                     // Content stays put and fades while the clipped card edge
                     // swallows it; a .move transition here reads as jank.
                     .transition(.opacity)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 8)
                 }
             }
         }
@@ -285,6 +274,34 @@ struct ExerciseCardView: View {
         .onChange(of: setStructureKey, initial: true) { _, _ in
             cachedSortedSets = loggedExercise.sortedSets
         }
+    }
+
+    private var isNoteVisible: Bool {
+        isNoteRevealed || !loggedExercise.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var noteControl: some View {
+        WorkoutProgressiveNoteControl(
+            notes: .constant(loggedExercise.notes),
+            addTitle: "Add exercise note",
+            addSystemImage: "note.text.badge.plus",
+            placeholder: "Exercise notes...",
+            accessibilityLabel: "Exercise note",
+            addAccessibilityIdentifier: "AddExerciseNoteButton-\(exerciseIndex)",
+            fieldAccessibilityIdentifier: "ExerciseNotesField-\(exerciseIndex)",
+            addAccessibilityHint: nil,
+            addButtonHorizontalPadding: 8,
+            focusTarget: .exerciseNotes(loggedExercise.id),
+            isRevealed: $isNoteRevealed,
+            focusedField: focusedField,
+            commitOnFocusLoss: { draft in
+                try? engine.updateExerciseNotes(
+                    draft,
+                    loggedExercise: loggedExercise,
+                    context: modelContext
+                )
+            }
+        )
     }
 
     private var addSetButton: some View {

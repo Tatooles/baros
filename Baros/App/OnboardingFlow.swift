@@ -74,6 +74,7 @@ private struct OnboardingIntroductionPage: View {
         } actions: {
             Button(action: onContinue) {
                 Text("Continue")
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassProminent)

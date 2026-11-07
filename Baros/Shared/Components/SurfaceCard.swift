@@ -46,33 +46,33 @@ struct SurfaceCard<Content: View>: View {
             )
             .shadow(
                 color: AppTheme.surfaceShadow,
-                radius: 14,
-                y: 5
+                radius: 10,
+                y: 3
             )
             .containerShape(shape)
     }
 }
 
-struct MetricSummaryCard: View {
+/// A summary figure without its own well, for rows that already sit on a
+/// bounded surface.
+struct MetricSummaryColumn: View {
     let title: String
     let value: String
-    var minimumScaleFactor: CGFloat = 0.7
 
     var body: some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.title3.weight(.bold))
+                .font(.title3.weight(.bold).monospacedDigit())
+                .fontDesign(.rounded)
                 .foregroundStyle(AppTheme.textPrimary)
-                .minimumScaleFactor(minimumScaleFactor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text(title)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(AppTheme.textSecondary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(
-            AppTheme.recessedSurface,
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-        )
+        .padding(.vertical, 6)
     }
 }

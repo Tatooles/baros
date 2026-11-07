@@ -49,7 +49,6 @@ hex value directly.
 | `brandAccentMuted` | `#1C66C7` at 8% | `#1768E5` at 16% | Soft selected backgrounds, compact badges, and secondary brand actions |
 | `brandFocus` | `#1C66C7` | `#4D94FF` | Focus rings and non-text focus indicators on editable fields |
 | `brandAccentGradient` | `#1C66C7` to `#1768E5` | `#1C66C7` to `#1768E5` | Existing high-emphasis branded moments only; white content remains readable across both endpoints |
-| `brandAccentGlow` | `#1C66C7` at 24% | `#1768E5` at 28% | Restrained decoration behind an existing high-emphasis branded control, never a structure or status signal |
 
 `#4D94FF` is a dark foreground/accessibility resolution of the cobalt family,
 not another primary brand color. It is not used in the production icon,
@@ -68,7 +67,9 @@ evidence captured in the
 | `focusSurfaceBottom` | `#FAFAFA` | `#050608` | Bottom of a selective focused or hero surface |
 | `fieldSurface` | `#ECECF0` | `#2C2C2E` | Actual editable regions |
 | `subtleBorder` | `#09121D` at 9% | `#FFFFFF` at 11% | Necessary card borders and dividers only |
-| `surfaceShadow` | `#000000` at 7% | `#000000` at 18% | Restrained depth cue under a justified grouped or focus surface |
+| `surfaceShadow` | `#000000` at 4.5% | none | Restrained depth cue under a justified grouped or focus surface; dark appearance relies on surface contrast |
+| `setFieldWell` | `#09121D` at 4.5% | `#FFFFFF` at 6% | Resting well behind an open set's weight and reps fields |
+| `completedSetFill` | `brandAccentMuted` | `brandAccentMuted` | Row wash behind a completed set, paired with the completion mark |
 | `platformGlass` | Native material | Native material | System-owned glass and material-adjacent chrome, without navy or cobalt tinting |
 
 ### System semantic roles
@@ -156,6 +157,12 @@ An editable field inside an exercise group is justified because the field is
 the interaction target. An additional decorative card around a heading and
 that field is not. Prefer spacing, alignment, and a restrained divider over
 another rounded rectangle.
+
+Set rows follow the same rule: an open set shows its weight and reps as quiet
+`setFieldWell` regions with a small unit placeholder, a completed set drops the
+wells and takes a `completedSetFill` wash, and no rule is drawn between rows.
+Informational counts, such as "3 sets", and repeated row icons stay neutral;
+cobalt remains for interaction and state.
 
 On the Active Workout surface, optional Workout Notes and Exercise Notes use
 progressive disclosure. When empty, each is represented by its named add-note

@@ -47,15 +47,44 @@ struct HistoryOverviewIconTile: View {
     let systemName: String
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(AppTheme.brandAccentMuted)
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(AppTheme.recessedSurface)
             .frame(width: 48, height: 48)
             .overlay {
                 Image(systemName: systemName)
-                    .font(.system(size: 19))
-                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(AppTheme.textSecondary)
             }
             .accessibilityHidden(true)
+    }
+}
+
+/// Calendar-style leading tile: the date is the row's most useful anchor when
+/// scanning History, so the tile carries it instead of a repeated glyph.
+struct HistoryDateTile: View {
+    let date: Date
+    @ScaledMetric(relativeTo: .headline) private var side: CGFloat = 48
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(date.formatted(.dateTime.month(.abbreviated)).uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(0.6)
+                .foregroundStyle(AppTheme.textSecondary)
+            Text(date.formatted(.dateTime.day()))
+                .font(.title3.weight(.semibold).monospacedDigit())
+                .fontDesign(.rounded)
+                .foregroundStyle(AppTheme.textPrimary)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .frame(width: side, height: side)
+        .background(
+            AppTheme.recessedSurface,
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(WorkoutFormatters.compactDate(date))
     }
 }
 
@@ -65,6 +94,7 @@ struct WorkoutHistoryRow: View {
         case historyList
     }
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let session: WorkoutSession
     var presentation: Presentation = .card
     var showsDivider = false
@@ -102,10 +132,88 @@ struct WorkoutHistoryRow: View {
     }
 
     private var historyListPresentation: some View {
-        HistoryOverviewRow(showsDivider: showsDivider) {
-            HistoryOverviewIconTile(systemName: "calendar")
+        // Resolve the row's strings once: metrics walk every set, and both
+        // ViewThatFits candidates below would otherwise recompute them.
+        let summary = ListSummary(
+            session: session,
+            metrics: metrics,
+            spellsOutDate: dynamicTypeSize.isAccessibilitySize
+        )
+        return HistoryOverviewRow(showsDivider: showsDivider) {
+            // Accessibility sizes give the text the full row width and spell
+            // the date out with the metrics instead.
+            if !dynamicTypeSize.isAccessibilitySize {
+                HistoryDateTile(date: session.startedAt)
+            }
         } content: {
-            workoutSummaryContent
+            VStack(alignment: .leading, spacing: 4) {
+                Text(session.title)
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.textPrimary)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) {
+                        listMetrics(summary, separated: true)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        listMetrics(summary, separated: false)
+                    }
+                }
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(AppTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private struct ListSummary {
+        /// The tile shows month and day; other years need the year spelled out.
+        let leadingDate: String?
+        let duration: String
+        let exercises: String
+        let sets: String
+
+        init(session: WorkoutSession, metrics: WorkoutMetrics, spellsOutDate: Bool) {
+            if spellsOutDate {
+                leadingDate = WorkoutFormatters.compactDate(session.startedAt)
+            } else {
+                leadingDate = Calendar.current.isDate(session.startedAt, equalTo: .now, toGranularity: .year)
+                    ? nil
+                    : session.startedAt.formatted(.dateTime.year())
+            }
+            duration = AppTheme.formatDuration(metrics.durationSeconds)
+            exercises = WorkoutFormatters.exerciseCount(session.visibleExerciseCount)
+            sets = WorkoutFormatters.setCount(metrics.totalSetCount)
+        }
+    }
+
+    @ViewBuilder
+    private func listMetrics(_ summary: ListSummary, separated: Bool) -> some View {
+        if let leadingDate = summary.leadingDate {
+            Text(leadingDate)
+            metricSeparator(separated)
+        }
+        // Beside a date tile, a bare "20:00" reads as a time of day.
+        HStack(spacing: 3) {
+            Image(systemName: "timer")
+                .imageScale(.small)
+                .accessibilityHidden(true)
+            Text(summary.duration)
+                .monospacedDigit()
+        }
+        metricSeparator(separated)
+        Text(summary.exercises)
+            .monospacedDigit()
+        metricSeparator(separated)
+        Text(summary.sets)
+            .monospacedDigit()
+    }
+
+    @ViewBuilder
+    private func metricSeparator(_ separated: Bool) -> some View {
+        if separated {
+            Text("\u{00B7}")
+                .foregroundStyle(AppTheme.textTertiary)
+                .accessibilityHidden(true)
         }
     }
 

@@ -11,15 +11,7 @@ struct ExerciseHistoryHeading: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             if isCompact && !dynamicTypeSize.isAccessibilitySize {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(AppTheme.brandAccentMuted)
-                    .frame(width: 48, height: 48)
-                    .overlay {
-                        Image(systemName: "dumbbell.fill")
-                            .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(AppTheme.brandAccentForeground)
-                    }
-                    .accessibilityHidden(true)
+                HistoryOverviewIconTile(systemName: "dumbbell.fill")
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -91,7 +83,7 @@ struct ExerciseHistorySessionGroupCard: View {
                         HistorySetCountPill(count: group.completedSetCount)
                         Image(systemName: "chevron.right")
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(AppTheme.brandAccentForeground)
+                            .foregroundStyle(AppTheme.textTertiary)
                     }
                     .frame(minHeight: 44, alignment: .top)
                     .contentShape(Rectangle())
