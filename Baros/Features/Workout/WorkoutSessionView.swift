@@ -333,6 +333,10 @@ struct WorkoutSessionView: View {
         .accessibilityIdentifier("ActiveWorkoutEditButton")
     }
 
+    private var showsRPEButton: Bool {
+        rpeEnabled && focusedSetID != nil
+    }
+
     private var keyboardAccessory: some View {
         HStack(spacing: 8) {
             if rpeEditingSetID != nil {
@@ -343,7 +347,7 @@ struct WorkoutSessionView: View {
                     .clipShape(Capsule())
                     .glassEffect(.regular, in: Capsule())
             } else {
-                if let focusedSetID, rpeEnabled {
+                if let focusedSetID, showsRPEButton {
                     Button("RPE") {
                         rpeEditingSetID = focusedSetID
                     }
@@ -362,15 +366,16 @@ struct WorkoutSessionView: View {
         .buttonStyle(.glass)
         .padding(4)
         .background {
-            // One quiet band behind the pills keeps set text from reading
-            // between them. It ignores touches, so a row beneath it can still
-            // be tapped; only the buttons take touches.
-            // An opaque band a step off the pills' own tone, so the glass
-            // buttons read as buttons; the soft shadow feathers its top edge.
+            // When RPE and Done share the bar, one quiet band joins them and
+            // keeps set text from reading between them. A lone Done floats on
+            // its own, since there is nothing to join. The band ignores
+            // touches, so a row beneath it can still be tapped. It is opaque
+            // and a step off the pills' tone, so the glass buttons read as
+            // buttons; the soft shadow feathers its top edge.
             Capsule()
                 .fill(AppTheme.keyboardBandFill)
                 .shadow(color: AppTheme.keyboardBandShadow, radius: 10, y: -2)
-                .opacity(rpeEditingSetID == nil ? 1 : 0)
+                .opacity(rpeEditingSetID == nil && showsRPEButton ? 1 : 0)
                 .allowsHitTesting(false)
         }
         .padding(.horizontal, AppTheme.shellPadding - 4)
