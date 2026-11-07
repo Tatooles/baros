@@ -43,7 +43,7 @@ struct HistorySetTable: View {
         )
         return Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 0) {
             if stacked {
-                Text("\(weightUnit.fieldLabel) × REPS")
+                Text("\(weightUnit.shortUnitLabel.uppercased()) × REPS")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -52,7 +52,7 @@ struct HistorySetTable: View {
                 GridRow {
                     Text("SET").gridColumnAlignment(.leading)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        valueColumns(weight: weightUnit.fieldLabel, reps: "REPS", stacked: false, widths: widths)
+                        valueColumns(weight: weightUnit.shortUnitLabel.uppercased(), reps: "REPS", stacked: false, widths: widths)
                         if hasRPE {
                             Text("RPE")
                                 .fixedSize()
@@ -191,13 +191,14 @@ struct HistorySetTable: View {
         Self.accessibilityLabel(set: row.set, number: row.number, recordKinds: [], unit: weightUnit)
     }
 
+    // Visible values always group thousands, matching Records.
     static func weightText(_ set: LoggedSet, unit: MeasurementUnit) -> String {
         unit.displayWeight(fromCanonicalPounds: WorkoutNumericInputPolicy.validatedWeight(set.weight))
-            .map(WorkoutFormatters.number) ?? "–"
+            .map(WorkoutFormatters.groupedNumber) ?? "–"
     }
 
     static func repsText(_ set: LoggedSet) -> String {
-        WorkoutNumericInputPolicy.validatedReps(set.reps).map(String.init) ?? "–"
+        WorkoutNumericInputPolicy.validatedReps(set.reps).map { WorkoutFormatters.groupedNumber(Double($0)) } ?? "–"
     }
 
     /// The complete spoken set, shared by tables and compact set tokens.

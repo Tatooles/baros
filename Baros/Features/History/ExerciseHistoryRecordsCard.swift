@@ -124,7 +124,7 @@ struct ExerciseHistoryRecordsCard: View {
                         .foregroundStyle(AppTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if dynamicTypeSize.isAccessibilitySize {
-                        Label("Show set", systemImage: "arrow.down.circle")
+                        Label("Show set", systemImage: "chevron.down")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(AppTheme.brandAccentForeground)
                             .padding(.top, 4)
@@ -133,9 +133,10 @@ struct ExerciseHistoryRecordsCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !dynamicTypeSize.isAccessibilitySize {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(AppTheme.brandAccentForeground)
+                    // Points down to the log, styled like the log's own chevrons.
+                    Image(systemName: "chevron.down")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.textTertiary)
                         .accessibilityHidden(true)
                 }
             }
@@ -173,10 +174,11 @@ struct ExerciseHistoryRecordsCard: View {
         if kind == .estimated1RM, records.recordsShareSource {
             return "From the same set"
         }
-        let reps = record.reps == 1 ? "1 rep" : "\(record.reps) reps"
+        let repCount = WorkoutFormatters.groupedNumber(Double(record.reps))
+        let reps = record.reps == 1 ? "1 rep" : "\(repCount) reps"
         let lift = kind == .heaviestRep
             ? reps
-            : "From \(weightUnit.recordNumber(fromCanonicalPounds: record.weight, isEstimate: false)) \(weightUnit.shortUnitLabel) × \(record.reps)"
+            : "From \(weightUnit.recordNumber(fromCanonicalPounds: record.weight, isEstimate: false)) \(weightUnit.shortUnitLabel) × \(repCount)"
         return "\(lift) · \(date) · \(record.workoutTitle)"
     }
 
@@ -250,20 +252,40 @@ struct ExerciseHistoryEstimateChart: View {
         return points.min { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }
     }
 
-    private var spanMonths: Int {
-        guard let first = points.first?.date, let last = points.last?.date else { return 0 }
-        return Calendar.current.dateComponents([.month], from: first, to: last).month ?? 0
-    }
-
-    private var monthStride: Int {
-        spanMonths > 6 || dynamicTypeSize.isAccessibilitySize ? 2 : 1
+    /// Lowest and highest displayed estimates, rounded as the record is.
+    private var yMarks: [Double] {
+        let values = points.map(display)
+        guard let low = values.min(), let high = values.max() else { return [] }
+        let step = weightUnit == .kilograms ? 0.5 : 1
+        let marks = [low, high].map { ($0 / step).rounded() * step }
+        return marks[0] == marks[1] ? [marks[0]] : marks
     }
 
     private var yDomain: ClosedRange<Double> {
         let values = points.map(display)
         let low = values.min() ?? 0, high = values.max() ?? 1
-        let pad = max((high - low) * 0.25, high * 0.02)
+        let pad = max((high - low) * 0.18, high * 0.02)
         return (low - pad)...(high + pad)
+    }
+
+    /// Insets the first and last points from the plot edges.
+    private var xDomain: ClosedRange<Date> {
+        guard let first = points.first?.date, let last = points.last?.date else { return Date.now...Date.now }
+        let inset = max(last.timeIntervalSince(first) * 0.03, 12 * 3_600)
+        return first.addingTimeInterval(-inset)...last.addingTimeInterval(inset)
+    }
+
+    private var showsYears: Bool {
+        guard let first = points.first?.date, let last = points.last?.date else { return false }
+        let calendar = Calendar.current
+        return !calendar.isDate(first, equalTo: last, toGranularity: .year)
+            || !calendar.isDate(last, equalTo: .now, toGranularity: .year)
+    }
+
+    private func axisDate(_ date: Date) -> some View {
+        Text(date.formatted(showsYears ? .dateTime.month(.abbreviated).day().year() : .dateTime.month(.abbreviated).day()))
+            .font(.caption2)
+            .foregroundStyle(AppTheme.textSecondary)
     }
 
     var body: some View {
@@ -339,27 +361,31 @@ struct ExerciseHistoryEstimateChart: View {
             }
         }
         .chartYScale(domain: yDomain)
+        .chartXScale(domain: xDomain)
+        // Gridlines at the lowest and highest estimates, so the record point
+        // always sits on a labeled line.
         .chartYAxis {
-            AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in
+            AxisMarks(position: .trailing, values: yMarks) { value in
                 AxisGridLine().foregroundStyle(AppTheme.subtleBorder)
-                AxisValueLabel()
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(AppTheme.textSecondary)
+                AxisValueLabel {
+                    if let number = value.as(Double.self) {
+                        Text(WorkoutFormatters.groupedNumber(number))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                }
             }
         }
+        // The first and last workout dates, so any span reads correctly.
         .chartXAxis {
-            if spanMonths <= 12 {
-                // One label per month (or every other), never the same month twice.
-                AxisMarks(values: .stride(by: .month, count: monthStride)) { _ in
-                    AxisValueLabel(format: .dateTime.month(.abbreviated), collisionResolution: .greedy)
-                        .font(.caption2)
-                        .foregroundStyle(AppTheme.textSecondary)
+            AxisMarks(values: [points.first?.date].compactMap { $0 }) { value in
+                AxisValueLabel(anchor: .topLeading) {
+                    if let date = value.as(Date.self) { axisDate(date) }
                 }
-            } else {
-                AxisMarks(values: .automatic(desiredCount: dynamicTypeSize.isAccessibilitySize ? 2 : 4)) { _ in
-                    AxisValueLabel(format: .dateTime.month(.abbreviated).year(.twoDigits), collisionResolution: .greedy)
-                        .font(.caption2)
-                        .foregroundStyle(AppTheme.textSecondary)
+            }
+            AxisMarks(values: [points.last?.date].compactMap { $0 }) { value in
+                AxisValueLabel(anchor: .topTrailing) {
+                    if let date = value.as(Date.self) { axisDate(date) }
                 }
             }
         }

@@ -18,7 +18,7 @@ struct ExerciseHistoryRow: View {
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(AppTheme.textSecondary)
                 }
-                Text(summary.performanceSummaryLabel)
+                Text(summary.exerciseHistoryHeadingLabel)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(AppTheme.textSecondary)
             }
