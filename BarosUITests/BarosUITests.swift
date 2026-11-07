@@ -759,7 +759,7 @@ final class BarosUITests: XCTestCase {
         let row = app.buttons["ExerciseHistoryButton-0"]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         XCTAssertTrue(row.isHittable)
-        for labelFragment in ["Back Squat", "Barbell", "Quads", "Last:", "50 workouts"] {
+        for labelFragment in ["Back Squat", "Barbell", "Quads", "50 workouts · Last "] {
             XCTAssertTrue(row.label.contains(labelFragment))
         }
 
@@ -4782,8 +4782,8 @@ final class BarosUITests: XCTestCase {
 
         let historyRow = app.buttons["ExerciseHistoryButton-0"]
         XCTAssertTrue(historyRow.waitForExistence(timeout: 3))
-        XCTAssertTrue(historyRow.label.contains("Last: "))
-        XCTAssertTrue(historyRow.label.contains("· 1 workout"))
+        // Same summary as the Exercise History heading.
+        XCTAssertTrue(historyRow.label.contains("1 workout · Last "), historyRow.label)
         XCTAssertFalse(historyRow.label.contains("x1"))
     }
 

@@ -26,6 +26,13 @@ struct ExerciseHistoryPerformanceRow: View {
                 header
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(group.loggedExerciseEntries) { entry in
+                        if entry.id != group.loggedExerciseEntries.first?.id {
+                            // Repeated occurrences of the exercise stay visibly separate.
+                            Rectangle()
+                                .fill(AppTheme.subtleBorder)
+                                .frame(height: 1)
+                                .accessibilityHidden(true)
+                        }
                         VStack(alignment: .leading, spacing: 8) {
                             if entry.showsIdentity(comparedTo: headingIdentity) {
                                 Text(entry.displayIdentity.metadataDisplayText.map {
@@ -35,7 +42,12 @@ struct ExerciseHistoryPerformanceRow: View {
                                     .foregroundStyle(AppTheme.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
-                            HistoryFlowLayout(horizontalSpacing: 16, verticalSpacing: 8) {
+                            HistoryFlowLayout(
+                                horizontalSpacing: 6,
+                                verticalSpacing: 8,
+                                // One set per line at accessibility sizes.
+                                isSingleColumn: dynamicTypeSize.isAccessibilitySize
+                            ) {
                                 ForEach(entry.setEntries) { item in
                                     HistorySetToken(
                                         set: item.set,
@@ -109,7 +121,7 @@ struct ExerciseHistoryPerformanceRow: View {
     private var subtitle: String {
         let sets = WorkoutFormatters.setCount(group.completedSetCount)
         if dynamicTypeSize.isAccessibilitySize {
-            return "\(WorkoutFormatters.compactDate(group.startedAt)) · \(sets)"
+            return "\(WorkoutFormatters.historyDate(group.startedAt)) · \(sets)"
         }
         if !Calendar.current.isDate(group.startedAt, equalTo: .now, toGranularity: .year) {
             return "\(group.startedAt.formatted(.dateTime.year())) · \(sets)"
@@ -118,7 +130,8 @@ struct ExerciseHistoryPerformanceRow: View {
     }
 }
 
-/// A completed set as `weight × reps`, with RPE and any record it holds.
+/// A completed set as `weight × reps`, with RPE and any record it holds, in
+/// one quiet pill so each set reads as a unit.
 struct HistorySetToken: View {
     let set: LoggedSet
     let number: Int
@@ -127,17 +140,20 @@ struct HistorySetToken: View {
     let accessibilityIdentifier: String
 
     var body: some View {
-        // The chip drops below the value when one line can't hold both.
+        // The record name drops below the value when one line can't hold both.
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 value
-                if !recordKinds.isEmpty { HistoryRecordChip(kinds: recordKinds) }
+                if !recordKinds.isEmpty { HistoryRecordLabel(kinds: recordKinds) }
             }
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 value
-                if !recordKinds.isEmpty { HistoryRecordChip(kinds: recordKinds) }
+                if !recordKinds.isEmpty { HistoryRecordLabel(kinds: recordKinds) }
             }
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(AppTheme.recessedSurface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(HistorySetTable.accessibilityLabel(
             set: set, number: number, recordKinds: recordKinds, unit: weightUnit
@@ -146,14 +162,14 @@ struct HistorySetToken: View {
     }
 
     private var value: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text("\(HistorySetTable.weightText(set, unit: weightUnit))\(Text(" × ").foregroundColor(AppTheme.textSecondary))\(HistorySetTable.repsText(set))")
-                .font(.body.monospacedDigit())
+                .font(.callout.monospacedDigit())
                 .foregroundStyle(AppTheme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             if let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe) {
                 Text("@\(WorkoutFormatters.number(rpe))")
-                    .font(.footnote.monospacedDigit())
+                    .font(.caption.monospacedDigit())
                     .foregroundStyle(AppTheme.textSecondary)
                     .fixedSize()
             }
@@ -162,12 +178,12 @@ struct HistorySetToken: View {
 }
 
 /// Names the record a set holds. Informational, so neutral rather than cobalt.
-struct HistoryRecordChip: View {
+struct HistoryRecordLabel: View {
     let kinds: [ExerciseHistoryRecordKind]
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
             Image(systemName: "trophy.fill")
                 .imageScale(.small)
                 .foregroundStyle(AppTheme.textSecondary)
@@ -175,9 +191,6 @@ struct HistoryRecordChip: View {
                 .foregroundStyle(AppTheme.textPrimary)
         }
         .font(.caption.weight(.semibold))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(AppTheme.recessedSurface, in: Capsule())
         // A record name only wraps when a single line can't hold it at all.
         .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
         .accessibilityHidden(true)
@@ -189,6 +202,7 @@ struct HistoryRecordChip: View {
 struct HistoryFlowLayout: Layout {
     var horizontalSpacing: CGFloat
     var verticalSpacing: CGFloat
+    var isSingleColumn = false
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? .infinity
@@ -213,12 +227,14 @@ struct HistoryFlowLayout: Layout {
         var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0, maxX: CGFloat = 0
         for subview in subviews {
             var size = subview.sizeThatFits(.unspecified)
-            let isConstrained = size.width > width
+            let isConstrained = size.width > width + 0.5
             if isConstrained {
                 size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
             }
             constrained.append(isConstrained)
-            if x > 0, x + size.width > width {
+            // Half a point of tolerance: placement must reproduce the lines
+            // that sizing measured, or wrapped sets overlap the next row.
+            if x > 0, isSingleColumn || x + size.width > width + 0.5 {
                 x = 0
                 y += lineHeight + verticalSpacing
                 lineHeight = 0
@@ -228,6 +244,6 @@ struct HistoryFlowLayout: Layout {
             lineHeight = max(lineHeight, size.height)
             maxX = max(maxX, x - horizontalSpacing)
         }
-        return (frames, constrained, CGSize(width: min(maxX, width), height: y + lineHeight))
+        return (frames, constrained, CGSize(width: width.isFinite ? width : maxX, height: y + lineHeight))
     }
 }
