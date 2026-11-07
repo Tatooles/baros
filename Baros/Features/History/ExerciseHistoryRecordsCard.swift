@@ -331,7 +331,7 @@ struct ExerciseHistoryEstimateChart: View {
         Chart {
             ForEach(points) { point in
                 LineMark(
-                    x: .value("Date", point.date, unit: .day),
+                    x: .value("Date", point.date),
                     y: .value("Estimated 1RM", display(point))
                 )
                 .foregroundStyle(AppTheme.brandAccentForeground.opacity(0.55))
@@ -339,14 +339,14 @@ struct ExerciseHistoryEstimateChart: View {
 
                 if point.id == recordWorkoutID {
                     PointMark(
-                        x: .value("Date", point.date, unit: .day),
+                        x: .value("Date", point.date),
                         y: .value("Estimated 1RM", display(point))
                     )
                     .symbolSize(90)
                     .foregroundStyle(AppTheme.brandAccentForeground)
                 } else {
                     PointMark(
-                        x: .value("Date", point.date, unit: .day),
+                        x: .value("Date", point.date),
                         y: .value("Estimated 1RM", display(point))
                     )
                     .symbolSize(28)
@@ -355,7 +355,7 @@ struct ExerciseHistoryEstimateChart: View {
             }
 
             if let selectedPoint {
-                RuleMark(x: .value("Date", selectedPoint.date, unit: .day))
+                RuleMark(x: .value("Date", selectedPoint.date))
                     .foregroundStyle(AppTheme.textTertiary)
                     .lineStyle(StrokeStyle(lineWidth: 1))
             }

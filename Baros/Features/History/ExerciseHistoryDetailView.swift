@@ -7,6 +7,7 @@ struct ExerciseHistoryDetailView: View {
     @State private var highlightedWorkoutID: UUID?
     @AccessibilityFocusState private var focusedWorkoutID: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
@@ -62,12 +63,16 @@ struct ExerciseHistoryDetailView: View {
 
     private func workouts(_ groups: [ExerciseHistorySessionGroup], records: ExerciseHistoryRecords?) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
+            // At accessibility sizes the caption stacks so the title never breaks mid-word.
+            let headerLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+            headerLayout {
                 Text("Workouts")
                     .font(.title3.bold())
                     .foregroundStyle(AppTheme.textPrimary)
                     .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 8)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                 Text("\(weightUnit.shortUnitLabel) × reps")
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(AppTheme.textSecondary)
