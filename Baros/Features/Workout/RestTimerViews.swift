@@ -24,7 +24,9 @@ struct RestSetDivider: View {
                     .id(period.rest.id)
                     .transition(.opacity)
             } else {
-                Divider().overlay(AppTheme.subtleBorder)
+                // Each open set already has field wells, so a rule between
+                // rows would add a second boundary; keep the spacing only.
+                Color.clear.frame(height: 1)
             }
         }
         .animation(restTimerReducesMotion(reduceMotion) ? nil : .snappy(duration: 0.25), value: slot.period?.rest.id)

@@ -253,19 +253,23 @@ struct WorkoutHistoryDetailView: View {
 
     private func workoutExerciseSection(_ loggedExercise: LoggedExercise) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(loggedExercise.exerciseSnapshotName)
-                    .font(.title3.bold())
-                    .foregroundStyle(AppTheme.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                HistorySetCountPill(count: loggedExercise.sortedSets.count)
-                    .accessibilityIdentifier("WorkoutHistorySetCount-\(loggedExercise.orderIndex)")
-            }
-            if let metadata = loggedExercise.metadataDisplayText {
-                Text(metadata)
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.textSecondary)
+            // Title and equipment read as one identity; the pill rides the
+            // title's baseline instead of setting the row height.
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(loggedExercise.exerciseSnapshotName)
+                        .font(.title3.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HistorySetCountPill(count: loggedExercise.sortedSets.count)
+                        .accessibilityIdentifier("WorkoutHistorySetCount-\(loggedExercise.orderIndex)")
+                }
+                if let metadata = loggedExercise.metadataDisplayText {
+                    Text(metadata)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
             }
 
             HistorySetTable(rows: loggedExercise.sortedSets.map { set in

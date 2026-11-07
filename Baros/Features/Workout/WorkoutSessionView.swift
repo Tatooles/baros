@@ -115,45 +115,19 @@ struct WorkoutSessionView: View {
                         }
                     }
 
-                    let actionLayout = dynamicTypeSize.isAccessibilitySize
-                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
-                        : AnyLayout(HStackLayout(spacing: 10))
-                    actionLayout {
-                        if !sortedLoggedExercises.isEmpty {
-                            // Sits beside Add Exercise, but while that row is
-                            // below the fold it pins to the bottom of the
-                            // screen. Left-aligned so it floats over set
-                            // numbers rather than completion checkmarks.
-                            let pins = focusedField == nil && !isChildPresentationActive
-                            editWorkoutPill
-                                .visualEffect { [pins] content, proxy in
-                                    content.offset(y: Self.editPillPinOffset(
-                                        pins: pins,
-                                        proxy: proxy
-                                    ))
-                                }
-                        }
-
-                        Button {
-                            guard prepareForPresentation() else { return }
-                            isAddExercisePresented = true
-                        } label: {
-                            Label("Add Exercise", systemImage: "plus")
-                                .font(.headline)
-                                .foregroundStyle(AppTheme.brandAccentForeground)
-                                .frame(maxWidth: .infinity, minHeight: actionMinHeight)
-                                .background(AppTheme.brandAccentMuted, in: Capsule())
-                                .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("AddExerciseButton")
+                    // While a field is focused the keyboard bar owns the
+                    // bottom edge, so the actions return to the end of the list.
+                    if !showsBottomActionBar {
+                        workoutActions
                     }
                 }
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
                 .padding(.bottom, 8)
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
+            // A safe-area bar lets the system scroll-edge effect separate
+            // the floating metrics from the sets scrolling beneath them.
+            .safeAreaBar(edge: .top, spacing: 0) {
                 ActiveWorkoutMetricsHeader(session: session, restTimer: engine.restTimer) {
                     // Flush any in-progress field edit through the commit path
                     // before the finish sheet reads the model.
@@ -199,6 +173,16 @@ struct WorkoutSessionView: View {
                     rpeEditingSetID = nil
                 }
 
+            }
+            // Reserved bottom chrome: the actions never sit on top of set rows,
+            // and the system scroll-edge effect separates them from the list.
+            .safeAreaBar(edge: .bottom, spacing: 0) {
+                if showsBottomActionBar {
+                    workoutActions
+                        .padding(.horizontal, AppTheme.shellPadding)
+                        .padding(.top, 8)
+                        .padding(.bottom, 4)
+                }
             }
             // Replaces a `.keyboard` toolbar, whose full-width strip swallows taps
             // between its buttons. As a safe-area inset, the system's keyboard
@@ -295,24 +279,41 @@ struct WorkoutSessionView: View {
         }
     }
 
+    private var showsBottomActionBar: Bool {
+        focusedField == nil && !isChildPresentationActive
+    }
+
+    private var workoutActions: some View {
+        let actionLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 10))
+        return actionLayout {
+            if !(cachedSortedLoggedExercises ?? session.sortedLoggedExercises).isEmpty {
+                editWorkoutPill
+            }
+
+            Button {
+                guard prepareForPresentation() else { return }
+                isAddExercisePresented = true
+            } label: {
+                Label("Add Exercise", systemImage: "plus")
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .frame(maxWidth: .infinity, minHeight: actionMinHeight)
+                    .glassEffect(.regular.tint(AppTheme.brandAccentMuted).interactive(), in: Capsule())
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("AddExerciseButton")
+        }
+    }
+
     @ScaledMetric(relativeTo: .headline) private var scaledActionHeight: CGFloat = 50
 
     private var actionMinHeight: CGFloat { max(50, scaledActionHeight) }
 
-    /// Lifts the pill from its slot to the bottom of the visible list, held
-    /// off the edge by the same 8pt the list ends with. When the slot is on
-    /// screen the pill stays in it.
-    nonisolated private static func editPillPinOffset(
-        pins: Bool,
-        proxy: GeometryProxy
-    ) -> CGFloat {
-        guard pins, let viewport = proxy.bounds(of: .scrollView) else { return 0 }
-        // The scroll-view bounds already exclude the bottom safe area.
-        let pinnedMaxY = viewport.maxY - 8
-        return min(0, pinnedMaxY - proxy.size.height)
-    }
-
-    /// An opaque surface keeps the floating action readable over exercise content.
+    /// Glass matches the workout's other floating controls and keeps the
+    /// pinned action legible as its own layer over exercise content.
     private var editWorkoutPill: some View {
         Button {
             guard prepareForPresentation() else { return }
@@ -324,15 +325,16 @@ struct WorkoutSessionView: View {
                 .fixedSize()
                 .padding(.horizontal, 20)
                 .frame(minWidth: 108, minHeight: actionMinHeight)
-                .background(AppTheme.groupedSurface, in: Capsule())
-                .overlay {
-                    Capsule().strokeBorder(AppTheme.subtleBorder, lineWidth: 1)
-                }
+                .glassEffect(.regular.interactive(), in: Capsule())
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Edit Workout")
         .accessibilityIdentifier("ActiveWorkoutEditButton")
+    }
+
+    private var showsRPEButton: Bool {
+        rpeEnabled && focusedSetID != nil
     }
 
     private var keyboardAccessory: some View {
@@ -345,7 +347,7 @@ struct WorkoutSessionView: View {
                     .clipShape(Capsule())
                     .glassEffect(.regular, in: Capsule())
             } else {
-                if let focusedSetID, rpeEnabled {
+                if let focusedSetID, showsRPEButton {
                     Button("RPE") {
                         rpeEditingSetID = focusedSetID
                     }
@@ -362,7 +364,21 @@ struct WorkoutSessionView: View {
         }
         .font(.system(size: 16, weight: .semibold))
         .buttonStyle(.glass)
-        .padding(.horizontal, AppTheme.shellPadding)
+        .padding(4)
+        .background {
+            // When RPE and Done share the bar, one quiet band joins them and
+            // keeps set text from reading between them. A lone Done floats on
+            // its own, since there is nothing to join. The band ignores
+            // touches, so a row beneath it can still be tapped. It is opaque
+            // and a step off the pills' tone, so the glass buttons read as
+            // buttons; the soft shadow feathers its top edge.
+            Capsule()
+                .fill(AppTheme.keyboardBandFill)
+                .shadow(color: AppTheme.keyboardBandShadow, radius: 10, y: -2)
+                .opacity(rpeEditingSetID == nil && showsRPEButton ? 1 : 0)
+                .allowsHitTesting(false)
+        }
+        .padding(.horizontal, AppTheme.shellPadding - 4)
         // The keyboard reveal clears the text field, not its taller rounded
         // container. Transparent top room keeps the whole field off the buttons.
         .padding(.top, 20)

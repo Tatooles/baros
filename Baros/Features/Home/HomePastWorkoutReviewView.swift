@@ -19,7 +19,8 @@ struct HomePastWorkoutReviewView: View {
                     .textCase(.uppercase)
                     .foregroundStyle(AppTheme.textSecondary)
                     .padding(.top, 28)
-                    .padding(.bottom, 6)
+                    .padding(.bottom, 8)
+                    .padding(.horizontal, 16)
                     .accessibilityIdentifier("PastWorkoutReviewExercisesHeading")
 
                 if presentation.exercises.isEmpty {
@@ -32,20 +33,27 @@ struct HomePastWorkoutReviewView: View {
                 } else {
                     let exercises = presentation.exercises
                     let blocks = SupersetGrouping.blocks(exercises, groupID: \.supersetGroupID)
-                    ForEach(blocks) { block in
-                        if block.isSuperset {
-                            SupersetRail(count: block.members.count, spacing: 0) {
-                                ForEach(block.members) { exercise in
-                                    exerciseRow(exercise, in: exercises)
-                                    if exercise.id != block.members.last?.id { divider }
+                    // The same grouped surface History uses, so the workout
+                    // being copied reads as one recognizable unit.
+                    SurfaceCard(padding: 0) {
+                        VStack(spacing: 0) {
+                            ForEach(blocks) { block in
+                                if block.isSuperset {
+                                    SupersetRail(count: block.members.count, spacing: 0) {
+                                        ForEach(block.members) { exercise in
+                                            exerciseRow(exercise, in: exercises)
+                                            if exercise.id != block.members.last?.id { divider }
+                                        }
+                                    }
+                                    .padding(.vertical, 8)
+                                } else {
+                                    exerciseRow(block.members[0], in: exercises)
                                 }
-                            }
-                            .padding(.top, 12)
-                        } else {
-                            exerciseRow(block.members[0], in: exercises)
-                        }
 
-                        if block.id != blocks.last?.id { divider }
+                                if block.id != blocks.last?.id { divider }
+                            }
+                        }
+                        .padding(.horizontal, 16)
                     }
                 }
             }
@@ -186,10 +194,13 @@ private struct HomePastWorkoutReviewExerciseRow: View {
 
     private var copiedSetCountText: some View {
         Text(exercise.copiedSetDescription)
-            .font(.body)
+            .font(.caption.weight(.medium))
             .foregroundStyle(AppTheme.textSecondary)
             .monospacedDigit()
-            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(AppTheme.recessedSurface, in: Capsule())
+            .fixedSize()
     }
 
     private var accessibilityDescription: String {

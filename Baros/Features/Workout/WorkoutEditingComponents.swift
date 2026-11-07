@@ -31,11 +31,18 @@ struct WorkoutProgressiveNoteAddButton<Focus: Hashable>: View {
                 focusedField.wrappedValue = focusTarget
             }
         } label: {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppTheme.brandAccentForeground)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
+            // Notes are optional, so the label stays quieter than primary
+            // actions; the tinted icon still marks it as tappable.
+            Label {
+                Text(title)
+                    .foregroundStyle(AppTheme.textSecondary)
+            } icon: {
+                Image(systemName: systemImage)
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+            }
+            .font(.subheadline.weight(.medium))
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(accessibilityIdentifier)
@@ -265,7 +272,7 @@ struct WorkoutSetColumnHeader: View {
         Text(title)
             .font(.caption.weight(.semibold))
             .tracking(0.6)
-            .foregroundStyle(AppTheme.textTertiary)
+            .foregroundStyle(AppTheme.textSecondary)
             .frame(maxWidth: .infinity)
     }
 }
@@ -321,9 +328,10 @@ struct LabeledWorkoutTitleField<Focus: Hashable>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(.caption2.weight(.bold))
-                .tracking(1.8)
+                .font(.caption.weight(.semibold))
+                .tracking(0.6)
                 .foregroundStyle(AppTheme.textSecondary)
+                .padding(.horizontal, 12)
                 .accessibilityIdentifier(labelIdentifier)
 
             HStack(spacing: 6) {

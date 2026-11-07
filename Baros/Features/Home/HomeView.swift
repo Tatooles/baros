@@ -43,7 +43,9 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     header
                     WorkoutRecoveryNotice()
-                    Spacer(minLength: 20).frame(maxHeight: 40)
+                    // Matching flexible spacers center the ring between the
+                    // header and the actions instead of crowding the bottom.
+                    Spacer(minLength: 20)
                     VStack(spacing: 12) {
                         HomeYearRingView(model: ring, period: effectivePeriod,
                                          diameter: min(geometry.size.width * 0.80, 350),
@@ -73,7 +75,7 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 14)
-                .padding(.bottom, 18)
+                .padding(.bottom, 24)
                 .frame(minHeight: geometry.size.height, alignment: .top)
             }
             .scrollBounceBehavior(.basedOnSize)
@@ -239,29 +241,26 @@ private struct HomeQuickStartSelection: Identifiable {
     let id: UUID
 }
 
+/// Shares the capsule shape and centered label of the app's other primary
+/// actions, so Home's Start Workout matches the one a tap later.
 private struct HomePrimaryWorkoutButton: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .title3) private var iconDimension: CGFloat = 40
+    /// Grows with text size so the main action stays a generous target.
+    @ScaledMetric(relativeTo: .title3) private var scaledMinHeight: CGFloat = 60
 
     let presentation: HomePrimaryWorkoutPresentation
     let action: () -> Void
 
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-    }
-
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
+            HStack(spacing: 10) {
                 if !dynamicTypeSize.isAccessibilitySize {
                     Image(systemName: presentation.isActive ? "figure.strengthtraining.traditional" : "plus")
                         .font(.title3.weight(.bold))
-                        .frame(width: iconDimension, height: iconDimension)
-                        .background(AppTheme.onBrandAccent.opacity(0.18), in: Circle())
                         .accessibilityHidden(true)
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(spacing: 2) {
                     Text(presentation.title)
                         .font(.title3.weight(.bold))
                         .fixedSize(horizontal: false, vertical: true)
@@ -273,20 +272,14 @@ private struct HomePrimaryWorkoutButton: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-
-                Spacer(minLength: 8)
-
-                Image(systemName: "chevron.right")
-                    .font(.headline.weight(.bold))
-                    .accessibilityHidden(true)
+                .multilineTextAlignment(.center)
             }
             .foregroundStyle(AppTheme.onBrandAccent)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-            .background(AppTheme.brandAccentGradient, in: shape)
-            .shadow(color: AppTheme.brandAccentGlow, radius: 14, y: 6)
-            .contentShape(shape)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, minHeight: min(scaledMinHeight, 120))
+            .background(AppTheme.brandAccentGradient, in: Capsule())
+            .contentShape(Capsule())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(presentation.title)
             .accessibilityValue(presentation.detail ?? "")

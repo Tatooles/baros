@@ -24,12 +24,6 @@ enum BarosBrand {
         dark: 0x1768E5,
         darkAlpha: 0.16
     )
-    static let brandAccentGlow = BarosAdaptiveColor.dynamic(
-        light: 0x1C66C7,
-        lightAlpha: 0.24,
-        dark: 0x1768E5,
-        darkAlpha: 0.28
-    )
     static let onBrandAccent = Color.white
 }
 
