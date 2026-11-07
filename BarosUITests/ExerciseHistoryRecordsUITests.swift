@@ -80,7 +80,10 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             XCTAssertEqual(values.count, 6)
             let heaviest = values.matching(NSPredicate(format: "label CONTAINS %@", "Heaviest Rep")).firstMatch
             XCTAssertEqual(heaviest.label, "Set 3, 225 pounds, 1 rep, Heaviest Rep")
-            XCTAssertTrue(app.staticTexts["3 sets"].exists)
+            // Both workouts hold a record, so each subtitle names it after the set count.
+            let subtitles = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "3 sets"))
+            XCTAssertGreaterThanOrEqual(subtitles.count, 1)
+            XCTAssertTrue(sourceWorkout.label.contains("record"), sourceWorkout.label)
             attachScreenshot(named: "exercise-no-rpe-\(appearance)", app: app)
             app.terminate()
         }
@@ -112,7 +115,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         }
     }
 
-    func testQuickHistoryUsesJournalRowsWithoutComputingRecords() {
+    func testQuickHistoryMarksRecordsLikeExerciseHistory() {
         let app = XCUIApplication()
         app.launchArguments = [
             "--uitest-reset-persistent-store", "--uitest-in-memory-store",
@@ -134,22 +137,23 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         app.buttons["ExerciseHistoryButton-0"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["QuickExerciseHistoryHeading"].waitForExistence(timeout: 5))
 
-        let dates = app.staticTexts.matching(NSPredicate(
-            format: "identifier BEGINSWITH %@", "ExerciseHistorySessionDate-"
-        ))
-        XCTAssertEqual(dates.count, 2)
         let values = app.descendants(matching: .any).matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"
         ))
         XCTAssertEqual(values.count, 6)
+        // The same rows as Exercise History: record sets are marked, without the Records card.
         let heaviest = values.matching(NSPredicate(format: "label CONTAINS %@", "225 pounds")).firstMatch
-        XCTAssertEqual(heaviest.label, "Set 3, 225 pounds, 1 rep")
+        XCTAssertEqual(heaviest.label, "Set 3, 225 pounds, 1 rep, Heaviest Rep")
+        let estimate = values.matching(NSPredicate(format: "label CONTAINS %@", "Estimated 1RM")).firstMatch
+        XCTAssertEqual(estimate.label, "Set 2, 210 pounds, 5 reps, Estimated 1RM")
         XCTAssertFalse(app.buttons["AboutStrengthRecordsButton"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["ExerciseRecord-heaviestRep"].exists)
-        XCTAssertEqual(values.matching(NSPredicate(format: "label CONTAINS %@", "Estimated 1RM")).count, 0)
-        XCTAssertEqual(app.buttons.matching(NSPredicate(
+        let workouts = app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-"
-        )).count, 2)
+        ))
+        XCTAssertEqual(workouts.count, 2)
+        XCTAssertTrue(workouts.element(boundBy: 0).label.hasSuffix("3 sets, holds Heaviest Rep record"))
+        XCTAssertTrue(workouts.element(boundBy: 1).label.hasSuffix("3 sets, holds Estimated 1RM record"))
     }
 
     func testLongValuesAndDuplicateOccurrencesPreserveRecordSourceContext() {

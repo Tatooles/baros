@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// One Exercise Performance in the Exercise History log: the workout as a
-/// navigable header, then every completed set as a compact `weight × reps`
-/// token. Record source sets carry the record's name.
+/// One Exercise Performance in the Exercise History log and Quick History:
+/// the workout as a navigable header, then every completed set as a compact
+/// `weight × reps` pill. A record set is outlined with a trophy, and the
+/// header's subtitle names the record, so every pill keeps the same grammar.
 struct ExerciseHistoryPerformanceRow: View {
     let group: ExerciseHistorySessionGroup
     let headingIdentity: ExerciseHistoryDisplayIdentity
@@ -14,10 +15,29 @@ struct ExerciseHistoryPerformanceRow: View {
     let openWorkout: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .headline) private var tileSide: CGFloat = 48
 
-    private var setsLeading: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 0 : tileSide + 12
+    /// Completed sets in this workout that hold a record, in logged order.
+    private var recordSets: [(entry: ExerciseHistorySetEntry, kinds: [ExerciseHistoryRecordKind])] {
+        guard let records else { return [] }
+        return group.setEntries.compactMap { entry in
+            let kinds = records.kinds(for: entry.id)
+            return kinds.isEmpty ? nil : (entry, kinds)
+        }
+    }
+
+    /// "Est. 1RM", "Heaviest rep · Est. 1RM" for one set holding both, or each
+    /// name with its value when different sets hold them.
+    private var recordSummary: String? {
+        let sets = recordSets
+        guard !sets.isEmpty else { return nil }
+        if sets.count == 1 {
+            return sets[0].kinds.map(\.badgeTitle).joined(separator: " · ")
+        }
+        return sets.map { item in
+            let value = "\(HistorySetTable.weightText(item.entry.set, unit: weightUnit)) × "
+                + HistorySetTable.repsText(item.entry.set)
+            return item.kinds.map { "\($0.badgeTitle) \(value)" }.joined(separator: " · ")
+        }.joined(separator: " · ")
     }
 
     var body: some View {
@@ -62,7 +82,6 @@ struct ExerciseHistoryPerformanceRow: View {
                         }
                     }
                 }
-                .padding(.leading, setsLeading)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
@@ -92,7 +111,7 @@ struct ExerciseHistoryPerformanceRow: View {
                         .foregroundStyle(AppTheme.textPrimary)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(subtitle)
+                    subtitleText
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(AppTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -110,10 +129,30 @@ struct ExerciseHistoryPerformanceRow: View {
         .accessibilityLabel(
             "\(group.title), \(WorkoutFormatters.compactDate(group.startedAt)), "
                 + WorkoutFormatters.setCount(group.completedSetCount)
+                + recordAccessibilitySuffix
         )
         .accessibilityHint("Opens completed workout.")
         .accessibilityFocused(accessibilityFocus, equals: group.id)
         .accessibilityIdentifier("ExercisePerformanceWorkoutButton-\(group.id.uuidString)")
+    }
+
+    /// The set count, then the record this workout holds. At accessibility
+    /// sizes the record gets its own line.
+    private var subtitleText: Text {
+        let base = Text(subtitle)
+        guard let recordSummary else { return base }
+        let trophy = Text("\(Image(systemName: "trophy.fill")) ")
+            .foregroundStyle(AppTheme.textSecondary)
+        let name = Text(recordSummary)
+            .fontWeight(.semibold)
+            .foregroundStyle(AppTheme.textPrimary)
+        return Text("\(base)\(dynamicTypeSize.isAccessibilitySize ? "\n" : " · ")\(trophy)\(name)")
+    }
+
+    private var recordAccessibilitySuffix: String {
+        let kinds = recordSets.flatMap(\.kinds)
+        guard !kinds.isEmpty else { return "" }
+        return ", holds " + kinds.map { "\($0.title) record" }.joined(separator: " and ")
     }
 
     /// The date tile carries month and day; the year and accessibility-size
@@ -130,8 +169,9 @@ struct ExerciseHistoryPerformanceRow: View {
     }
 }
 
-/// A completed set as `weight × reps`, with RPE and any record it holds, in
-/// one quiet pill so each set reads as a unit.
+/// A completed set as one line: `weight × reps`, then RPE only when logged.
+/// A record set adds a faint outline and a trophy; its name lives in the
+/// workout's subtitle, so the pill never grows a label or a second line.
 struct HistorySetToken: View {
     let set: LoggedSet
     let number: Int
@@ -139,30 +179,10 @@ struct HistorySetToken: View {
     let weightUnit: MeasurementUnit
     let accessibilityIdentifier: String
 
-    var body: some View {
-        // The record name drops below the value when one line can't hold both.
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                value
-                if !recordKinds.isEmpty { HistoryRecordLabel(kinds: recordKinds) }
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                value
-                if !recordKinds.isEmpty { HistoryRecordLabel(kinds: recordKinds) }
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(AppTheme.recessedSurface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(HistorySetTable.accessibilityLabel(
-            set: set, number: number, recordKinds: recordKinds, unit: weightUnit
-        ))
-        .accessibilityIdentifier(accessibilityIdentifier)
-    }
+    private var isRecord: Bool { !recordKinds.isEmpty }
 
-    private var value: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
             Text("\(HistorySetTable.weightText(set, unit: weightUnit))\(Text(" × ").foregroundColor(AppTheme.textSecondary))\(HistorySetTable.repsText(set))")
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(AppTheme.textPrimary)
@@ -173,27 +193,27 @@ struct HistorySetToken: View {
                     .foregroundStyle(AppTheme.textSecondary)
                     .fixedSize()
             }
+            if isRecord {
+                Image(systemName: "trophy.fill")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
         }
-    }
-}
-
-/// Names the record a set holds. Informational, so neutral rather than cobalt.
-struct HistoryRecordLabel: View {
-    let kinds: [ExerciseHistoryRecordKind]
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Image(systemName: "trophy.fill")
-                .imageScale(.small)
-                .foregroundStyle(AppTheme.textSecondary)
-            Text(kinds.map(\.badgeTitle).joined(separator: " · "))
-                .foregroundStyle(AppTheme.textPrimary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(AppTheme.recessedSurface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            if isRecord {
+                // Neutral, not cobalt: records are information, not interaction.
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(AppTheme.textTertiary, lineWidth: 1)
+            }
         }
-        .font(.caption.weight(.semibold))
-        // A record name only wraps when a single line can't hold it at all.
-        .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
-        .accessibilityHidden(true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(HistorySetTable.accessibilityLabel(
+            set: set, number: number, recordKinds: recordKinds, unit: weightUnit
+        ))
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
