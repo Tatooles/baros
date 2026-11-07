@@ -40,6 +40,7 @@ struct WorkoutSessionView: View {
     @State private var cachedSortedLoggedExercises: [LoggedExercise]?
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
+    @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var setInputRegistry = ActiveSetInputRegistry()
     @State private var focusTransitionCoordinator = WorkoutFocusTransitionCoordinator()
     @FocusState private var focusedField: WorkoutField?
@@ -180,8 +181,8 @@ struct WorkoutSessionView: View {
                 if showsBottomActionBar {
                     workoutActions
                         .padding(.horizontal, AppTheme.shellPadding)
-                        .padding(.top, 8)
-                        .padding(.bottom, 4)
+                        .padding(.top, 12)
+                        .padding(.bottom, workoutActionsBottomPadding)
                 }
             }
             // Replaces a `.keyboard` toolbar, whose full-width strip swallows taps
@@ -192,6 +193,11 @@ struct WorkoutSessionView: View {
                     keyboardAccessory
                 }
             }
+            // While the actions show, the bars run to the screen edge, so the
+            // actions' padding places them inside the home-indicator inset and
+            // their whole frame stays tappable. The keyboard bar keeps the
+            // normal safe area, so it clears the home indicator with any keyboard.
+            .ignoresSafeArea(.container, edges: showsBottomActionBar ? .bottom : [])
             .background {
                 PreviousSetsCacheLoader(session: session) {
                     cachedPreviousSets = $0
@@ -199,6 +205,15 @@ struct WorkoutSessionView: View {
                 }
                 .frame(width: 0, height: 0)
             }
+        }
+        .background {
+            // Ignoring the keyboard keeps this the screen's resting bottom
+            // inset, so the actions don't jump while the keyboard animates away.
+            Color.clear
+                .ignoresSafeArea(.keyboard)
+                .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: {
+                    bottomSafeAreaInset = $0
+                }
         }
         .disabled(engine.hasPendingSetSave)
         .alert("Couldn't save this edit", isPresented: $showsSetSaveFailure) {
@@ -281,6 +296,13 @@ struct WorkoutSessionView: View {
 
     private var showsBottomActionBar: Bool {
         focusedField == nil && !isChildPresentationActive
+    }
+
+    /// On phones with a home indicator, the actions sit inside its inset at
+    /// about the floating tab bar's height. Phones without one keep a small
+    /// gap above the screen edge.
+    private var workoutActionsBottomPadding: CGFloat {
+        min(bottomSafeAreaInset + 4, 22)
     }
 
     private var workoutActions: some View {

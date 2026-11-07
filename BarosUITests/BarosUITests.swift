@@ -272,6 +272,34 @@ final class BarosUITests: XCTestCase {
                                  "Adding an exercise must not leave a persistent blank scroll tail")
     }
 
+    /// The actions sit inside the home-indicator inset, at about the floating
+    /// tab bar's height. A tap on their lower edge must still reach them, which
+    /// fails if they overflow their bar.
+    @MainActor
+    func testWorkoutActionsRespondToTapsNearTheirBottomEdge() {
+        let app = makeApp(extraArguments: ["--uitest-seed-edit-workout"])
+        app.launch()
+        XCTAssertTrue(app.textFields["WorkoutTitle"].waitForExistence(timeout: 8))
+        func tapNearBottom(_ element: XCUIElement) {
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1))
+                .withOffset(CGVector(dx: 0, dy: -2))
+                .tap()
+        }
+
+        let edit = app.buttons["ActiveWorkoutEditButton"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 3))
+        XCTAssertEqual(app.frame.maxY - edit.frame.maxY, 22, accuracy: 2,
+                       "Assumes a home-indicator device (CI: iPhone 17)")
+        tapNearBottom(edit)
+        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 4))
+        app.navigationBars["Edit Workout"].buttons["Cancel"].tap()
+
+        let add = app.buttons["AddExerciseButton"]
+        XCTAssertTrue(add.waitForExistence(timeout: 4))
+        tapNearBottom(add)
+        XCTAssertTrue(app.buttons["ExercisePickerCancelButton"].waitForExistence(timeout: 4))
+    }
+
     @MainActor
     func testEditWorkoutAddAndReorderWalkthrough() {
         let app = XCUIApplication()
