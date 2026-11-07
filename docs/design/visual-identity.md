@@ -161,8 +161,8 @@ another rounded rectangle.
 Set rows follow the same rule: an open set shows its weight and reps as quiet
 `setFieldWell` regions with a small unit placeholder, a completed set drops the
 wells and takes a `completedSetFill` wash, and no rule is drawn between rows.
-Informational counts, such as "3 sets", record-source chips such as
-"Heaviest rep", and repeated row icons stay neutral; cobalt remains for
+Informational counts, such as "3 sets", record-source marks such as the
+outlined set box and "Heaviest rep", and repeated row icons stay neutral; cobalt remains for
 interaction and state. A row revealed by a record tap may take a brief
 `brandAccentMuted` wash, because it shows a transient state.
 

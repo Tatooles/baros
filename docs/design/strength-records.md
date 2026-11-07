@@ -132,15 +132,27 @@ The revision keeps the calculation and changes how the screen tells the story.
   reps with weight." and "No records yet — Log a weight and reps on a completed
   set to see records here." No zeros, no extra explanation in the card; the
   information sheet holds the full rules.
-- **Source markers.** In the Exercise History log, the source set carries a
-  neutral chip with a trophy glyph and the record's name ("Heaviest rep",
-  "Est. 1RM", or both joined by "·"). Chips use `recessedSurface` and primary
-  text, not cobalt or gold: they are informational, not interactive.
 - **Exercise History log.** Each Exercise Performance is one row in a single
   grouped list: the History date tile, workout title and set count as the
-  button that opens the workout, then every completed set as a `weight × reps`
-  token with optional `@RPE`. Occurrence boundaries, other-equipment identity
-  labels, and exercise notes are preserved.
+  button that opens the workout, then every completed set across the full row
+  width. Occurrence boundaries, other-equipment identity labels, and exercise
+  notes are preserved.
+- **Set boxes.** Each completed set is a one-line `recessedSurface` box that
+  fits its content: `weight × reps`, then `@RPE` only when logged. No box
+  reserves space for a missing RPE or has a fixed width, so no box shows empty
+  space inside it. At accessibility sizes each set takes its own line.
+- **Source markers.** The source set's box adds a faint neutral outline and a
+  small trophy; the box itself carries no record name. The workout's subtitle
+  names the record after the set count (`3 sets · 🏆 Est. 1RM`). If one set
+  holds both records, the subtitle names both, joined by "·". If different
+  sets in one workout hold them, each name carries its value
+  (`Heaviest rep 235 × 1 · Est. 1RM 210 × 6`). At accessibility sizes the
+  record name takes its own line. Markers are neutral, not cobalt or gold:
+  they are informational, not interactive. The workout row's VoiceOver label
+  ends with "holds … record", and each set still speaks its record names.
+- **Quick History.** The active workout's Quick History uses the same rows for
+  the last three workouts, with record sets marked from the full history. It
+  shows no Records card, and its summary matches the Exercise History heading.
 - **Information sheet.** Opens at a medium detent. It leads with "Records
   describe sets you've saved. They aren't a measure of what you can lift
   today.", explains both records, notes that warmup and drop sets don't count
@@ -159,7 +171,7 @@ When implementation is authorized, verify calculation boundaries (one, ten, and 
 - `Baros/Features/History/ExerciseHistoryDetailView.swift`: insertion point, current unit setting, and existing workout navigation.
 - `Baros/Features/History/ExerciseHistorySummary.swift`: conservative identity resolution and heading metadata.
 - `Baros/Features/History/ExerciseHistorySessionGroup.swift`: eligible visible workout groups and occurrence/set context.
-- `Baros/Features/History/ExerciseHistorySessionGroupCard.swift`: existing appearance and source set numbering.
+- `Baros/Features/History/ExerciseHistoryPerformanceRow.swift`: log rows, set boxes, and source markers, shared with Quick History.
 - `Baros/Core/Models/LoggedSet.swift`, `Baros/Core/Domain/WorkoutNumericInputPolicy.swift`, and `Baros/Core/Domain/MeasurementUnit.swift`: stored values, numeric validation, and unit conversion.
 
 The selected ten-rep cap is a product boundary, not a guarantee of accuracy across exercises. [Reynolds, Gordon, and Robergs (2006)](https://www.unm.edu/~rrobergs/478RMStrengthPrediction.pdf) studied chest press and leg press, found better prediction from lower-repetition tests, and recommended no more than ten repetitions for linear prediction in those exercises. Their tests used repetition maximum effort; ordinary logged sets need the effort limitation stated above.
