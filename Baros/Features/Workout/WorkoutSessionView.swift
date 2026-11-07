@@ -365,8 +365,11 @@ struct WorkoutSessionView: View {
             // One quiet band behind the pills keeps set text from reading
             // between them. It ignores touches, so a row beneath it can still
             // be tapped; only the buttons take touches.
+            // The grouped surface sits a step darker than the glass pills in
+            // dark mode, and the soft shadow feathers its top edge over rows.
             Capsule()
-                .fill(.regularMaterial)
+                .fill(AppTheme.groupedSurface.opacity(0.96))
+                .shadow(color: AppTheme.keyboardBandShadow, radius: 10, y: -2)
                 .opacity(rpeEditingSetID == nil ? 1 : 0)
                 .allowsHitTesting(false)
         }
