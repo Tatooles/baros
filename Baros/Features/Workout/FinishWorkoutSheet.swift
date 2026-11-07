@@ -63,8 +63,9 @@ struct FinishWorkoutSheet: View {
             }
 
             // One aligned row of figures; the sheet already bounds them, so
-            // they need no wells of their own.
-            HStack(spacing: 0) {
+            // they need no wells of their own. Accessibility sizes stack them
+            // so long values keep their full width.
+            metricsLayout {
                 MetricSummaryColumn(title: "Duration", value: AppTheme.formatDuration(metrics.durationSeconds))
                 metricDivider
                 MetricSummaryColumn(title: "Sets Done", value: "\(metrics.completedSetCount)/\(metrics.totalSetCount)")
@@ -142,12 +143,27 @@ struct FinishWorkoutSheet: View {
         .padding(.horizontal, 20)
     }
 
+    private var metricsLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 0))
+            : AnyLayout(HStackLayout(spacing: 0))
+    }
+
+    @ViewBuilder
     private var metricDivider: some View {
-        Rectangle()
-            .fill(AppTheme.subtleBorder)
-            .frame(width: 1)
-            .padding(.vertical, 6)
-            .accessibilityHidden(true)
+        if dynamicTypeSize.isAccessibilitySize {
+            Rectangle()
+                .fill(AppTheme.subtleBorder)
+                .frame(height: 1)
+                .padding(.horizontal, 24)
+                .accessibilityHidden(true)
+        } else {
+            Rectangle()
+                .fill(AppTheme.subtleBorder)
+                .frame(width: 1)
+                .padding(.vertical, 6)
+                .accessibilityHidden(true)
+        }
     }
 
     var body: some View {
