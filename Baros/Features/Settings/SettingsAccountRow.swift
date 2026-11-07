@@ -159,7 +159,7 @@ struct SettingsAccountRow: View {
                 .accessibilityIdentifier("SettingsAccountTitle")
 
             Text(displayState.subtitle)
-                .font(.subheadline)
+                .font(.footnote)
                 .foregroundStyle(AppTheme.textSecondary)
                 .lineLimit(displayState.isSignedIn ? 1 : nil)
                 .truncationMode(.middle)

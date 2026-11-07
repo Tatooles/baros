@@ -136,6 +136,9 @@ struct WorkoutSessionView: View {
                 }
                 .equatable()
             }
+            // With the keyboard up, a hard edge keeps the card footer from
+            // reading between the RPE and Done pills.
+            .scrollEdgeEffectStyle(focusedField == nil ? .soft : .hard, for: .bottom)
             .onScrollPhaseChange { _, phase in
                 if phase != .idle { engine.restTimer.collapseControls() }
             }
