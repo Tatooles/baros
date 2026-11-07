@@ -268,26 +268,31 @@ struct ExerciseHistoryEstimateChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // While dragging, the selected workout replaces the title so the
+            // header keeps one height instead of squeezing both onto a line.
             HStack(alignment: .firstTextBaseline) {
-                Text("Estimated 1RM by workout")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.textSecondary)
-                Spacer(minLength: 8)
                 if let selectedPoint {
                     Text(selectionText(selectedPoint))
-                        .font(.footnote.weight(.medium).monospacedDigit())
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
                         .foregroundStyle(AppTheme.textPrimary)
-                } else if recordWorkoutID != nil {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(AppTheme.brandAccentForeground)
-                            .frame(width: 8, height: 8)
-                        Text("Record")
+                } else {
+                    Text("Estimated 1RM by workout")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.textSecondary)
+                    Spacer(minLength: 8)
+                    if recordWorkoutID != nil {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(AppTheme.brandAccentForeground)
+                                .frame(width: 8, height: 8)
+                            Text("Record")
+                        }
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(AppTheme.textSecondary)
                     }
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(AppTheme.textSecondary)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: 20)
 
             chart
@@ -364,7 +369,7 @@ struct ExerciseHistoryEstimateChart: View {
     private func selectionText(_ point: ExerciseHistoryEstimatePoint) -> String {
         let value = weightUnit.recordNumber(fromCanonicalPounds: point.value, isEstimate: true)
         let weight = weightUnit.recordNumber(fromCanonicalPounds: point.record.weight, isEstimate: false)
-        return "\(WorkoutFormatters.historyDate(point.date)) · ≈\u{2009}\(value) from \(weight) × \(point.record.reps)"
+        return "\(WorkoutFormatters.historyDate(point.date)) · ≈\u{2009}\(value) \(weightUnit.shortUnitLabel) from \(weight) × \(point.record.reps)"
     }
 
     private var summary: String {
