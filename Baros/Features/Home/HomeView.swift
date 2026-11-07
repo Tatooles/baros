@@ -245,6 +245,8 @@ private struct HomeQuickStartSelection: Identifiable {
 /// actions, so Home's Start Workout matches the one a tap later.
 private struct HomePrimaryWorkoutButton: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Grows with text size so the main action stays a generous target.
+    @ScaledMetric(relativeTo: .title3) private var scaledMinHeight: CGFloat = 60
 
     let presentation: HomePrimaryWorkoutPresentation
     let action: () -> Void
@@ -275,7 +277,7 @@ private struct HomePrimaryWorkoutButton: View {
             .foregroundStyle(AppTheme.onBrandAccent)
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, minHeight: 60)
+            .frame(maxWidth: .infinity, minHeight: min(scaledMinHeight, 120))
             .background(AppTheme.brandAccentGradient, in: Capsule())
             .contentShape(Capsule())
             .accessibilityElement(children: .ignore)

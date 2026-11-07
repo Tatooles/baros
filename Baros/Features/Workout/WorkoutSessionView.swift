@@ -136,9 +136,6 @@ struct WorkoutSessionView: View {
                 }
                 .equatable()
             }
-            // With the keyboard up, a hard edge keeps the card footer from
-            // reading between the RPE and Done pills.
-            .scrollEdgeEffectStyle(focusedField == nil ? .soft : .hard, for: .bottom)
             .onScrollPhaseChange { _, phase in
                 if phase != .idle { engine.restTimer.collapseControls() }
             }
@@ -188,10 +185,9 @@ struct WorkoutSessionView: View {
                 }
             }
             // Replaces a `.keyboard` toolbar, whose full-width strip swallows taps
-            // between its buttons. As a safe-area bar, the system's keyboard
-            // reveal clears the bar, only the buttons themselves take touches,
-            // and the scroll-edge effect keeps sets from showing between them.
-            .safeAreaBar(edge: .bottom, spacing: 0) {
+            // between its buttons. As a safe-area inset, the system's keyboard
+            // reveal clears the bar, and only the buttons themselves take touches.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 if focusedField != nil, !isChildPresentationActive {
                     keyboardAccessory
                 }
@@ -364,7 +360,17 @@ struct WorkoutSessionView: View {
         }
         .font(.system(size: 16, weight: .semibold))
         .buttonStyle(.glass)
-        .padding(.horizontal, AppTheme.shellPadding)
+        .padding(4)
+        .background {
+            // One quiet band behind the pills keeps set text from reading
+            // between them. It ignores touches, so a row beneath it can still
+            // be tapped; only the buttons take touches.
+            Capsule()
+                .fill(.regularMaterial)
+                .opacity(rpeEditingSetID == nil ? 1 : 0)
+                .allowsHitTesting(false)
+        }
+        .padding(.horizontal, AppTheme.shellPadding - 4)
         // The keyboard reveal clears the text field, not its taller rounded
         // container. Transparent top room keeps the whole field off the buttons.
         .padding(.top, 20)

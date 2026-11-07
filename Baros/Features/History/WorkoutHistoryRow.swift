@@ -132,7 +132,14 @@ struct WorkoutHistoryRow: View {
     }
 
     private var historyListPresentation: some View {
-        HistoryOverviewRow(showsDivider: showsDivider) {
+        // Resolve the row's strings once: metrics walk every set, and both
+        // ViewThatFits candidates below would otherwise recompute them.
+        let summary = ListSummary(
+            session: session,
+            metrics: metrics,
+            spellsOutDate: dynamicTypeSize.isAccessibilitySize
+        )
+        return HistoryOverviewRow(showsDivider: showsDivider) {
             // Accessibility sizes give the text the full row width and spell
             // the date out with the metrics instead.
             if !dynamicTypeSize.isAccessibilitySize {
@@ -145,10 +152,10 @@ struct WorkoutHistoryRow: View {
                     .foregroundStyle(AppTheme.textPrimary)
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) {
-                        listMetrics(separated: true)
+                        listMetrics(summary, separated: true)
                     }
                     VStack(alignment: .leading, spacing: 2) {
-                        listMetrics(separated: false)
+                        listMetrics(summary, separated: false)
                     }
                 }
                 .font(.footnote.weight(.medium))
@@ -158,49 +165,57 @@ struct WorkoutHistoryRow: View {
         }
     }
 
-    /// The tile shows month and day; other years need the year spelled out.
-    private var listYearText: String? {
-        if dynamicTypeSize.isAccessibilitySize {
-            return WorkoutFormatters.compactDate(session.startedAt)
+    private struct ListSummary {
+        /// The tile shows month and day; other years need the year spelled out.
+        let leadingDate: String?
+        let duration: String
+        let exercises: String
+        let sets: String
+
+        init(session: WorkoutSession, metrics: WorkoutMetrics, spellsOutDate: Bool) {
+            if spellsOutDate {
+                leadingDate = WorkoutFormatters.compactDate(session.startedAt)
+            } else {
+                leadingDate = Calendar.current.isDate(session.startedAt, equalTo: .now, toGranularity: .year)
+                    ? nil
+                    : session.startedAt.formatted(.dateTime.year())
+            }
+            duration = AppTheme.formatDuration(metrics.durationSeconds)
+            exercises = WorkoutFormatters.exerciseCount(session.visibleExerciseCount)
+            sets = WorkoutFormatters.setCount(metrics.totalSetCount)
         }
-        let calendar = Calendar.current
-        guard calendar.component(.year, from: session.startedAt) != calendar.component(.year, from: .now) else {
-            return nil
-        }
-        return session.startedAt.formatted(.dateTime.year())
     }
 
     @ViewBuilder
-    private func listMetrics(separated: Bool) -> some View {
-        let duration = AppTheme.formatDuration(metrics.durationSeconds)
-        let items = [
-            listYearText,
-            duration,
-            WorkoutFormatters.exerciseCount(session.visibleExerciseCount),
-            WorkoutFormatters.setCount(metrics.totalSetCount),
-        ].compactMap { $0 }
-        ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-            if separated, index > 0 {
-                Text("·")
-                    .foregroundStyle(AppTheme.textTertiary)
-                    .accessibilityHidden(true)
-            }
-            if item == duration {
-                // Beside a date tile, a bare "20:00" reads as a time of day.
-                HStack(spacing: 3) {
-                    Image(systemName: "timer")
-                        .imageScale(.small)
-                        .accessibilityHidden(true)
-                    Text(item)
-                        .monospacedDigit()
-                }
-            } else {
-                Text(item)
-                    .monospacedDigit()
-            }
+    private func listMetrics(_ summary: ListSummary, separated: Bool) -> some View {
+        if let leadingDate = summary.leadingDate {
+            Text(leadingDate)
+            metricSeparator(separated)
         }
+        // Beside a date tile, a bare "20:00" reads as a time of day.
+        HStack(spacing: 3) {
+            Image(systemName: "timer")
+                .imageScale(.small)
+                .accessibilityHidden(true)
+            Text(summary.duration)
+                .monospacedDigit()
+        }
+        metricSeparator(separated)
+        Text(summary.exercises)
+            .monospacedDigit()
+        metricSeparator(separated)
+        Text(summary.sets)
+            .monospacedDigit()
     }
 
+    @ViewBuilder
+    private func metricSeparator(_ separated: Bool) -> some View {
+        if separated {
+            Text("\u{00B7}")
+                .foregroundStyle(AppTheme.textTertiary)
+                .accessibilityHidden(true)
+        }
+    }
 
     private var workoutSummaryContent: some View {
         VStack(alignment: .leading, spacing: 4) {

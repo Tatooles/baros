@@ -38,6 +38,7 @@ final class SupersetUITests: XCTestCase {
         XCTAssertEqual(partner.label, "Mark set complete")
         let tapped = app.buttons["SetCompletionButton-1-2"]
         for _ in 0..<4 where !tapped.isHittable { app.swipeUp() }
+        app.revealAboveWorkoutActions(tapped)
         tapped.tap()
         XCTAssertTrue(waitForLabel(tapped, "Mark set incomplete"))
         XCTAssertTrue(waitForLabel(partner, "Mark set incomplete"))
@@ -273,6 +274,7 @@ final class SupersetUITests: XCTestCase {
         let app = launch(seedsSupersets: true)
         app.buttons["ExerciseHeader-0"].tap()
         let draft = app.textFields["SetWeightField-2-0"]
+        app.revealAboveWorkoutActions(draft)
         draft.tap()
         draft.typeText("100")
         let check = app.buttons["SetCompletionButton-1-1"]
@@ -288,6 +290,7 @@ final class SupersetUITests: XCTestCase {
         let app = launch(seedsSupersets: true)
         app.buttons["ExerciseHeader-0"].tap()
         let reps = app.textFields["SetRepsField-2-0"]
+        app.revealAboveWorkoutActions(reps)
         reps.tap()
         reps.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4) + "1001")
         app.buttons["SetCompletionButton-1-0"].tap()

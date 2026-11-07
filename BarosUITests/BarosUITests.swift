@@ -13,7 +13,7 @@ final class BarosUITests: XCTestCase {
         app.launch()
         tapTab(.settings, in: app)
         let toggle = app.switches["SettingsRPEToggle"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        revealSettingsRow(toggle, in: app)
         XCTAssertEqual(toggle.value as? String, "1")
         toggle.switches.firstMatch.tap()
         XCTAssertEqual(toggle.value as? String, "0")
@@ -37,7 +37,7 @@ final class BarosUITests: XCTestCase {
         minimizeActiveWorkout(in: app)
         tapTab(.settings, in: app)
         let toggle = app.switches["SettingsRPEToggle"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        revealSettingsRow(toggle, in: app)
         XCTAssertEqual(toggle.value as? String, "0")
         toggle.switches.firstMatch.tap()
         XCTAssertEqual(toggle.value as? String, "1")
@@ -48,7 +48,7 @@ final class BarosUITests: XCTestCase {
         app.launchArguments.removeAll { $0 == "--uitest-enable-rpe" || $0 == "--uitest-reset-rpe" }
         app.launch()
         tapTab(.settings, in: app)
-        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        revealSettingsRow(toggle, in: app)
         XCTAssertEqual(toggle.value as? String, "1")
     }
 
@@ -2137,6 +2137,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(units.waitForExistence(timeout: 3))
         XCTAssertTrue(units.buttons["Pounds"].isSelected)
         XCTAssertEqual(app.switches["SettingsRestTimerToggle"].value as? String, "1")
+        revealSettingsRow(app.switches["SettingsRPEToggle"], in: app)
         XCTAssertEqual(app.switches["SettingsRPEToggle"].value as? String, "0")
     }
 
@@ -4403,6 +4404,7 @@ final class BarosUITests: XCTestCase {
 
         // A changed source must reach an already registered RPE callback.
         replaceText(in: secondReps, with: "10")
+        app.revealAboveWorkoutActions(thirdWeight)
         thirdWeight.tap()
         XCTAssertEqual(thirdReps.value as? String, "Suggested 10")
         enterRPEViaChips("8", in: app)
@@ -4569,12 +4571,21 @@ final class BarosUITests: XCTestCase {
 
         let weightField = app.textFields["SetWeightField-0-0"]
         XCTAssertTrue(weightField.waitForExistence(timeout: 3))
+        app.revealAboveWorkoutActions(weightField)
         weightField.tap()
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
 
-        XCTAssertTrue(app.buttons["ExerciseMenuButton-0"].waitForExistence(timeout: 3))
-        app.buttons["ExerciseMenuButton-0"].tap()
+        let menu = app.buttons["ExerciseMenuButton-0"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 3))
+        // The metrics header floats over the list; keep the menu below it.
+        let headerBottom = app.buttons["FinishWorkoutButton"].frame.maxY
+        if menu.frame.minY < headerBottom + 4 {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+            let distance = headerBottom - menu.frame.minY + 60
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
+        }
+        menu.tap()
         XCTAssertTrue(app.buttons["ExerciseHistoryButton-0"].waitForExistence(timeout: 3))
         app.buttons["ExerciseHistoryButton-0"].tap()
 
@@ -6249,6 +6260,8 @@ final class BarosUITests: XCTestCase {
             for setIndex in 0..<5 {
                 let field = app.textFields["SetWeightField-\(exerciseIndex)-\(setIndex)"]
                 guard field.exists, field.isHittable else { continue }
+                // A row under the bottom action bar is covered, not visible.
+                if let barTop = app.workoutActionBarTop, field.frame.maxY > barTop { continue }
                 if lowest.map({ field.frame.maxY > $0.frame.maxY }) ?? true {
                     lowest = field
                 }
@@ -6355,6 +6368,27 @@ final class BarosUITests: XCTestCase {
 }
 
 /// The app's permanent tabs as UI tests see them.
+extension XCUIApplication {
+    /// The top of the Active Workout's bottom chrome: the reserved action bar
+    /// (Edit stacks above Add Exercise at accessibility sizes) or, with the
+    /// keyboard up, its RPE/Done bar. Rows beneath it cannot take taps.
+    var workoutActionBarTop: CGFloat? {
+        let chrome = [buttons["ActiveWorkoutEditButton"], buttons["AddExerciseButton"], buttons["DismissKeyboardButton"]]
+        let tops = chrome.filter { $0.exists && $0.frame.minY > frame.midY * 0.9 }.map(\.frame.minY)
+        return tops.min().map { $0 - 8 }
+    }
+
+    /// Scrolls the workout until `element` sits above its bottom chrome.
+    func revealAboveWorkoutActions(_ element: XCUIElement) {
+        for _ in 0..<4 {
+            guard let top = workoutActionBarTop, element.exists, element.frame.maxY > top else { return }
+            let start = coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+            let distance = element.frame.maxY - top + 60
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -distance)))
+        }
+    }
+}
+
 enum UITestTab {
     case history
     case home
