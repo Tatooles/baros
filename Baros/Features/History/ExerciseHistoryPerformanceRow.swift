@@ -85,8 +85,13 @@ struct ExerciseHistoryPerformanceRow: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
+            // An explicit Rectangle: a bare style would fill the card's
+            // container shape and round every row's corners. The card's clip
+            // rounds only the first and last rows, so the highlight matches
+            // the row it marks.
             .background(
-                AppTheme.brandAccentMuted.opacity(isHighlighted ? 1 : 0)
+                AppTheme.brandAccentMuted.opacity(isHighlighted ? 1 : 0),
+                in: Rectangle()
             )
 
             if showsDivider {
