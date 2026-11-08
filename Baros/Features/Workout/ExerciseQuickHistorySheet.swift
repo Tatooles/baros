@@ -64,6 +64,16 @@ struct ExerciseQuickHistorySheet: View {
                             message: "Completed workouts for this exercise will appear here."
                         )
                     } else {
+                        // The set boxes show bare numbers; name the unit as
+                        // the Exercise History log does.
+                        Text("\(weightUnit.shortUnitLabel) × reps")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.horizontal, 4)
+                            .padding(.bottom, -6)
+                            .accessibilityHidden(true)
+
                         // The same rows as the Exercise History log.
                         SurfaceCard(padding: 0) {
                             VStack(spacing: 0) {
