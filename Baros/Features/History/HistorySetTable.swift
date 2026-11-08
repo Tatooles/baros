@@ -6,13 +6,15 @@ struct HistorySetTable: View {
     struct Row: Identifiable {
         let set: LoggedSet
         let number: Int
-        var recordKinds: [ExerciseHistoryRecordKind] = []
         let accessibilityIdentifier: String
         var id: UUID { self.set.id }
     }
 
     let rows: [Row]
     let weightUnit: MeasurementUnit
+    /// Sets from sibling tables on the same screen. Their values widen the
+    /// columns and reserve the RPE column so adjacent tables line up.
+    var alignedSets: [LoggedSet] = []
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .body) private var weightWidth = 64.0
@@ -36,12 +38,12 @@ struct HistorySetTable: View {
         // Measure once for the whole compact table, then reuse the same widths
         // for its header and every row. The stacked layout does not need them.
         let widths = (
-            weight: stacked ? weightWidth : fittedWidth(rows.map { weightText($0.set) }, minimum: weightWidth),
-            reps: stacked ? repsWidth : fittedWidth(rows.map { repsText($0.set) }, minimum: repsWidth)
+            weight: stacked ? weightWidth : fittedWidth(measuredSets.map { weightText($0) }, minimum: weightWidth),
+            reps: stacked ? repsWidth : fittedWidth(measuredSets.map { repsText($0) }, minimum: repsWidth)
         )
         return Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 0) {
             if stacked {
-                Text("\(weightUnit.fieldLabel) × REPS")
+                Text("\(weightUnit.shortUnitLabel.uppercased()) × REPS")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -50,8 +52,12 @@ struct HistorySetTable: View {
                 GridRow {
                     Text("SET").gridColumnAlignment(.leading)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        valueColumns(weight: weightUnit.fieldLabel, reps: "REPS", showsRecord: false, stacked: false, widths: widths)
-                        if hasRPE { rpePlaceholder }
+                        valueColumns(weight: weightUnit.shortUnitLabel.uppercased(), reps: "REPS", stacked: false, widths: widths)
+                        if hasRPE {
+                            Text("RPE")
+                                .fixedSize()
+                                .frame(width: rpeWidth, alignment: .trailing)
+                        }
                     }
                 }
                 .font(.caption)
@@ -109,15 +115,14 @@ struct HistorySetTable: View {
             valueColumns(
                 weight: weightText(row.set),
                 reps: repsText(row.set),
-                showsRecord: !row.recordKinds.isEmpty,
                 stacked: stacked,
                 widths: widths
             )
             .foregroundStyle(AppTheme.textPrimary)
             if let rpe = WorkoutNumericInputPolicy.validatedRPE(row.set.rpe) {
-                Text("@ \(WorkoutFormatters.number(rpe))")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(AppTheme.textTertiary)
+                Text(stacked ? "RPE \(WorkoutFormatters.number(rpe))" : WorkoutFormatters.number(rpe))
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(AppTheme.textSecondary)
                     .fixedSize()
                     .frame(width: stacked ? nil : rpeWidth, alignment: .trailing)
             } else if !stacked && hasRPE {
@@ -128,25 +133,20 @@ struct HistorySetTable: View {
 
     // Header and data use the same columns, including space reserved for record/RPE annotations.
     @ViewBuilder
-    private func valueColumns(weight: String, reps: String, showsRecord: Bool, stacked: Bool, widths: (weight: Double, reps: Double)) -> some View {
+    private func valueColumns(weight: String, reps: String, stacked: Bool, widths: (weight: Double, reps: Double)) -> some View {
         if stacked {
             let separator = Text(" × ").foregroundColor(AppTheme.textSecondary)
-            let trophy = showsRecord
-                ? Text(" \(Image(systemName: "trophy.fill"))")
-                    .font(.caption)
-                    .foregroundColor(AppTheme.brandAccentForeground)
-                : Text("")
             // A single text run can wrap between values instead of forcing the
             // entire weight × reps expression beyond the block's available width.
-            Text("\(weight)\(separator)\(reps)\(trophy)")
+            Text("\(weight)\(separator)\(reps)")
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            compactValueColumns(weight: weight, reps: reps, showsRecord: showsRecord, widths: widths)
+            compactValueColumns(weight: weight, reps: reps, widths: widths)
         }
     }
 
-    private func compactValueColumns(weight: String, reps: String, showsRecord: Bool, widths: (weight: Double, reps: Double)) -> some View {
+    private func compactValueColumns(weight: String, reps: String, widths: (weight: Double, reps: Double)) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(weight)
                 .fixedSize()
@@ -157,11 +157,6 @@ struct HistorySetTable: View {
             Text(reps)
                 .fixedSize()
                 .frame(width: widths.reps, alignment: .trailing)
-            Image(systemName: "trophy.fill")
-                .font(.caption)
-                .foregroundStyle(AppTheme.brandAccentForeground)
-                .opacity(showsRecord ? 1 : 0)
-                .accessibilityHidden(true)
         }
     }
 
@@ -172,8 +167,12 @@ struct HistorySetTable: View {
         return max(minimum, values.map { ceil(($0 as NSString).size(withAttributes: [.font: font]).width) }.max() ?? 0)
     }
 
+    private var measuredSets: [LoggedSet] {
+        rows.map(\.set) + alignedSets
+    }
+
     private var hasRPE: Bool {
-        rows.contains { WorkoutNumericInputPolicy.validatedRPE($0.set.rpe) != nil }
+        measuredSets.contains { WorkoutNumericInputPolicy.validatedRPE($0.rpe) != nil }
     }
 
     private var rpePlaceholder: some View {
@@ -181,23 +180,39 @@ struct HistorySetTable: View {
     }
 
     private func weightText(_ set: LoggedSet) -> String {
-        weightUnit.displayWeight(fromCanonicalPounds: WorkoutNumericInputPolicy.validatedWeight(set.weight))
-            .map(WorkoutFormatters.number) ?? "–"
+        Self.weightText(set, unit: weightUnit)
     }
 
     private func repsText(_ set: LoggedSet) -> String {
-        WorkoutNumericInputPolicy.validatedReps(set.reps).map(String.init) ?? "–"
+        Self.repsText(set)
     }
 
     private func accessibilityLabel(_ row: Row) -> String {
-        let weight = weightUnit.displayWeight(
-            fromCanonicalPounds: WorkoutNumericInputPolicy.validatedWeight(row.set.weight)
-        ).map { "\(WorkoutFormatters.number($0)) \(weightUnit.displayName.lowercased())" } ?? "no weight"
-        let reps = WorkoutNumericInputPolicy.validatedReps(row.set.reps)
+        Self.accessibilityLabel(set: row.set, number: row.number, recordKinds: [], unit: weightUnit)
+    }
+
+    // Visible values always group thousands, matching Records.
+    static func weightText(_ set: LoggedSet, unit: MeasurementUnit) -> String {
+        unit.displayWeight(fromCanonicalPounds: WorkoutNumericInputPolicy.validatedWeight(set.weight))
+            .map(WorkoutFormatters.groupedNumber) ?? "–"
+    }
+
+    static func repsText(_ set: LoggedSet) -> String {
+        WorkoutNumericInputPolicy.validatedReps(set.reps).map { WorkoutFormatters.groupedNumber(Double($0)) } ?? "–"
+    }
+
+    /// The complete spoken set, shared by tables and compact set tokens.
+    static func accessibilityLabel(
+        set: LoggedSet, number: Int, recordKinds: [ExerciseHistoryRecordKind], unit: MeasurementUnit
+    ) -> String {
+        let weight = unit.displayWeight(
+            fromCanonicalPounds: WorkoutNumericInputPolicy.validatedWeight(set.weight)
+        ).map { "\(WorkoutFormatters.number($0)) \(unit.displayName.lowercased())" } ?? "no weight"
+        let reps = WorkoutNumericInputPolicy.validatedReps(set.reps)
             .map { "\($0) \($0 == 1 ? "rep" : "reps")" } ?? "no reps"
-        let rpe = WorkoutNumericInputPolicy.validatedRPE(row.set.rpe)
+        let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe)
             .map { ", RPE \(WorkoutFormatters.number($0))" } ?? ""
-        return (["Set \(row.number), \(weight), \(reps)\(rpe)"] + row.recordKinds.map(\.title))
+        return (["Set \(number), \(weight), \(reps)\(rpe)"] + recordKinds.map(\.title))
             .joined(separator: ", ")
     }
 }

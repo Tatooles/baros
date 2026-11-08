@@ -787,7 +787,7 @@ final class BarosUITests: XCTestCase {
         let row = app.buttons["ExerciseHistoryButton-0"]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         XCTAssertTrue(row.isHittable)
-        for labelFragment in ["Back Squat", "Barbell", "Quads", "Last:", "50 workouts"] {
+        for labelFragment in ["Back Squat", "Barbell", "Quads", "50 workouts · Last "] {
             XCTAssertTrue(row.label.contains(labelFragment))
         }
 
@@ -1952,13 +1952,11 @@ final class BarosUITests: XCTestCase {
             exercise.tap()
             let estimate = app.descendants(matching: .any)["ExerciseRecord-estimated1RM"]
             XCTAssertTrue(estimate.waitForExistence(timeout: 5))
-            XCTAssertTrue(estimate.label.contains("215.83 lbs"))
-            if !accessible {
-                let heaviest = app.descendants(matching: .any)["ExerciseRecord-heaviestRep"]
-                XCTAssertEqual(heaviest.frame.width, estimate.frame.width, accuracy: 1)
-                XCTAssertEqual(heaviest.frame.height, estimate.frame.height, accuracy: 1)
-                XCTAssertEqual(heaviest.frame.minY, estimate.frame.minY, accuracy: 1)
-            }
+            // 185 × (1 + 5/30) = 215.83, shown as a whole pound so it doesn't read as exact.
+            XCTAssertTrue(estimate.label.contains("about 216 pounds"), estimate.label)
+            let heaviest = app.descendants(matching: .any)["ExerciseRecord-heaviestRep"]
+            XCTAssertEqual(heaviest.frame.width, estimate.frame.width, accuracy: 1)
+            XCTAssertGreaterThanOrEqual(estimate.frame.minY, heaviest.frame.maxY - 1)
             let sources = app.buttons.matching(NSPredicate(
                 format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-"
             ))
@@ -4627,7 +4625,7 @@ final class BarosUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
         XCTAssertFalse(keyboard.exists)
-        XCTAssertTrue(historyHeading.label.contains("· 1 workout · 1 set"))
+        XCTAssertTrue(historyHeading.label.contains("1 workout · Last "), historyHeading.label)
         XCTAssertTrue(app.buttons["Done"].exists)
         XCTAssertTrue(app.buttons["Full History"].exists)
         XCTAssertFalse(app.staticTexts["QuickHistoryLimitFooter"].exists)
@@ -4651,10 +4649,8 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["ExerciseHistoryNoteLabel"].exists)
         XCTAssertEqual(noteText.label, "Exercise note")
         XCTAssertEqual(noteText.value as? String, "Pause at the bottom\nKeep wrists stacked")
-        XCTAssertEqual(setLabel.label, "Set 1, 185 pounds, 5 reps, RPE 8")
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(
-            format: "identifier BEGINSWITH %@", "ExerciseHistorySessionDate-"
-        )).firstMatch.exists)
+        // The only logged set holds both records, marked as in Exercise History.
+        XCTAssertEqual(setLabel.label, "Set 1, 185 pounds, 5 reps, RPE 8, Heaviest Rep, Estimated 1RM")
         for _ in 0..<8 where !noteText.isHittable { app.swipeUp() }
         XCTAssertTrue(noteText.isHittable)
         XCTAssertGreaterThanOrEqual(noteText.frame.minX, historyHeading.frame.minX)
@@ -4682,8 +4678,9 @@ final class BarosUITests: XCTestCase {
             app.buttons["ExerciseHistoryButton-0"].tap()
             let heading = app.descendants(matching: .any)["QuickExerciseHistoryHeading"]
             XCTAssertTrue(heading.waitForExistence(timeout: 5))
-            let date = app.staticTexts.matching(NSPredicate(
-                format: "identifier BEGINSWITH %@", "ExerciseHistorySessionDate-"
+            // The workout row's header carries the date tile.
+            let date = app.buttons.matching(NSPredicate(
+                format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-"
             )).firstMatch
             let set = app.descendants(matching: .any).matching(NSPredicate(
                 format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"
@@ -4696,7 +4693,7 @@ final class BarosUITests: XCTestCase {
             XCTAssertLessThan(heading.frame.maxY, date.frame.minY)
             XCTAssertLessThan(date.frame.maxY, set.frame.minY)
             XCTAssertLessThan(set.frame.maxY, app.frame.maxY - 34)
-            XCTAssertEqual(set.label, "Set 1, 185 pounds, 5 reps, RPE 8")
+            XCTAssertEqual(set.label, "Set 1, 185 pounds, 5 reps, RPE 8, Heaviest Rep, Estimated 1RM")
             XCTAssertFalse(app.buttons["AboutStrengthRecordsButton"].exists)
             let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             screenshot.name = "quick-history-medium-\(appearance)"
@@ -4809,7 +4806,7 @@ final class BarosUITests: XCTestCase {
             .firstMatch
         XCTAssertTrue(historyHeading.waitForExistence(timeout: 3))
         guard historyHeading.exists else { return }
-        XCTAssertTrue(historyHeading.label.contains("· 1 workout · 1 set"))
+        XCTAssertTrue(historyHeading.label.contains("1 workout · Last "), historyHeading.label)
     }
 
     @MainActor
@@ -4823,8 +4820,8 @@ final class BarosUITests: XCTestCase {
 
         let historyRow = app.buttons["ExerciseHistoryButton-0"]
         XCTAssertTrue(historyRow.waitForExistence(timeout: 3))
-        XCTAssertTrue(historyRow.label.contains("Last: "))
-        XCTAssertTrue(historyRow.label.contains("· 1 workout"))
+        // Same summary as the Exercise History heading.
+        XCTAssertTrue(historyRow.label.contains("1 workout · Last "), historyRow.label)
         XCTAssertFalse(historyRow.label.contains("x1"))
     }
 

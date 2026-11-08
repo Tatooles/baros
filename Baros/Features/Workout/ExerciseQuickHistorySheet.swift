@@ -5,6 +5,7 @@ struct ExerciseQuickHistorySheet: View {
     let loggedExercise: LoggedExercise
     let openFullHistory: (ExerciseHistoryRoute) -> Void
     @State private var selectedWorkoutID: UUID?
+    @AccessibilityFocusState private var focusedWorkoutID: UUID?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
@@ -32,14 +33,19 @@ struct ExerciseQuickHistorySheet: View {
             ownerTokenIdentifier: ownerTokenIdentifier
         )
         let summary = historySnapshot.resolvedHistory.summary(for: historyRoute)
-        let recentGroups = summary.map {
-            ExerciseHistorySessionGroup.recentGroups(
+        let allGroups = summary.map {
+            ExerciseHistorySessionGroup.makeGroups(
                 from: sessions,
                 matching: $0,
-                ownerTokenIdentifier: ownerTokenIdentifier,
-                limit: 3
+                ownerTokenIdentifier: ownerTokenIdentifier
             )
         } ?? []
+        let recentGroups = Array(allGroups.prefix(3))
+        // Records come from the full history, so a recent set is marked only
+        // when it is the all-time record, as in Exercise History.
+        let records = summary.flatMap {
+            ExerciseHistoryRecords.make(from: allGroups, equipmentRaw: $0.equipmentRaw)
+        }
 
         NavigationStack {
             ScrollView(showsIndicators: false) {
@@ -47,7 +53,7 @@ struct ExerciseQuickHistorySheet: View {
                     ExerciseHistoryHeading(
                         name: loggedExercise.exerciseSnapshotName,
                         metadata: loggedExercise.metadataDisplayText,
-                        performanceSummary: summary?.historyDetailSummaryLabel,
+                        performanceSummary: summary?.exerciseHistoryHeadingLabel,
                         isCompact: true
                     )
                     .accessibilityIdentifier("QuickExerciseHistoryHeading")
@@ -58,16 +64,32 @@ struct ExerciseQuickHistorySheet: View {
                             message: "Completed workouts for this exercise will appear here."
                         )
                     } else {
-                        VStack(spacing: 12) {
-                            ForEach(recentGroups) { group in
-                                ExerciseHistorySessionGroupCard(
-                                    group: group,
-                                    headingIdentity: ExerciseHistoryDisplayIdentity(
-                                        loggedExercise: loggedExercise
-                                    ),
-                                    weightUnit: weightUnit,
-                                    openWorkout: { selectedWorkoutID = group.session.id }
-                                )
+                        // The set boxes show bare numbers; name the unit as
+                        // the Exercise History log does.
+                        Text("\(weightUnit.shortUnitLabel) × reps")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.horizontal, 4)
+                            .padding(.bottom, -6)
+                            .accessibilityHidden(true)
+
+                        // The same rows as the Exercise History log.
+                        SurfaceCard(padding: 0) {
+                            VStack(spacing: 0) {
+                                ForEach(Array(recentGroups.enumerated()), id: \.element.id) { index, group in
+                                    ExerciseHistoryPerformanceRow(
+                                        group: group,
+                                        headingIdentity: ExerciseHistoryDisplayIdentity(
+                                            loggedExercise: loggedExercise
+                                        ),
+                                        weightUnit: weightUnit,
+                                        records: records,
+                                        showsDivider: index < recentGroups.count - 1,
+                                        accessibilityFocus: $focusedWorkoutID,
+                                        openWorkout: { selectedWorkoutID = group.session.id }
+                                    )
+                                }
                             }
                         }
 

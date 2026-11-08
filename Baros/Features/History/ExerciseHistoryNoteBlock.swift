@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ExerciseHistoryNoteBlock: View {
     let note: String
+    var topPadding: CGFloat = 12
 
     var body: some View {
         if let displayNote = Self.displayNote(from: note) {
@@ -13,7 +14,7 @@ struct ExerciseHistoryNoteBlock: View {
                 .accessibilityValue(displayNote)
                 .accessibilityIdentifier("ExerciseHistoryNoteText")
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 12)
+                .padding(.top, topPadding)
         }
     }
 

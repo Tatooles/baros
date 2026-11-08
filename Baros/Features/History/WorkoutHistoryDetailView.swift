@@ -3,6 +3,8 @@ import SwiftUI
 
 struct WorkoutHistoryDestinationView: View {
     let sessionID: UUID
+    /// Only History's navigation stack can push Exercise History routes.
+    var linksExercises = false
 
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Query(
@@ -22,7 +24,7 @@ struct WorkoutHistoryDestinationView: View {
 
     var body: some View {
         if let session {
-            WorkoutHistoryDetailView(session: session)
+            WorkoutHistoryDetailView(session: session, linksExercises: linksExercises)
         } else {
             EmptyStateView(
                 title: "Workout Unavailable",
@@ -39,6 +41,7 @@ struct WorkoutHistoryDetailView: View {
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
     let session: WorkoutSession
+    var linksExercises = false
     @State private var deleteErrorMessage: String?
     @State private var showsDeleteConfirmation = false
     @State private var editPresentation: CompletedWorkoutEditPresentation?
@@ -257,10 +260,7 @@ struct WorkoutHistoryDetailView: View {
             // title's baseline instead of setting the row height.
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(loggedExercise.exerciseSnapshotName)
-                        .font(.title3.bold())
-                        .foregroundStyle(AppTheme.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    exerciseTitle(loggedExercise)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     HistorySetCountPill(count: loggedExercise.sortedSets.count)
                         .accessibilityIdentifier("WorkoutHistorySetCount-\(loggedExercise.orderIndex)")
@@ -278,12 +278,46 @@ struct WorkoutHistoryDetailView: View {
                     number: set.orderIndex + 1,
                     accessibilityIdentifier: "WorkoutHistorySetSummary-\(loggedExercise.orderIndex)-\(set.orderIndex)"
                 )
-            }, weightUnit: weightUnit)
+            }, weightUnit: weightUnit, alignedSets: allSets)
 
             ExerciseHistoryNoteBlock(note: loggedExercise.notes)
         }
         .padding(16)
         .background(AppTheme.groupedSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+extension WorkoutHistoryDetailView {
+    /// Every set in the workout, so each exercise's table shares one column grid.
+    fileprivate var allSets: [LoggedSet] {
+        session.sortedLoggedExercises.flatMap(\.sortedSets)
+    }
+
+    /// In History, the exercise name opens that exercise's history.
+    @ViewBuilder
+    fileprivate func exerciseTitle(_ loggedExercise: LoggedExercise) -> some View {
+        let title = Text(loggedExercise.exerciseSnapshotName)
+            .font(.title3.bold())
+            .foregroundStyle(AppTheme.textPrimary)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+        if linksExercises, loggedExercise.sortedSets.contains(where: \.isCompleted) {
+            NavigationLink(value: HistoryRoute.exercise(ExerciseHistoryRoute(loggedExercise: loggedExercise))) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    title
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(AppTheme.textTertiary)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens exercise history.")
+            .accessibilityIdentifier("WorkoutHistoryExerciseLink-\(loggedExercise.orderIndex)")
+        } else {
+            title
+        }
     }
 }
 
