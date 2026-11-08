@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import SwiftUI
 import XCTest
 @testable import Baros
 
@@ -495,4 +496,44 @@ final class HomeRingModelTests: XCTestCase {
         }
     }
     #endif
+}
+
+final class HomeLayoutTests: XCTestCase {
+    func testPortraitIPhoneKeepsTheSingleColumnAndWidthBasedRing() {
+        let layout = HomeLayout(size: CGSize(width: 402, height: 780))
+
+        XCTAssertFalse(layout.isWide)
+        XCTAssertEqual(layout.ringDiameter, 321.6, accuracy: 0.01)
+    }
+
+    func testIPhoneDuoOuterDisplayKeepsTheSingleColumn() {
+        let layout = HomeLayout(size: CGSize(width: 466, height: 610))
+
+        XCTAssertFalse(layout.isWide)
+        XCTAssertEqual(layout.ringDiameter, 350)
+    }
+
+    func testIPhoneDuoInnerDisplaySplitsTheColumnsAtTheFold() {
+        // 951 pt window; the side tab rail takes about 83 pt of trailing safe area.
+        let layout = HomeLayout(size: CGSize(width: 868, height: 630),
+                                safeAreaInsets: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 83))
+
+        XCTAssertTrue(layout.isWide)
+        // Window midpoint 475.5, minus 24 pt padding and half the 48 pt gap.
+        XCTAssertEqual(layout.leadingColumnWidth, 427.5, accuracy: 0.01)
+        XCTAssertEqual(layout.ringDiameter, 342, accuracy: 0.01)
+    }
+
+    func testShortWideWindowFitsTheRingToTheHeight() {
+        let layout = HomeLayout(size: CGSize(width: 900, height: 480))
+
+        XCTAssertTrue(layout.isWide)
+        XCTAssertEqual(layout.ringDiameter, 280)
+    }
+
+    func testNarrowLandscapeWindowStaysSingleColumn() {
+        let layout = HomeLayout(size: CGSize(width: 560, height: 400))
+
+        XCTAssertFalse(layout.isWide)
+    }
 }
