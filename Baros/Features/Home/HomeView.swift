@@ -198,11 +198,19 @@ struct HomeView: View {
     /// system reports one (iPhone Duo, iOS 27.1 and later). Inactive regions count too, so
     /// the columns stay put whether the display is half-open or flat.
     private static func foldMidX(in geometry: GeometryProxy) -> CGFloat? {
+        // The fold API ships in newer SDKs (it is in the iOS 27.2 SDK's SwiftUI, 8.1.13);
+        // builds with older Xcode versions, such as CI's, use the window midpoint.
+        #if canImport(SwiftUICore, _version: 8.1.13)
         guard #available(iOS 27.1, *) else { return nil }
-        return geometry.reservedRegions(kind: .division, options: .includeInactive)
-            .map(\.frame)
-            .first { $0.height > $0.width && $0.midX > 0 && $0.midX < geometry.size.width }?
-            .midX
+        let width = geometry.size.width
+        for region in geometry.reservedRegions(kind: .division, options: .includeInactive) {
+            let frame = region.frame
+            if frame.height > frame.width, frame.midX > 0, frame.midX < width { return frame.midX }
+        }
+        return nil
+        #else
+        return nil
+        #endif
     }
 
     private func ringWorkouts(content: HomeContent, now: Date) -> [RingWorkout] {
