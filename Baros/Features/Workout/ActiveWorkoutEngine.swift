@@ -225,6 +225,7 @@ final class ActiveWorkoutEngine {
             startedAt: now,
             status: .active,
             source: .template,
+            sourceTemplateID: template.id,
             createdAt: now,
             updatedAt: now,
             syncOwnerTokenIdentifier: ownerTokenIdentifier

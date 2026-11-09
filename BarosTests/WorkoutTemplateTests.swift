@@ -6,6 +6,9 @@ private let owner = "issuer|owner_a"
 
 @MainActor
 final class WorkoutTemplateTests: XCTestCase {
+    /// Keeps helper-made containers alive for the test's duration.
+    private var retainedContainers: [ModelContainer] = []
+
     // MARK: - Mutations
 
     func testCreateRecordsAnOwnedCreateAndNormalizesGrouping() throws {
@@ -276,6 +279,7 @@ final class WorkoutTemplateTests: XCTestCase {
         XCTAssertEqual(session.title, "Upper Day")
         XCTAssertEqual(session.source, .template)
         XCTAssertNil(session.sourceSessionID)
+        XCTAssertEqual(session.sourceTemplateID, template.id)
         XCTAssertEqual(session.status, .active)
         let exercises = session.sortedLoggedExercises
         XCTAssertEqual(exercises.map(\.exerciseSnapshotName), ["Bench Press", "Row", "Curl"])
@@ -599,7 +603,113 @@ final class WorkoutTemplateTests: XCTestCase {
         XCTAssertTrue(draft.canSave)
     }
 
+    // MARK: - Finish sheet template offer
+
+    func testFinishOffersNothingForAnUnchangedTemplateWorkout() throws {
+        let (context, template) = try makeSupersetTemplate()
+        let session = try ActiveWorkoutEngine().startWorkout(fromTemplate: template, ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertEqual(offer(for: session, in: context), FinishTemplateOffer.none)
+    }
+
+    func testFinishOffersUpdateWhenATemplateWorkoutChanged() throws {
+        let (context, template) = try makeSupersetTemplate()
+        let engine = ActiveWorkoutEngine()
+
+        // Dropped an exercise.
+        let dropped = try engine.startWorkout(fromTemplate: template, ownerTokenIdentifier: owner, context: context)
+        dropped.sortedLoggedExercises[0].deletedAt = .now
+        XCTAssertEqual(offer(for: dropped, in: context), .updateOrSaveAsNew(template))
+        try engine.discardWorkout(dropped, context: context)
+
+        // Same exercises, superset split up.
+        let ungrouped = try engine.startWorkout(fromTemplate: template, ownerTokenIdentifier: owner, context: context)
+        ungrouped.sortedLoggedExercises.forEach { $0.supersetGroupID = nil }
+        XCTAssertEqual(offer(for: ungrouped, in: context), .updateOrSaveAsNew(template))
+        try engine.discardWorkout(ungrouped, context: context)
+
+        // Same exercises, new order.
+        let reordered = try engine.startWorkout(fromTemplate: template, ownerTokenIdentifier: owner, context: context)
+        let exercises = reordered.sortedLoggedExercises
+        exercises[0].orderIndex = 5
+        XCTAssertEqual(offer(for: reordered, in: context), .updateOrSaveAsNew(template))
+    }
+
+    func testFinishOffersTheSwitchWithoutALiveSourceTemplate() throws {
+        let (context, template) = try makeSupersetTemplate()
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startWorkout(fromTemplate: template, ownerTokenIdentifier: owner, context: context)
+        session.sortedLoggedExercises[0].deletedAt = .now
+
+        session.sourceTemplateID = nil
+        XCTAssertEqual(offer(for: session, in: context), .saveAsNew, "a template workout from before the link")
+
+        session.sourceTemplateID = template.id
+        template.deletedAt = .now
+        XCTAssertEqual(offer(for: session, in: context), .saveAsNew, "its template was deleted")
+    }
+
+    func testFinishOffersTheSwitchForOtherWorkoutsWithExercises() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = WorkoutSession(title: "Push", startedAt: .now, status: .active, source: .blank, syncOwnerTokenIdentifier: owner)
+        context.insert(session)
+        XCTAssertEqual(offer(for: session, in: context), FinishTemplateOffer.none, "no exercises")
+
+        let bench = makeExercise("Bench Press", owner: owner)
+        context.insert(bench)
+        let loggedExercise = LoggedExercise(orderIndex: 0, exercise: bench)
+        loggedExercise.session = session
+        session.loggedExercises.append(loggedExercise)
+        context.insert(loggedExercise)
+        XCTAssertEqual(offer(for: session, in: context), .saveAsNew)
+    }
+
+    func testSameExercisesMatchADeletedLibraryExerciseByName() {
+        let id = UUID()
+        let template = [WorkoutTemplateEntry(
+            exerciseID: id, exerciseSnapshotName: "Hack Squat",
+            exerciseSnapshotEquipmentRaw: "", exerciseSnapshotPrimaryMuscleGroupRaw: ""
+        )]
+        let workout = [WorkoutTemplateEntry(
+            exerciseID: nil, exerciseSnapshotName: "hack squat",
+            exerciseSnapshotEquipmentRaw: "", exerciseSnapshotPrimaryMuscleGroupRaw: ""
+        )]
+        XCTAssertTrue(WorkoutTemplateEntry.haveSameExercises(template, workout))
+        var swapped = template
+        swapped[0].exerciseID = UUID()
+        XCTAssertFalse(WorkoutTemplateEntry.haveSameExercises(template, swapped))
+    }
+
     // MARK: - Helpers
+
+    /// Bench, then Row and Curl in a superset.
+    private func makeSupersetTemplate() throws -> (ModelContext, WorkoutTemplate) {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        retainedContainers.append(container)
+        let bench = makeExercise("Bench Press", owner: owner)
+        let row = makeExercise("Row", owner: owner)
+        let curl = makeExercise("Curl", owner: owner)
+        [bench, row, curl].forEach(context.insert)
+        let group = UUID()
+        let template = WorkoutTemplate(
+            name: "Upper Day",
+            entries: [
+                WorkoutTemplateEntry(exercise: bench),
+                WorkoutTemplateEntry(exercise: row, supersetGroupID: group),
+                WorkoutTemplateEntry(exercise: curl, supersetGroupID: group),
+            ],
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(template)
+        return (context, template)
+    }
+
+    private func offer(for session: WorkoutSession, in context: ModelContext) -> FinishTemplateOffer {
+        let templates = (try? context.fetch(FetchDescriptor<WorkoutTemplate>())) ?? []
+        return FinishTemplateOffer(session: session, templates: templates, ownerTokenIdentifier: owner)
+    }
 
     private func makeExercise(_ name: String, owner: String?, seedIdentifier: String? = nil) -> Exercise {
         Exercise(

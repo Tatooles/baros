@@ -121,3 +121,59 @@ struct NewTemplateFromWorkout: Identifiable {
         draft = WorkoutTemplateDraft(name: session.title, entries: WorkoutTemplateEntry.entries(copying: session))
     }
 }
+
+/// What the Finish sheet offers for keeping the workout as a template.
+enum FinishTemplateOffer: Equatable {
+    /// No exercises, or a template workout that still matches its template.
+    case none
+    /// The Save as Template switch.
+    case saveAsNew
+    /// The Template menu: update the workout's template, or save a new one.
+    case updateOrSaveAsNew(WorkoutTemplate)
+
+    init(session: WorkoutSession, templates: [WorkoutTemplate], ownerTokenIdentifier: String?) {
+        guard session.visibleExerciseCount > 0 else {
+            self = .none
+            return
+        }
+        // Blank and past-workout starts, template workouts from before the
+        // link, and ones whose template has since been deleted.
+        guard session.source == .template,
+              let sourceTemplateID = session.sourceTemplateID,
+              let template = templates.first(where: {
+                  $0.id == sourceTemplateID && !$0.isDeleted && $0.isVisible(to: ownerTokenIdentifier)
+              })
+        else {
+            self = .saveAsNew
+            return
+        }
+        let workoutEntries = WorkoutTemplateEntry.entries(copying: session)
+        self = WorkoutTemplateEntry.haveSameExercises(template.entries, workoutEntries)
+            ? .none
+            : .updateOrSaveAsNew(template)
+    }
+}
+
+extension WorkoutTemplateEntry {
+    /// Whether two lists hold the same exercises in the same order and
+    /// supersets. Entry and group ids don't count; copies get fresh ones.
+    static func haveSameExercises(_ lhs: [Self], _ rhs: [Self]) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+        let lhsGroups = lhs.map(\.supersetGroupID)
+        let rhsGroups = rhs.map(\.supersetGroupID)
+        return lhs.indices.allSatisfy { index in
+            lhs[index].isSameExercise(as: rhs[index])
+                && SupersetGrouping.areGrouped(lhsGroups, index, index - 1)
+                    == SupersetGrouping.areGrouped(rhsGroups, index, index - 1)
+        }
+    }
+
+    /// By library id when both have one; by name when an exercise was
+    /// deleted from the library and only its name is left.
+    private func isSameExercise(as other: Self) -> Bool {
+        if let exerciseID, let otherID = other.exerciseID {
+            return exerciseID == otherID
+        }
+        return exerciseSnapshotName.caseInsensitiveCompare(other.exerciseSnapshotName) == .orderedSame
+    }
+}

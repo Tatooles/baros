@@ -13,6 +13,9 @@ final class WorkoutSession: Identifiable {
     var statusRaw: String
     var sourceRaw: String
     var sourceSessionID: UUID?
+    /// The template a workout started from. Nil for other sources and for
+    /// template workouts from before the link existed.
+    var sourceTemplateID: UUID? = nil
     var createdAt: Date
     var updatedAt: Date
     var deletedAt: Date?
@@ -30,6 +33,7 @@ final class WorkoutSession: Identifiable {
         status: WorkoutSessionStatus,
         source: WorkoutSource,
         sourceSessionID: UUID? = nil,
+        sourceTemplateID: UUID? = nil,
         referenceNotes: String? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
@@ -48,6 +52,7 @@ final class WorkoutSession: Identifiable {
         self.statusRaw = status.rawValue
         self.sourceRaw = source.rawValue
         self.sourceSessionID = sourceSessionID
+        self.sourceTemplateID = sourceTemplateID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

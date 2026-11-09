@@ -178,6 +178,7 @@ type WorkoutSessionRecord = {
   sourceRaw: "blank" | "pastWorkout" | "template";
   sourceSessionID: string | null;
   healthLinkID: string | null;
+  sourceTemplateID?: string | null;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
@@ -2446,3 +2447,19 @@ type WorkoutTemplateRecord = {
   updatedAt: number;
   deletedAt: number | null;
 };
+
+test("a workout keeps its template link when an older build edits it", async () => {
+  const t = testDb();
+  const client = t.withIdentity(userA);
+  const record = workoutSessionRecord({ sourceRaw: "template" });
+  await client.mutation(api.sync.upsertWorkoutSession, {
+    record: { ...record, sourceTemplateID: "template-1" },
+  });
+  await client.mutation(api.sync.upsertWorkoutSession, {
+    record: { ...record, title: "Renamed by an older build", updatedAt: 3 },
+  });
+  const stored = await t.run(async ctx =>
+    await ctx.db.query("workoutSessions").unique());
+  expect(stored?.title).toBe("Renamed by an older build");
+  expect(stored?.sourceTemplateID).toBe("template-1");
+});

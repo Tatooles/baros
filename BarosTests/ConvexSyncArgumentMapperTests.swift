@@ -73,13 +73,15 @@ final class ConvexSyncArgumentMapperTests: XCTestCase {
             statusRaw: "completed",
             sourceRaw: "pastWorkout",
             sourceSessionID: "source-1",
-            healthLinkID: nil
+            healthLinkID: nil,
+            sourceTemplateID: "template-1"
         )
 
         let record = ConvexSyncArgumentMapper.workoutSessionRecord(payload)
 
         XCTAssertEqual(try XCTUnwrap(record["durationSeconds"] as? Double), 60)
         XCTAssertEqual(try XCTUnwrap(record["sourceSessionID"] as? String), "source-1")
+        XCTAssertEqual(try XCTUnwrap(record["sourceTemplateID"] as? String), "template-1")
         XCTAssertNil(record["healthLinkID"]!)
     }
 

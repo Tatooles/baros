@@ -111,6 +111,7 @@ final class SyncPayloadMappingTests: XCTestCase {
         XCTAssertEqual(payload.sourceRaw, "pastWorkout")
         XCTAssertEqual(payload.sourceSessionID, sourceID.uuidString.lowercased())
         XCTAssertEqual(payload.healthLinkID, healthID.uuidString.lowercased())
+        XCTAssertNil(payload.sourceTemplateID)
         XCTAssertEqual(payload.createdAt, 90)
         XCTAssertEqual(payload.updatedAt, 230)
         XCTAssertNil(payload.deletedAt)

@@ -1251,6 +1251,7 @@ final class SyncCoordinator {
                     status: WorkoutSessionStatus(rawValue: record.statusRaw) ?? .completed,
                     source: WorkoutSource(rawValue: record.sourceRaw) ?? .blank,
                     sourceSessionID: record.sourceSessionID.flatMap(UUID.init(uuidString:)),
+                    sourceTemplateID: record.sourceTemplateID.flatMap(UUID.init(uuidString:)),
                     referenceNotes: record.referenceNotes,
                     createdAt: Date(timeIntervalSince1970: record.createdAt),
                     updatedAt: incomingUpdatedAt,
@@ -1280,6 +1281,7 @@ final class SyncCoordinator {
         session.statusRaw = record.statusRaw
         session.sourceRaw = record.sourceRaw
         session.sourceSessionID = record.sourceSessionID.flatMap(UUID.init(uuidString:))
+        session.sourceTemplateID = record.sourceTemplateID.flatMap(UUID.init(uuidString:))
         session.createdAt = Date(timeIntervalSince1970: record.createdAt)
         session.updatedAt = Date(timeIntervalSince1970: record.updatedAt)
         session.deletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))

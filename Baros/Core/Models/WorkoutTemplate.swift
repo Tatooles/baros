@@ -1,8 +1,8 @@
 import Foundation
 import SwiftData
 
-/// A named, ordered list of exercises to start a workout from. Workouts never
-/// change their template; only editing the template does.
+/// A named, ordered list of exercises to start a workout from. A workout
+/// changes its template only when Update is chosen on the Finish sheet.
 @Model
 final class WorkoutTemplate: Identifiable {
     @Attribute(.unique) var id: UUID
