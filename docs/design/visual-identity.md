@@ -56,6 +56,19 @@ marketing palette, or solid control fills. This distinction follows the
 evidence captured in the
 [#170 color-variant research](brand/issue-170/color-variant-research.md).
 
+### Record roles
+
+| Token | Light | Dark | Usage |
+| --- | --- | --- | --- |
+| `recordHeaviestForeground` | `#8A5700` | `#E7BB6A` | Heaviest Rep trophy, label, and source-set outline |
+| `recordEstimateForeground` | `#7250A2` | `#C2A5E8` | Estimated 1RM trend-line glyph, label, and source-set outline |
+
+Both clear 5.4:1 on `groupedSurface`, `recessedSurface`, and `appCanvas` in
+each appearance. They mark which set holds a record and are never used for
+interaction, status, or fills. Because the rest of the app is neutral with
+cobalt for interaction, these two hues stand out by design: a record is
+worth noticing, and the shared color is what ties a record's name to its set.
+
 ### Application surfaces and structure
 
 | Token | Light | Dark | Usage |
@@ -161,9 +174,10 @@ another rounded rectangle.
 Set rows follow the same rule: an open set shows its weight and reps as quiet
 `setFieldWell` regions with a small unit placeholder, a completed set drops the
 wells and takes a `completedSetFill` wash, and no rule is drawn between rows.
-Informational counts, such as "3 sets", record-source marks such as the
-outlined set box and "Heaviest rep", and repeated row icons stay neutral; cobalt remains for
-interaction and state. A row revealed by a record tap may take a brief
+Informational counts, such as "3 sets", and repeated row icons stay neutral;
+cobalt remains for interaction and state. Strength-record marks are the one
+informational exception: each record kind uses its own record color (see
+Record roles), always paired with its glyph and name. A row revealed by a record tap may take a brief
 `brandAccentMuted` wash, because it shows a transient state.
 
 On the Active Workout surface, optional Workout Notes and Exercise Notes use

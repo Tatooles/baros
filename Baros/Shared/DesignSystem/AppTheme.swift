@@ -87,6 +87,19 @@ enum AppTheme {
         dark: 0x4CD964
     )
 
+    /// Record markers: informational categories, never interactive, so they
+    /// stay out of the cobalt family. Each clears 5.4:1 on grouped and
+    /// recessed surfaces in both appearances and always travels with its own
+    /// glyph and name, so color is never the only cue.
+    static let recordHeaviestForeground = BarosAdaptiveColor.dynamic(
+        light: 0x8A5700,
+        dark: 0xE7BB6A
+    )
+    static let recordEstimateForeground = BarosAdaptiveColor.dynamic(
+        light: 0x7250A2,
+        dark: 0xC2A5E8
+    )
+
     /// Foreground for content sitting on `brandAccentFill` or
     /// `brandAccentGradient`.
     static let onBrandAccent = BarosBrand.onBrandAccent

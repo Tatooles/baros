@@ -80,9 +80,11 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             XCTAssertEqual(values.count, 6)
             let heaviest = values.matching(NSPredicate(format: "label CONTAINS %@", "Heaviest Rep")).firstMatch
             XCTAssertEqual(heaviest.label, "Set 3, 225 pounds, 1 rep, Heaviest Rep")
-            // Both workouts hold a record, so each subtitle names it after the set count.
-            let subtitles = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "3 sets"))
+            // Both workouts hold a record, so each subtitle names only that record:
+            // the set boxes already show the count.
+            let subtitles = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Heaviest rep"))
             XCTAssertGreaterThanOrEqual(subtitles.count, 1)
+            XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "3 sets")).firstMatch.exists)
             XCTAssertTrue(sourceWorkout.label.contains("record"), sourceWorkout.label)
             attachScreenshot(named: "exercise-no-rpe-\(appearance)", app: app)
             app.terminate()
