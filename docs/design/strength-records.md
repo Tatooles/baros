@@ -133,23 +133,31 @@ The revision keeps the calculation and changes how the screen tells the story.
   set to see records here." No zeros, no extra explanation in the card; the
   information sheet holds the full rules.
 - **Exercise History log.** Each Exercise Performance is one row in a single
-  grouped list: the History date tile, workout title and set count as the
-  button that opens the workout, then every completed set across the full row
+  grouped list: the History date tile and workout title as the button that
+  opens the workout, then every completed set across the full row
   width. Occurrence boundaries, other-equipment identity labels, and exercise
   notes are preserved.
 - **Set boxes.** Each completed set is a one-line `recessedSurface` box that
   fits its content: `weight × reps`, then `@RPE` only when logged. No box
   reserves space for a missing RPE or has a fixed width, so no box shows empty
   space inside it. At accessibility sizes each set takes its own line.
-- **Source markers.** The source set's box adds a faint neutral outline and a
-  small trophy; the box itself carries no record name. The workout's subtitle
-  names the record after the set count (`3 sets · 🏆 Est. 1RM`). If one set
-  holds both records, the subtitle names both, joined by "·". If different
-  sets in one workout hold them, each name carries its value
-  (`Heaviest rep 235 × 1 · Est. 1RM 210 × 6`). At accessibility sizes the
-  record name takes its own line. Markers are neutral, not cobalt or gold:
-  they are informational, not interactive. The workout row's VoiceOver label
-  ends with "holds … record", and each set still speaks its record names.
+- **Source markers.** Each record has its own glyph and color: Heaviest Rep is
+  a trophy in ochre (`recordHeaviestForeground`), and Estimated 1RM is a
+  trend-line glyph in violet (`recordEstimateForeground`). The same glyph and
+  color label the record in the Records card, in the workout's subtitle, and
+  on the source set's box, so the eye pairs them. The box leads with the glyph
+  and takes a 1pt outline in the record's color; it carries no record name.
+  The subtitle shows only what the date tile and set boxes don't: the year
+  outside the current year (or the full date at accessibility sizes), then
+  the record names (`🏆 Heaviest rep · 📈 Est. 1RM`). A workout holding
+  neither has no subtitle; there is no "N sets", because the boxes show the
+  count. If one set holds both records, its box shows both glyphs with a
+  neutral outline. If different sets in one workout hold them, each box shows
+  its own glyph, so the names don't repeat the values. At accessibility sizes
+  the record names take their own line. The colors are informational, not
+  cobalt, and never the only cue: a glyph and a name always come with them.
+  The workout row's VoiceOver label keeps the set count and ends with "holds
+  … record", and each set still speaks its record names.
 - **Quick History.** The active workout's Quick History uses the same rows for
   the last three workouts, with record sets marked from the full history. It
   shows no Records card, and its summary matches the Exercise History heading.

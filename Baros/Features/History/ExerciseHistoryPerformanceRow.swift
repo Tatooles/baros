@@ -2,8 +2,9 @@ import SwiftUI
 
 /// One Exercise Performance in the Exercise History log and Quick History:
 /// the workout as a navigable header, then every completed set as a compact
-/// `weight × reps` pill. A record set is outlined with a trophy, and the
-/// header's subtitle names the record, so every pill keeps the same grammar.
+/// `weight × reps` pill. A record set carries its record's glyph and color,
+/// and the header's subtitle names the record in the same glyph and color, so
+/// the eye pairs them and every pill keeps the same grammar.
 struct ExerciseHistoryPerformanceRow: View {
     let group: ExerciseHistorySessionGroup
     let headingIdentity: ExerciseHistoryDisplayIdentity
@@ -25,19 +26,20 @@ struct ExerciseHistoryPerformanceRow: View {
         }
     }
 
-    /// "Est. 1RM", "Heaviest rep · Est. 1RM" for one set holding both, or each
-    /// name with its value when different sets hold them.
-    private var recordSummary: String? {
-        let sets = recordSets
-        guard !sets.isEmpty else { return nil }
-        if sets.count == 1 {
-            return sets[0].kinds.map(\.badgeTitle).joined(separator: " · ")
+    /// Each record this workout holds, as its glyph and name in its color. The
+    /// matching glyph on the set box shows which set holds it, so the names
+    /// never repeat the set's value.
+    private var recordSummary: Text? {
+        let kinds = ExerciseHistoryRecordKind.allCases.filter { kind in
+            recordSets.contains { $0.kinds.contains(kind) }
         }
-        return sets.map { item in
-            let value = "\(HistorySetTable.weightText(item.entry.set, unit: weightUnit)) × "
-                + HistorySetTable.repsText(item.entry.set)
-            return item.kinds.map { "\($0.badgeTitle) \(value)" }.joined(separator: " · ")
-        }.joined(separator: " · ")
+        guard !kinds.isEmpty else { return nil }
+        return kinds.enumerated().reduce(Text(verbatim: "")) { text, item in
+            let label = Text("\(Image(systemName: item.element.markerSymbol)) \(item.element.badgeTitle)")
+                .fontWeight(.semibold)
+                .foregroundStyle(item.element.markerColor)
+            return item.offset == 0 ? Text("\(text)\(label)") : Text("\(text) · \(label)")
+        }
     }
 
     var body: some View {
@@ -116,10 +118,12 @@ struct ExerciseHistoryPerformanceRow: View {
                         .foregroundStyle(AppTheme.textPrimary)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
-                    subtitleText
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if let subtitleText {
+                        subtitleText
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.right")
@@ -141,17 +145,18 @@ struct ExerciseHistoryPerformanceRow: View {
         .accessibilityIdentifier("ExercisePerformanceWorkoutButton-\(group.id.uuidString)")
     }
 
-    /// The set count, then the record this workout holds. At accessibility
-    /// sizes the record gets its own line.
-    private var subtitleText: Text {
-        let base = Text(subtitle)
-        guard let recordSummary else { return base }
-        let trophy = Text("\(Image(systemName: "trophy.fill")) ")
-            .foregroundStyle(AppTheme.textSecondary)
-        let name = Text(recordSummary)
-            .fontWeight(.semibold)
-            .foregroundStyle(AppTheme.textPrimary)
-        return Text("\(base)\(dynamicTypeSize.isAccessibilitySize ? "\n" : " · ")\(trophy)\(name)")
+    /// The date the tile can't show, then the records this workout holds. The
+    /// set boxes already show the count, so there is no "N sets" here, and a
+    /// workout with neither has no subtitle. At accessibility sizes the
+    /// records get their own line.
+    private var subtitleText: Text? {
+        switch (datePrefix, recordSummary) {
+        case (nil, nil): nil
+        case let (date?, nil): Text(date)
+        case let (nil, records?): records
+        case let (date?, records?):
+            Text("\(date)\(dynamicTypeSize.isAccessibilitySize ? "\n" : " · ")\(records)")
+        }
     }
 
     private var recordAccessibilitySuffix: String {
@@ -162,20 +167,20 @@ struct ExerciseHistoryPerformanceRow: View {
 
     /// The date tile carries month and day; the year and accessibility-size
     /// date move into the subtitle instead.
-    private var subtitle: String {
-        let sets = WorkoutFormatters.setCount(group.completedSetCount)
+    private var datePrefix: String? {
         if dynamicTypeSize.isAccessibilitySize {
-            return "\(WorkoutFormatters.historyDate(group.startedAt)) · \(sets)"
+            return WorkoutFormatters.historyDate(group.startedAt)
         }
         if !Calendar.current.isDate(group.startedAt, equalTo: .now, toGranularity: .year) {
-            return "\(group.startedAt.formatted(.dateTime.year())) · \(sets)"
+            return group.startedAt.formatted(.dateTime.year())
         }
-        return sets
+        return nil
     }
 }
 
 /// A completed set as one line: `weight × reps`, then RPE only when logged.
-/// A record set adds a faint outline and a trophy; its name lives in the
+/// A record set leads with its record's glyph and takes a 1pt outline in the
+/// record's color (neutral when it holds both); the name lives in the
 /// workout's subtitle, so the pill never grows a label or a second line.
 struct HistorySetToken: View {
     let set: LoggedSet
@@ -186,8 +191,18 @@ struct HistorySetToken: View {
 
     private var isRecord: Bool { !recordKinds.isEmpty }
 
+    /// One record's color, or neutral when both glyphs share the box.
+    private var outlineColor: Color {
+        recordKinds.count == 1 ? recordKinds[0].markerColor : AppTheme.textSecondary
+    }
+
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
+            ForEach(recordKinds, id: \.self) { kind in
+                Image(systemName: kind.markerSymbol)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(kind.markerColor)
+            }
             Text("\(HistorySetTable.weightText(set, unit: weightUnit))\(Text(" × ").foregroundColor(AppTheme.textSecondary))\(HistorySetTable.repsText(set))")
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(AppTheme.textPrimary)
@@ -198,20 +213,15 @@ struct HistorySetToken: View {
                     .foregroundStyle(AppTheme.textSecondary)
                     .fixedSize()
             }
-            if isRecord {
-                Image(systemName: "trophy.fill")
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.textSecondary)
-            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(AppTheme.recessedSurface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay {
             if isRecord {
-                // Neutral, not cobalt: records are information, not interaction.
+                // Record colors, not cobalt: records are information, not interaction.
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(AppTheme.textTertiary, lineWidth: 1)
+                    .strokeBorder(outlineColor, lineWidth: 1)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -270,5 +280,23 @@ struct HistoryFlowLayout: Layout {
             maxX = max(maxX, x - horizontalSpacing)
         }
         return (frames, constrained, CGSize(width: width.isFinite ? width : maxX, height: y + lineHeight))
+    }
+}
+
+extension ExerciseHistoryRecordKind {
+    /// Paired with the record's name and color wherever a record is marked,
+    /// so the two records stay distinct without color.
+    var markerSymbol: String {
+        switch self {
+        case .heaviestRep: "trophy.fill"
+        case .estimated1RM: "chart.line.uptrend.xyaxis"
+        }
+    }
+
+    var markerColor: Color {
+        switch self {
+        case .heaviestRep: AppTheme.recordHeaviestForeground
+        case .estimated1RM: AppTheme.recordEstimateForeground
+        }
     }
 }

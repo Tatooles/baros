@@ -111,9 +111,10 @@ struct ExerciseHistoryRecordsCard: View {
         } label: {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(kind.title)
+                    // The same glyph and color mark this record's set in the log.
+                    Text("\(Image(systemName: kind.markerSymbol)) \(kind.title)")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppTheme.textSecondary)
+                        .foregroundStyle(kind.markerColor)
                     RecordValue(
                         number: isEstimate ? "≈\u{2009}\(value)" : value,
                         unit: weightUnit.shortUnitLabel,
