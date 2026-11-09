@@ -191,8 +191,10 @@ function pageFromOverfetch<TRecord extends { serverUpdatedAt: number }>(
 // Sync conflicts are last-writer-wins on the client's `updatedAt`, which the
 // app sends in seconds since 1970 (the server clock is milliseconds). A device
 // clock set far ahead would otherwise win every conflict, and block every
-// other device's edits and deletes, until real time caught up. So the server
-// keeps no client timestamp more than this far ahead of its own clock.
+// other device's edits and deletes, until real time caught up. So when the
+// server writes a row, it keeps no conflict timestamp (`updatedAt`,
+// `deletedAt`) more than this far ahead of its own clock. Other client
+// timestamps, such as `createdAt` and `startedAt`, are stored as sent.
 //
 // Accepted for v1:
 // - A clock ahead by less than the allowance still wins conflicts it should
@@ -203,6 +205,10 @@ function pageFromOverfetch<TRecord extends { serverUpdatedAt: number }>(
 // - A clock that runs behind loses conflicts, as before.
 // - The fast device keeps its own future timestamps locally, so it keeps
 //   ignoring other devices' changes to those records until its timestamps pass.
+// - Rows stored before this cap can still hold far-future timestamps, and
+//   fetchChanges returns them as stored. A device that pulls one keeps that
+//   timestamp locally and keeps its own copy over later corrections until the
+//   timestamp passes (client-side keep-local rules, #97).
 const clientClockSkewAllowanceSeconds = 5 * 60;
 
 function clampClientTimestamp(seconds: number): number {

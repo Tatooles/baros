@@ -2703,9 +2703,9 @@ describe("client clock skew", () => {
     });
   });
 
-  const exerciseKind = kinds[1];
+  const exerciseKind = kinds.find((kind) => kind.entityKind === "exercises")!;
 
-  test("an upload timestamp at most the allowance ahead is stored as sent", async () => {
+  test("upload timestamps up to the allowance ahead are kept, and later ones are capped", async () => {
     await withServerClock(async () => {
       const client = testDb().withIdentity(userA);
 
@@ -2731,15 +2731,20 @@ describe("client clock skew", () => {
     });
   });
 
-  test("a delete timestamp at most the allowance ahead is stored as sent", async () => {
+  test("delete timestamps up to the allowance ahead are kept, and later ones are capped", async () => {
     await withServerClock(async () => {
       const client = testDb().withIdentity(userA);
-      for (const clientId of ["at-ceiling", "outside"]) {
+      for (const clientId of ["inside", "at-ceiling", "outside"]) {
         await client.mutation(api.sync.upsertExercise, {
           record: exerciseRecord({ clientId, updatedAt: serverStartSeconds - 10 }),
         });
       }
 
+      await client.mutation(api.sync.tombstone, {
+        entityKind: "exercises",
+        clientId: "inside",
+        deletedAt: ceilingSeconds - 0.25,
+      });
       await client.mutation(api.sync.tombstone, {
         entityKind: "exercises",
         clientId: "at-ceiling",
@@ -2756,8 +2761,31 @@ describe("client clock skew", () => {
         changes.exercises.map((row) => [row.clientId, row.deletedAt]),
       );
       expect(deletedAtByClientId).toEqual({
+        inside: 1_767_225_899.75,
         "at-ceiling": 1_767_225_900,
         outside: 1_767_225_900,
+      });
+    });
+  });
+
+  test("a far-future write against a row already at the ceiling is capped before it is compared", async () => {
+    await withServerClock(async () => {
+      const client = testDb().withIdentity(userA);
+      const inserted = await exerciseKind.upsert(client, { updatedAt: ceilingSeconds });
+
+      await expect(
+        exerciseKind.upsert(client, { updatedAt: monthAheadSeconds }),
+      ).resolves.toEqual({
+        status: "ignored_stale",
+        serverUpdatedAt: inserted.serverUpdatedAt,
+      });
+      await expect(tombstone(client, exerciseKind, monthAheadSeconds)).resolves.toEqual({
+        status: "ignored_stale",
+        serverUpdatedAt: inserted.serverUpdatedAt,
+      });
+      expect(await storedRow(client, exerciseKind)).toMatchObject({
+        updatedAt: ceilingSeconds,
+        deletedAt: null,
       });
     });
   });
