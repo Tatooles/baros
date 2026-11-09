@@ -44,7 +44,7 @@ struct HomeView: View {
             // Wide windows, such as the iPhone Duo's inner display, put the ring and the
             // actions in their own halves so neither crosses the fold. Only the layout
             // changes, not the views: folding keeps the ring's selection, the pills' scroll
-            // offset, and any sheet or alert the header or recovery notice is showing.
+            // view, and any sheet or alert the header or recovery notice is showing.
             let arrangement = layout.isWide
                 ? AnyLayout(HStackLayout(alignment: .center, spacing: HomeLayout.columnSpacing))
                 : AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
@@ -194,20 +194,17 @@ struct HomeView: View {
         replayID += 1
     }
 
-    /// The center of the screen's fold, measured from the window's safe area, where the
-    /// system reports one (iPhone Duo, iOS 27.1 and later). Inactive regions count too, so
-    /// the columns stay put whether the display is half-open or flat.
+    /// The center of the screen's fold, where the system reports one (iPhone Duo, iOS 27.1
+    /// and later). Region frames are in this view's coordinate space, so the result is
+    /// measured from the safe area's leading edge. Inactive regions count too, so the
+    /// columns stay put whether the display is half-open or flat.
     private static func foldMidX(in geometry: GeometryProxy) -> CGFloat? {
         // The fold API ships in newer SDKs (it is in the iOS 27.2 SDK's SwiftUI, 8.1.13);
         // builds with older Xcode versions, such as CI's, use the window midpoint.
         #if canImport(SwiftUICore, _version: 8.1.13)
         guard #available(iOS 27.1, *) else { return nil }
-        let width = geometry.size.width
-        for region in geometry.reservedRegions(kind: .division, options: .includeInactive) {
-            let frame = region.frame
-            if frame.height > frame.width, frame.midX > 0, frame.midX < width { return frame.midX }
-        }
-        return nil
+        let regions = geometry.reservedRegions(kind: .division, options: .includeInactive)
+        return HomeLayout.foldMidX(divisionFrames: regions.map(\.frame), width: geometry.size.width)
         #else
         return nil
         #endif
@@ -302,6 +299,13 @@ struct HomeLayout {
             leadingColumnWidth = size.width
             ringDiameter = min(size.width * Self.ringWidthFraction, Self.maxRingDiameter)
         }
+    }
+
+    /// The center of the first vertical division that lies inside the view's width, if any.
+    static func foldMidX(divisionFrames: [CGRect], width: CGFloat) -> CGFloat? {
+        divisionFrames.first { frame in
+            frame.height > frame.width && frame.midX > 0 && frame.midX < width
+        }?.midX
     }
 }
 

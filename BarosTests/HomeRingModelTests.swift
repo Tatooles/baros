@@ -543,12 +543,25 @@ final class HomeLayoutTests: XCTestCase {
         XCTAssertEqual(layout.leadingColumnWidth, 452, accuracy: 0.01)
     }
 
-    func testLopsidedInsetsKeepRoomForTheActionsColumn() {
+    func testLeadingColumnIsClampedToTheContentWidth() {
         let layout = HomeLayout(size: CGSize(width: 600, height: 400),
                                 safeAreaInsets: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 1_000))
 
         // The midpoint lies past the safe area, so the column stops a gap short of its far edge.
         XCTAssertEqual(layout.leadingColumnWidth, 600 - 48 - 48, accuracy: 0.01)
+    }
+
+    func testFoldIsTheFirstVerticalDivisionInsideTheWindow() {
+        // As the iPhone Duo simulator reports it when open: a 40 pt strip centered at 475.5.
+        let duoFold = CGRect(x: 455.5, y: 0, width: 40, height: 669)
+
+        XCTAssertEqual(HomeLayout.foldMidX(divisionFrames: [duoFold], width: 867), 475.5)
+        XCTAssertNil(HomeLayout.foldMidX(divisionFrames: [], width: 867))
+        // Closed, the inner fold lies beyond the outer window.
+        XCTAssertNil(HomeLayout.foldMidX(divisionFrames: [duoFold], width: 382))
+        // A horizontal division does not split columns.
+        XCTAssertNil(HomeLayout.foldMidX(divisionFrames: [CGRect(x: 0, y: 300, width: 867, height: 40)],
+                                         width: 867))
     }
 
     func testWideLayoutStartsAtTheMinimumWidthOnlyWhenWiderThanTall() {
