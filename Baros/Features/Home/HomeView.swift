@@ -39,41 +39,36 @@ struct HomeView: View {
         )
 
         GeometryReader { geometry in
-            let layout = HomeLayout(size: geometry.size, safeAreaInsets: geometry.safeAreaInsets)
+            let layout = HomeLayout(size: geometry.size, safeAreaInsets: geometry.safeAreaInsets,
+                                    foldMidX: Self.foldMidX(in: geometry))
+            // Wide windows, such as the iPhone Duo's inner display, put the ring and the
+            // actions in their own halves so neither crosses the fold. Only the layout
+            // changes, not the views: folding keeps the ring's selection, the pills' scroll
+            // offset, and any sheet or alert the header or recovery notice is showing.
+            let arrangement = layout.isWide
+                ? AnyLayout(HStackLayout(alignment: .center, spacing: HomeLayout.columnSpacing))
+                : AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
             ScrollView(showsIndicators: false) {
-                Group {
-                    if layout.isWide {
-                        // Landscape windows, such as the iPhone Duo's inner display, keep the
-                        // ring and the actions in their own halves so neither crosses the fold.
-                        HStack(alignment: .center, spacing: HomeLayout.columnSpacing) {
-                            VStack(alignment: .leading, spacing: 0) {
-                                header
-                                WorkoutRecoveryNotice()
-                                Spacer(minLength: 16)
-                                ringSection(diameter: layout.ringDiameter, content: content)
-                                Spacer(minLength: 0)
-                            }
-                            .frame(width: layout.leadingColumnWidth)
-                            actions(content: content, primaryPresentation: primary, hasHistory: ring.totalWorkouts > 0,
-                                    bleedsPills: false)
-                                .frame(maxWidth: HomeLayout.actionsMaxWidth)
-                                .frame(maxWidth: .infinity)
-                        }
-                    } else {
-                        VStack(alignment: .leading, spacing: 0) {
-                            header
-                            WorkoutRecoveryNotice()
-                            // Matching flexible spacers center the ring between the
-                            // header and the actions instead of crowding the bottom.
-                            Spacer(minLength: 20)
-                            ringSection(diameter: layout.ringDiameter, content: content)
-                            Spacer(minLength: 28)
-                            actions(content: content, primaryPresentation: primary, hasHistory: ring.totalWorkouts > 0,
-                                    bleedsPills: true)
-                        }
+                arrangement {
+                    VStack(alignment: .leading, spacing: 0) {
+                        header
+                        WorkoutRecoveryNotice()
+                        // Matching flexible spacers center the ring between the
+                        // header and the actions instead of crowding the bottom.
+                        Spacer(minLength: layout.isWide ? 16 : 20)
+                        ringSection(diameter: layout.ringDiameter, content: content)
+                        Spacer(minLength: layout.isWide ? 0 : 28)
                     }
+                    .frame(width: layout.isWide ? layout.leadingColumnWidth : nil)
+                    actions(content: content, primaryPresentation: primary, hasHistory: ring.totalWorkouts > 0,
+                            bleedsPills: !layout.isWide)
+                        .frame(maxWidth: layout.isWide ? HomeLayout.actionsMaxWidth : .infinity)
+                        .frame(maxWidth: .infinity)
+                        // VoiceOver reads the actions last, as in the phone column, so the
+                        // wide layout keeps the period picker next to its ring.
+                        .accessibilitySortPriority(-1)
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, HomeLayout.horizontalPadding)
                 .padding(.top, 14)
                 .padding(.bottom, 24)
                 .frame(minHeight: geometry.size.height, alignment: .top)
@@ -199,6 +194,17 @@ struct HomeView: View {
         replayID += 1
     }
 
+    /// The center of the screen's fold, measured from the window's safe area, where the
+    /// system reports one (iPhone Duo, iOS 27.1 and later). Inactive regions count too, so
+    /// the columns stay put whether the display is half-open or flat.
+    private static func foldMidX(in geometry: GeometryProxy) -> CGFloat? {
+        guard #available(iOS 27.1, *) else { return nil }
+        return geometry.reservedRegions(kind: .division, options: .includeInactive)
+            .map(\.frame)
+            .first { $0.height > $0.width && $0.midX > 0 && $0.midX < geometry.size.width }?
+            .midX
+    }
+
     private func ringWorkouts(content: HomeContent, now: Date) -> [RingWorkout] {
         #if DEBUG
         if fixture != .live { return fixture.workouts(now: now, calendar: .current) }
@@ -253,34 +259,40 @@ struct HomeView: View {
 
 /// Chooses between the phone column and the two-column layout that wide,
 /// short windows (the iPhone Duo's inner display) use. The columns split at the
-/// window's midpoint, where the Duo folds, rather than the middle of the safe area,
-/// which the side tab rail pushes left.
-struct HomeLayout: Equatable {
+/// fold: where the system reports it, otherwise the window's midpoint. Either way
+/// that is not the middle of the safe area, which the side tab rail pushes left.
+struct HomeLayout {
     static let columnSpacing: CGFloat = 48
     static let actionsMaxWidth: CGFloat = 420
     static let horizontalPadding: CGFloat = 24
+    /// Windows at least this wide, and wider than tall, get two columns.
+    static let minimumWideWidth: CGFloat = 600
     /// Header, period picker, and padding share the wide layout's height with the ring.
+    /// A fixed estimate: with large text, the sign-in banner, or the recovery notice,
+    /// the wide layout scrolls a little rather than shrinking the ring further.
     static let wideVerticalChrome: CGFloat = 200
     static let maxRingDiameter: CGFloat = 350
+    static let ringWidthFraction: CGFloat = 0.8
 
     let isWide: Bool
     let ringDiameter: CGFloat
-    /// Width of the ring column in the wide layout; it ends half a gap before the window's midpoint.
+    /// Width of the ring column in the wide layout; it ends half a gap before the fold.
     let leadingColumnWidth: CGFloat
 
-    init(size: CGSize, safeAreaInsets: EdgeInsets = EdgeInsets()) {
-        isWide = size.width > size.height && size.width >= 600
+    /// `foldMidX` is the fold's center, measured from the safe area's leading edge.
+    init(size: CGSize, safeAreaInsets: EdgeInsets = EdgeInsets(), foldMidX: CGFloat? = nil) {
+        isWide = size.width > size.height && size.width >= Self.minimumWideWidth
         if isWide {
-            let windowMidpoint = (size.width + safeAreaInsets.leading + safeAreaInsets.trailing) / 2
-                - safeAreaInsets.leading
+            let fold = foldMidX
+                ?? (size.width + safeAreaInsets.leading + safeAreaInsets.trailing) / 2 - safeAreaInsets.leading
             let contentWidth = size.width - Self.horizontalPadding * 2
-            leadingColumnWidth = min(max(0, windowMidpoint - Self.horizontalPadding - Self.columnSpacing / 2),
+            leadingColumnWidth = min(max(0, fold - Self.horizontalPadding - Self.columnSpacing / 2),
                                      contentWidth - Self.columnSpacing)
-            ringDiameter = max(0, min(leadingColumnWidth * 0.80, size.height - Self.wideVerticalChrome,
-                                      Self.maxRingDiameter))
+            ringDiameter = max(0, min(leadingColumnWidth * Self.ringWidthFraction,
+                                      size.height - Self.wideVerticalChrome, Self.maxRingDiameter))
         } else {
             leadingColumnWidth = size.width
-            ringDiameter = min(size.width * 0.80, Self.maxRingDiameter)
+            ringDiameter = min(size.width * Self.ringWidthFraction, Self.maxRingDiameter)
         }
     }
 }
@@ -383,10 +395,8 @@ private struct HomeStartFromPills: View {
                     }
                 }
             }
-            .contentMargins(.horizontal, bleedsToScreenEdges ? 24 : 0, for: .scrollContent)
-            .padding(.horizontal, bleedsToScreenEdges ? -24 : 0)
-            // Only the wide layout clips; the expanded rectangle leaves the phone column as it was.
-            .clipShape(Rectangle().inset(by: bleedsToScreenEdges ? -1_000 : 0))
+            .contentMargins(.horizontal, bleedsToScreenEdges ? HomeLayout.horizontalPadding : 0, for: .scrollContent)
+            .padding(.horizontal, bleedsToScreenEdges ? -HomeLayout.horizontalPadding : 0)
         }
     }
 }

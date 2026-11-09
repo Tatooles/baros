@@ -507,10 +507,12 @@ final class HomeLayoutTests: XCTestCase {
     }
 
     func testIPhoneDuoOuterDisplayKeepsTheSingleColumn() {
-        let layout = HomeLayout(size: CGSize(width: 466, height: 610))
+        // 466 pt window, less the side tab rail's 83 pt of trailing safe area.
+        let layout = HomeLayout(size: CGSize(width: 383, height: 610),
+                                safeAreaInsets: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 83))
 
         XCTAssertFalse(layout.isWide)
-        XCTAssertEqual(layout.ringDiameter, 350)
+        XCTAssertEqual(layout.ringDiameter, 306.4, accuracy: 0.01)
     }
 
     func testIPhoneDuoInnerDisplaySplitsTheColumnsAtTheFold() {
@@ -522,6 +524,37 @@ final class HomeLayoutTests: XCTestCase {
         // Window midpoint 475.5, minus 24 pt padding and half the 48 pt gap.
         XCTAssertEqual(layout.leadingColumnWidth, 427.5, accuracy: 0.01)
         XCTAssertEqual(layout.ringDiameter, 342, accuracy: 0.01)
+    }
+
+    func testLeadingSafeAreaInsetStillSplitsAtTheWindowMidpoint() {
+        // A rail on the leading side moves the safe area right, so the fold sits nearer its start.
+        let layout = HomeLayout(size: CGSize(width: 868, height: 630),
+                                safeAreaInsets: EdgeInsets(top: 0, leading: 83, bottom: 0, trailing: 0))
+
+        // Midpoint 475.5 − 83 = 392.5 from the safe area's edge, minus 24 pt padding and half the gap.
+        XCTAssertEqual(layout.leadingColumnWidth, 344.5, accuracy: 0.01)
+    }
+
+    func testReportedFoldPositionReplacesTheWindowMidpoint() {
+        let layout = HomeLayout(size: CGSize(width: 868, height: 630),
+                                safeAreaInsets: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 83),
+                                foldMidX: 500)
+
+        XCTAssertEqual(layout.leadingColumnWidth, 452, accuracy: 0.01)
+    }
+
+    func testLopsidedInsetsKeepRoomForTheActionsColumn() {
+        let layout = HomeLayout(size: CGSize(width: 600, height: 400),
+                                safeAreaInsets: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 1_000))
+
+        // The midpoint lies past the safe area, so the column stops a gap short of its far edge.
+        XCTAssertEqual(layout.leadingColumnWidth, 600 - 48 - 48, accuracy: 0.01)
+    }
+
+    func testWideLayoutStartsAtTheMinimumWidthOnlyWhenWiderThanTall() {
+        XCTAssertTrue(HomeLayout(size: CGSize(width: 600, height: 599)).isWide)
+        XCTAssertFalse(HomeLayout(size: CGSize(width: 599, height: 400)).isWide)
+        XCTAssertFalse(HomeLayout(size: CGSize(width: 600, height: 600)).isWide)
     }
 
     func testShortWideWindowFitsTheRingToTheHeight() {
