@@ -38,15 +38,19 @@ struct ActiveWorkoutAccessoryView: View {
                                 .background(AppTheme.brandAccentMuted, in: Circle())
                                 .accessibilityHidden(true)
 
+                            // One line each: the system can dock this capsule narrow (the closed
+                            // iPhone Duo, or half-open), and a wrapped title would push the
+                            // elapsed time out of it. The full title stays in the accessibility value.
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(session.title)
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(AppTheme.textPrimary)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
                                 Text(restSubtitle ?? WorkoutFormatters.elapsedDescription(metrics.durationSeconds))
                                     .font(.caption)
                                     .foregroundStyle(restState != nil ? AppTheme.brandAccentForeground : AppTheme.textSecondary)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                    .lineLimit(1)
                             }
 
                             Spacer(minLength: 8)
@@ -59,6 +63,8 @@ struct ActiveWorkoutAccessoryView: View {
                                     .font(.caption)
                                     .foregroundStyle(AppTheme.textSecondary)
                             }
+                            // The set count never truncates; the title gives way instead.
+                            .fixedSize(horizontal: true, vertical: false)
                         }
                     }
                 }

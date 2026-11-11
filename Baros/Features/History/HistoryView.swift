@@ -119,6 +119,7 @@ private struct HistorySearchContent: View {
                 #endif
             }
             .padding(AppTheme.shellPadding)
+            .readableContentWidth()
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle("History")

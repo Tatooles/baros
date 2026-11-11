@@ -125,6 +125,9 @@ enum AppTheme {
     static let cardCornerRadius: CGFloat = 26
     static let fieldCornerRadius: CGFloat = 14
     static let shellPadding: CGFloat = 16
+    /// Wide windows, such as the iPhone Duo's inner display, cap scrolling
+    /// content here so rows stay readable. Every other iPhone is narrower.
+    static let readableContentWidth: CGFloat = 640
 
     static func formatDuration(_ seconds: Int) -> String {
         WorkoutFormatters.duration(seconds)
@@ -134,4 +137,13 @@ enum AppTheme {
         WorkoutFormatters.date(date)
     }
 
+}
+
+extension View {
+    /// Centers content in a column no wider than `AppTheme.readableContentWidth`.
+    /// Apply it inside a full-width scroll view so scrolling still spans the window.
+    func readableContentWidth(_ maxWidth: CGFloat = AppTheme.readableContentWidth) -> some View {
+        frame(maxWidth: maxWidth)
+            .frame(maxWidth: .infinity)
+    }
 }

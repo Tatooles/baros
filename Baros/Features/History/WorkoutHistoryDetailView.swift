@@ -113,6 +113,7 @@ struct WorkoutHistoryDetailView: View {
                 .padding(.top, 24)
             }
             .padding(AppTheme.shellPadding)
+            .readableContentWidth()
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle("")

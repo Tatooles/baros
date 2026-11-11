@@ -52,6 +52,7 @@ struct ExerciseHistoryDetailView: View {
                     workouts(groups, records: records)
                 }
                 .padding(AppTheme.shellPadding)
+                .readableContentWidth()
             }
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
