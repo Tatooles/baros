@@ -182,6 +182,9 @@ struct FinishWorkoutSheet: View {
                 .accessibilityIdentifier("DismissKeyboardButton")
             }
         }
+        // Sync can delete the source template while the sheet is open; a
+        // choice made for the old control must not carry over.
+        .onChange(of: templateOffer) { templateAction = .none }
         .onChange(of: focusedField) { previousField, newField in
             if previousField == .title, newField != .title {
                 commitWorkoutTitle()
