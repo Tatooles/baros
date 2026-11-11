@@ -160,6 +160,7 @@ enum ConvexSyncArgumentMapper {
             "sourceRaw": record.sourceRaw,
             "sourceSessionID": record.sourceSessionID,
             "healthLinkID": record.healthLinkID,
+            "sourceTemplateID": record.sourceTemplateID,
         ]
     }
 

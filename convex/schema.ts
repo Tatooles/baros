@@ -88,6 +88,7 @@ export default defineSchema({
     ),
     sourceSessionID: nullableString,
     healthLinkID: nullableString,
+    sourceTemplateID: v.optional(nullableString),
   })
     .index("by_ownerTokenIdentifier_and_clientId", [
       "ownerTokenIdentifier",

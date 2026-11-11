@@ -56,6 +56,9 @@ export const workoutSessionPayloadValidator = v.object({
   ),
   sourceSessionID: nullableString,
   healthLinkID: nullableString,
+  // The template a workout started from. Builds from before the link omit
+  // it, and the upsert's patch keeps the stored value.
+  sourceTemplateID: v.optional(nullableString),
 });
 
 export const loggedExercisePayloadValidator = v.object({

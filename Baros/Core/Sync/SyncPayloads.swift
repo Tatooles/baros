@@ -41,6 +41,7 @@ struct WorkoutSessionSyncPayload: Codable, Equatable {
     let sourceRaw: String
     let sourceSessionID: String?
     let healthLinkID: String?
+    var sourceTemplateID: String? = nil
 }
 
 struct LoggedExerciseSyncPayload: Codable, Equatable {
@@ -146,7 +147,8 @@ enum SyncPayloadMapper {
             statusRaw: session.statusRaw,
             sourceRaw: session.sourceRaw,
             sourceSessionID: session.sourceSessionID?.uuidString.lowercased(),
-            healthLinkID: session.healthLinkID?.uuidString.lowercased()
+            healthLinkID: session.healthLinkID?.uuidString.lowercased(),
+            sourceTemplateID: session.sourceTemplateID?.uuidString.lowercased()
         )
     }
 
@@ -275,6 +277,7 @@ struct WorkoutSessionSyncRecord: Codable, Equatable {
     let sourceRaw: String
     let sourceSessionID: String?
     let healthLinkID: String?
+    var sourceTemplateID: String? = nil
 }
 
 struct LoggedExerciseSyncRecord: Codable, Equatable {

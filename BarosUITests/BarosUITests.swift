@@ -1143,18 +1143,41 @@ final class BarosUITests: XCTestCase {
         app.buttons["SaveWorkoutButton"].tap()
         XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
 
-        // Finishing a workout started from that template doesn't offer another.
+        // Unchanged, a workout started from that template offers nothing.
+        startWorkout(fromTemplate: "Push Day", in: app)
+        assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
+        openFinishWorkoutSheet(in: app)
+        XCTAssertFalse(app.switches["SaveAsTemplateToggle"].exists)
+        XCTAssertFalse(app.buttons["FinishTemplatePicker"].exists)
+
+        // Changed, it can update the template.
+        app.buttons["KeepGoingButton"].tap()
+        addExercise("ExercisePickerRow-Back Squat-Barbell", in: app)
+        dismissKeyboardIfNeeded(in: app)
+        openFinishWorkoutSheet(in: app)
+        let picker = app.buttons["FinishTemplatePicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 3))
+        picker.tap()
+        let update = app.buttons["Update \u{201C}Push Day\u{201D}"]
+        XCTAssertTrue(update.waitForExistence(timeout: 3))
+        update.tap()
+        app.buttons["SaveWorkoutButton"].tap()
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitForExistence(timeout: 3))
+
+        startWorkout(fromTemplate: "Push Day", in: app)
+        assertActiveWorkoutExerciseOrder(["Bench Press", "Back Squat"], in: app)
+    }
+
+    @MainActor
+    private func startWorkout(fromTemplate name: String, in app: XCUIApplication) {
         app.buttons["StartWorkoutButton"].tap()
         XCTAssertTrue(app.buttons["UseTemplateButton"].waitForExistence(timeout: 3))
         app.buttons["UseTemplateButton"].tap()
-        let row = app.buttons["TemplateRow-Push Day"]
+        let row = app.buttons["TemplateRow-\(name)"]
         XCTAssertTrue(row.waitForExistence(timeout: 3))
         row.tap()
         XCTAssertTrue(app.buttons["StartFromTemplateButton"].waitForExistence(timeout: 3))
         app.buttons["StartFromTemplateButton"].tap()
-        assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
-        openFinishWorkoutSheet(in: app)
-        XCTAssertFalse(app.switches["SaveAsTemplateToggle"].exists)
     }
 
     @MainActor

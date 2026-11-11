@@ -13,9 +13,10 @@ struct FinishWorkoutSheet: View {
     @State private var actionError: WorkoutActionError?
     @State private var titleDraft: String?
     @State private var isDiscardingWorkout = false
-    @State private var savesAsTemplate = false
+    @State private var templateAction = FinishTemplateAction.none
     @FocusState private var focusedField: FinishWorkoutFocusedField?
     @Query(sort: \UserSettings.createdAt) private var settingsRecords: [UserSettings]
+    @Query private var templates: [WorkoutTemplate]
 
     private var metrics: WorkoutMetrics {
         WorkoutMetrics(session: session)
@@ -77,19 +78,13 @@ struct FinishWorkoutSheet: View {
             }
             .fixedSize(horizontal: false, vertical: true)
 
-            if offersSaveAsTemplate {
-                Toggle("Save as Template", isOn: $savesAsTemplate)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(AppTheme.textPrimary)
-                    .tint(AppTheme.brandAccentFill)
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("SaveAsTemplateToggle")
-            }
+            templateControl
 
             Button {
                 focusedField = nil
                 commitWorkoutTitle()
+                // Read before finishing; the save refreshes the queries.
+                let templateOffer = templateOffer
                 do {
                     try engine.finishWorkout(
                         session,
@@ -98,7 +93,7 @@ struct FinishWorkoutSheet: View {
                         context: modelContext
                     )
                     actionError = nil
-                    if offersSaveAsTemplate, savesAsTemplate { saveTemplate() }
+                    if templateOffer != .none, templateAction != .none { saveTemplate(templateOffer) }
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     dismiss()
                 } catch {
@@ -175,7 +170,7 @@ struct FinishWorkoutSheet: View {
                 sheetContent
             }
         }
-        .presentationDetents([dynamicTypeSize.isAccessibilitySize ? .large : .height(offersSaveAsTemplate ? 572 : 500)])
+        .presentationDetents([dynamicTypeSize.isAccessibilitySize ? .large : .height(templateOffer == .none ? 500 : 572)])
         .presentationCornerRadius(36)
         .presentationDragIndicator(.visible)
         .toolbar {
@@ -187,6 +182,9 @@ struct FinishWorkoutSheet: View {
                 .accessibilityIdentifier("DismissKeyboardButton")
             }
         }
+        // Sync can delete the source template while the sheet is open; a
+        // choice made for the old control must not carry over.
+        .onChange(of: templateOffer) { templateAction = .none }
         .onChange(of: focusedField) { previousField, newField in
             if previousField == .title, newField != .title {
                 commitWorkoutTitle()
@@ -230,14 +228,60 @@ struct FinishWorkoutSheet: View {
         )
     }
 
-    /// Hidden for a workout started from a template, so finishing "Upper
-    /// Day" can't make a second "Upper Day".
-    private var offersSaveAsTemplate: Bool {
-        session.source != .template && session.visibleExerciseCount > 0
+    private var templateOffer: FinishTemplateOffer {
+        FinishTemplateOffer(
+            session: session,
+            templates: templates,
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
+        )
+    }
+
+    @ViewBuilder
+    private var templateControl: some View {
+        switch templateOffer {
+        case .none:
+            EmptyView()
+        case .saveAsNew:
+            Toggle("Save as Template", isOn: Binding(
+                get: { templateAction == .saveAsNew },
+                set: { templateAction = $0 ? .saveAsNew : .none }
+            ))
+            .tint(AppTheme.brandAccentFill)
+            .modifier(TemplateRowStyle())
+            .accessibilityIdentifier("SaveAsTemplateToggle")
+        case .updateOrSaveAsNew(let template):
+            HStack(spacing: 12) {
+                Text("Template")
+                    .layoutPriority(1)
+                Spacer(minLength: 8)
+                // A Menu around the Picker keeps the choice on one line;
+                // a menu-style Picker wraps long template names.
+                Menu {
+                    Picker("Template", selection: $templateAction) {
+                        ForEach(FinishTemplateAction.allCases, id: \.self) { action in
+                            Text(action.title(templateName: template.name)).tag(action)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(templateAction.title(templateName: template.name))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(templateAction == .none ? AppTheme.textSecondary : AppTheme.brandAccentFill)
+                }
+                .accessibilityLabel("Template")
+                .accessibilityValue(templateAction.title(templateName: template.name))
+                .accessibilityIdentifier("FinishTemplatePicker")
+            }
+            .modifier(TemplateRowStyle())
+        }
     }
 
     /// Runs after the workout is saved, which stands even if this fails.
-    private func saveTemplate() {
+    private func saveTemplate(_ offer: FinishTemplateOffer) {
         do {
             #if DEBUG
             let arguments = ProcessInfo.processInfo.arguments
@@ -245,12 +289,20 @@ struct FinishWorkoutSheet: View {
                 throw CocoaError(.fileWriteUnknown)
             }
             #endif
-            try WorkoutTemplateMutationService(syncScheduler: syncScheduler).createTemplate(
-                name: session.title,
-                entries: WorkoutTemplateEntry.entries(copying: session),
-                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
-                context: modelContext
-            )
+            let service = WorkoutTemplateMutationService(syncScheduler: syncScheduler)
+            let entries = WorkoutTemplateEntry.entries(copying: session)
+            let owner = currentOwnerCoordinator.localDataOwnerTokenIdentifier
+            if templateAction == .update, case .updateOrSaveAsNew(let template) = offer {
+                try service.updateTemplate(
+                    template, name: template.name, entries: entries,
+                    ownerTokenIdentifier: owner, context: modelContext
+                )
+            } else {
+                try service.createTemplate(
+                    name: session.title, entries: entries,
+                    ownerTokenIdentifier: owner, context: modelContext
+                )
+            }
         } catch {
             modelContext.rollback()
             engine.failedToSaveTemplate = true
@@ -279,4 +331,28 @@ struct FinishWorkoutSheet: View {
 
 private enum FinishWorkoutFocusedField: Hashable {
     case title
+}
+
+private enum FinishTemplateAction: Hashable, CaseIterable {
+    case none
+    case update
+    case saveAsNew
+
+    func title(templateName: String) -> String {
+        switch self {
+        case .none: "Don't Save"
+        case .update: "Update \u{201C}\(templateName)\u{201D}"
+        case .saveAsNew: "Save as New Template"
+        }
+    }
+}
+
+private struct TemplateRowStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.body.weight(.medium))
+            .foregroundStyle(AppTheme.textPrimary)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
+    }
 }
