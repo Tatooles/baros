@@ -236,7 +236,8 @@ struct HomeView: View {
     }
 
     private func livePills(_ quickStartWorkouts: [HomeQuickStartWorkout], bleeds: Bool) -> some View {
-        HomeStartFromPills(titles: quickStartWorkouts.map(\.title), bleedsToScreenEdges: bleeds) { index in
+        HomeStartFromPills(pills: quickStartWorkouts.map { ($0.name, $0.lastDoneText(now: now)) },
+                           bleedsToScreenEdges: bleeds) { index in
             quickStartSelection = HomeQuickStartSelection(id: quickStartWorkouts[index].id)
         }
     }
@@ -377,7 +378,7 @@ private struct HomePrimaryWorkoutButton: View {
 
 /// Recent workouts retain their review-and-start behavior with neutral styling.
 private struct HomeStartFromPills: View {
-    let titles: [String]
+    let pills: [(name: String, lastDone: String)]
     /// The phone column scrolls the pills edge to edge. The wide layout keeps
     /// them inside the actions column so they never slide under the tab rail.
     let bleedsToScreenEdges: Bool
@@ -390,18 +391,25 @@ private struct HomeStartFromPills: View {
                 .foregroundStyle(AppTheme.textSecondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(Array(titles.enumerated()), id: \.offset) { index, title in
+                    ForEach(Array(pills.enumerated()), id: \.offset) { index, pill in
                         Button { select(index) } label: {
-                            Text(title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(AppTheme.textPrimary)
-                                .padding(.horizontal, 15)
-                                .padding(.vertical, 13)
-                                .background(AppTheme.groupedSurface, in: Capsule())
-                                .overlay { Capsule().strokeBorder(AppTheme.subtleBorder, lineWidth: 0.6) }
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(pill.name)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(AppTheme.textPrimary)
+                                Text(pill.lastDone)
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.textSecondary)
+                            }
+                            .lineLimit(1)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(AppTheme.groupedSurface, in: Capsule())
+                            .overlay { Capsule().strokeBorder(AppTheme.subtleBorder, lineWidth: 0.6) }
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(title)
+                        .accessibilityLabel(pill.name)
+                        .accessibilityValue(pill.lastDone)
                         .accessibilityHint("Review and start this workout")
                         .accessibilityIdentifier("HomeQuickStartButton-\(index)")
                     }

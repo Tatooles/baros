@@ -122,7 +122,50 @@ struct HomeQuickStartWorkout: Identifiable {
     let session: WorkoutSession
 
     var id: UUID { session.id }
-    var title: String { session.title }
+
+    /// The workout's own title. Workouts still using the default title would all read "Workout", so they
+    /// are named by their two most-used muscle groups instead, ties kept in workout order, or by their
+    /// first exercise when no exercise has a known muscle group.
+    var name: String {
+        guard Self.titleGroupingKey(session.title) == nil else { return session.title }
+        let loggedExercises = session.sortedLoggedExercises
+        var counts: [ExerciseMuscleGroup: Int] = [:]
+        var groups: [ExerciseMuscleGroup] = []
+        for loggedExercise in loggedExercises {
+            guard let raw = loggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw,
+                  let group = ExerciseMuscleGroup(rawValue: raw), group != .other else { continue }
+            if counts[group] == nil { groups.append(group) }
+            counts[group, default: 0] += 1
+        }
+        // A stable sort keeps first appearance as the tie-break.
+        let topGroups = groups.enumerated()
+            .sorted { lhs, rhs in
+                let (lhsCount, rhsCount) = (counts[lhs.element, default: 0], counts[rhs.element, default: 0])
+                return lhsCount != rhsCount ? lhsCount > rhsCount : lhs.offset < rhs.offset
+            }
+            .prefix(2)
+            .map(\.element.displayName)
+        guard topGroups.isEmpty else { return topGroups.joined(separator: " · ") }
+        return loggedExercises.first?.exerciseSnapshotName ?? session.title
+    }
+
+    /// When this workout was last done: Today, Yesterday, days ago within the week, then the date.
+    func lastDoneText(now: Date = .now, calendar: Calendar = .current) -> String {
+        let days = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: session.startedAt), to: calendar.startOfDay(for: now)
+        ).day ?? 0
+        switch days {
+        case ...0: return "Today"
+        case 1: return "Yesterday"
+        case 2...6: return "\(days) days ago"
+        default:
+            let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+                .locale(calendar.locale ?? .current)
+            let sameYear = calendar.isDate(session.startedAt, equalTo: now, toGranularity: .year)
+            return session.startedAt.formatted(sameYear ? style.month(.abbreviated).day()
+                                                        : style.month(.abbreviated).day().year())
+        }
+    }
 
     /// Expects `completedSessions` newest start first, the same date the ring and History use. Custom titles
     /// group by title; workouts still using the default title group by their ordered exercises so unrenamed

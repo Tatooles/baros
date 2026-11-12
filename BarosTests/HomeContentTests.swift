@@ -446,7 +446,49 @@ final class HomeContentTests: XCTestCase {
             now: date(2026, 8, 19, hour: 12)
         )
 
-        XCTAssertEqual(content.quickStartWorkouts.map(\.title), ["Push", "Pull"])
+        XCTAssertEqual(content.quickStartWorkouts.map(\.name), ["Push", "Pull"])
+    }
+
+    func testQuickStartNamesUnnamedWorkoutsByTheirMostUsedMuscleGroups() {
+        let push = session(title: " workout", startedAt: date(2026, 8, 19, hour: 8),
+                           exerciseNames: ["Overhead Press", "Bench Press", "Incline Press", "Pushdown"])
+        setMuscleGroups([.shoulders, .chest, .chest, .triceps], of: push)
+        let pull = session(title: "Workout", startedAt: date(2026, 8, 18, hour: 8),
+                           exerciseNames: ["Deadlift", "Row", "Pulldown"])
+        setMuscleGroups([.glutes, .upperBack, .lats], of: pull)
+        let custom = session(title: "Workout", startedAt: date(2026, 8, 17, hour: 8),
+                             exerciseNames: ["Sled Push", "Farmer's Carry"])
+        let named = session(title: "Leg Day", startedAt: date(2026, 8, 16, hour: 8), exerciseNames: ["Back Squat"])
+        setMuscleGroups([.quads], of: named)
+
+        let content = HomeContent(
+            sessions: [push, pull, custom, named],
+            ownerTokenIdentifier: nil,
+            now: date(2026, 8, 19, hour: 12)
+        )
+
+        XCTAssertEqual(content.quickStartWorkouts.map(\.name),
+                       ["Chest · Shoulders", "Glutes · Upper Back", "Sled Push", "Leg Day"])
+    }
+
+    func testQuickStartSaysWhenEachWorkoutWasLastDone() {
+        let now = date(2026, 8, 19, hour: 12)
+        func lastDone(_ startedAt: Date) -> String {
+            HomeQuickStartWorkout(session: session(title: "Push", startedAt: startedAt))
+                .lastDoneText(now: now, calendar: calendar)
+        }
+
+        XCTAssertEqual(lastDone(date(2026, 8, 19, hour: 6)), "Today")
+        XCTAssertEqual(lastDone(date(2026, 8, 18, hour: 23)), "Yesterday")
+        XCTAssertEqual(lastDone(date(2026, 8, 13, hour: 8)), "6 days ago")
+        XCTAssertEqual(lastDone(date(2026, 8, 12, hour: 8)), "Aug 12")
+        XCTAssertEqual(lastDone(date(2025, 12, 30, hour: 8)), "Dec 30, 2025")
+    }
+
+    private func setMuscleGroups(_ groups: [ExerciseMuscleGroup], of session: WorkoutSession) {
+        for (loggedExercise, group) in zip(session.sortedLoggedExercises, groups) {
+            loggedExercise.exerciseSnapshotPrimaryMuscleGroupRaw = group.rawValue
+        }
     }
 
     private var calendar: Calendar {
