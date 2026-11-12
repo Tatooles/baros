@@ -2430,6 +2430,394 @@ describe("workout templates", () => {
   });
 });
 
+describe("client clock skew", () => {
+  // Client timestamps are seconds since 1970; the server clock is milliseconds.
+  // Fake time starts on a whole second so every expected value is exact.
+  const serverStartMs = Date.UTC(2026, 0, 1);
+  const serverStartSeconds = 1_767_225_600;
+  // The latest client timestamp the server keeps at serverStartMs (+5 minutes).
+  const ceilingSeconds = 1_767_225_900;
+  const monthAheadSeconds = serverStartSeconds + 30 * 24 * 60 * 60;
+
+  type ClockClient = ReturnType<ReturnType<typeof testDb>["withIdentity"]>;
+  type TimestampOverrides = { updatedAt: number; deletedAt?: number | null };
+  type SyncRow = { clientId: string; updatedAt: number; deletedAt: number | null };
+
+  const templateCursors = { ...zeroCursors, workoutTemplates: 0 };
+
+  function templateRecord(overrides: Partial<WorkoutTemplateRecord> = {}): WorkoutTemplateRecord {
+    return {
+      clientId: "template-1",
+      name: "Upper Day",
+      entries: [
+        {
+          id: "entry-1",
+          exerciseClientId: null,
+          exerciseSnapshotName: "Bench Press",
+          exerciseSnapshotEquipmentRaw: "barbell",
+          exerciseSnapshotPrimaryMuscleGroupRaw: "chest",
+          supersetGroupID: null,
+        },
+      ],
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: null,
+      ...overrides,
+    };
+  }
+
+  async function seedSession(client: ClockClient) {
+    await client.mutation(api.sync.upsertWorkoutSession, {
+      record: workoutSessionRecord({ updatedAt: serverStartSeconds - 60 }),
+    });
+  }
+
+  async function seedLoggedExercise(client: ClockClient) {
+    await seedSession(client);
+    await client.mutation(api.sync.upsertLoggedExercise, {
+      record: loggedExerciseRecord({
+        exerciseClientId: null,
+        updatedAt: serverStartSeconds - 60,
+      }),
+    });
+  }
+
+  const kinds = [
+    {
+      entityKind: "userSettings",
+      clientId: "settings-1",
+      seedParents: async (_client: ClockClient) => {},
+      record: (overrides: TimestampOverrides) => userSettingsRecord(overrides),
+      upsert: (client: ClockClient, overrides: TimestampOverrides) =>
+        client.mutation(api.sync.upsertUserSettings, {
+          record: userSettingsRecord(overrides),
+        }),
+    },
+    {
+      entityKind: "exercises",
+      clientId: "exercise-1",
+      seedParents: async (_client: ClockClient) => {},
+      record: (overrides: TimestampOverrides) => exerciseRecord(overrides),
+      upsert: (client: ClockClient, overrides: TimestampOverrides) =>
+        client.mutation(api.sync.upsertExercise, { record: exerciseRecord(overrides) }),
+    },
+    {
+      entityKind: "workoutSessions",
+      clientId: "session-1",
+      seedParents: async (_client: ClockClient) => {},
+      record: (overrides: TimestampOverrides) => workoutSessionRecord(overrides),
+      upsert: (client: ClockClient, overrides: TimestampOverrides) =>
+        client.mutation(api.sync.upsertWorkoutSession, {
+          record: workoutSessionRecord(overrides),
+        }),
+    },
+    {
+      entityKind: "loggedExercises",
+      clientId: "logged-exercise-1",
+      seedParents: seedSession,
+      record: (overrides: TimestampOverrides) =>
+        loggedExerciseRecord({ exerciseClientId: null, ...overrides }),
+      upsert: (client: ClockClient, overrides: TimestampOverrides) =>
+        client.mutation(api.sync.upsertLoggedExercise, {
+          record: loggedExerciseRecord({ exerciseClientId: null, ...overrides }),
+        }),
+    },
+    {
+      entityKind: "loggedSets",
+      clientId: "logged-set-1",
+      seedParents: seedLoggedExercise,
+      record: (overrides: TimestampOverrides) => loggedSetRecord(overrides),
+      upsert: (client: ClockClient, overrides: TimestampOverrides) =>
+        client.mutation(api.sync.upsertLoggedSet, { record: loggedSetRecord(overrides) }),
+    },
+    {
+      entityKind: "workoutTemplates",
+      clientId: "template-1",
+      seedParents: async (_client: ClockClient) => {},
+      record: (overrides: TimestampOverrides) => templateRecord(overrides),
+      upsert: (client: ClockClient, overrides: TimestampOverrides) =>
+        client.mutation(api.sync.upsertWorkoutTemplate, {
+          record: templateRecord(overrides),
+        }),
+    },
+  ] as const;
+
+  type ClockKind = (typeof kinds)[number];
+
+  async function storedRow(client: ClockClient, kind: ClockKind): Promise<SyncRow> {
+    const changes = await client.query(api.sync.fetchChanges, { cursors: templateCursors });
+    const rows: SyncRow[] = (changes as Record<string, unknown>)[kind.entityKind] as SyncRow[];
+    const row = rows.find((candidate) => candidate.clientId === kind.clientId);
+    if (row === undefined) {
+      throw new Error(`Expected a stored ${kind.entityKind} row`);
+    }
+    return row;
+  }
+
+  function tombstone(client: ClockClient, kind: ClockKind, deletedAt: number) {
+    return client.mutation(api.sync.tombstone, {
+      entityKind: kind.entityKind,
+      clientId: kind.clientId,
+      deletedAt,
+    });
+  }
+
+  /// Runs `body` with the server clock frozen at `serverStartMs`; `advance`
+  /// moves it forward by whole seconds.
+  async function withServerClock(
+    body: (advance: (seconds: number) => void) => Promise<void>,
+  ) {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(serverStartMs);
+      await body((seconds) => {
+        vi.setSystemTime(Date.now() + seconds * 1000);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  describe.each(kinds)("$entityKind", (kind) => {
+    test("a month-ahead edit is stored at the ceiling, and a normal-clock edit applies once the allowance passes", async () => {
+      await withServerClock(async (advance) => {
+        const client = testDb().withIdentity(userA);
+        await kind.seedParents(client);
+
+        await expect(kind.upsert(client, { updatedAt: monthAheadSeconds })).resolves
+          .toMatchObject({ status: "inserted" });
+        expect((await storedRow(client, kind)).updatedAt).toBe(ceilingSeconds);
+
+        // Inside the allowance the fast clock still wins (accepted for v1).
+        advance(60);
+        await expect(
+          kind.upsert(client, { updatedAt: serverStartSeconds + 60 }),
+        ).resolves.toMatchObject({ status: "ignored_stale" });
+
+        advance(241);
+        await expect(
+          kind.upsert(client, { updatedAt: serverStartSeconds + 301 }),
+        ).resolves.toMatchObject({ status: "updated" });
+        expect((await storedRow(client, kind)).updatedAt).toBe(serverStartSeconds + 301);
+      });
+    });
+
+    test("a month-ahead edit lets a normal-clock delete apply once the allowance passes", async () => {
+      await withServerClock(async (advance) => {
+        const client = testDb().withIdentity(userA);
+        await kind.seedParents(client);
+        await kind.upsert(client, { updatedAt: monthAheadSeconds });
+
+        advance(60);
+        await expect(tombstone(client, kind, serverStartSeconds + 60)).resolves
+          .toMatchObject({ status: "ignored_stale" });
+
+        advance(241);
+        await expect(tombstone(client, kind, serverStartSeconds + 301)).resolves
+          .toMatchObject({ status: "tombstoned" });
+        expect(await storedRow(client, kind)).toMatchObject({
+          updatedAt: serverStartSeconds + 301,
+          deletedAt: serverStartSeconds + 301,
+        });
+      });
+    });
+
+    test("a month-ahead delete is stored at the ceiling", async () => {
+      await withServerClock(async (advance) => {
+        const client = testDb().withIdentity(userA);
+        await kind.seedParents(client);
+        await kind.upsert(client, { updatedAt: serverStartSeconds - 10 });
+
+        await expect(tombstone(client, kind, monthAheadSeconds)).resolves
+          .toMatchObject({ status: "tombstoned" });
+        expect(await storedRow(client, kind)).toMatchObject({
+          updatedAt: ceilingSeconds,
+          deletedAt: ceilingSeconds,
+        });
+
+        advance(301);
+        await expect(
+          kind.upsert(client, { updatedAt: serverStartSeconds + 301 }),
+        ).resolves.toMatchObject({ status: "updated" });
+      });
+    });
+
+    /// A row stored before the server capped client clocks: a month-ahead
+    /// `updatedAt`, written when the server clock read `serverStartMs`.
+    async function insertLegacyMonthAheadRow(client: ClockClient) {
+      await client.run(async (ctx) => {
+        await ctx.db.insert(kind.entityKind, {
+          ...kind.record({ updatedAt: monthAheadSeconds }),
+          ownerTokenIdentifier: userA.tokenIdentifier,
+          serverUpdatedAt: serverStartMs,
+        } as never);
+      });
+    }
+
+    test("a stored month-ahead row accepts normal-clock edits after the allowance from its write", async () => {
+      await withServerClock(async (advance) => {
+        const client = testDb().withIdentity(userA);
+        await kind.seedParents(client);
+        await insertLegacyMonthAheadRow(client);
+
+        advance(301);
+        await expect(kind.upsert(client, { updatedAt: ceilingSeconds })).resolves
+          .toMatchObject({ status: "ignored_stale" });
+        await expect(kind.upsert(client, { updatedAt: ceilingSeconds + 0.5 })).resolves
+          .toMatchObject({ status: "updated" });
+        expect((await storedRow(client, kind)).updatedAt).toBe(ceilingSeconds + 0.5);
+      });
+    });
+
+    test("a stored month-ahead row accepts normal-clock deletes after the allowance from its write", async () => {
+      await withServerClock(async (advance) => {
+        const client = testDb().withIdentity(userA);
+        await kind.seedParents(client);
+        await insertLegacyMonthAheadRow(client);
+
+        advance(301);
+        await expect(tombstone(client, kind, ceilingSeconds)).resolves
+          .toMatchObject({ status: "ignored_stale" });
+        await expect(tombstone(client, kind, ceilingSeconds + 0.5)).resolves
+          .toMatchObject({ status: "tombstoned" });
+        expect(await storedRow(client, kind)).toMatchObject({
+          updatedAt: ceilingSeconds + 0.5,
+          deletedAt: ceilingSeconds + 0.5,
+        });
+      });
+    });
+
+    test("a month-ahead soft delete in an upload is stored at the ceiling", async () => {
+      await withServerClock(async () => {
+        const client = testDb().withIdentity(userA);
+        await kind.seedParents(client);
+
+        await kind.upsert(client, {
+          updatedAt: monthAheadSeconds,
+          deletedAt: monthAheadSeconds,
+        });
+        expect(await storedRow(client, kind)).toMatchObject({
+          updatedAt: ceilingSeconds,
+          deletedAt: ceilingSeconds,
+        });
+      });
+    });
+  });
+
+  const exerciseKind = kinds.find((kind) => kind.entityKind === "exercises")!;
+
+  test("upload timestamps up to the allowance ahead are kept, and later ones are capped", async () => {
+    await withServerClock(async () => {
+      const client = testDb().withIdentity(userA);
+
+      await client.mutation(api.sync.upsertExercise, {
+        record: exerciseRecord({ clientId: "inside", updatedAt: ceilingSeconds - 0.25 }),
+      });
+      await client.mutation(api.sync.upsertExercise, {
+        record: exerciseRecord({ clientId: "at-ceiling", updatedAt: ceilingSeconds }),
+      });
+      await client.mutation(api.sync.upsertExercise, {
+        record: exerciseRecord({ clientId: "outside", updatedAt: ceilingSeconds + 1 }),
+      });
+
+      const changes = await client.query(api.sync.fetchChanges, { cursors: zeroCursors });
+      const updatedAtByClientId = Object.fromEntries(
+        changes.exercises.map((row) => [row.clientId, row.updatedAt]),
+      );
+      expect(updatedAtByClientId).toEqual({
+        inside: 1_767_225_899.75,
+        "at-ceiling": 1_767_225_900,
+        outside: 1_767_225_900,
+      });
+    });
+  });
+
+  test("delete timestamps up to the allowance ahead are kept, and later ones are capped", async () => {
+    await withServerClock(async () => {
+      const client = testDb().withIdentity(userA);
+      for (const clientId of ["inside", "at-ceiling", "outside"]) {
+        await client.mutation(api.sync.upsertExercise, {
+          record: exerciseRecord({ clientId, updatedAt: serverStartSeconds - 10 }),
+        });
+      }
+
+      await client.mutation(api.sync.tombstone, {
+        entityKind: "exercises",
+        clientId: "inside",
+        deletedAt: ceilingSeconds - 0.25,
+      });
+      await client.mutation(api.sync.tombstone, {
+        entityKind: "exercises",
+        clientId: "at-ceiling",
+        deletedAt: ceilingSeconds,
+      });
+      await client.mutation(api.sync.tombstone, {
+        entityKind: "exercises",
+        clientId: "outside",
+        deletedAt: ceilingSeconds + 1,
+      });
+
+      const changes = await client.query(api.sync.fetchChanges, { cursors: zeroCursors });
+      const deletedAtByClientId = Object.fromEntries(
+        changes.exercises.map((row) => [row.clientId, row.deletedAt]),
+      );
+      expect(deletedAtByClientId).toEqual({
+        inside: 1_767_225_899.75,
+        "at-ceiling": 1_767_225_900,
+        outside: 1_767_225_900,
+      });
+    });
+  });
+
+  test("a far-future write against a row already at the ceiling is capped before it is compared", async () => {
+    await withServerClock(async () => {
+      const client = testDb().withIdentity(userA);
+      const inserted = await exerciseKind.upsert(client, { updatedAt: ceilingSeconds });
+
+      await expect(
+        exerciseKind.upsert(client, { updatedAt: monthAheadSeconds }),
+      ).resolves.toEqual({
+        status: "ignored_stale",
+        serverUpdatedAt: inserted.serverUpdatedAt,
+      });
+      await expect(tombstone(client, exerciseKind, monthAheadSeconds)).resolves.toEqual({
+        status: "ignored_stale",
+        serverUpdatedAt: inserted.serverUpdatedAt,
+      });
+      expect(await storedRow(client, exerciseKind)).toMatchObject({
+        updatedAt: ceilingSeconds,
+        deletedAt: null,
+      });
+    });
+  });
+
+  // Accepted for v1: the cap moves with the server clock, so replaying a
+  // capped upload stores a later timestamp and overwrites edits made since.
+  test("a replayed month-ahead upload is capped again at the later server time", async () => {
+    await withServerClock(async (advance) => {
+      const client = testDb().withIdentity(userA);
+      const fastUpload = { updatedAt: monthAheadSeconds };
+
+      await exerciseKind.upsert(client, fastUpload);
+      advance(301);
+      await expect(
+        client.mutation(api.sync.upsertExercise, {
+          record: exerciseRecord({ name: "Normal Clock", updatedAt: serverStartSeconds + 301 }),
+        }),
+      ).resolves.toMatchObject({ status: "updated" });
+
+      advance(100);
+      await expect(exerciseKind.upsert(client, fastUpload)).resolves.toMatchObject({
+        status: "updated",
+      });
+      expect(await storedRow(client, exerciseKind)).toMatchObject({
+        name: "Bench Press",
+        updatedAt: serverStartSeconds + 701,
+      });
+    });
+  });
+});
+
 type WorkoutTemplateEntry = {
   id: string;
   exerciseClientId: string | null;

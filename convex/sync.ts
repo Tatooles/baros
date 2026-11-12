@@ -188,11 +188,62 @@ function pageFromOverfetch<TRecord extends { serverUpdatedAt: number }>(
   };
 }
 
+// Sync conflicts are last-writer-wins on the client's `updatedAt`, which the
+// app sends in seconds since 1970 (the server clock is milliseconds). A device
+// clock set far ahead would otherwise win every conflict, and block every
+// other device's edits and deletes, until real time caught up. So when the
+// server writes a row, it keeps no conflict timestamp (`updatedAt`,
+// `deletedAt`) more than this far ahead of its own clock. Other client
+// timestamps, such as `createdAt` and `startedAt`, are stored as sent.
+//
+// Accepted for v1:
+// - A clock ahead by less than the allowance still wins conflicts it should
+//   lose, and a capped write still beats other devices' edits and deletes for
+//   up to the allowance after it lands.
+// - The cap moves with the server clock, so a retry of a capped upload lands
+//   with a later timestamp than the first attempt and can win again.
+// - A clock that runs behind loses conflicts, as before.
+// - The fast device keeps its own future timestamps locally, so it keeps
+//   ignoring other devices' changes to those records until its timestamps pass.
+// - Rows stored before this cap can still hold far-future timestamps, and
+//   fetchChanges returns them as stored. A device that pulls one keeps that
+//   timestamp locally and keeps its own copy over later corrections until the
+//   timestamp passes (client-side keep-local rules, #97).
+const clientClockSkewAllowanceSeconds = 5 * 60;
+
+function clampClientTimestamp(seconds: number): number {
+  return Math.min(seconds, Date.now() / 1000 + clientClockSkewAllowanceSeconds);
+}
+
+function clampClientTimestamps<
+  TRecord extends { updatedAt: number; deletedAt: number | null },
+>(record: TRecord): TRecord {
+  return {
+    ...record,
+    updatedAt: clampClientTimestamp(record.updatedAt),
+    deletedAt:
+      record.deletedAt === null ? null : clampClientTimestamp(record.deletedAt),
+  };
+}
+
+/// A stored row's `updatedAt`, capped by the same rule at the time the server
+/// wrote it. Rows written before the cap existed can hold far-future values;
+/// for every row written since, this returns `updatedAt` unchanged.
+function cappedStoredUpdatedAt(existing: {
+  updatedAt: number;
+  serverUpdatedAt: number;
+}): number {
+  return Math.min(
+    existing.updatedAt,
+    existing.serverUpdatedAt / 1000 + clientClockSkewAllowanceSeconds,
+  );
+}
+
 function isStale(
-  existing: { updatedAt: number },
+  existing: { updatedAt: number; serverUpdatedAt: number },
   payload: { updatedAt: number },
 ): boolean {
-  return existing.updatedAt >= payload.updatedAt;
+  return cappedStoredUpdatedAt(existing) >= payload.updatedAt;
 }
 
 function withServerFields<TRecord extends { clientId: string }>(
@@ -972,7 +1023,7 @@ async function tombstoneExisting(
   ownerTokenIdentifier: string,
   deletedAt: number,
 ): Promise<TombstoneResult> {
-  if (existing.updatedAt >= deletedAt) {
+  if (isStale(existing, { updatedAt: deletedAt })) {
     return {
       status: "ignored_stale",
       serverUpdatedAt: existing.serverUpdatedAt,
@@ -1339,7 +1390,7 @@ export const upsertUserSettings = mutation({
     return await upsertUserSettingsByClientId(
       ctx,
       ownerTokenIdentifier,
-      args.record,
+      clampClientTimestamps(args.record),
     );
   },
 });
@@ -1350,7 +1401,11 @@ export const upsertExercise = mutation({
     assertFinitePayloadNumbers(args.record);
     const ownerTokenIdentifier = await requireOwnerTokenIdentifier(ctx);
     await assertAccountDeletionNotStarted(ctx, ownerTokenIdentifier);
-    return await upsertExerciseByClientId(ctx, ownerTokenIdentifier, args.record);
+    return await upsertExerciseByClientId(
+      ctx,
+      ownerTokenIdentifier,
+      clampClientTimestamps(args.record),
+    );
   },
 });
 
@@ -1363,7 +1418,7 @@ export const upsertWorkoutSession = mutation({
     return await upsertWorkoutSessionByClientId(
       ctx,
       ownerTokenIdentifier,
-      args.record,
+      clampClientTimestamps(args.record),
     );
   },
 });
@@ -1377,7 +1432,7 @@ export const upsertLoggedExercise = mutation({
     return await upsertLoggedExerciseByClientId(
       ctx,
       ownerTokenIdentifier,
-      args.record,
+      clampClientTimestamps(args.record),
     );
   },
 });
@@ -1388,7 +1443,11 @@ export const upsertLoggedSet = mutation({
     assertFinitePayloadNumbers(args.record);
     const ownerTokenIdentifier = await requireOwnerTokenIdentifier(ctx);
     await assertAccountDeletionNotStarted(ctx, ownerTokenIdentifier);
-    return await upsertLoggedSetByClientId(ctx, ownerTokenIdentifier, args.record);
+    return await upsertLoggedSetByClientId(
+      ctx,
+      ownerTokenIdentifier,
+      clampClientTimestamps(args.record),
+    );
   },
 });
 
@@ -1398,7 +1457,11 @@ export const upsertWorkoutTemplate = mutation({
     assertFinitePayloadNumbers(args.record);
     const ownerTokenIdentifier = await requireOwnerTokenIdentifier(ctx);
     await assertAccountDeletionNotStarted(ctx, ownerTokenIdentifier);
-    return await upsertWorkoutTemplateByClientId(ctx, ownerTokenIdentifier, args.record);
+    return await upsertWorkoutTemplateByClientId(
+      ctx,
+      ownerTokenIdentifier,
+      clampClientTimestamps(args.record),
+    );
   },
 });
 
@@ -1412,6 +1475,7 @@ export const tombstone = mutation({
     assertFiniteNumber(args.deletedAt, "deletedAt");
     const ownerTokenIdentifier = await requireOwnerTokenIdentifier(ctx);
     await assertAccountDeletionNotStarted(ctx, ownerTokenIdentifier);
+    const deletedAt = clampClientTimestamp(args.deletedAt);
 
     switch (args.entityKind) {
       case "userSettings":
@@ -1419,42 +1483,42 @@ export const tombstone = mutation({
           ctx,
           ownerTokenIdentifier,
           args.clientId,
-          args.deletedAt,
+          deletedAt,
         );
       case "exercises":
         return await tombstoneExerciseByClientId(
           ctx,
           ownerTokenIdentifier,
           args.clientId,
-          args.deletedAt,
+          deletedAt,
         );
       case "workoutSessions":
         return await tombstoneWorkoutSessionByClientId(
           ctx,
           ownerTokenIdentifier,
           args.clientId,
-          args.deletedAt,
+          deletedAt,
         );
       case "loggedExercises":
         return await tombstoneLoggedExerciseByClientId(
           ctx,
           ownerTokenIdentifier,
           args.clientId,
-          args.deletedAt,
+          deletedAt,
         );
       case "loggedSets":
         return await tombstoneLoggedSetByClientId(
           ctx,
           ownerTokenIdentifier,
           args.clientId,
-          args.deletedAt,
+          deletedAt,
         );
       case "workoutTemplates":
         return await tombstoneWorkoutTemplateByClientId(
           ctx,
           ownerTokenIdentifier,
           args.clientId,
-          args.deletedAt,
+          deletedAt,
         );
     }
   },
