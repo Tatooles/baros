@@ -21,6 +21,7 @@ struct HomeView: View {
     @AppStorage(HomeRingPeriod.storageKey) private var periodRaw = HomeRingPeriod.month.rawValue
     #if DEBUG
     private let fixture = HomeRingFixture.launchFixture
+    @AppStorage(StartFromPrototypeVariant.storageKey) private var prototypeVariantRaw = StartFromPrototypeVariant.a.rawValue
     #endif
 
     var body: some View {
@@ -77,6 +78,9 @@ struct HomeView: View {
             .accessibilityIdentifier("HomeScrollView")
         }
         .background(AppTheme.canvasBackground.ignoresSafeArea())
+        #if DEBUG
+        .overlay(alignment: .top) { StartFromPrototypeSwitcher().padding(.top, 2) }
+        #endif
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(item: $openedWorkoutID) { id in
             WorkoutHistoryDestinationView(sessionID: id)
@@ -235,10 +239,19 @@ struct HomeView: View {
         }
     }
 
+    @ViewBuilder
     private func livePills(_ quickStartWorkouts: [HomeQuickStartWorkout], bleeds: Bool) -> some View {
+        #if DEBUG
+        // PROTOTYPE (#313): remove with HomeStartFromPrototype.swift.
+        StartFromPrototypePills(variant: StartFromPrototypeVariant(rawValue: prototypeVariantRaw) ?? .a,
+                                workouts: quickStartWorkouts, bleedsToScreenEdges: bleeds) { index in
+            quickStartSelection = HomeQuickStartSelection(id: quickStartWorkouts[index].id)
+        }
+        #else
         HomeStartFromPills(titles: quickStartWorkouts.map(\.title), bleedsToScreenEdges: bleeds) { index in
             quickStartSelection = HomeQuickStartSelection(id: quickStartWorkouts[index].id)
         }
+        #endif
     }
 
     private func primaryWorkoutAction() {

@@ -202,6 +202,11 @@ enum UITestFixtureSeeder {
             try context.save()
         }
 
+        // PROTOTYPE (#313)
+        if arguments.contains(StartFromPrototypeSeed.argument) {
+            try StartFromPrototypeSeed.seed(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
         if arguments.contains(historyShowcaseArgument) {
             try seedHistoryShowcase(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         }
