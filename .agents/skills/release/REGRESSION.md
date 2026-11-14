@@ -2,7 +2,7 @@
 
 Two layers on the candidate commit: a **baseline** every release runs, and a **focus** chosen from this release's diff. All of it runs on the simulator; Kevin's device time is reserved for the one case the simulator cannot see (the device check below).
 
-Setup: `git switch --detach <candidate sha>` in this worktree, and follow the simulator rules in `AGENTS.md` — a pool device by UUID, `-parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1`, per-worktree DerivedData, and release the device when the pass ends. Test commands are in `README.md` → Commands.
+Setup: `git switch --detach <candidate sha>` in this worktree, and follow the simulator rules in `AGENTS.md` — a pool device by UUID, `-parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1`, per-worktree DerivedData, and release the device when the pass ends. Switch back to the starting branch when the pass ends too: an older candidate or tag may predate this skill's own files. Test commands are in `README.md` → Commands.
 
 ## Baseline
 

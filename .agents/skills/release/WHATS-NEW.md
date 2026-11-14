@@ -19,7 +19,7 @@ On a branch from `main`, follow `git show --stat 1aa83132` (the 1.4 sheet) — i
 - a new view copied from the newest `WhatsNewVersion*View.swift`, title `What's new in Baros <version>`;
 - the `WhatsNewSheetID` case and the catalog entry in `AppReleaseCatalog.swift`, plus the `WhatsNewSheet` switch;
 - `xcodegen generate` to add the file to the project;
-- the tests that pin the newest sheet (`AppReleaseCatalogTests`, `FirstRunExperienceStoreTests`, `LaunchExperienceCoordinatorTests`, and the upgrade test in `BarosUITests`);
+- the tests that pin the newest sheet (`AppReleaseCatalogTests`, `FirstRunExperienceStoreTests`, `LaunchExperienceCoordinatorTests`, and every `BarosUITests` test asserting `What's new in Baros <previous>` or its highlights, including the upgrade test);
 - the version's section at the top of "Release Notes" in the submission pack.
 
 Run the unit tests and the edited UI tests.

@@ -42,7 +42,7 @@ function loadEnv() {
   try {
     text = readFileSync(path, "utf8");
   } catch {
-    fail(`Missing ${path}. See the release skill's setup section.`);
+    fail(`Missing ${path}; it needs ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_PATH (see the release skill's SKILL.md).`);
   }
   const env = {};
   for (const line of text.split("\n")) {
@@ -129,14 +129,14 @@ async function localization(versionId) {
 async function findBuild(app, versionString, number) {
   const { data } = await get(
     `/v1/builds?filter[app]=${app}&filter[version]=${number}&filter[preReleaseVersion.version]=${versionString}` +
-      `&fields[builds]=version,processingState,expired,usesNonExemptEncryption`,
+      `&fields[builds]=version,processingState,expired`,
   );
   return data[0] ?? null;
 }
 
 async function submissions(app) {
   const { data } = await get(
-    `/v1/reviewSubmissions?filter[app]=${app}&filter[platform]=IOS&limit=10&include=items`,
+    `/v1/reviewSubmissions?filter[app]=${app}&filter[platform]=IOS&limit=10`,
   );
   return data;
 }
@@ -201,30 +201,31 @@ async function runs(opts) {
   if (!shown) console.log(searching ? `No Xcode Cloud run matched within the newest ${limit} runs.` : "No runs.");
 }
 
-// Recent App Store versions, newest first, with whether the matching v<semver> tag exists.
-// The active release is the newest untagged version; when every version is tagged,
-// the next release is MARKETING_VERSION.
+// Recent App Store versions, newest first, with their "<version> release" milestone state.
+// Closing the milestone is the release's last step, so the active release is the newest
+// version whose milestone is still open; when none is, the next release is MARKETING_VERSION.
 async function versions(opts) {
   const app = await appId();
   const { data } = await get(
     `/v1/apps/${app}/appStoreVersions?filter[platform]=IOS&limit=${Number(opts.limit ?? 5)}` +
       "&fields[appStoreVersions]=versionString,appStoreState,appVersionState,releaseType,createdDate",
   );
-  const tags = new Set(
-    execFileSync("git", ["tag", "-l", "v*"], { encoding: "utf8" }).split("\n").filter(Boolean),
+  const milestones = new Map(
+    JSON.parse(
+      execFileSync("gh", ["api", "repos/Tatooles/baros/milestones?state=all&per_page=100"], { encoding: "utf8" }),
+    ).map((m) => [m.title, m.state]),
   );
   const sorted = [...data].sort((a, b) => b.attributes.createdDate.localeCompare(a.attributes.createdDate));
   let active = null;
   for (const v of sorted) {
     const a = v.attributes;
-    const semver = /^\d+\.\d+$/.test(a.versionString) ? `${a.versionString}.0` : a.versionString;
-    const tagged = tags.has(`v${semver}`);
-    if (!tagged && !active) active = a.versionString;
+    const milestone = milestones.get(`${a.versionString} release`) ?? "no milestone";
+    if (milestone === "open" && !active) active = a.versionString;
     console.log(
-      `${a.versionString.padEnd(8)} ${a.appVersionState.padEnd(26)} ${tagged ? `tagged v${semver}` : "untagged"}  created ${a.createdDate}`,
+      `${a.versionString.padEnd(8)} ${a.appVersionState.padEnd(26)} milestone ${milestone}  created ${a.createdDate}`,
     );
   }
-  console.log(active ? `Active release: ${active}` : "Every listed version is tagged; the next release is MARKETING_VERSION.");
+  console.log(active ? `Active release: ${active}` : "No listed version has an open milestone; the next release is MARKETING_VERSION.");
 }
 
 async function status(versionString) {

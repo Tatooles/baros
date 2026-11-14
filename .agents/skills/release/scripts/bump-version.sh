@@ -39,5 +39,5 @@ if [[ "$yml_count" != 1 || "$pbx_count" -lt 1 || "$stale_count" != 0 ]]; then
 fi
 
 echo "Bumped $current -> $next (project.yml, $pbx_count pbxproj entries, catalog)."
-echo "Tests mentioning $current (change only those asserting the current release, such as the upgrade test):"
-git grep -n -F "\"$current\"" -- BarosTests BarosUITests || echo "  none"
+echo "Tests mentioning $current or the upgrade path (change only those asserting the current release):"
+git grep -n -E "\"${current//./\\.}\"|Baros ${current//./\\.}|lastProcessedAppVersion|lastSeenWhatsNewVersion" -- BarosTests BarosUITests || echo "  none"
