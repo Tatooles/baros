@@ -60,10 +60,10 @@ type UpsertResult =
   | { status: "updated"; serverUpdatedAt: number; updatedAt: number }
   | { status: "ignored_stale"; serverUpdatedAt: number; updatedAt: number };
 
-type TombstoneResult =
-  | { status: "tombstoned"; serverUpdatedAt: number }
-  | { status: "ignored_stale"; serverUpdatedAt: number }
-  | { status: "missing" };
+// Deletes always win, so a tombstone call always ends deleted. Installed
+// builds also accept the "ignored_stale" and "missing" statuses older servers
+// returned here.
+type TombstoneResult = { status: "tombstoned"; serverUpdatedAt: number };
 
 type AccountDataDeletionResult = {
   status: "deleted";
