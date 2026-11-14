@@ -253,6 +253,22 @@ describe("#97 delete versus edit", () => {
     expect(changes.workoutSessions[0].updatedAt).toBeGreaterThan(now - 600);
   });
 
+  test("an idle installed build holding a fast clock's copy adopts a current build's delete of it", async () => {
+    const client = convexTest(schema, modules).withIdentity(owner);
+    // After a partial cloud wipe, device B still holds a copy stamped a month
+    // ahead. A current build that saw it deletes it, stamping above it.
+    const deviceBCopy = session(now + month);
+    await client.mutation(api.sync.tombstone, {
+      entityKind: "workoutSessions",
+      clientId: "session-1",
+      deletedAt: now + month + 0.001,
+    });
+    const placeholder = (await client.mutation(api.sync.fetchChangesOnce, { cursors: zeroCursors }))
+      .workoutSessions[0];
+    expect(placeholder.deletedAt).toBe(now);
+    expect(legacyClientAdopts(deviceBCopy, placeholder)).toBe(true);
+  });
+
   test("an idle installed build adopts a delete the server received before the record", async () => {
     const client = convexTest(schema, modules).withIdentity(owner);
     // Device B still holds the workout from before a partial cloud wipe.

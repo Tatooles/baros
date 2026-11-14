@@ -260,9 +260,14 @@ export function decideTombstone(
   nowSeconds: number,
 ): TombstoneDecision {
   if (stored === null) {
-    const clampedDeletedAt = clampToServerTime(deletedAt, nowSeconds);
-    // A real version, so devices still holding the record adopt the delete.
-    return { action: "insertPlaceholder", updatedAt: clampedDeletedAt, deletedAt: clampedDeletedAt };
+    // Versioned at the delete's own stamp, and at least its arrival, so a
+    // device still holding the record adopts the delete. A current build
+    // stamps a delete above the version it replaced, even from a fast clock.
+    return {
+      action: "insertPlaceholder",
+      updatedAt: Math.max(deletedAt, nowSeconds),
+      deletedAt: clampToServerTime(deletedAt, nowSeconds),
+    };
   }
   if (stored.deletedAt !== null) {
     return { action: "alreadyDeleted" };

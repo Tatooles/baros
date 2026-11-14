@@ -793,10 +793,11 @@ export class SimDevice {
     this.log.trace.push(`${this.name} add set ${set.id} to ${loggedExercise.id}`);
   }
 
+  // Current builds stamp a delete like an edit, above the version it replaces.
   private markDeleted(record: LocalRecord): void {
-    const now = this.now();
-    record.deletedAt = now;
-    record.updatedAt = this.rule === "legacy" ? now : Math.max(now, record.updatedAt + millisecond);
+    const stamp = this.editStamp(record);
+    record.deletedAt = stamp;
+    record.updatedAt = stamp;
   }
 
   deleteRecord(record: LocalRecord): void {
