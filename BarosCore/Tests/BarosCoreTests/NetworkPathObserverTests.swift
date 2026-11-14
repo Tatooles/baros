@@ -28,7 +28,7 @@ final class NetworkPathObserverTests: XCTestCase {
         let monitor = TestNetworkPathMonitor()
         let observer = NetworkPathObserver(
             monitor: monitor,
-            settlingDelay: .milliseconds(10),
+            settlingDelay: .milliseconds(100),
             makeRecoveryCandidate: { true }
         )
         var recoveryCount = 0
@@ -37,7 +37,7 @@ final class NetworkPathObserverTests: XCTestCase {
             recoveryCount += 1
         }
         monitor.send(.satisfied)
-        try await Task.sleep(for: .milliseconds(30))
+        try await Task.sleep(for: .milliseconds(300))
 
         XCTAssertEqual(recoveryCount, 0)
     }
@@ -46,7 +46,7 @@ final class NetworkPathObserverTests: XCTestCase {
         let monitor = TestNetworkPathMonitor()
         let observer = NetworkPathObserver(
             monitor: monitor,
-            settlingDelay: .milliseconds(10),
+            settlingDelay: .milliseconds(100),
             makeRecoveryCandidate: { true }
         )
         var recoveryCount = 0
@@ -56,7 +56,7 @@ final class NetworkPathObserverTests: XCTestCase {
         }
         monitor.send(.unsatisfied)
         monitor.send(.satisfied)
-        try await Task.sleep(for: .milliseconds(30))
+        try await Task.sleep(for: .milliseconds(300))
 
         XCTAssertEqual(recoveryCount, 1)
     }
@@ -65,7 +65,7 @@ final class NetworkPathObserverTests: XCTestCase {
         let monitor = TestNetworkPathMonitor()
         let observer = NetworkPathObserver(
             monitor: monitor,
-            settlingDelay: .milliseconds(10),
+            settlingDelay: .milliseconds(100),
             makeRecoveryCandidate: { true }
         )
         var recoveryCount = 0
@@ -75,7 +75,7 @@ final class NetworkPathObserverTests: XCTestCase {
         }
         monitor.send(.requiresConnection)
         monitor.send(.satisfied)
-        try await Task.sleep(for: .milliseconds(30))
+        try await Task.sleep(for: .milliseconds(300))
 
         XCTAssertEqual(recoveryCount, 1)
     }
@@ -84,7 +84,7 @@ final class NetworkPathObserverTests: XCTestCase {
         let monitor = TestNetworkPathMonitor()
         let observer = NetworkPathObserver(
             monitor: monitor,
-            settlingDelay: .milliseconds(20),
+            settlingDelay: .milliseconds(200),
             makeRecoveryCandidate: { true }
         )
         var recoveryCount = 0
@@ -97,7 +97,7 @@ final class NetworkPathObserverTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(5))
         monitor.send(.unsatisfied)
         monitor.send(.satisfied)
-        try await Task.sleep(for: .milliseconds(40))
+        try await Task.sleep(for: .milliseconds(400))
 
         XCTAssertEqual(recoveryCount, 1)
     }
@@ -106,7 +106,7 @@ final class NetworkPathObserverTests: XCTestCase {
         let monitor = TestNetworkPathMonitor()
         let observer = NetworkPathObserver(
             monitor: monitor,
-            settlingDelay: .milliseconds(20),
+            settlingDelay: .milliseconds(200),
             makeRecoveryCandidate: { true }
         )
         var recoveryCount = 0
@@ -118,7 +118,7 @@ final class NetworkPathObserverTests: XCTestCase {
         monitor.send(.satisfied)
         try await Task.sleep(for: .milliseconds(5))
         monitor.send(.unsatisfied)
-        try await Task.sleep(for: .milliseconds(40))
+        try await Task.sleep(for: .milliseconds(400))
 
         XCTAssertEqual(recoveryCount, 0)
     }
@@ -127,7 +127,7 @@ final class NetworkPathObserverTests: XCTestCase {
         let monitor = TestNetworkPathMonitor()
         let observer = NetworkPathObserver(
             monitor: monitor,
-            settlingDelay: .milliseconds(10),
+            settlingDelay: .milliseconds(100),
             makeRecoveryCandidate: { true }
         )
         var recoveryCount = 0
@@ -139,7 +139,7 @@ final class NetworkPathObserverTests: XCTestCase {
         monitor.send(.unsatisfied)
         monitor.send(.satisfied)
         monitor.send(.satisfied)
-        try await Task.sleep(for: .milliseconds(30))
+        try await Task.sleep(for: .milliseconds(300))
 
         XCTAssertEqual(recoveryCount, 1)
     }
@@ -148,7 +148,7 @@ final class NetworkPathObserverTests: XCTestCase {
         let monitor = TestNetworkPathMonitor()
         let observer = NetworkPathObserver(
             monitor: monitor,
-            settlingDelay: .milliseconds(20),
+            settlingDelay: .milliseconds(200),
             makeRecoveryCandidate: { true }
         )
         var recoveryCount = 0
@@ -159,7 +159,7 @@ final class NetworkPathObserverTests: XCTestCase {
         monitor.send(.unsatisfied)
         monitor.send(.satisfied)
         observer.cancel()
-        try await Task.sleep(for: .milliseconds(40))
+        try await Task.sleep(for: .milliseconds(400))
 
         XCTAssertEqual(recoveryCount, 0)
     }
@@ -182,7 +182,7 @@ final class NetworkPathObserverTests: XCTestCase {
         let candidateSource = TestRecoveryCandidateSource("owner-a|session-a")
         let observer = NetworkPathObserver(
             monitor: monitor,
-            settlingDelay: .milliseconds(20),
+            settlingDelay: .milliseconds(200),
             makeRecoveryCandidate: { candidateSource.value }
         )
         var recoveredCandidate: String?
@@ -193,7 +193,7 @@ final class NetworkPathObserverTests: XCTestCase {
         monitor.send(.unsatisfied)
         monitor.send(.satisfied)
         candidateSource.value = "owner-b|session-b"
-        try await Task.sleep(for: .milliseconds(40))
+        try await Task.sleep(for: .milliseconds(400))
 
         XCTAssertEqual(recoveredCandidate, "owner-a|session-a")
     }
@@ -228,7 +228,7 @@ final class NetworkPathObserverTests: XCTestCase {
         let activity = NetworkRecoveryActivity()
         let observer = NetworkPathObserver(
             monitor: monitor,
-            settlingDelay: .milliseconds(20),
+            settlingDelay: .milliseconds(200),
             makeRecoveryCandidate: { activity.makeCandidate { true } }
         )
         var recoveryCount = 0
@@ -241,7 +241,7 @@ final class NetworkPathObserverTests: XCTestCase {
         monitor.send(.unsatisfied)
         monitor.send(.satisfied)
         activity.setActive(true)
-        try await Task.sleep(for: .milliseconds(40))
+        try await Task.sleep(for: .milliseconds(400))
 
         XCTAssertEqual(recoveryCount, 0)
     }
@@ -252,7 +252,7 @@ final class NetworkPathObserverTests: XCTestCase {
         activity.setActive(true)
         let observer = NetworkPathObserver(
             monitor: monitor,
-            settlingDelay: .milliseconds(20),
+            settlingDelay: .milliseconds(200),
             makeRecoveryCandidate: { activity.makeCandidate { true } }
         )
         var recoveryCount = 0
@@ -266,7 +266,7 @@ final class NetworkPathObserverTests: XCTestCase {
         monitor.send(.satisfied)
         activity.setActive(false)
         activity.setActive(true)
-        try await Task.sleep(for: .milliseconds(40))
+        try await Task.sleep(for: .milliseconds(400))
 
         XCTAssertEqual(recoveryCount, 0)
     }
