@@ -22,7 +22,7 @@ Credentials live outside the repo in `~/.appstoreconnect/release.env` (Team key,
 
 ## 0. Locate the release
 
-`git fetch --tags origin`, then `node scripts/asc.mjs status <version>`. Resume at:
+`git fetch --tags origin`, then `node scripts/asc.mjs versions`. The **release version** is the one it reports as active — the newest App Store version without its `v<semver>` tag — or, when every version is tagged, `MARKETING_VERSION`. `project.yml` moves to the next version at step 9, before the release is recorded, so it identifies the release only when nothing is in flight. Then `node scripts/asc.mjs status <version>` and resume at:
 
 - no version, `PREPARE_FOR_SUBMISSION`, or rejected → the first Phase A step whose **Done when** fails
 - `WAITING_FOR_REVIEW` / `IN_REVIEW` → step 8
@@ -33,7 +33,7 @@ Credentials live outside the repo in `~/.appstoreconnect/release.env` (Team key,
 
 ### 1. Fix the base
 
-The **base** is the commit whose code this release ships. With `build <n>`, it is that build's commit (`node scripts/asc.mjs runs --build <n>`); otherwise it is `origin/main` now. Every later range — scope, release notes, regression focus — is `v<previous>..<base>`: `node scripts/release-diff.mjs v<previous> <base>`. Work merged after the base belongs to the next release.
+The **base** is the commit whose code this release ships. With `build <n>`, it is that build's commit (`node scripts/asc.mjs runs --build <n>`); otherwise it is `origin/main` now. Every later range — scope, release notes, regression focus — is `v<previous>..<base>`: `node scripts/release-diff.mjs v<previous> <base>`. Work merged after the base belongs to the next release. A resumed run recovers it from App Store Connect: once a build is attached, that build's commit (`status`, then `runs --build <n>`) stands in for the base.
 
 **Done when** the base SHA is recorded and the diff for that range is in hand.
 
@@ -53,10 +53,11 @@ Follow [WHATS-NEW.md](WHATS-NEW.md): copy for the base range only, sheet, screen
 
 ### 4. Build the candidate
 
-The **candidate** is the build that ships: the exact binary the regression tests and App Review sees. Two paths:
+The **candidate** is the build that ships: the exact binary the regression tests and App Review sees. Its code is the base plus nothing but the What's New merge and release fixes — check with `node scripts/release-diff.mjs <base> <candidate>` before accepting it. Three paths:
 
-- **The base is `main`** (or the What's New merge is already in the base, or this release has no sheet): the candidate is the newest `main` build containing the What's New merge — `node scripts/asc.mjs runs`. Xcode Cloud only builds `main` when app paths change, so the candidate can trail `main` by docs-only commits; wait for any run still building.
-- **The base predates the What's New merge**: cut `release/<version>` from the base and `git cherry-pick -m 1 <What's New merge>`. Resolve any conflict so the sheet matches what `main` merged, then run the unit tests. ⛔ Push the branch. Xcode Cloud's "Main Branch Build" workflow also builds `release/` branches; the candidate is that run (`node scripts/asc.mjs runs --branch release/<version>`).
+- **Kevin named a build that already holds this release's sheet, or the release has no sheet**: the candidate is that build, unchanged.
+- **No build named**: the candidate is the newest `main` build containing the What's New merge — `node scripts/asc.mjs runs`. Xcode Cloud only builds `main` when app paths change, so it can trail `main` by docs-only commits; wait for any run still building. When the check shows other PRs merged after the base, ⛔ ask Kevin to either widen the base to that build (rerun steps 1–3 for the added PRs) or take the release-branch path from the original base.
+- **Otherwise — a named build without the sheet, or a base that needs fixes `main` cannot supply alone** — the release branch: cut `release/<version>` from the base and cherry-pick what it needs (`git cherry-pick -m 1 <merge>` for the What's New merge and each fix). Resolve any conflict so the code matches what `main` merged, then run the unit tests. ⛔ Push the branch. Xcode Cloud's "Main Branch Build" workflow also builds `release/` branches; the candidate is that run (`node scripts/asc.mjs runs --branch release/<version>`).
 
 Check GitHub's checks on a `main` candidate: `gh api repos/Tatooles/baros/commits/<sha>/check-runs --jq '.check_runs[] | "\(.name) \(.conclusion)"'`. A release branch gets no GitHub Actions run; the regression's unit and UI suites stand in.
 
@@ -64,7 +65,7 @@ Check GitHub's checks on a `main` candidate: `gh api repos/Tatooles/baros/commit
 
 ### 5. Regression
 
-Follow [REGRESSION.md](REGRESSION.md) on the candidate commit. A blocker gets a fix PR to `main`; on a release branch, cherry-pick that fix onto it too. Then back to step 4.
+Follow [REGRESSION.md](REGRESSION.md) on the candidate commit. A blocker gets a fix PR to `main`, then back to step 4 — the fixed candidate still holds only the base plus release changes, so a pinned base reaches the fix through the release branch.
 
 **Done when** the regression report shows no blockers.
 
@@ -87,7 +88,7 @@ Show Kevin the `status` output and the regression report. On yes: `node scripts/
 Review usually takes a day or two. End the turn: tell Kevin to rerun `/release` when Apple emails. On the rerun:
 
 - **Approved** (`PENDING_DEVELOPER_RELEASE`) → step 9.
-- **Rejected** → the reason lives in App Store Connect's App Review messages, outside the API: ask Kevin to paste it, or read it with him in the in-app browser. Metadata-only fixes go straight into App Store Connect. Binary fixes take a fix PR to `main` (cherry-picked onto the release branch when there is one), a new candidate (step 4), regression on the fix's area, `prepare` with the new build, then the resubmission — `asc.mjs` refuses an `UNRESOLVED_ISSUES` submission, so Kevin resubmits that one from the App Store Connect page.
+- **Rejected** → the reason lives in App Store Connect's App Review messages, outside the API: ask Kevin to paste it, or read it with him in the in-app browser. Metadata-only fixes go straight into App Store Connect. Binary fixes take a fix PR to `main`, a new candidate (step 4, same base rule), regression on the fix's area, `prepare` with the new build, then the resubmission — `asc.mjs` refuses an `UNRESOLVED_ISSUES` submission, so Kevin resubmits that one from the App Store Connect page.
 
 ### 9. Bump the version, then hand off
 

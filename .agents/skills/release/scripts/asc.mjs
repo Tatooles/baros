@@ -11,6 +11,7 @@
 //
 //   node asc.mjs check
 //   node asc.mjs runs [--build <number>] [--commit <sha>] [--branch <name>] [--limit <n>]
+//   node asc.mjs versions [--limit <n>]
 //   node asc.mjs status <version>
 //   node asc.mjs prepare <version> --build <number> --whats-new <file> [--apply]
 //   node asc.mjs submit <version> [--apply]
@@ -18,6 +19,7 @@
 import { readFileSync } from "node:fs";
 import { createSign } from "node:crypto";
 import { homedir } from "node:os";
+import { execFileSync } from "node:child_process";
 
 const BUNDLE_ID = "com.kevintatooles.LiftingLog";
 const LOCALE = "en-US";
@@ -197,6 +199,32 @@ async function runs(opts) {
     if (opts.build) break;
   }
   if (!shown) console.log(searching ? `No Xcode Cloud run matched within the newest ${limit} runs.` : "No runs.");
+}
+
+// Recent App Store versions, newest first, with whether the matching v<semver> tag exists.
+// The active release is the newest untagged version; when every version is tagged,
+// the next release is MARKETING_VERSION.
+async function versions(opts) {
+  const app = await appId();
+  const { data } = await get(
+    `/v1/apps/${app}/appStoreVersions?filter[platform]=IOS&limit=${Number(opts.limit ?? 5)}` +
+      "&fields[appStoreVersions]=versionString,appStoreState,appVersionState,releaseType,createdDate",
+  );
+  const tags = new Set(
+    execFileSync("git", ["tag", "-l", "v*"], { encoding: "utf8" }).split("\n").filter(Boolean),
+  );
+  const sorted = [...data].sort((a, b) => b.attributes.createdDate.localeCompare(a.attributes.createdDate));
+  let active = null;
+  for (const v of sorted) {
+    const a = v.attributes;
+    const semver = /^\d+\.\d+$/.test(a.versionString) ? `${a.versionString}.0` : a.versionString;
+    const tagged = tags.has(`v${semver}`);
+    if (!tagged && !active) active = a.versionString;
+    console.log(
+      `${a.versionString.padEnd(8)} ${a.appVersionState.padEnd(26)} ${tagged ? `tagged v${semver}` : "untagged"}  created ${a.createdDate}`,
+    );
+  }
+  console.log(active ? `Active release: ${active}` : "Every listed version is tagged; the next release is MARKETING_VERSION.");
 }
 
 async function status(versionString) {
@@ -428,12 +456,13 @@ const { positional, opts } = parse(rest);
 const commands = {
   check: () => check(),
   runs: () => runs(opts),
+  versions: () => versions(opts),
   status: () => status(positional[0]),
   prepare: () => prepare(positional[0], opts),
   submit: () => submit(positional[0], opts),
 };
 if (!commands[command]) {
-  console.error("usage: asc.mjs check | runs [--build <n>] [--commit <sha>] [--branch <name>] | status <v> | prepare <v> --build <n> --whats-new <file> [--apply] | submit <v> [--apply]");
+  console.error("usage: asc.mjs check | runs [--build <n>] [--commit <sha>] [--branch <name>] | versions | status <v> | prepare <v> --build <n> --whats-new <file> [--apply] | submit <v> [--apply]");
   process.exit(2);
 }
 await commands[command]();
