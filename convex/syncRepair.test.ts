@@ -316,6 +316,17 @@ describe("sync damage audit and repair", () => {
         deletedAt: t1 - 3 * day,
         serverUpdatedAt: ms(t1) + 3,
       }));
+      // A logged exercise removed days before, with a set of its own.
+      await ctx.db.insert("loggedExercises", loggedExerciseRow("removed-earlier-le", "fast", {
+        updatedAt: t1 - 3 * day,
+        deletedAt: t1 - 3 * day,
+        serverUpdatedAt: ms(t1) + 4,
+      }));
+      await ctx.db.insert("loggedSets", setRow("removed-earlier-le-set", "removed-earlier-le", {
+        updatedAt: t1 - 3 * day,
+        deletedAt: t1 - 3 * day,
+        serverUpdatedAt: ms(t1) + 5,
+      }));
     });
     // A device an hour fast deletes the workout; its set, logged exercise and
     // workout tombstones arrive one after another and are capped at arrival.
@@ -333,13 +344,13 @@ describe("sync damage audit and repair", () => {
     expect((await row(t, "loggedSets", "fast-set"))!.deletedAt).toBeLessThan(session.deletedAt!);
 
     const byDefault = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, { sessionRowId: session._id });
-    expect(byDefault).toMatchObject({ loggedExercises: 1, sets: 1, leftOut: { loggedExercises: 0, sets: 1 } });
+    expect(byDefault).toMatchObject({ loggedExercises: 1, sets: 1, leftOut: { loggedExercises: 1, sets: 2 } });
 
     const wider = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, {
       sessionRowId: session._id,
       childrenDeletedSince: t1 - 4 * day,
     });
-    expect(wider).toMatchObject({ loggedExercises: 1, sets: 2, leftOut: { loggedExercises: 0, sets: 0 } });
+    expect(wider).toMatchObject({ loggedExercises: 2, sets: 3, leftOut: { loggedExercises: 0, sets: 0 } });
   });
 
   test("restoring refuses a workout that is not deleted", async () => {

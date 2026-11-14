@@ -457,32 +457,32 @@ export const restoreWorkoutAsCopy = internalMutation({
       row.deletedAt === null || row.deletedAt >= childrenDeletedSince;
     const owner = session.ownerTokenIdentifier;
     const loggedExercises: Doc<"loggedExercises">[] = [];
+    const setsByLoggedExercise = new Map<string, Doc<"loggedSets">[]>();
     for await (const loggedExercise of ctx.db
       .query("loggedExercises")
       .withIndex("by_ownerTokenIdentifier_and_sessionClientId", (q) =>
         q.eq("ownerTokenIdentifier", owner).eq("sessionClientId", session.clientId),
       )) {
-      if (deletedWithWorkout(loggedExercise)) {
+      const keepsExercise = deletedWithWorkout(loggedExercise);
+      if (keepsExercise) {
         loggedExercises.push(loggedExercise);
       } else {
         leftOut.loggedExercises += 1;
       }
-    }
-    const setsByLoggedExercise = new Map<string, Doc<"loggedSets">[]>();
-    for (const loggedExercise of loggedExercises) {
       const sets: Doc<"loggedSets">[] = [];
       for await (const set of ctx.db
         .query("loggedSets")
         .withIndex("by_ownerTokenIdentifier_and_loggedExerciseClientId", (q) =>
           q.eq("ownerTokenIdentifier", owner).eq("loggedExerciseClientId", loggedExercise.clientId),
         )) {
-        if (deletedWithWorkout(set)) {
+        // A set under a left-out exercise is left out with it.
+        if (keepsExercise && deletedWithWorkout(set)) {
           sets.push(set);
         } else {
           leftOut.sets += 1;
         }
       }
-      setsByLoggedExercise.set(loggedExercise.clientId, sets);
+      if (keepsExercise) setsByLoggedExercise.set(loggedExercise.clientId, sets);
     }
     const setCount = [...setsByLoggedExercise.values()].reduce((total, sets) => total + sets.length, 0);
     const newSessionClientId = crypto.randomUUID().toLowerCase();
