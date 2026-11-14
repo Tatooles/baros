@@ -385,6 +385,38 @@ describe("sync damage audit and repair", () => {
     void [_id, _creationTime, ownerTokenIdentifier, serverUpdatedAt, syncOrder];
   });
 
+  test("a restored copy drops a link to a library exercise the server no longer has", async () => {
+    const t = convexTest(schema, modules);
+    await seedDamage(t);
+    const deleted = (await row(t, "workoutSessions", "deleted"))!;
+    const deletedLoggedExercise = (await row(t, "loggedExercises", "deleted-le"))!;
+    // A partial wipe removed the library exercise the workout used.
+    await t.run(async (ctx) => {
+      await ctx.db.patch(deletedLoggedExercise._id, { exerciseClientId: "wiped-exercise" });
+    });
+
+    const dryRun = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, { sessionRowId: deleted._id });
+    expect(dryRun).toMatchObject({ clearedExerciseReferences: 1 });
+    const restored = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, {
+      sessionRowId: deleted._id,
+      dryRun: false,
+    });
+
+    const copy = await t.run(async (ctx) =>
+      (await ctx.db.query("loggedExercises").collect()).find(
+        (candidate) => candidate.sessionClientId === restored.newSessionClientId,
+      ),
+    );
+    expect(copy).toMatchObject({ exerciseClientId: null, exerciseSnapshotName: "Bench Press", deletedAt: null });
+    // Devices can edit the copy: the server accepts it with no exercise link.
+    const { _id, _creationTime, ownerTokenIdentifier, serverUpdatedAt, syncOrder, ...fields } = copy!;
+    const edit = await t.withIdentity(owner).mutation(api.sync.upsertLoggedExercise, {
+      record: { ...fields, notes: "edited", updatedAt: now + 1, baseUpdatedAt: copy!.updatedAt },
+    });
+    expect(edit.status).toBe("updated");
+    void [_id, _creationTime, ownerTokenIdentifier, serverUpdatedAt, syncOrder];
+  });
+
   test("restoring refuses a workout that is not deleted", async () => {
     const t = convexTest(schema, modules);
     await seedDamage(t);

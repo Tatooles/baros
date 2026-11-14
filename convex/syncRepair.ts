@@ -485,8 +485,33 @@ export const restoreWorkoutAsCopy = internalMutation({
       if (keepsExercise) setsByLoggedExercise.set(loggedExercise.clientId, sets);
     }
     const setCount = [...setsByLoggedExercise.values()].reduce((total, sets) => total + sets.length, 0);
+    // A library exercise the server no longer has would leave the copy's
+    // logged exercise unusable on every device, so the copy drops that link
+    // and keeps the exercise's name, equipment and muscle group snapshot.
+    const missingExerciseIds = new Set<string>();
+    for (const loggedExercise of loggedExercises) {
+      const exerciseId = loggedExercise.exerciseClientId;
+      if (exerciseId === null || missingExerciseIds.has(exerciseId)) continue;
+      const exercise = await ctx.db
+        .query("exercises")
+        .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
+          q.eq("ownerTokenIdentifier", owner).eq("clientId", exerciseId),
+        )
+        .unique();
+      if (exercise === null) missingExerciseIds.add(exerciseId);
+    }
+    const clearedExerciseReferences = loggedExercises.filter(
+      (loggedExercise) =>
+        loggedExercise.exerciseClientId !== null && missingExerciseIds.has(loggedExercise.exerciseClientId),
+    ).length;
     const newSessionClientId = crypto.randomUUID().toLowerCase();
-    const counts = { loggedExercises: loggedExercises.length, sets: setCount, childrenDeletedSince, leftOut };
+    const counts = {
+      loggedExercises: loggedExercises.length,
+      sets: setCount,
+      childrenDeletedSince,
+      leftOut,
+      clearedExerciseReferences,
+    };
     if (args.dryRun !== false) {
       return { dryRun: true, newSessionClientId: null, ...counts };
     }
@@ -508,6 +533,10 @@ export const restoreWorkoutAsCopy = internalMutation({
       await ctx.db.insert("loggedExercises", {
         ...fields,
         ...live,
+        exerciseClientId:
+          fields.exerciseClientId !== null && missingExerciseIds.has(fields.exerciseClientId)
+            ? null
+            : fields.exerciseClientId,
         clientId: newLoggedExerciseClientId,
         sessionClientId: newSessionClientId,
         serverUpdatedAt: await nextVersion(),
