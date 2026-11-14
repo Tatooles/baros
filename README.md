@@ -11,27 +11,46 @@ Native SwiftUI workout tracker for iPhone with a SwiftData-backed offline workou
 ## Commands
 
 - Generate project: `xcodegen generate`
+- Run logic tests (macOS, no simulator): `swift test --package-path BarosCore`
 - Build simulator app: `xcodebuild build -project Baros.xcodeproj -scheme Baros -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/codex-ios-app-derived-data`
 - Run full XCTest suite: `xcodebuild test -project Baros.xcodeproj -scheme Baros -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
-- Run unit tests only: `xcodebuild test -project Baros.xcodeproj -scheme BarosUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Run hosted unit tests only: `xcodebuild test -project Baros.xcodeproj -scheme BarosUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
 - Run UI tests only: `xcodebuild test -project Baros.xcodeproj -scheme Baros -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -only-testing:BarosUITests -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+
+## Testing
+
+Non-UI logic (models, persistence, sync, formatting, export, ownership, and the
+workout engine) lives in the local Swift package `BarosCore/`, which builds for
+iOS 26 and macOS 26. Its tests in `BarosCore/Tests/BarosCoreTests` run on macOS
+with `swift test --package-path BarosCore` in seconds and need no simulator, so
+use that loop for logic changes.
+
+`BarosTests` stays hosted in `Baros.app` for the tests that need the app or UI
+frameworks: SwiftUI and UIKit types, app lifecycle, the real app bundle and its
+Info.plist, entitlements, Sentry adapters, Live Activities, and launch order.
+Use the simulator for those, for `BarosUITests`, and for final evidence.
+
+`BarosCore` must not import SwiftUI, UIKit, ActivityKit, StoreKit, Clerk,
+Sentry, or ConvexMobile. When package code needs one of them, the package
+declares a protocol or closure and the app supplies the adapter.
 
 ## CI
 
 Pull requests classify changed paths before selecting the relevant GitHub
 Actions checks. Pushes to `main` use the same path boundaries. The checks are:
 
-- `ios-unit-tests`: builds the `BarosUnitTests` scheme and runs `BarosTests`.
+- `baros-core-tests`: runs `swift test --package-path BarosCore` on macOS, with no simulator.
+- `ios-unit-tests`: builds the `BarosUnitTests` scheme and runs the hosted `BarosTests`.
 - `ios-ui-smoke`: runs four deterministic UI tests covering completed workout logging, workout/tab navigation, a settings-triggered sync request, and signed-out local-data reset.
 - `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
 - `support-site-checks`: builds, checks, and tests the Astro support site, including any tracked release-asset contracts.
 
-The two iOS jobs report as skipped on support-site-only or unrelated pull
+The three app jobs report as skipped on support-site-only or unrelated pull
 requests, which preserves their required-check results without reserving a
 macOS runner. Changes to `convex/auth.config.ts` are app-relevant because the
 Swift unit suite validates that file's Clerk audience and OIDC contract.
 
-The UI smoke job intentionally selects only the four tests below instead of making the full `BarosUITests` target part of the required PR gate. Each selected test uses the UI suite's deterministic reset and in-memory launch helper. If either iOS job fails, first inspect the GitHub Actions log. The failed workflow run also uploads its `.xcresult` bundle and test log for local Xcode inspection.
+The UI smoke job intentionally selects only the four tests below instead of making the full `BarosUITests` target part of the required PR gate. Each selected test uses the UI suite's deterministic reset and in-memory launch helper. If an app job fails, first inspect the GitHub Actions log. A failed iOS job also uploads its `.xcresult` bundle and test log for local Xcode inspection; a failed `baros-core-tests` job uploads its `swift test` log.
 
 Run the exact UI smoke shard locally with:
 
@@ -82,6 +101,7 @@ Repeated green nightly runs are the evidence issue #63 needs before a 15–20 te
 Local equivalents:
 
 ```sh
+swift test --package-path BarosCore
 xcodebuild test -project Baros.xcodeproj -scheme BarosUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.5 -derivedDataPath /private/tmp/codex-ios-app-derived-data
 pnpm install --frozen-lockfile
 pnpm run convex:test

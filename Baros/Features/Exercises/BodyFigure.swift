@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftUI
 
 /// A drawn region of the body figure. Muscle regions map to the exercise

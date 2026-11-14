@@ -13,6 +13,7 @@ const repositoryRoot = process.env.CI_WORKFLOW_ROOT
 const appPaths = [
   ".github/workflows/app-ci.yml",
   "Baros/**",
+  "BarosCore/**",
   "BarosLiveActivity/**",
   "BarosTests/**",
   "BarosUITests/**",
@@ -83,8 +84,23 @@ function requireFailClosedGate(job) {
 test("required iOS gates fail closed when app-change classification fails or is cancelled", async () => {
   const workflow = await readWorkflow("app-ci.yml");
 
+  requireFailClosedGate(workflow.jobs["baros-core-tests"]);
   requireFailClosedGate(workflow.jobs["ios-unit-tests"]);
   requireFailClosedGate(workflow.jobs["ios-ui-smoke"]);
+});
+
+test("BarosCore package tests run on macOS without a simulator", async () => {
+  const workflow = await readWorkflow("app-ci.yml");
+  const steps = workflow.jobs["baros-core-tests"].steps;
+  const testStep = steps.find((step) => step.name === "Run BarosCore package tests");
+
+  assert.ok(testStep, "baros-core-tests must run the package tests");
+  assert.match(testStep.run, /set -o pipefail/);
+  assert.match(testStep.run, /swift test --package-path BarosCore/);
+  assert.ok(
+    steps.every((step) => !step.run?.includes("xcodebuild")),
+    "the package gate must not build the app or boot a simulator",
+  );
 });
 
 test("required iOS gates retry failed tests and report retries that passed", async () => {

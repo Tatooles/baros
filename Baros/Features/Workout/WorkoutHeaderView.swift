@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftUI
 
 struct WorkoutHeaderView: View {

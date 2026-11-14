@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftUI
 
 /// The release sheet shipped for Baros 1.3. It shares onboarding's page
