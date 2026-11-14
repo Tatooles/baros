@@ -303,6 +303,45 @@ describe("sync damage audit and repair", () => {
     expect(copiedSets).toEqual([expect.objectContaining({ deletedAt: null, weight: 135 })]);
   });
 
+  test("restoring brings back children a fast clock deleted just before the workout", async () => {
+    const t = convexTest(schema, modules);
+    const client = t.withIdentity(owner);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("workoutSessions", sessionRow("fast", { updatedAt: t1, deletedAt: null, serverUpdatedAt: ms(t1) }));
+      await ctx.db.insert("loggedExercises", loggedExerciseRow("fast-le", "fast", { updatedAt: t1, deletedAt: null, serverUpdatedAt: ms(t1) + 1 }));
+      await ctx.db.insert("loggedSets", setRow("fast-set", "fast-le", { updatedAt: t1, deletedAt: null, serverUpdatedAt: ms(t1) + 2 }));
+      // Removed by a history edit days before the workout was deleted.
+      await ctx.db.insert("loggedSets", setRow("removed-earlier", "fast-le", {
+        updatedAt: t1 - 3 * day,
+        deletedAt: t1 - 3 * day,
+        serverUpdatedAt: ms(t1) + 3,
+      }));
+    });
+    // A device an hour fast deletes the workout; its set, logged exercise and
+    // workout tombstones arrive one after another and are capped at arrival.
+    const deviceDeletedAt = now + 3600;
+    const uploads = [
+      ["loggedSets", "fast-set"],
+      ["loggedExercises", "fast-le"],
+      ["workoutSessions", "fast"],
+    ] as const;
+    for (const [index, [entityKind, clientId]] of uploads.entries()) {
+      vi.setSystemTime((now + index) * 1000);
+      await client.mutation(api.sync.tombstone, { entityKind, clientId, deletedAt: deviceDeletedAt });
+    }
+    const session = (await row(t, "workoutSessions", "fast"))!;
+    expect((await row(t, "loggedSets", "fast-set"))!.deletedAt).toBeLessThan(session.deletedAt!);
+
+    const byDefault = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, { sessionRowId: session._id });
+    expect(byDefault).toMatchObject({ loggedExercises: 1, sets: 1, leftOut: { loggedExercises: 0, sets: 1 } });
+
+    const wider = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, {
+      sessionRowId: session._id,
+      childrenDeletedSince: t1 - 4 * day,
+    });
+    expect(wider).toMatchObject({ loggedExercises: 1, sets: 2, leftOut: { loggedExercises: 0, sets: 0 } });
+  });
+
   test("restoring refuses a workout that is not deleted", async () => {
     const t = convexTest(schema, modules);
     await seedDamage(t);

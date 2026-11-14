@@ -425,10 +425,19 @@ export const syncRepairLogForRun = internalQuery({
 // so this creates a live copy under new ids, with the logged exercises and
 // sets that were deleted together with the workout. Every build downloads it
 // as a new workout. Dry run by default.
+//
+// A device uploads a workout's deletes children first, and the server caps
+// each deletion time at its arrival, so children deleted with the workout can
+// carry slightly earlier times. By default every child deleted up to a day
+// before the workout comes back; pass childrenDeletedSince (seconds) to choose
+// another cut-off. The result says how many children the cut-off left out.
+const defaultRestoreWindowSeconds = 24 * 60 * 60;
+
 export const restoreWorkoutAsCopy = internalMutation({
   args: {
     sessionRowId: v.id("workoutSessions"),
     dryRun: v.optional(v.boolean()),
+    childrenDeletedSince: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const session = await ctx.db.get(args.sessionRowId);
@@ -441,8 +450,11 @@ export const restoreWorkoutAsCopy = internalMutation({
     if (session.createdAt === 0) {
       throw new Error("The server never received this workout's content.");
     }
+    const childrenDeletedSince =
+      args.childrenDeletedSince ?? session.deletedAt - defaultRestoreWindowSeconds;
+    const leftOut = { loggedExercises: 0, sets: 0 };
     const deletedWithWorkout = (row: { deletedAt: number | null }) =>
-      row.deletedAt === null || row.deletedAt >= session.deletedAt!;
+      row.deletedAt === null || row.deletedAt >= childrenDeletedSince;
     const owner = session.ownerTokenIdentifier;
     const loggedExercises: Doc<"loggedExercises">[] = [];
     for await (const loggedExercise of ctx.db
@@ -450,7 +462,11 @@ export const restoreWorkoutAsCopy = internalMutation({
       .withIndex("by_ownerTokenIdentifier_and_sessionClientId", (q) =>
         q.eq("ownerTokenIdentifier", owner).eq("sessionClientId", session.clientId),
       )) {
-      if (deletedWithWorkout(loggedExercise)) loggedExercises.push(loggedExercise);
+      if (deletedWithWorkout(loggedExercise)) {
+        loggedExercises.push(loggedExercise);
+      } else {
+        leftOut.loggedExercises += 1;
+      }
     }
     const setsByLoggedExercise = new Map<string, Doc<"loggedSets">[]>();
     for (const loggedExercise of loggedExercises) {
@@ -460,14 +476,19 @@ export const restoreWorkoutAsCopy = internalMutation({
         .withIndex("by_ownerTokenIdentifier_and_loggedExerciseClientId", (q) =>
           q.eq("ownerTokenIdentifier", owner).eq("loggedExerciseClientId", loggedExercise.clientId),
         )) {
-        if (deletedWithWorkout(set)) sets.push(set);
+        if (deletedWithWorkout(set)) {
+          sets.push(set);
+        } else {
+          leftOut.sets += 1;
+        }
       }
       setsByLoggedExercise.set(loggedExercise.clientId, sets);
     }
     const setCount = [...setsByLoggedExercise.values()].reduce((total, sets) => total + sets.length, 0);
     const newSessionClientId = crypto.randomUUID().toLowerCase();
+    const counts = { loggedExercises: loggedExercises.length, sets: setCount, childrenDeletedSince, leftOut };
     if (args.dryRun !== false) {
-      return { dryRun: true, newSessionClientId: null, loggedExercises: loggedExercises.length, sets: setCount };
+      return { dryRun: true, newSessionClientId: null, ...counts };
     }
 
     const nextVersion = serverVersionAllocator(ctx, owner);
@@ -501,6 +522,6 @@ export const restoreWorkoutAsCopy = internalMutation({
         });
       }
     }
-    return { dryRun: false, newSessionClientId, loggedExercises: loggedExercises.length, sets: setCount };
+    return { dryRun: false, newSessionClientId, ...counts };
   },
 });
