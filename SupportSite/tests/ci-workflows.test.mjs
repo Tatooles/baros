@@ -89,15 +89,22 @@ test("required iOS gates fail closed when app-change classification fails or is 
   requireFailClosedGate(workflow.jobs["ios-ui-smoke"]);
 });
 
-test("BarosCore package tests run on macOS without a simulator", async () => {
+test("BarosCore package tests run once on macOS without a simulator", async () => {
   const workflow = await readWorkflow("app-ci.yml");
-  const steps = workflow.jobs["baros-core-tests"].steps;
+  const job = workflow.jobs["baros-core-tests"];
+  const steps = job.steps;
   const testStep = steps.find((step) => step.name === "Run BarosCore package tests");
 
+  // Branch protection requires this check by name.
+  assert.equal(job.name, "baros-core-tests");
   assert.ok(testStep, "baros-core-tests must run the package tests");
   assert.equal(
     testStep.run,
-    'python3 ci_scripts/swift_test_with_retry.py BarosCore "${RUNNER_TEMP}/BarosCoreTests.log"',
+    'set -o pipefail\nswift test --package-path BarosCore 2>&1 | tee "${RUNNER_TEMP}/BarosCoreTests.log"\n',
+  );
+  assert.ok(
+    steps.every((step) => !step.run?.includes("retry")),
+    "package test failures must fail the job instead of retrying",
   );
   assert.ok(
     steps.every((step) => !step.run?.includes("xcodebuild")),

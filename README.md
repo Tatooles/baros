@@ -39,7 +39,7 @@ declares a protocol or closure and the app supplies the adapter.
 Pull requests classify changed paths before selecting the relevant GitHub
 Actions checks. Pushes to `main` use the same path boundaries. The checks are:
 
-- `baros-core-tests`: runs `swift test --package-path BarosCore` on macOS, with no simulator, retrying failed tests once like the iOS jobs.
+- `baros-core-tests`: runs `swift test --package-path BarosCore` on macOS, with no simulator. It does not retry failed tests: without a simulator, a failure is almost always real.
 - `ios-unit-tests`: builds the `BarosUnitTests` scheme and runs the hosted `BarosTests`.
 - `ios-ui-smoke`: runs four deterministic UI tests covering completed workout logging, workout/tab navigation, a settings-triggered sync request, and signed-out local-data reset.
 - `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
