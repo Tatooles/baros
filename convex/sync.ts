@@ -745,6 +745,12 @@ async function tombstoneSyncedRecord(
         deletedAt: decision.deletedAt,
         serverUpdatedAt,
       } as Doc<"exercises">);
+      // Children an older server left without this parent row follow it too.
+      await cascadeDeletion(ctx, ownerTokenIdentifier, table, {
+        clientId,
+        updatedAt: decision.updatedAt,
+        deletedAt: decision.deletedAt,
+      }, nextVersion);
       return { status: "tombstoned", serverUpdatedAt };
     }
     case "alreadyDeleted": {

@@ -557,6 +557,42 @@ describe("#98 client clocks", () => {
     }
   });
 
+  test("limitation: an installed build's retry can win again once its clock skew has passed", async () => {
+    const client = convexTest(schema, modules).withIdentity(owner);
+    await client.mutation(api.sync.upsertExercise, { record: exercise(now - 100, { name: "Original" }) });
+    // Installed build F runs five minutes fast. Its upload applies; the
+    // response is lost.
+    const deviceFUpload = exercise(now + 300, { name: "F" });
+    expect((await client.mutation(api.sync.upsertExercise, { record: deviceFUpload })).status).toBe("updated");
+    // H edits in the gap between F's pull and F's retry.
+    vi.setSystemTime((now + 60) * 1000);
+    await client.mutation(api.sync.upsertExercise, { record: exercise(now + 60, { name: "H" }) });
+    // Once real time passes F's stamp, the retry carries no sign it is one.
+    // (F normally pulls H's version before retrying, which avoids this.)
+    vi.setSystemTime((now + 600) * 1000);
+    const retry = await client.mutation(api.sync.upsertExercise, { record: deviceFUpload });
+    expect(retry.status).toBe("updated");
+  });
+
+  test("a delete that reaches the server before its workout also deletes children left without it", async () => {
+    const t = convexTest(schema, modules);
+    // An older server left a logged exercise whose workout row is missing.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("loggedExercises", {
+        ...loggedExercise(now - 600, { sessionClientId: "session-1" }),
+        ownerTokenIdentifier: owner.tokenIdentifier,
+        serverUpdatedAt: (now - 600) * 1000,
+      } as never);
+    });
+    await t.withIdentity(owner).mutation(api.sync.tombstone, {
+      entityKind: "workoutSessions",
+      clientId: "session-1",
+      deletedAt: now - 60,
+    });
+    const child = await t.run(async (ctx) => await ctx.db.query("loggedExercises").unique());
+    expect(child!.deletedAt).toBe(now - 60);
+  });
+
   test("limitation: an installed build re-sending a pulled version can revert an edit made within a few seconds of clock skew", async () => {
     const client = convexTest(schema, modules).withIdentity(owner);
     // A device ten seconds fast wrote V. Installed build B pulled V, which
