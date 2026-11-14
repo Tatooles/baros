@@ -14,7 +14,12 @@ import subprocess
 import sys
 
 FAILED_CASE = re.compile(r"Test Case '-\[(\S+)\.(\S+) (\S+)\]' failed")
-ALL_TESTS_FINISHED = re.compile(r"^Test Suite 'All tests' (?:passed|failed) at ", re.MULTILINE)
+ANY_FAILED_CASE = re.compile(r"^Test Case '.*' failed", re.MULTILINE)
+CASE_FAILURE = re.compile(r"error: -\[\S+ \S+\] : ")
+ALL_TESTS_SUMMARY = re.compile(
+    r"^Test Suite 'All tests' (?:passed|failed) at .*\n\s*Executed \d+ tests?, with (\d+) failures?",
+    re.MULTILINE,
+)
 SWIFT_TESTING_FAILED = re.compile(r"Test run with \d+ tests?\b.* failed")
 
 
@@ -41,11 +46,17 @@ def main():
             return 0
 
         failed = sorted({f"{module}.{cls}/{test}" for module, cls, test in FAILED_CASE.findall(output)})
-        # Retry only when the whole XCTest run finished and its failures are
-        # all named test cases. A build failure, a crash, or a Swift Testing
-        # failure fails the step, because a filtered retry can't cover them.
-        completed = ALL_TESTS_FINISHED.search(output) and "unexpected signal" not in output
-        if not failed or not completed or SWIFT_TESTING_FAILED.search(output):
+        # Retry only when the whole XCTest run finished and every failure it
+        # counted belongs to a parsed test case. A build failure, a crash, a
+        # suite-level failure, or a Swift Testing failure fails the step,
+        # because a filtered retry can't cover them.
+        summary = ALL_TESTS_SUMMARY.search(output)
+        accounted = (
+            summary is not None
+            and int(summary.group(1)) == len(CASE_FAILURE.findall(output))
+            and len(ANY_FAILED_CASE.findall(output)) == len(FAILED_CASE.findall(output))
+        )
+        if not failed or not accounted or "unexpected signal" in output or SWIFT_TESTING_FAILED.search(output):
             print("swift test failed in a way a retry can't cover (build failure, crash, or unnamed failure).")
             return 1
 
