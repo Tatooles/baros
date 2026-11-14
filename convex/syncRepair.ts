@@ -493,7 +493,8 @@ export const restoreWorkoutAsCopy = internalMutation({
 
     const nextVersion = serverVersionAllocator(ctx, owner);
     const nowSeconds = Date.now() / 1000;
-    const live = { deletedAt: null, updatedAt: nowSeconds };
+    // A fresh record: none of the original's version or conflict history.
+    const live = { deletedAt: null, updatedAt: nowSeconds, syncOrder: nowSeconds };
     const { _id: _sessionId, _creationTime: _sessionCreation, ...sessionFields } = session;
     await ctx.db.insert("workoutSessions", {
       ...sessionFields,

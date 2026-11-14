@@ -353,6 +353,38 @@ describe("sync damage audit and repair", () => {
     expect(wider).toMatchObject({ loggedExercises: 2, sets: 3, leftOut: { loggedExercises: 0, sets: 0 } });
   });
 
+  test("a restored copy starts with no conflict history from the original", async () => {
+    const t = convexTest(schema, modules);
+    await seedDamage(t);
+    const deleted = (await row(t, "workoutSessions", "deleted"))!;
+    // The original was last written by a current build a month fast.
+    await t.run(async (ctx) => {
+      await ctx.db.patch(deleted._id, { syncOrder: now + 30 * day });
+    });
+    const restored = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, {
+      sessionRowId: deleted._id,
+      dryRun: false,
+    });
+    const copy = (await row(t, "workoutSessions", restored.newSessionClientId!))!;
+    const { _id, _creationTime, ownerTokenIdentifier, serverUpdatedAt, syncOrder, ...fields } = copy;
+
+    // Two devices pull the copy; A edits, then B edits concurrently, later.
+    const client = t.withIdentity(owner);
+    vi.setSystemTime((now + 1) * 1000);
+    const deviceA = await client.mutation(api.sync.upsertWorkoutSession, {
+      record: { ...fields, title: "A", updatedAt: now + 1, baseUpdatedAt: copy.updatedAt },
+    });
+    vi.setSystemTime((now + 2) * 1000);
+    const deviceB = await client.mutation(api.sync.upsertWorkoutSession, {
+      record: { ...fields, title: "B", updatedAt: now + 2, baseUpdatedAt: copy.updatedAt },
+    });
+
+    expect(deviceA.status).toBe("updated");
+    expect(deviceB.status).toBe("updated");
+    expect((await row(t, "workoutSessions", restored.newSessionClientId!))!.title).toBe("B");
+    void [_id, _creationTime, ownerTokenIdentifier, serverUpdatedAt, syncOrder];
+  });
+
   test("restoring refuses a workout that is not deleted", async () => {
     const t = convexTest(schema, modules);
     await seedDamage(t);
