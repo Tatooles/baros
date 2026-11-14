@@ -1,0 +1,124 @@
+---
+name: release
+description: Ship the next Baros version — scope, What's New, regression, App Store submission, and the post-release record. Optionally name the build to ship.
+disable-model-invocation: true
+---
+
+# Release
+
+Takes the version in `project.yml` (`MARKETING_VERSION`) from merged work to **Pending Developer Release** in App Store Connect, hands Kevin the Release button, and after he presses it, records the release. Re-running `/release` resumes wherever the release stands.
+
+`/release` ships from the newest `main`. `/release build <n>` ships the code of App Store Connect build `<n>` instead, so a release never has to wait for `main` to settle.
+
+**Gate** (⛔): stop, show Kevin exactly what the next action will do, and wait for an explicit yes in this conversation. A yes covers that one action. Everything outside a gate the skill does on its own.
+
+Scripts are in `scripts/` beside this file:
+
+- `asc.mjs` — App Store Connect client (`check`, `runs`, `status`, `prepare`, `submit`). Writes print a plan and send only with `--apply`. It has no release command: making a version available to customers is Kevin's press in App Store Connect.
+- `release-diff.mjs` — merged PRs, changed areas, and regression signals between two refs.
+- `bump-version.sh`, `tag-release.sh` — mechanical edits; each prints what it changed.
+
+Credentials live outside the repo in `~/.appstoreconnect/release.env` (Team key, App Manager role). `node scripts/asc.mjs check` confirms them; a `403 REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED` means Kevin has an agreement to accept in App Store Connect → Business.
+
+## 0. Locate the release
+
+`git fetch --tags origin`, then `node scripts/asc.mjs status <version>`. Resume at:
+
+- no version, `PREPARE_FOR_SUBMISSION`, or rejected → the first Phase A step whose **Done when** fails
+- `WAITING_FOR_REVIEW` / `IN_REVIEW` → step 8
+- `PENDING_DEVELOPER_RELEASE` → step 9
+- `READY_FOR_SALE` → Phase B
+
+## Phase A — prepare and submit
+
+### 1. Fix the base
+
+The **base** is the commit whose code this release ships. With `build <n>`, it is that build's commit (`node scripts/asc.mjs runs --build <n>`); otherwise it is `origin/main` now. Every later range — scope, release notes, regression focus — is `v<previous>..<base>`: `node scripts/release-diff.mjs v<previous> <base>`. Work merged after the base belongs to the next release.
+
+**Done when** the base SHA is recorded and the diff for that range is in hand.
+
+### 2. Reconcile scope
+
+List the milestone `"<version> release"` (`gh issue list --milestone ... --state all`). Sort every open milestone issue into *shipped* (its fix is in the base range → close it) or *deferred* (→ the next open milestone). Issues closed by PRs merged after the base move to the next milestone too. Add the issues closed by PRs in the range that are missing from the milestone. An open bug that should block the release is Kevin's call — raise it.
+
+⛔ The list of closes, moves, and additions.
+
+**Done when** the milestone holds exactly the issues the base range ships, with none open.
+
+### 3. What's New
+
+Follow [WHATS-NEW.md](WHATS-NEW.md): copy for the base range only, sheet, screenshot approval, PR merged to `main`.
+
+**Done when** the What's New PR is merged and `docs/release/app-store-submission-pack.md` on `main` holds this version's App Store text.
+
+### 4. Build the candidate
+
+The **candidate** is the build that ships: the exact binary the regression tests and App Review sees. Two paths:
+
+- **The base is `main`** (or the What's New merge is already in the base, or this release has no sheet): the candidate is the newest `main` build containing the What's New merge — `node scripts/asc.mjs runs`. Xcode Cloud only builds `main` when app paths change, so the candidate can trail `main` by docs-only commits; wait for any run still building.
+- **The base predates the What's New merge**: cut `release/<version>` from the base and `git cherry-pick -m 1 <What's New merge>`. Resolve any conflict so the sheet matches what `main` merged, then run the unit tests. ⛔ Push the branch. Xcode Cloud's "Main Branch Build" workflow also builds `release/` branches; the candidate is that run (`node scripts/asc.mjs runs --branch release/<version>`).
+
+Check GitHub's checks on a `main` candidate: `gh api repos/Tatooles/baros/commits/<sha>/check-runs --jq '.check_runs[] | "\(.name) \(.conclusion)"'`. A release branch gets no GitHub Actions run; the regression's unit and UI suites stand in.
+
+**Done when** you have the candidate's commit SHA, build number (`COMPLETE/SUCCEEDED`, `VALID`), and Xcode Cloud run ID, and its checks are green or the release-branch exception applies.
+
+### 5. Regression
+
+Follow [REGRESSION.md](REGRESSION.md) on the candidate commit. A blocker gets a fix PR to `main`; on a release branch, cherry-pick that fix onto it too. Then back to step 4.
+
+**Done when** the regression report shows no blockers.
+
+### 6. Prepare the App Store version
+
+Copy this version's text from the submission pack into a scratch file, byte for byte. Run `node scripts/asc.mjs prepare <version> --build <n> --whats-new <file>`, read the plan, then rerun with `--apply`. This only edits the draft, so it needs no gate.
+
+The API cannot reach the App Privacy answers. When the range adds data collection, a tracking or analytics SDK, or changes `PrivacyInfo.xcprivacy`, ask Kevin to update App Privacy in App Store Connect (or walk the page with him in the in-app browser).
+
+**Done when** `status` shows the candidate build attached, `releaseType: MANUAL`, and What's New identical to the pack.
+
+### 7. ⛔ Submit for review
+
+Show Kevin the `status` output and the regression report. On yes: `node scripts/asc.mjs submit <version>`, check the plan, `--apply`.
+
+**Done when** `status` shows the submission `WAITING_FOR_REVIEW`.
+
+### 8. Await review
+
+Review usually takes a day or two. End the turn: tell Kevin to rerun `/release` when Apple emails. On the rerun:
+
+- **Approved** (`PENDING_DEVELOPER_RELEASE`) → step 9.
+- **Rejected** → the reason lives in App Store Connect's App Review messages, outside the API: ask Kevin to paste it, or read it with him in the in-app browser. Metadata-only fixes go straight into App Store Connect. Binary fixes take a fix PR to `main` (cherry-picked onto the release branch when there is one), a new candidate (step 4), regression on the fix's area, `prepare` with the new build, then the resubmission — `asc.mjs` refuses an `UNRESOLVED_ISSUES` submission, so Kevin resubmits that one from the App Store Connect page.
+
+### 9. Bump the version, then hand off
+
+`main` stays on this version until approval so a rejection can still ship a new build. Now move it on:
+
+1. Next version = the lowest open milestone above this one (`gh api 'repos/Tatooles/baros/milestones?state=open' --jq '.[].title'`).
+2. On a branch from `main`, run `scripts/bump-version.sh <next>`. Of the tests it lists, update those asserting the current release the way commit `2ddae398` (the 1.5 bump) did — the upgrade test now expects an upgrade into an unannounced release to skip What's New. Run the unit tests and the edited UI tests.
+3. Open the PR with the `file-pr` skill. ⛔ Merge it once checks are green.
+
+Then tell Kevin: version `<version>` build `<n>` is approved and waiting — **Release This Version** in App Store Connect makes it live, and `/release` afterwards records it.
+
+**Done when** the bump PR is merged and Kevin has the hand-off.
+
+## Phase B — record the release
+
+### 10. Confirm availability
+
+`status` shows `READY_FOR_SALE`. Take the release date from Kevin's word or today's date.
+
+### 11. ⛔ Tags
+
+`scripts/tag-release.sh --version <v> --build <n> --commit <candidate sha> --run <run id> --date <date>`, show the two tags, then rerun with `--push`. A release branch is deleted from origin once both tags verify — the tags keep its commit.
+
+**Done when** the script reports both tags verified on origin and no `release/<version>` branch remains.
+
+### 12. ⛔ GitHub Release
+
+Draft the body in the shape of `gh release view v1.4.0`: the App Store summary with highlights in bold, the version/date/commit/audit-tag table, the App Store and closed-milestone links, and a changelog from the base range grouped into Features, Reliability and performance, and Fixes and maintenance, each line in user language with its PR numbers. No binaries attached. Show the draft; on yes, `gh release create v<semver> --verify-tag --title "Baros <semver>" --notes-file <file>`.
+
+### 13. ⛔ Close the milestone
+
+`gh api -X PATCH repos/Tatooles/baros/milestones/<number> -f state=closed -f description="Shipped <date>: <release url>"`.
+
+**Done when** the Release is public and the milestone is closed. Report the Release URL, tags, and build to Kevin.
