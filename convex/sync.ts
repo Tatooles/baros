@@ -21,6 +21,14 @@ import {
   workoutSessionPayloadValidator,
   workoutTemplatePayloadValidator,
 } from "./sync/validators";
+import {
+  cascadedChildVersion,
+  decideTombstone,
+  decideUpsert,
+  syncedContentEquals,
+  type UpsertDecision,
+} from "./sync/merge";
+import { syncError, type SyncErrorCode } from "./sync/errors";
 
 type UserSettingsPayload = Infer<typeof userSettingsPayloadValidator>;
 type ExercisePayload = Infer<typeof exercisePayloadValidator>;
@@ -45,10 +53,12 @@ type NormalizedLoggedExercisePayload = LoggedExercisePayload & {
   hasSnapshotMetadata: boolean;
 };
 
+// updatedAt is the stored version after the call. Current builds use it as
+// the base of their next edit; installed builds ignore it.
 type UpsertResult =
-  | { status: "inserted"; serverUpdatedAt: number }
-  | { status: "updated"; serverUpdatedAt: number }
-  | { status: "ignored_stale"; serverUpdatedAt: number };
+  | { status: "inserted"; serverUpdatedAt: number; updatedAt: number }
+  | { status: "updated"; serverUpdatedAt: number; updatedAt: number }
+  | { status: "ignored_stale"; serverUpdatedAt: number; updatedAt: number };
 
 type TombstoneResult =
   | { status: "tombstoned"; serverUpdatedAt: number }
@@ -139,7 +149,7 @@ type SyncReadCtx = QueryCtx | MutationCtx;
 
 function assertFiniteNumber(value: number, fieldName: string): void {
   if (!Number.isFinite(value)) {
-    throw new Error(`${fieldName} must be a finite number`);
+    throw syncError("invalidPayload", `${fieldName} must be a finite number`);
   }
 }
 
@@ -185,25 +195,6 @@ function pageFromOverfetch<TRecord extends { serverUpdatedAt: number }>(
   return {
     records: records.slice(0, limit),
     hasMore: records.length > limit,
-  };
-}
-
-function isStale(
-  existing: { updatedAt: number },
-  payload: { updatedAt: number },
-): boolean {
-  return existing.updatedAt >= payload.updatedAt;
-}
-
-function withServerFields<TRecord extends { clientId: string }>(
-  record: TRecord,
-  ownerTokenIdentifier: string,
-  serverUpdatedAt: number,
-): TRecord & { ownerTokenIdentifier: string; serverUpdatedAt: number } {
-  return {
-    ...record,
-    ownerTokenIdentifier,
-    serverUpdatedAt,
   };
 }
 
@@ -460,7 +451,7 @@ async function assertAccountDeletionNotStarted(
     return;
   }
 
-  throw new Error("Account deletion is in progress");
+  throw syncError("accountDeletionInProgress", "Account deletion is in progress");
 }
 
 async function markAccountDeletionStarted(
@@ -586,35 +577,370 @@ async function resolveExpiredAccountDeletionMarker(
 
 const expirableAccountDeletionPhases = ["started", "deleting", undefined] as const;
 
+// Every synced table shares the sync fields and these two index names, so one
+// engine handles them all. See sync/merge.ts for the rule itself.
+export type SyncTableName = AccountDeletionTable;
+type SyncDoc = Doc<SyncTableName>;
+type SyncPayload = {
+  clientId: string;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+};
+
+type ParentState =
+  | { kind: "live" }
+  | { kind: "deleted"; deletedAt: number }
+  | { kind: "missing"; code: SyncErrorCode; message: string };
+
+type UpsertPlan<TRecord extends SyncPayload> = {
+  table: SyncTableName;
+  record: TRecord;
+  insertFields: (record: TRecord) => Record<string, unknown>;
+  updateFields: (record: TRecord, existing: SyncDoc) => Record<string, unknown>;
+  // Only asked when the upload would keep the record live.
+  parentState?: () => Promise<ParentState>;
+};
+
+// Allocates the change-feed versions for one mutation. Each written row gets
+// its own value, because the per-table cursors page with a strict
+// greater-than and would skip rows that share one.
+export function serverVersionAllocator(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+): () => Promise<number> {
+  let next: number | null = null;
+  return async () => {
+    next ??= await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
+    return next++;
+  };
+}
+
+export async function findSyncedRecord(
+  ctx: MutationCtx,
+  table: SyncTableName,
+  ownerTokenIdentifier: string,
+  clientId: string,
+): Promise<SyncDoc | null> {
+  // The cast only narrows the table union; every synced table has this index.
+  return await ctx.db
+    .query(table as "exercises")
+    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
+      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
+    )
+    .unique();
+}
+
+function sameSyncedFields(existing: SyncDoc, fields: Record<string, unknown>): boolean {
+  const stored = existing as unknown as Record<string, unknown>;
+  return Object.entries(fields).every(
+    ([key, value]) => key === "updatedAt" || syncedContentEquals(stored[key] ?? null, value ?? null),
+  );
+}
+
+function keepsUploadLive(decision: UpsertDecision): boolean {
+  return (
+    (decision.action === "insert" && decision.deletedAt === null) ||
+    (decision.action === "patch" && decision.takeIncomingFields && decision.deletedAt === null)
+  );
+}
+
+async function upsertSyncedRecord<TRecord extends SyncPayload>(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+  plan: UpsertPlan<TRecord>,
+): Promise<UpsertResult> {
+  const { table } = plan;
+  // The base names the version an edit started from; it is not stored.
+  const { baseUpdatedAt, ...upload } = plan.record as TRecord & { baseUpdatedAt?: number | null };
+  const record = upload as TRecord;
+  const existing = await findSyncedRecord(ctx, table, ownerTokenIdentifier, record.clientId);
+  const keepsRecordLive =
+    record.deletedAt === null && (existing === null || existing.deletedAt === null);
+  const parent: ParentState =
+    keepsRecordLive && plan.parentState !== undefined
+      ? await plan.parentState()
+      : { kind: "live" };
+  const fields =
+    existing === null ? plan.insertFields(record) : plan.updateFields(record, existing);
+  const decision = decideUpsert(existing, { ...record, baseUpdatedAt }, {
+    nowSeconds: Date.now() / 1000,
+    sameContent: existing !== null && sameSyncedFields(existing, fields),
+    parentDeletedAt: parent.kind === "deleted" ? parent.deletedAt : null,
+  });
+  if (parent.kind === "missing" && keepsUploadLive(decision)) {
+    throw syncError(parent.code, parent.message);
+  }
+
+  const nextVersion = serverVersionAllocator(ctx, ownerTokenIdentifier);
+  switch (decision.action) {
+    case "ignore":
+      return {
+        status: "ignored_stale",
+        serverUpdatedAt: existing!.serverUpdatedAt,
+        updatedAt: existing!.updatedAt,
+      };
+    case "insert": {
+      const serverUpdatedAt = await nextVersion();
+      await ctx.db.insert(table as "exercises", {
+        ...fields,
+        updatedAt: decision.updatedAt,
+        deletedAt: decision.deletedAt,
+        ownerTokenIdentifier,
+        serverUpdatedAt,
+        syncOrder: decision.syncOrder,
+      } as Doc<"exercises">);
+      return {
+        status: decision.accepted ? "inserted" : "ignored_stale",
+        serverUpdatedAt,
+        updatedAt: decision.updatedAt,
+      };
+    }
+    case "patch": {
+      const serverUpdatedAt = await nextVersion();
+      await ctx.db.patch(existing!._id, {
+        ...(decision.takeIncomingFields ? { ...fields, ownerTokenIdentifier } : {}),
+        updatedAt: decision.updatedAt,
+        deletedAt: decision.deletedAt,
+        serverUpdatedAt,
+        ...(decision.syncOrder === undefined ? {} : { syncOrder: decision.syncOrder }),
+      });
+      if (decision.becomesDeleted && decision.deletedAt !== null) {
+        await cascadeDeletion(ctx, ownerTokenIdentifier, table, {
+          clientId: record.clientId,
+          updatedAt: decision.updatedAt,
+          deletedAt: decision.deletedAt,
+        }, nextVersion);
+      }
+      return {
+        status: decision.accepted ? "updated" : "ignored_stale",
+        serverUpdatedAt,
+        updatedAt: decision.updatedAt,
+      };
+    }
+  }
+}
+
+async function tombstoneSyncedRecord(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+  table: SyncTableName,
+  clientId: string,
+  deletedAt: number,
+): Promise<TombstoneResult> {
+  const existing = await findSyncedRecord(ctx, table, ownerTokenIdentifier, clientId);
+  const decision = decideTombstone(existing, deletedAt, Date.now() / 1000);
+  const nextVersion = serverVersionAllocator(ctx, ownerTokenIdentifier);
+  switch (decision.action) {
+    case "insertPlaceholder": {
+      const serverUpdatedAt = await nextVersion();
+      await ctx.db.insert(table as "exercises", {
+        ...placeholderFields(table),
+        clientId,
+        ownerTokenIdentifier,
+        // Zero createdAt marks a placeholder: the record's own upload, if it
+        // ever arrives, writes its fields onto the tombstone and stays deleted.
+        createdAt: 0,
+        updatedAt: decision.updatedAt,
+        deletedAt: decision.deletedAt,
+        serverUpdatedAt,
+      } as Doc<"exercises">);
+      return { status: "tombstoned", serverUpdatedAt };
+    }
+    case "alreadyDeleted": {
+      // Children that an older server left live under this tombstone follow it now.
+      await cascadeDeletion(ctx, ownerTokenIdentifier, table, {
+        clientId,
+        updatedAt: existing!.updatedAt,
+        deletedAt: existing!.deletedAt!,
+      }, nextVersion);
+      return { status: "tombstoned", serverUpdatedAt: existing!.serverUpdatedAt };
+    }
+    case "tombstone": {
+      const serverUpdatedAt = await nextVersion();
+      await ctx.db.patch(existing!._id, {
+        deletedAt: decision.deletedAt,
+        updatedAt: decision.updatedAt,
+        serverUpdatedAt,
+      });
+      await cascadeDeletion(ctx, ownerTokenIdentifier, table, {
+        clientId,
+        updatedAt: decision.updatedAt,
+        deletedAt: decision.deletedAt,
+      }, nextVersion);
+      return { status: "tombstoned", serverUpdatedAt };
+    }
+  }
+}
+
+// Valid field values for a tombstone of a record the server never received.
+// Installed builds skip tombstones for records they do not have.
+function placeholderFields(table: SyncTableName): Record<string, unknown> {
+  switch (table) {
+    case "userSettings":
+      return { weightUnitRaw: "pounds", defaultRestTimerSeconds: 0, hasCompletedOnboarding: false };
+    case "exercises":
+      return {
+        seedIdentifier: null,
+        name: "",
+        categoryRaw: "other",
+        equipmentRaw: "other",
+        primaryMuscleRaw: "",
+        primaryMuscleGroupRaw: defaultPrimaryMuscleGroupRaw,
+        notes: "",
+        isArchived: false,
+        isSeeded: false,
+      };
+    case "workoutSessions":
+      return {
+        title: "",
+        startedAt: 0,
+        endedAt: null,
+        durationSeconds: 0,
+        notes: "",
+        referenceNotes: null,
+        statusRaw: "discarded",
+        sourceRaw: "blank",
+        sourceSessionID: null,
+        healthLinkID: null,
+      };
+    case "loggedExercises":
+      return {
+        sessionClientId: "",
+        exerciseClientId: null,
+        orderIndex: 0,
+        exerciseSnapshotName: "",
+        exerciseSnapshotEquipmentRaw: defaultExerciseSnapshotEquipmentRaw,
+        exerciseSnapshotPrimaryMuscleGroupRaw: defaultExerciseSnapshotPrimaryMuscleGroupRaw,
+        hasSnapshotMetadata: false,
+        notes: "",
+        referenceNotes: null,
+      };
+    case "loggedSets":
+      return {
+        loggedExerciseClientId: "",
+        orderIndex: 0,
+        weight: null,
+        reps: null,
+        rpe: null,
+        kindRaw: "working",
+        isCompleted: false,
+        completedAt: null,
+        notes: "",
+        healthLinkID: null,
+      };
+    case "workoutTemplates":
+      return { name: "", entries: [] };
+  }
+}
+
+// Deleting a workout deletes its logged exercises and their sets; deleting a
+// logged exercise deletes its sets. Deleting an exercise from the library
+// leaves history alone, because history keeps its own snapshot.
+export type SyncRowVersion = {
+  updatedAt: number;
+  deletedAt: number | null;
+  serverUpdatedAt: number;
+};
+
+// Reports each row a cascade changes, so a repair can log what it did.
+export type CascadeChange = {
+  tableName: "loggedExercises" | "loggedSets";
+  rowId: string;
+  clientId: string;
+  before: SyncRowVersion;
+  after: SyncRowVersion;
+};
+
+export async function cascadeDeletion(
+  ctx: MutationCtx,
+  ownerTokenIdentifier: string,
+  table: SyncTableName,
+  parent: { clientId: string; updatedAt: number; deletedAt: number },
+  nextVersion: () => Promise<number>,
+  onChange?: (change: CascadeChange) => Promise<void>,
+): Promise<void> {
+  if (table === "workoutSessions") {
+    const loggedExercises: Doc<"loggedExercises">[] = [];
+    for await (const loggedExercise of ctx.db
+      .query("loggedExercises")
+      .withIndex("by_ownerTokenIdentifier_and_sessionClientId", (q) =>
+        q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("sessionClientId", parent.clientId),
+      )) {
+      loggedExercises.push(loggedExercise);
+    }
+    for (const loggedExercise of loggedExercises) {
+      let version = { updatedAt: loggedExercise.updatedAt, deletedAt: loggedExercise.deletedAt };
+      if (loggedExercise.deletedAt === null) {
+        version = cascadedChildVersion(loggedExercise, parent);
+        const after = { ...version, serverUpdatedAt: await nextVersion() };
+        await ctx.db.patch(loggedExercise._id, after);
+        await onChange?.({
+          tableName: "loggedExercises",
+          rowId: loggedExercise._id,
+          clientId: loggedExercise.clientId,
+          before: versionOf(loggedExercise),
+          after,
+        });
+      }
+      await cascadeDeletion(ctx, ownerTokenIdentifier, "loggedExercises", {
+        clientId: loggedExercise.clientId,
+        updatedAt: version.updatedAt,
+        deletedAt: version.deletedAt ?? parent.deletedAt,
+      }, nextVersion, onChange);
+    }
+    return;
+  }
+
+  if (table === "loggedExercises") {
+    const sets: Doc<"loggedSets">[] = [];
+    for await (const set of ctx.db
+      .query("loggedSets")
+      .withIndex("by_ownerTokenIdentifier_and_loggedExerciseClientId", (q) =>
+        q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("loggedExerciseClientId", parent.clientId),
+      )) {
+      sets.push(set);
+    }
+    for (const set of sets) {
+      if (set.deletedAt === null) {
+        const after = { ...cascadedChildVersion(set, parent), serverUpdatedAt: await nextVersion() };
+        await ctx.db.patch(set._id, after);
+        await onChange?.({
+          tableName: "loggedSets",
+          rowId: set._id,
+          clientId: set.clientId,
+          before: versionOf(set),
+          after,
+        });
+      }
+    }
+  }
+}
+
+export function versionOf(row: SyncRowVersion): SyncRowVersion {
+  return { updatedAt: row.updatedAt, deletedAt: row.deletedAt, serverUpdatedAt: row.serverUpdatedAt };
+}
+
+function parentStateFromRow(
+  row: { deletedAt: number | null } | null,
+  missingMessage: string,
+): ParentState {
+  if (row === null) return { kind: "missing", code: "missingParent", message: missingMessage };
+  if (row.deletedAt !== null) return { kind: "deleted", deletedAt: row.deletedAt };
+  return { kind: "live" };
+}
+
 async function upsertUserSettingsByClientId(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
   record: UserSettingsPayload,
 ): Promise<UpsertResult> {
-  const existing = await ctx.db
-    .query("userSettings")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", record.clientId),
-    )
-    .unique();
-
-  if (existing !== null && isStale(existing, record)) {
-    return {
-      status: "ignored_stale",
-      serverUpdatedAt: existing.serverUpdatedAt,
-    };
-  }
-
-  const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
-  const nextRecord = withServerFields(record, ownerTokenIdentifier, serverUpdatedAt);
-
-  if (existing === null) {
-    await ctx.db.insert("userSettings", nextRecord);
-    return { status: "inserted", serverUpdatedAt };
-  }
-
-  await ctx.db.patch(existing._id, nextRecord);
-  return { status: "updated", serverUpdatedAt };
+  return await upsertSyncedRecord(ctx, ownerTokenIdentifier, {
+    table: "userSettings",
+    record,
+    insertFields: (upload) => ({ ...upload }),
+    updateFields: (upload) => ({ ...upload }),
+  });
 }
 
 async function upsertExerciseByClientId(
@@ -622,44 +948,18 @@ async function upsertExerciseByClientId(
   ownerTokenIdentifier: string,
   record: ExercisePayload,
 ): Promise<UpsertResult> {
-  const existing = await ctx.db
-    .query("exercises")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", record.clientId),
-    )
-    .unique();
-
-  if (existing !== null && isStale(existing, record)) {
-    return {
-      status: "ignored_stale",
-      serverUpdatedAt: existing.serverUpdatedAt,
-    };
-  }
-
-  const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
-  const normalizedRecord =
-    existing === null
-      ? normalizeExercisePayload(record)
-      : {
-          ...record,
-          primaryMuscleGroupRaw:
-            record.primaryMuscleGroupRaw ??
-            existing.primaryMuscleGroupRaw ??
-            defaultPrimaryMuscleGroupRaw,
-        };
-  const nextRecord = withServerFields(
-    normalizedRecord,
-    ownerTokenIdentifier,
-    serverUpdatedAt,
-  );
-
-  if (existing === null) {
-    await ctx.db.insert("exercises", nextRecord);
-    return { status: "inserted", serverUpdatedAt };
-  }
-
-  await ctx.db.patch(existing._id, nextRecord);
-  return { status: "updated", serverUpdatedAt };
+  return await upsertSyncedRecord(ctx, ownerTokenIdentifier, {
+    table: "exercises",
+    record,
+    insertFields: normalizeExercisePayload,
+    updateFields: (upload, existing) => ({
+      ...upload,
+      primaryMuscleGroupRaw:
+        upload.primaryMuscleGroupRaw ??
+        (existing as Doc<"exercises">).primaryMuscleGroupRaw ??
+        defaultPrimaryMuscleGroupRaw,
+    }),
+  });
 }
 
 async function upsertWorkoutSessionByClientId(
@@ -667,30 +967,19 @@ async function upsertWorkoutSessionByClientId(
   ownerTokenIdentifier: string,
   record: WorkoutSessionPayload,
 ): Promise<UpsertResult> {
-  const existing = await ctx.db
-    .query("workoutSessions")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", record.clientId),
-    )
-    .unique();
-
-  if (existing !== null && isStale(existing, record)) {
-    return {
-      status: "ignored_stale",
-      serverUpdatedAt: existing.serverUpdatedAt,
-    };
-  }
-
-  const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
-  const nextRecord = withServerFields(record, ownerTokenIdentifier, serverUpdatedAt);
-
-  if (existing === null) {
-    await ctx.db.insert("workoutSessions", nextRecord);
-    return { status: "inserted", serverUpdatedAt };
-  }
-
-  await ctx.db.patch(existing._id, nextRecord);
-  return { status: "updated", serverUpdatedAt };
+  return await upsertSyncedRecord(ctx, ownerTokenIdentifier, {
+    table: "workoutSessions",
+    record,
+    insertFields: (upload) => ({ ...upload }),
+    // patch keeps sourceTemplateID when an older build leaves it out.
+    updateFields: (upload, existing) => ({
+      ...upload,
+      sourceTemplateID:
+        upload.sourceTemplateID === undefined
+          ? (existing as Doc<"workoutSessions">).sourceTemplateID
+          : upload.sourceTemplateID,
+    }),
+  });
 }
 
 /// Starts each entry from the stored one with the same id, so fields an
@@ -709,40 +998,18 @@ async function upsertWorkoutTemplateByClientId(
   ownerTokenIdentifier: string,
   record: WorkoutTemplatePayload,
 ): Promise<UpsertResult> {
-  const existing = await ctx.db
-    .query("workoutTemplates")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", record.clientId),
-    )
-    .unique();
-
-  if (existing !== null && isStale(existing, record)) {
-    return {
-      status: "ignored_stale",
-      serverUpdatedAt: existing.serverUpdatedAt,
-    };
-  }
-
-  const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
-
-  if (existing === null) {
-    await ctx.db.insert(
-      "workoutTemplates",
-      withServerFields(record, ownerTokenIdentifier, serverUpdatedAt),
-    );
-    return { status: "inserted", serverUpdatedAt };
-  }
-
-  // patch keeps top-level fields the upload leaves out.
-  await ctx.db.patch(
-    existing._id,
-    withServerFields(
-      { ...record, entries: mergeWorkoutTemplateEntries(existing.entries, record.entries) },
-      ownerTokenIdentifier,
-      serverUpdatedAt,
-    ),
-  );
-  return { status: "updated", serverUpdatedAt };
+  return await upsertSyncedRecord(ctx, ownerTokenIdentifier, {
+    table: "workoutTemplates",
+    record,
+    insertFields: (upload) => ({ ...upload }),
+    updateFields: (upload, existing) => ({
+      ...upload,
+      entries: mergeWorkoutTemplateEntries(
+        (existing as Doc<"workoutTemplates">).entries,
+        upload.entries,
+      ),
+    }),
+  });
 }
 
 async function findWorkoutSessionByClientId(
@@ -750,25 +1017,12 @@ async function findWorkoutSessionByClientId(
   ownerTokenIdentifier: string,
   clientId: string,
 ): Promise<Doc<"workoutSessions"> | null> {
-  return await ctx.db
-    .query("workoutSessions")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
-    )
-    .unique();
-}
-
-async function findExerciseByClientId(
-  ctx: MutationCtx,
-  ownerTokenIdentifier: string,
-  clientId: string,
-): Promise<Doc<"exercises"> | null> {
-  return await ctx.db
-    .query("exercises")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
-    )
-    .unique();
+  return (await findSyncedRecord(
+    ctx,
+    "workoutSessions",
+    ownerTokenIdentifier,
+    clientId,
+  )) as Doc<"workoutSessions"> | null;
 }
 
 async function findLoggedExerciseByClientId(
@@ -776,78 +1030,61 @@ async function findLoggedExerciseByClientId(
   ownerTokenIdentifier: string,
   clientId: string,
 ): Promise<Doc<"loggedExercises"> | null> {
-  return await ctx.db
-    .query("loggedExercises")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
-    )
-    .unique();
+  return (await findSyncedRecord(
+    ctx,
+    "loggedExercises",
+    ownerTokenIdentifier,
+    clientId,
+  )) as Doc<"loggedExercises"> | null;
 }
 
-async function assertLoggedExerciseParentExists(
+async function loggedExerciseParentState(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
   record: LoggedExercisePayload,
-): Promise<void> {
-  if (record.deletedAt !== null) {
-    return;
-  }
-
-  const session = await findWorkoutSessionByClientId(
-    ctx,
-    ownerTokenIdentifier,
-    record.sessionClientId,
+): Promise<ParentState> {
+  const session = parentStateFromRow(
+    await findWorkoutSessionByClientId(ctx, ownerTokenIdentifier, record.sessionClientId),
+    "Cannot upsert active logged exercise without its workout session parent.",
   );
-  if (session === null || session.deletedAt !== null) {
-    throw new Error(
-      "Cannot upsert active logged exercise without its workout session parent.",
-    );
+  if (session.kind !== "live" || record.exerciseClientId === null) {
+    return session;
   }
-
-  if (record.exerciseClientId !== null) {
-    const exercise = await findExerciseByClientId(
-      ctx,
-      ownerTokenIdentifier,
-      record.exerciseClientId,
-    );
-    if (exercise === null) {
-      throw new Error(
-        "Cannot upsert active logged exercise with a missing exercise reference.",
-      );
-    }
-  }
+  // A tombstoned exercise is still a valid reference: history keeps its snapshot.
+  const exercise = await findSyncedRecord(
+    ctx,
+    "exercises",
+    ownerTokenIdentifier,
+    record.exerciseClientId,
+  );
+  return exercise === null
+    ? {
+        kind: "missing",
+        code: "missingExerciseReference",
+        message: "Cannot upsert active logged exercise with a missing exercise reference.",
+      }
+    : { kind: "live" };
 }
 
-async function assertLoggedSetParentExists(
+async function loggedSetParentState(
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
   record: LoggedSetPayload,
-): Promise<void> {
-  if (record.deletedAt !== null) {
-    return;
-  }
-
+): Promise<ParentState> {
+  const missingMessage = "Cannot upsert active logged set without its logged exercise parent.";
   const loggedExercise = await findLoggedExerciseByClientId(
     ctx,
     ownerTokenIdentifier,
     record.loggedExerciseClientId,
   );
-  if (loggedExercise === null || loggedExercise.deletedAt !== null) {
-    throw new Error(
-      "Cannot upsert active logged set without its logged exercise parent.",
-    );
+  const loggedExerciseState = parentStateFromRow(loggedExercise, missingMessage);
+  if (loggedExercise === null || loggedExerciseState.kind !== "live") {
+    return loggedExerciseState;
   }
-
-  const session = await findWorkoutSessionByClientId(
-    ctx,
-    ownerTokenIdentifier,
-    loggedExercise.sessionClientId,
+  return parentStateFromRow(
+    await findWorkoutSessionByClientId(ctx, ownerTokenIdentifier, loggedExercise.sessionClientId),
+    missingMessage,
   );
-  if (session === null || session.deletedAt !== null) {
-    throw new Error(
-      "Cannot upsert active logged set without its logged exercise parent.",
-    );
-  }
 }
 
 async function upsertLoggedExerciseByClientId(
@@ -855,40 +1092,14 @@ async function upsertLoggedExerciseByClientId(
   ownerTokenIdentifier: string,
   record: LoggedExercisePayload,
 ): Promise<UpsertResult> {
-  const existing = await ctx.db
-    .query("loggedExercises")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", record.clientId),
-    )
-    .unique();
-
-  if (existing !== null && isStale(existing, record)) {
-    return {
-      status: "ignored_stale",
-      serverUpdatedAt: existing.serverUpdatedAt,
-    };
-  }
-
-  await assertLoggedExerciseParentExists(ctx, ownerTokenIdentifier, record);
-
-  const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
-  const normalizedRecord =
-    existing === null
-      ? normalizeLoggedExercisePayload(record)
-      : normalizeLoggedExerciseUpdatePayload(record, existing);
-  const nextRecord = withServerFields(
-    normalizedRecord,
-    ownerTokenIdentifier,
-    serverUpdatedAt,
-  );
-
-  if (existing === null) {
-    await ctx.db.insert("loggedExercises", nextRecord);
-    return { status: "inserted", serverUpdatedAt };
-  }
-
-  await ctx.db.patch(existing._id, nextRecord);
-  return { status: "updated", serverUpdatedAt };
+  return await upsertSyncedRecord(ctx, ownerTokenIdentifier, {
+    table: "loggedExercises",
+    record,
+    insertFields: normalizeLoggedExercisePayload,
+    updateFields: (upload, existing) =>
+      normalizeLoggedExerciseUpdatePayload(upload, existing as Doc<"loggedExercises">),
+    parentState: () => loggedExerciseParentState(ctx, ownerTokenIdentifier, record),
+  });
 }
 
 async function upsertLoggedSetByClientId(
@@ -896,217 +1107,13 @@ async function upsertLoggedSetByClientId(
   ownerTokenIdentifier: string,
   record: LoggedSetPayload,
 ): Promise<UpsertResult> {
-  const existing = await ctx.db
-    .query("loggedSets")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", record.clientId),
-    )
-    .unique();
-
-  if (existing !== null && isStale(existing, record)) {
-    return {
-      status: "ignored_stale",
-      serverUpdatedAt: existing.serverUpdatedAt,
-    };
-  }
-
-  await assertLoggedSetParentExists(ctx, ownerTokenIdentifier, record);
-
-  const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
-  const nextRecord = withServerFields(record, ownerTokenIdentifier, serverUpdatedAt);
-
-  if (existing === null) {
-    await ctx.db.insert("loggedSets", nextRecord);
-    return { status: "inserted", serverUpdatedAt };
-  }
-
-  await ctx.db.patch(existing._id, nextRecord);
-  return { status: "updated", serverUpdatedAt };
-}
-
-async function tombstoneExisting(
-  ctx: MutationCtx,
-  existing: Doc<"userSettings">,
-  ownerTokenIdentifier: string,
-  deletedAt: number,
-): Promise<TombstoneResult>;
-async function tombstoneExisting(
-  ctx: MutationCtx,
-  existing: Doc<"exercises">,
-  ownerTokenIdentifier: string,
-  deletedAt: number,
-): Promise<TombstoneResult>;
-async function tombstoneExisting(
-  ctx: MutationCtx,
-  existing: Doc<"workoutSessions">,
-  ownerTokenIdentifier: string,
-  deletedAt: number,
-): Promise<TombstoneResult>;
-async function tombstoneExisting(
-  ctx: MutationCtx,
-  existing: Doc<"loggedExercises">,
-  ownerTokenIdentifier: string,
-  deletedAt: number,
-): Promise<TombstoneResult>;
-async function tombstoneExisting(
-  ctx: MutationCtx,
-  existing: Doc<"loggedSets">,
-  ownerTokenIdentifier: string,
-  deletedAt: number,
-): Promise<TombstoneResult>;
-async function tombstoneExisting(
-  ctx: MutationCtx,
-  existing: Doc<"workoutTemplates">,
-  ownerTokenIdentifier: string,
-  deletedAt: number,
-): Promise<TombstoneResult>;
-async function tombstoneExisting(
-  ctx: MutationCtx,
-  existing:
-    | Doc<"userSettings">
-    | Doc<"exercises">
-    | Doc<"workoutSessions">
-    | Doc<"loggedExercises">
-    | Doc<"loggedSets">
-    | Doc<"workoutTemplates">,
-  ownerTokenIdentifier: string,
-  deletedAt: number,
-): Promise<TombstoneResult> {
-  if (existing.updatedAt >= deletedAt) {
-    return {
-      status: "ignored_stale",
-      serverUpdatedAt: existing.serverUpdatedAt,
-    };
-  }
-
-  const serverUpdatedAt = await nextServerUpdatedAt(ctx, ownerTokenIdentifier);
-  await ctx.db.patch(existing._id, {
-    deletedAt,
-    updatedAt: deletedAt,
-    serverUpdatedAt,
+  return await upsertSyncedRecord(ctx, ownerTokenIdentifier, {
+    table: "loggedSets",
+    record,
+    insertFields: (upload) => ({ ...upload }),
+    updateFields: (upload) => ({ ...upload }),
+    parentState: () => loggedSetParentState(ctx, ownerTokenIdentifier, record),
   });
-
-  return { status: "tombstoned", serverUpdatedAt };
-}
-
-async function tombstoneUserSettingsByClientId(
-  ctx: MutationCtx,
-  ownerTokenIdentifier: string,
-  clientId: string,
-  deletedAt: number,
-): Promise<TombstoneResult> {
-  const existing = await ctx.db
-    .query("userSettings")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
-    )
-    .unique();
-
-  if (existing === null) {
-    return { status: "missing" };
-  }
-
-  return await tombstoneExisting(ctx, existing, ownerTokenIdentifier, deletedAt);
-}
-
-async function tombstoneExerciseByClientId(
-  ctx: MutationCtx,
-  ownerTokenIdentifier: string,
-  clientId: string,
-  deletedAt: number,
-): Promise<TombstoneResult> {
-  const existing = await ctx.db
-    .query("exercises")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
-    )
-    .unique();
-
-  if (existing === null) {
-    return { status: "missing" };
-  }
-
-  return await tombstoneExisting(ctx, existing, ownerTokenIdentifier, deletedAt);
-}
-
-async function tombstoneWorkoutSessionByClientId(
-  ctx: MutationCtx,
-  ownerTokenIdentifier: string,
-  clientId: string,
-  deletedAt: number,
-): Promise<TombstoneResult> {
-  const existing = await ctx.db
-    .query("workoutSessions")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
-    )
-    .unique();
-
-  if (existing === null) {
-    return { status: "missing" };
-  }
-
-  return await tombstoneExisting(ctx, existing, ownerTokenIdentifier, deletedAt);
-}
-
-async function tombstoneLoggedExerciseByClientId(
-  ctx: MutationCtx,
-  ownerTokenIdentifier: string,
-  clientId: string,
-  deletedAt: number,
-): Promise<TombstoneResult> {
-  const existing = await ctx.db
-    .query("loggedExercises")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
-    )
-    .unique();
-
-  if (existing === null) {
-    return { status: "missing" };
-  }
-
-  return await tombstoneExisting(ctx, existing, ownerTokenIdentifier, deletedAt);
-}
-
-async function tombstoneLoggedSetByClientId(
-  ctx: MutationCtx,
-  ownerTokenIdentifier: string,
-  clientId: string,
-  deletedAt: number,
-): Promise<TombstoneResult> {
-  const existing = await ctx.db
-    .query("loggedSets")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
-    )
-    .unique();
-
-  if (existing === null) {
-    return { status: "missing" };
-  }
-
-  return await tombstoneExisting(ctx, existing, ownerTokenIdentifier, deletedAt);
-}
-
-async function tombstoneWorkoutTemplateByClientId(
-  ctx: MutationCtx,
-  ownerTokenIdentifier: string,
-  clientId: string,
-  deletedAt: number,
-): Promise<TombstoneResult> {
-  const existing = await ctx.db
-    .query("workoutTemplates")
-    .withIndex("by_ownerTokenIdentifier_and_clientId", (q) =>
-      q.eq("ownerTokenIdentifier", ownerTokenIdentifier).eq("clientId", clientId),
-    )
-    .unique();
-
-  if (existing === null) {
-    return { status: "missing" };
-  }
-
-  return await tombstoneExisting(ctx, existing, ownerTokenIdentifier, deletedAt);
 }
 
 async function fetchUserSettingsChanges(
@@ -1413,50 +1420,13 @@ export const tombstone = mutation({
     const ownerTokenIdentifier = await requireOwnerTokenIdentifier(ctx);
     await assertAccountDeletionNotStarted(ctx, ownerTokenIdentifier);
 
-    switch (args.entityKind) {
-      case "userSettings":
-        return await tombstoneUserSettingsByClientId(
-          ctx,
-          ownerTokenIdentifier,
-          args.clientId,
-          args.deletedAt,
-        );
-      case "exercises":
-        return await tombstoneExerciseByClientId(
-          ctx,
-          ownerTokenIdentifier,
-          args.clientId,
-          args.deletedAt,
-        );
-      case "workoutSessions":
-        return await tombstoneWorkoutSessionByClientId(
-          ctx,
-          ownerTokenIdentifier,
-          args.clientId,
-          args.deletedAt,
-        );
-      case "loggedExercises":
-        return await tombstoneLoggedExerciseByClientId(
-          ctx,
-          ownerTokenIdentifier,
-          args.clientId,
-          args.deletedAt,
-        );
-      case "loggedSets":
-        return await tombstoneLoggedSetByClientId(
-          ctx,
-          ownerTokenIdentifier,
-          args.clientId,
-          args.deletedAt,
-        );
-      case "workoutTemplates":
-        return await tombstoneWorkoutTemplateByClientId(
-          ctx,
-          ownerTokenIdentifier,
-          args.clientId,
-          args.deletedAt,
-        );
-    }
+    return await tombstoneSyncedRecord(
+      ctx,
+      ownerTokenIdentifier,
+      args.entityKind,
+      args.clientId,
+      args.deletedAt,
+    );
   },
 });
 

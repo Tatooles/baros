@@ -1845,7 +1845,7 @@ describe("sync conflict behavior", () => {
     expect(changes.exercises[0].updatedAt).toBe(3);
   });
 
-  test("workout graph tombstones stay in fetchChanges", async () => {
+  test("workout graph tombstones stay in fetchChanges and follow the workout's deletion", async () => {
     const t = testDb().withIdentity(userA);
 
     await t.mutation(api.sync.upsertExercise, { record: exerciseRecord() });
@@ -1887,26 +1887,28 @@ describe("sync conflict behavior", () => {
       deletedAt: 3,
       updatedAt: 3,
     });
+    // Deleting the workout already deleted its children, so their own later
+    // tombstones keep the workout's deletion time.
     expect(changes.loggedExercises[0]).toMatchObject({
       clientId: "logged-exercise-1",
-      deletedAt: 4,
-      updatedAt: 4,
+      deletedAt: 3,
+      updatedAt: 3,
     });
     expect(changes.loggedSets[0]).toMatchObject({
       clientId: "logged-set-1",
-      deletedAt: 5,
-      updatedAt: 5,
+      deletedAt: 3,
+      updatedAt: 3,
     });
   });
 
-  test("stale and equal-timestamp upserts are ignored idempotently", async () => {
+  test("older and duplicate upserts are ignored without a write", async () => {
     const t = testDb().withIdentity(userA);
 
     const inserted = await t.mutation(api.sync.upsertExercise, {
       record: exerciseRecord({ updatedAt: 4, name: "Bench Press" }),
     });
-    const equalTimestamp = await t.mutation(api.sync.upsertExercise, {
-      record: exerciseRecord({ updatedAt: 4, name: "Incline Press" }),
+    const duplicate = await t.mutation(api.sync.upsertExercise, {
+      record: exerciseRecord({ updatedAt: 4, name: "Bench Press" }),
     });
     const stale = await t.mutation(api.sync.upsertExercise, {
       record: exerciseRecord({ updatedAt: 3, name: "Decline Press" }),
@@ -1917,51 +1919,75 @@ describe("sync conflict behavior", () => {
     });
 
     expect(inserted.status).toBe("inserted");
-    expect(equalTimestamp).toEqual({
+    expect(duplicate).toMatchObject({
       status: "ignored_stale",
       serverUpdatedAt: inserted.serverUpdatedAt,
     });
-    expect(stale).toEqual({
+    expect(stale).toMatchObject({
       status: "ignored_stale",
       serverUpdatedAt: inserted.serverUpdatedAt,
     });
     expect(changes.exercises).toHaveLength(1);
-    expect(changes.exercises[0].name).toBe("Bench Press");
-    expect(changes.exercises[0].serverUpdatedAt).toBe(inserted.serverUpdatedAt);
+    expect(changes.exercises[0]).toMatchObject({
+      name: "Bench Press",
+      updatedAt: 4,
+      serverUpdatedAt: inserted.serverUpdatedAt,
+    });
   });
 
-  test("stale and equal-timestamp tombstones are ignored", async () => {
+  test("an equal-timestamp conflict keeps the stored version above the discarded upload", async () => {
     const t = testDb().withIdentity(userA);
 
     const inserted = await t.mutation(api.sync.upsertExercise, {
-      record: exerciseRecord({ updatedAt: 4 }),
+      record: exerciseRecord({ updatedAt: 4, name: "Bench Press" }),
     });
-    const equalTimestamp = await t.mutation(api.sync.tombstone, {
-      entityKind: "exercises",
-      clientId: "exercise-1",
-      deletedAt: 4,
-    });
-    const stale = await t.mutation(api.sync.tombstone, {
-      entityKind: "exercises",
-      clientId: "exercise-1",
-      deletedAt: 3,
+    const conflict = await t.mutation(api.sync.upsertExercise, {
+      record: exerciseRecord({ updatedAt: 4, name: "Incline Press" }),
     });
 
     const changes = await t.query(api.sync.fetchChanges, {
       cursors: zeroCursors,
     });
 
-    expect(equalTimestamp).toEqual({
-      status: "ignored_stale",
-      serverUpdatedAt: inserted.serverUpdatedAt,
+    // Installed builds adopt a pulled record only when its updatedAt is
+    // greater than their own, so the device holding "Incline Press" at 4
+    // needs the kept version above 4 to converge.
+    expect(conflict.status).toBe("ignored_stale");
+    expect(conflict.serverUpdatedAt).toBeGreaterThan(inserted.serverUpdatedAt!);
+    expect(changes.exercises[0].name).toBe("Bench Press");
+    expect(changes.exercises[0].updatedAt).toBeGreaterThan(4);
+  });
+
+  test("a tombstone wins regardless of timestamps and repeats idempotently (#97)", async () => {
+    const t = testDb().withIdentity(userA);
+
+    const inserted = await t.mutation(api.sync.upsertExercise, {
+      record: exerciseRecord({ updatedAt: 4 }),
     });
-    expect(stale).toEqual({
-      status: "ignored_stale",
-      serverUpdatedAt: inserted.serverUpdatedAt,
+    const tombstoned = await t.mutation(api.sync.tombstone, {
+      entityKind: "exercises",
+      clientId: "exercise-1",
+      deletedAt: 3,
     });
+    const repeated = await t.mutation(api.sync.tombstone, {
+      entityKind: "exercises",
+      clientId: "exercise-1",
+      deletedAt: 2,
+    });
+
+    const changes = await t.query(api.sync.fetchChanges, {
+      cursors: zeroCursors,
+    });
+
+    expect(tombstoned).toMatchObject({ status: "tombstoned" });
+    expect((tombstoned as { serverUpdatedAt: number }).serverUpdatedAt).toBeGreaterThan(
+      inserted.serverUpdatedAt,
+    );
+    expect(repeated).toEqual(tombstoned);
     expect(changes.exercises).toHaveLength(1);
-    expect(changes.exercises[0].deletedAt).toBeNull();
-    expect(changes.exercises[0].updatedAt).toBe(4);
+    expect(changes.exercises[0].deletedAt).toBe(3);
+    // Above the live version, so installed builds holding it adopt the delete.
+    expect(changes.exercises[0].updatedAt).toBeGreaterThan(4);
   });
 });
 
