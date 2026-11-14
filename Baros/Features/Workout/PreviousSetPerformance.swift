@@ -64,23 +64,18 @@ struct PreviousSetPerformance: Equatable {
         in sessions: [WorkoutSession],
         ownerTokenIdentifier: String?
     ) -> [UUID: [PreviousSetPerformance]] {
-        let routeIDByLoggedExerciseID = Dictionary(
-            uniqueKeysWithValues: loggedExercises.map { loggedExercise in
-                (loggedExercise.id, ExerciseHistoryRoute(loggedExercise: loggedExercise).id)
-            }
-        )
-        let requestedRouteIDs = Set(routeIDByLoggedExerciseID.values)
-        guard !requestedRouteIDs.isEmpty else { return [:] }
-
-        let previousSetsByRouteID = lastCompletedSetsByRouteID(
-            matching: requestedRouteIDs,
-            in: sessions,
-            ownerTokenIdentifier: ownerTokenIdentifier
+        let latestEntriesByRouteID = latestEntriesByRouteID(
+            for: loggedExercises,
+            in: sortedCompletedSessions(sessions, ownerTokenIdentifier: ownerTokenIdentifier)
         )
 
         return Dictionary(
-            uniqueKeysWithValues: routeIDByLoggedExerciseID.map { loggedExerciseID, routeID in
-                (loggedExerciseID, previousSetsByRouteID[routeID]?.map { makePerformance(from: $0) } ?? [])
+            uniqueKeysWithValues: loggedExercises.map { loggedExercise in
+                let routeID = ExerciseHistoryRoute(loggedExercise: loggedExercise).id
+                return (
+                    loggedExercise.id,
+                    latestEntriesByRouteID[routeID]?.sets.map { makePerformance(from: $0) } ?? []
+                )
             }
         )
     }
@@ -93,60 +88,72 @@ struct PreviousSetPerformance: Equatable {
         in sessions: [WorkoutSession],
         ownerTokenIdentifier: String?
     ) -> [SetKind] {
-        lastCompletedSetsByRouteID(
+        latestEntriesByRouteID(
             matching: [route.id],
-            in: sessions,
-            ownerTokenIdentifier: ownerTokenIdentifier
-        )[route.id]?.map(\.kind) ?? []
+            in: sortedCompletedSessions(sessions, ownerTokenIdentifier: ownerTokenIdentifier)
+        )[route.id]?.sets.map(\.kind) ?? []
     }
 
+    /// A repeated workout's rows stay linked to the sets they were copied from,
+    /// but Previous still shows the exercise's most recent performance. Copied
+    /// rows read the source workout's own sets only while no later session has
+    /// logged the exercise; otherwise each copied row reads the latest
+    /// session's set at its source set's position.
     private static func lastCompletedSetsByExerciseIDFromSourceSession(
         for loggedExercises: [LoggedExercise],
         in sessions: [WorkoutSession],
         ownerTokenIdentifier: String?,
         sourceSessionID: UUID
     ) -> [UUID: [PreviousSetPerformance]] {
-        let unlinkedExercises = loggedExercises.filter { $0.sourceLoggedExerciseID == nil }
-        let historyForUnlinkedExercises = lastCompletedSetsByExerciseIDFromHistory(
-            for: unlinkedExercises,
-            in: sessions,
-            ownerTokenIdentifier: ownerTokenIdentifier
-        )
-
-        guard let sourceSession = WorkoutSession.visibleCompletedSessions(
-            from: sessions,
-            ownerTokenIdentifier: ownerTokenIdentifier
-        ).first(where: { $0.id == sourceSessionID }) else {
-            return Dictionary(uniqueKeysWithValues: loggedExercises.map {
-                ($0.id, historyForUnlinkedExercises[$0.id] ?? [])
-            })
-        }
-
-        let sourceEntriesByID = Dictionary(
-            uniqueKeysWithValues: sourceSession.sortedLoggedExercises.map { ($0.id, $0) }
-        )
+        let sortedSessions = sortedCompletedSessions(sessions, ownerTokenIdentifier: ownerTokenIdentifier)
+        let latestEntriesByRouteID = latestEntriesByRouteID(for: loggedExercises, in: sortedSessions)
+        let sourceRank = sortedSessions.firstIndex { $0.id == sourceSessionID }
+        let sourceEntriesByID = sourceRank.map { rank in
+            Dictionary(
+                uniqueKeysWithValues: sortedSessions[rank].sortedLoggedExercises.map { ($0.id, $0) }
+            )
+        } ?? [:]
 
         return Dictionary(
             uniqueKeysWithValues: loggedExercises.map { loggedExercise in
-                if let sourceLoggedExerciseID = loggedExercise.sourceLoggedExerciseID,
-                   let sourceLoggedExercise = sourceEntriesByID[sourceLoggedExerciseID] {
-                    return (
-                        loggedExercise.id,
-                        sourceSetPerformances(for: loggedExercise, in: sourceLoggedExercise)
-                    )
+                let latestEntry = latestEntriesByRouteID[ExerciseHistoryRoute(loggedExercise: loggedExercise).id]
+
+                guard let sourceRank,
+                      let sourceLoggedExerciseID = loggedExercise.sourceLoggedExerciseID,
+                      let sourceLoggedExercise = sourceEntriesByID[sourceLoggedExerciseID] else {
+                    return (loggedExercise.id, latestEntry?.sets.map { makePerformance(from: $0) } ?? [])
                 }
 
-                return (loggedExercise.id, historyForUnlinkedExercises[loggedExercise.id] ?? [])
+                let previousSets: [LoggedSet]
+                if let latestEntry, latestEntry.sessionRank < sourceRank {
+                    previousSets = latestEntry.sets
+                } else {
+                    previousSets = sourceLoggedExercise.sortedSets
+                }
+
+                return (
+                    loggedExercise.id,
+                    alignedSetPerformances(
+                        for: loggedExercise,
+                        in: sourceLoggedExercise,
+                        from: previousSets
+                    )
+                )
             }
         )
     }
 
-    private static func lastCompletedSetsByRouteID(
-        matching routeIDs: Set<String>,
-        in sessions: [WorkoutSession],
+    private struct LatestEntry {
+        /// Position of the entry's session in newest-first completed history.
+        let sessionRank: Int
+        let sets: [LoggedSet]
+    }
+
+    private static func sortedCompletedSessions(
+        _ sessions: [WorkoutSession],
         ownerTokenIdentifier: String?
-    ) -> [String: [LoggedSet]] {
-        let sortedCompletedSessions = WorkoutSession.visibleCompletedSessions(
+    ) -> [WorkoutSession] {
+        WorkoutSession.visibleCompletedSessions(
             from: sessions,
             ownerTokenIdentifier: ownerTokenIdentifier
         )
@@ -156,10 +163,27 @@ struct PreviousSetPerformance: Equatable {
             }
             return lhs.startedAt > rhs.startedAt
         }
+    }
 
-        var result: [String: [LoggedSet]] = [:]
+    private static func latestEntriesByRouteID(
+        for loggedExercises: [LoggedExercise],
+        in sortedSessions: [WorkoutSession]
+    ) -> [String: LatestEntry] {
+        latestEntriesByRouteID(
+            matching: Set(loggedExercises.map { ExerciseHistoryRoute(loggedExercise: $0).id }),
+            in: sortedSessions
+        )
+    }
 
-        for session in sortedCompletedSessions {
+    private static func latestEntriesByRouteID(
+        matching routeIDs: Set<String>,
+        in sortedSessions: [WorkoutSession]
+    ) -> [String: LatestEntry] {
+        guard !routeIDs.isEmpty else { return [:] }
+
+        var result: [String: LatestEntry] = [:]
+
+        for (rank, session) in sortedSessions.enumerated() {
             for loggedExercise in session.sortedLoggedExercises {
                 let routeID = ExerciseHistoryRoute(loggedExercise: loggedExercise).id
                 guard routeIDs.contains(routeID), result[routeID] == nil else { continue }
@@ -167,7 +191,7 @@ struct PreviousSetPerformance: Equatable {
                 let completedSets = loggedExercise.sortedSets.filter(\.isCompleted)
                 guard !completedSets.isEmpty else { continue }
 
-                result[routeID] = completedSets
+                result[routeID] = LatestEntry(sessionRank: rank, sets: completedSets)
             }
 
             if result.count == routeIDs.count {
@@ -178,9 +202,13 @@ struct PreviousSetPerformance: Equatable {
         return result
     }
 
-    private static func sourceSetPerformances(
+    /// Maps each copied row to the set at its source set's position in
+    /// `previousSets`: the source exercise's own sets, or a later session's
+    /// completed sets for the same exercise.
+    private static func alignedSetPerformances(
         for activeLoggedExercise: LoggedExercise,
-        in sourceLoggedExercise: LoggedExercise
+        in sourceLoggedExercise: LoggedExercise,
+        from previousSets: [LoggedSet]
     ) -> [PreviousSetPerformance] {
         let activeSets = activeLoggedExercise.sortedSets
 
@@ -192,15 +220,16 @@ struct PreviousSetPerformance: Equatable {
         // previous values even after an earlier row is deleted or the rows are
         // reordered. Rows added after cloning carry no source link and always sort
         // after the cloned rows, so dropping everything past the last linked row
-        // leaves them with no previous value rather than reusing a source set.
-        let sourceSetsByID = Dictionary(
-            uniqueKeysWithValues: sourceLoggedExercise.sortedSets.map { ($0.id, $0) }
+        // leaves them with no previous value rather than reusing a previous set.
+        let sourcePositionsByID = Dictionary(
+            uniqueKeysWithValues: sourceLoggedExercise.sortedSets.enumerated().map { ($1.id, $0) }
         )
 
         return activeSets.prefix(through: lastLinkedIndex).map { activeSet in
             if let sourceSetID = activeSet.sourceLoggedSetID,
-               let sourceSet = sourceSetsByID[sourceSetID] {
-                return makePerformance(from: sourceSet)
+               let position = sourcePositionsByID[sourceSetID],
+               previousSets.indices.contains(position) {
+                return makePerformance(from: previousSets[position])
             }
 
             return PreviousSetPerformance(weight: nil, reps: nil)

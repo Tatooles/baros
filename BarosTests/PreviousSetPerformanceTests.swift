@@ -280,7 +280,7 @@ final class PreviousSetPerformanceTests: XCTestCase {
         ])
     }
 
-    func testPastWorkoutLookupUsesSourceSessionInsteadOfMostRecentSession() throws {
+    func testPastWorkoutLookupUsesSessionNewerThanSource() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let exercise = Exercise(
@@ -351,7 +351,86 @@ final class PreviousSetPerformanceTests: XCTestCase {
         )
 
         XCTAssertEqual(lookup[activeLogged.id], [
-            PreviousSetPerformance(weight: 185, reps: 5),
+            PreviousSetPerformance(weight: 225, reps: 3),
+        ])
+    }
+
+    func testPastWorkoutLookupAlignsNewerSessionSetsBySourcePositionAfterRowDeleted() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: "Matrix Ab Crunch",
+            category: .strength,
+            equipment: .machine,
+            primaryMuscleGroup: .core
+        )
+        context.insert(exercise)
+
+        let source = WorkoutSession(
+            title: "Arms",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .completed,
+            source: .blank
+        )
+        let sourceLogged = LoggedExercise(orderIndex: 0, exercise: exercise)
+        let sourceSets = (0..<3).map { index in
+            LoggedSet(orderIndex: index, weight: 130, reps: 15, isCompleted: true, completedAt: source.startedAt)
+        }
+        sourceLogged.sets.append(contentsOf: sourceSets)
+        source.loggedExercises.append(sourceLogged)
+        context.insert(source)
+        context.insert(sourceLogged)
+
+        let newer = WorkoutSession(
+            title: "Lower",
+            startedAt: Date(timeIntervalSince1970: 200),
+            status: .completed,
+            source: .blank
+        )
+        let newerLogged = LoggedExercise(orderIndex: 0, exercise: exercise)
+        newerLogged.sets.append(contentsOf: [
+            LoggedSet(orderIndex: 0, weight: 140, reps: 15, isCompleted: true, completedAt: newer.startedAt),
+            LoggedSet(orderIndex: 1, weight: 145, reps: 12, isCompleted: true, completedAt: newer.startedAt),
+        ])
+        newer.loggedExercises.append(newerLogged)
+        context.insert(newer)
+        context.insert(newerLogged)
+
+        let active = WorkoutSession(
+            title: "Arms",
+            startedAt: Date(timeIntervalSince1970: 300),
+            status: .active,
+            source: .pastWorkout,
+            sourceSessionID: source.id
+        )
+        let activeLogged = LoggedExercise(
+            orderIndex: 0,
+            exercise: exercise,
+            sourceLoggedExerciseID: sourceLogged.id
+        )
+        // The first cloned row was deleted. The remaining rows keep their source
+        // positions (1 and 2), which read the newer session's sets at those positions;
+        // the newer session has no third set.
+        activeLogged.sets.append(contentsOf: [
+            LoggedSet(orderIndex: 0, sourceLoggedSetID: sourceSets[1].id),
+            LoggedSet(orderIndex: 1, sourceLoggedSetID: sourceSets[2].id),
+        ])
+        active.loggedExercises.append(activeLogged)
+        context.insert(active)
+        context.insert(activeLogged)
+        try context.save()
+
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let lookup = PreviousSetPerformance.lastCompletedSetsByExerciseID(
+            for: active.sortedLoggedExercises,
+            in: sessions,
+            ownerTokenIdentifier: nil,
+            sourceSessionID: active.sourceSessionID
+        )
+
+        XCTAssertEqual(lookup[activeLogged.id], [
+            PreviousSetPerformance(weight: 145, reps: 12),
+            PreviousSetPerformance(weight: nil, reps: nil),
         ])
     }
 
@@ -702,10 +781,10 @@ final class PreviousSetPerformanceTests: XCTestCase {
             sourceSessionID: active.sourceSessionID
         )
 
-        // The cloned card keeps its linked source values; the added card uses
-        // normal history (the newer session) instead of reusing the source clone.
+        // Both cards show the newer session: the cloned card through its linked
+        // source position, the added card through normal history.
         XCTAssertEqual(lookup[clonedBench.id], [
-            PreviousSetPerformance(weight: 185, reps: 5),
+            PreviousSetPerformance(weight: 225, reps: 3),
         ])
         XCTAssertEqual(lookup[addedBench.id], [
             PreviousSetPerformance(weight: 225, reps: 3),
@@ -1013,7 +1092,7 @@ final class PreviousSetPerformanceTests: XCTestCase {
         XCTAssertEqual(deletedLookup[deletedSourceActiveLogged.id], [])
     }
 
-    func testUnavailableSourceKeepsIndependentHistoryOnlyForUnlinkedExercises() throws {
+    func testUnavailableSourceUsesLatestHistoryForLinkedAndUnlinkedExercises() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let exercise = Exercise(name: "Bench Press", category: .strength,
@@ -1042,7 +1121,7 @@ final class PreviousSetPerformanceTests: XCTestCase {
         context.insert(active)
         try context.save()
 
-        // Both rows share a route: the linked row must never borrow the newer history.
+        // Missing and deleted sources both fall back to the latest history for every row.
         for sourceIsDeleted in [false, true] {
             source.deletedAt = sourceIsDeleted ? Date(timeIntervalSince1970: 300) : nil
             let sessions = sourceIsDeleted ? [source, surviving, active] : [surviving, active]
@@ -1050,7 +1129,8 @@ final class PreviousSetPerformanceTests: XCTestCase {
                 for: active.sortedLoggedExercises, in: sessions,
                 ownerTokenIdentifier: nil, sourceSessionID: source.id
             )
-            XCTAssertEqual(lookup[linked.id], [], "Source deleted: \(sourceIsDeleted)")
+            XCTAssertEqual(lookup[linked.id], [PreviousSetPerformance(weight: 205, reps: 8)],
+                           "Source deleted: \(sourceIsDeleted)")
             XCTAssertEqual(lookup[unlinked.id], [PreviousSetPerformance(weight: 205, reps: 8)],
                            "Source deleted: \(sourceIsDeleted)")
         }
