@@ -95,8 +95,10 @@ test("BarosCore package tests run on macOS without a simulator", async () => {
   const testStep = steps.find((step) => step.name === "Run BarosCore package tests");
 
   assert.ok(testStep, "baros-core-tests must run the package tests");
-  assert.match(testStep.run, /set -o pipefail/);
-  assert.match(testStep.run, /swift test --package-path BarosCore/);
+  assert.equal(
+    testStep.run,
+    'python3 ci_scripts/swift_test_with_retry.py BarosCore "${RUNNER_TEMP}/BarosCoreTests.log"',
+  );
   assert.ok(
     steps.every((step) => !step.run?.includes("xcodebuild")),
     "the package gate must not build the app or boot a simulator",

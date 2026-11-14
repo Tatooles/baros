@@ -25,7 +25,7 @@ public enum SyncFailureCategory: String, CaseIterable, Equatable {
     case ownership
 }
 
-public enum SyncStableErrorCode: String, CaseIterable, Equatable {
+public enum SyncStableErrorCode: String, CaseIterable, Equatable, Sendable {
     case failedOutboxPush = "failed_outbox_push"
     case incompleteRemotePull = "incomplete_remote_pull"
     case syncRunFailed = "sync_run_failed"

@@ -103,11 +103,10 @@ jobs:
         run: swift --version
 
       # BarosCore holds the app's non-UI logic and its tests. It builds and
-      # tests on macOS, so this gate needs no simulator.
+      # tests on macOS, so this gate needs no simulator. Like the iOS gates, it
+      # retries failed tests once and reports any that passed only on retry.
       - name: Run BarosCore package tests
-        run: |
-          set -o pipefail
-          swift test --package-path BarosCore 2>&1 | tee "${RUNNER_TEMP}/BarosCoreTests.log"
+        run: python3 ci_scripts/swift_test_with_retry.py BarosCore "${RUNNER_TEMP}/BarosCoreTests.log"
 
       - name: Upload BarosCore failure diagnostics
         if: failure()
