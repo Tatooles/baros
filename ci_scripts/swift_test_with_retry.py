@@ -14,6 +14,8 @@ import subprocess
 import sys
 
 FAILED_CASE = re.compile(r"Test Case '-\[(\S+)\.(\S+) (\S+)\]' failed")
+ALL_TESTS_FINISHED = re.compile(r"^Test Suite 'All tests' (?:passed|failed) at ", re.MULTILINE)
+SWIFT_TESTING_FAILED = re.compile(r"Test run with \d+ tests?\b.* failed")
 
 
 def run(args, log):
@@ -39,8 +41,12 @@ def main():
             return 0
 
         failed = sorted({f"{module}.{cls}/{test}" for module, cls, test in FAILED_CASE.findall(output)})
-        if not failed:
-            print("swift test failed without a failed test case to retry (build failure or crash).")
+        # Retry only when the whole XCTest run finished and its failures are
+        # all named test cases. A build failure, a crash, or a Swift Testing
+        # failure fails the step, because a filtered retry can't cover them.
+        completed = ALL_TESTS_FINISHED.search(output) and "unexpected signal" not in output
+        if not failed or not completed or SWIFT_TESTING_FAILED.search(output):
+            print("swift test failed in a way a retry can't cover (build failure, crash, or unnamed failure).")
             return 1
 
         pattern = "|".join(f"^{re.escape(name)}$" for name in failed)
