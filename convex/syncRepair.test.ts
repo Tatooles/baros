@@ -417,6 +417,35 @@ describe("sync damage audit and repair", () => {
     void [_id, _creationTime, ownerTokenIdentifier, serverUpdatedAt, syncOrder];
   });
 
+  test("restoring the same workout twice needs force, and each restore is logged", async () => {
+    const t = convexTest(schema, modules);
+    await seedDamage(t);
+    const deleted = (await row(t, "workoutSessions", "deleted"))!;
+    const first = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, {
+      sessionRowId: deleted._id,
+      dryRun: false,
+    });
+
+    // An operator reruns the command, for example after a timeout.
+    const dryRun = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, { sessionRowId: deleted._id });
+    expect(dryRun).toMatchObject({ alreadyRestoredAs: first.newSessionClientId });
+    await expect(
+      t.mutation(internal.syncRepair.restoreWorkoutAsCopy, { sessionRowId: deleted._id, dryRun: false }),
+    ).rejects.toThrow("already restored");
+    const forced = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, {
+      sessionRowId: deleted._id,
+      dryRun: false,
+      force: true,
+    });
+
+    const log = (await t.query(internal.syncRepair.syncRepairLogForRun, { runId: `restore:${deleted._id}` })) as {
+      rowId: string;
+      clientId: string;
+    }[];
+    expect(log.map((entry) => entry.clientId)).toEqual([first.newSessionClientId, forced.newSessionClientId]);
+    expect(log.every((entry) => entry.rowId === deleted._id)).toBe(true);
+  });
+
   test("restoring refuses a workout that is not deleted", async () => {
     const t = convexTest(schema, modules);
     await seedDamage(t);

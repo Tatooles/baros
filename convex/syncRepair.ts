@@ -431,6 +431,10 @@ export const syncRepairLogForRun = internalQuery({
 // carry slightly earlier times. By default every child deleted up to a day
 // before the workout comes back; pass childrenDeletedSince (seconds) to choose
 // another cut-off. The result says how many children the cut-off left out.
+//
+// Each restore is logged in syncRepairLog under runId "restore:<sessionRowId>",
+// and a second restore of the same workout is refused unless force: true, so
+// rerunning the command after a timeout cannot duplicate the workout.
 const defaultRestoreWindowSeconds = 24 * 60 * 60;
 
 export const restoreWorkoutAsCopy = internalMutation({
@@ -438,6 +442,7 @@ export const restoreWorkoutAsCopy = internalMutation({
     sessionRowId: v.id("workoutSessions"),
     dryRun: v.optional(v.boolean()),
     childrenDeletedSince: v.optional(v.number()),
+    force: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const session = await ctx.db.get(args.sessionRowId);
@@ -504,8 +509,16 @@ export const restoreWorkoutAsCopy = internalMutation({
       (loggedExercise) =>
         loggedExercise.exerciseClientId !== null && missingExerciseIds.has(loggedExercise.exerciseClientId),
     ).length;
+    const restoreRunId = `restore:${args.sessionRowId}`;
+    const previousRestore = (
+      await ctx.db
+        .query("syncRepairLog")
+        .withIndex("by_runId", (q) => q.eq("runId", restoreRunId))
+        .take(1)
+    )[0];
     const newSessionClientId = crypto.randomUUID().toLowerCase();
     const counts = {
+      alreadyRestoredAs: previousRestore?.clientId ?? null,
       loggedExercises: loggedExercises.length,
       sets: setCount,
       childrenDeletedSince,
@@ -516,16 +529,32 @@ export const restoreWorkoutAsCopy = internalMutation({
       return { dryRun: true, newSessionClientId: null, ...counts };
     }
 
+    if (previousRestore !== undefined && args.force !== true) {
+      throw new Error(
+        `This workout was already restored as ${previousRestore.clientId}. Pass force: true to restore it again.`,
+      );
+    }
     const nextVersion = serverVersionAllocator(ctx, owner);
     const nowSeconds = Date.now() / 1000;
     // A fresh record: none of the original's version or conflict history.
     const live = { deletedAt: null, updatedAt: nowSeconds, syncOrder: nowSeconds };
     const { _id: _sessionId, _creationTime: _sessionCreation, ...sessionFields } = session;
+    const copyServerUpdatedAt = await nextVersion();
     await ctx.db.insert("workoutSessions", {
       ...sessionFields,
       ...live,
       clientId: newSessionClientId,
-      serverUpdatedAt: await nextVersion(),
+      serverUpdatedAt: copyServerUpdatedAt,
+    });
+    await ctx.db.insert("syncRepairLog", {
+      runId: restoreRunId,
+      damageKind: "restoredAsCopy",
+      tableName: "workoutSessions",
+      rowId: args.sessionRowId,
+      clientId: newSessionClientId,
+      before: versionOf(session),
+      after: { updatedAt: nowSeconds, deletedAt: null, serverUpdatedAt: copyServerUpdatedAt },
+      repairedAt: Date.now(),
     });
     for (const loggedExercise of loggedExercises) {
       const newLoggedExerciseClientId = crypto.randomUUID().toLowerCase();
