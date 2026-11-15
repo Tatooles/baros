@@ -50,7 +50,7 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
     }
 
     func testNewUserReceivesOnboardingInsteadOfCurrentReleaseHighlights() throws {
-        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.4"))
+        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.5"))
 
         let presentation = LaunchExperienceCoordinator.nextPresentation(
             state: LaunchExperienceState(
@@ -79,14 +79,14 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
         XCTAssertEqual(presentation, .whatsNew(try XCTUnwrap(release.whatsNew)))
     }
 
-    func testExistingOneThreeUserReceivesUnseenOneFourReleaseHighlights() throws {
-        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.4"))
+    func testExistingOneFourUserReceivesUnseenOneFiveReleaseHighlights() throws {
+        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.5"))
 
         let presentation = LaunchExperienceCoordinator.nextPresentation(
             state: LaunchExperienceState(
                 hasCompletedOnboarding: true,
-                lastProcessedAppVersion: "1.3",
-                lastSeenWhatsNewVersion: "1.3"
+                lastProcessedAppVersion: "1.4",
+                lastSeenWhatsNewVersion: "1.4"
             ),
             currentRelease: release
         )
@@ -95,13 +95,13 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
     }
 
     func testExistingUserDoesNotReceiveSeenReleaseHighlights() throws {
-        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.4"))
+        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.5"))
 
         let presentation = LaunchExperienceCoordinator.nextPresentation(
             state: LaunchExperienceState(
                 hasCompletedOnboarding: true,
-                lastProcessedAppVersion: "1.3",
-                lastSeenWhatsNewVersion: "1.4"
+                lastProcessedAppVersion: "1.4",
+                lastSeenWhatsNewVersion: "1.5"
             ),
             currentRelease: release
         )
