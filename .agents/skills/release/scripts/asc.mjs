@@ -4,10 +4,8 @@
 // Credentials: ~/.appstoreconnect/release.env with ASC_KEY_ID, ASC_ISSUER_ID and
 // ASC_KEY_PATH (a Team key with the App Manager role). Node built-ins only.
 //
-// Reads run immediately. Write commands (prepare, submit) print the requests
-// they would send and send them only with --apply. Releasing an approved
-// version to customers is Kevin's action in App Store Connect, so this client
-// has no command for it.
+// Reads run immediately. Write commands (prepare, submit, release) print the
+// requests they would send and send them only with --apply.
 //
 //   node asc.mjs check
 //   node asc.mjs runs [--build <number>] [--commit <sha>] [--branch <name>] [--limit <n>]
@@ -15,6 +13,7 @@
 //   node asc.mjs status <version>
 //   node asc.mjs prepare <version> --build <number> --whats-new <file> [--apply]
 //   node asc.mjs submit <version> [--apply]
+//   node asc.mjs release <version> [--apply]
 
 import { readFileSync } from "node:fs";
 import { createSign } from "node:crypto";
@@ -401,6 +400,26 @@ async function submit(versionString, opts) {
   if (opts.apply) await status(versionString);
 }
 
+// The API equivalent of "Release This Version" for an approved manual release.
+async function release(versionString, opts) {
+  requireVersion(versionString);
+  const version = await findVersion(await appId(), versionString);
+  if (!version) fail(`Version ${versionString} does not exist.`);
+  const state = version.attributes.appStoreState;
+  if (state !== "PENDING_DEVELOPER_RELEASE") {
+    fail(`Version ${versionString} is ${state}; only a PENDING_DEVELOPER_RELEASE version can be released.`);
+  }
+  const plan = new Plan(opts.apply);
+  await plan.send(`Release version ${versionString} to the App Store`, "POST", "/v1/appStoreVersionReleaseRequests", {
+    data: {
+      type: "appStoreVersionReleaseRequests",
+      relationships: { appStoreVersion: { data: { type: "appStoreVersions", id: version.id } } },
+    },
+  });
+  plan.finish();
+  if (opts.apply) await status(versionString);
+}
+
 // ---------- helpers ----------
 
 class Plan {
@@ -461,9 +480,10 @@ const commands = {
   status: () => status(positional[0]),
   prepare: () => prepare(positional[0], opts),
   submit: () => submit(positional[0], opts),
+  release: () => release(positional[0], opts),
 };
 if (!commands[command]) {
-  console.error("usage: asc.mjs check | runs [--build <n>] [--commit <sha>] [--branch <name>] | versions | status <v> | prepare <v> --build <n> --whats-new <file> [--apply] | submit <v> [--apply]");
+  console.error("usage: asc.mjs check | runs [--build <n>] [--commit <sha>] [--branch <name>] | versions | status <v> | prepare <v> --build <n> --whats-new <file> [--apply] | submit <v> [--apply] | release <v> [--apply]");
   process.exit(2);
 }
 await commands[command]();

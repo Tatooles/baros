@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Release
 
-Takes the version in `project.yml` (`MARKETING_VERSION`) from merged work to **Pending Developer Release** in App Store Connect, hands Kevin the Release button, and after he presses it, records the release. Re-running `/release` resumes wherever the release stands.
+Takes the version in `project.yml` (`MARKETING_VERSION`) from merged work to **Pending Developer Release** in App Store Connect, releases it, and records the release.
 
 `/release` ships from the newest `main`. `/release build <n>` ships the code of App Store Connect build `<n>` instead, so a release never has to wait for `main` to settle.
 
@@ -14,7 +14,7 @@ Takes the version in `project.yml` (`MARKETING_VERSION`) from merged work to **P
 
 Scripts are in `scripts/` beside this file:
 
-- `asc.mjs` — App Store Connect client (`check`, `runs`, `status`, `prepare`, `submit`). Writes print a plan and send only with `--apply`. It has no release command: making a version available to customers is Kevin's press in App Store Connect.
+- `asc.mjs` — App Store Connect client (`check`, `runs`, `status`, `prepare`, `submit`, `release`). Writes print a plan and send only with `--apply`.
 - `release-diff.mjs` — merged PRs, changed areas, and regression signals between two refs.
 - `bump-version.sh`, `tag-release.sh` — mechanical edits; each prints what it changed.
 
@@ -90,12 +90,12 @@ Show Kevin the `status` output and the regression report. On yes: `node scripts/
 
 ### 8. Await review
 
-Review usually takes a day or two. End the turn: tell Kevin to rerun `/release` when Apple emails. On the rerun:
+Review usually takes a day or two. End the turn until Kevin says Apple emailed, then:
 
 - **Approved** (`PENDING_DEVELOPER_RELEASE`) → step 9.
 - **Rejected** → the reason lives in App Store Connect's App Review messages, outside the API: ask Kevin to paste it, or read it with him in the in-app browser. Metadata-only fixes go straight into App Store Connect. Binary fixes take a fix PR to `main` (⛔ merge), a new candidate (step 4, same base rule), regression on the fix's area, `prepare` with the new build, then the resubmission — `asc.mjs` refuses an `UNRESOLVED_ISSUES` submission, so Kevin resubmits that one from the App Store Connect page.
 
-### 9. Bump the version, then hand off
+### 9. Bump the version and release
 
 `main` stays on this version until approval so a rejection can still ship a new build. Now move it on:
 
@@ -103,9 +103,9 @@ Review usually takes a day or two. End the turn: tell Kevin to rerun `/release` 
 2. On a branch from `main`, run `scripts/bump-version.sh <next>`. Of the tests it lists, update those asserting the current release or its upgrade path the way commit `2ddae398` (the 1.5 bump) did — the upgrade test now expects an upgrade into an unannounced release to skip What's New. Run the unit tests and the edited UI tests.
 3. Open the PR with the `file-pr` skill. ⛔ Merge it once checks are green.
 
-Then tell Kevin: version `<version>` build `<n>` is approved and waiting — **Release This Version** in App Store Connect makes it live, and `/release` afterwards records it.
+4. ⛔ `node scripts/asc.mjs release <version>`, check the plan, `--apply`.
 
-**Done when** the bump PR is merged and Kevin has the hand-off.
+**Done when** the bump PR is merged and `status` shows `READY_FOR_SALE`.
 
 ## Phase B — record the release
 
