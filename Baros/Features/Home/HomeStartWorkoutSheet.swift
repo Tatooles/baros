@@ -104,6 +104,16 @@ struct HomeStartWorkoutSheet: View {
     }
 
     private var choices: some View {
+        // Scrolls so large text keeps each choice at its natural height
+        // instead of squeezing the rows into the medium detent.
+        ScrollView {
+            choiceRows
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(AppTheme.canvasBackground.ignoresSafeArea())
+    }
+
+    private var choiceRows: some View {
         VStack(spacing: 12) {
             Button(action: startBlankWorkout) {
                 HomeStartChoiceRow(
@@ -142,8 +152,6 @@ struct HomeStartWorkoutSheet: View {
             .accessibilityIdentifier("UseTemplateButton")
         }
         .padding(20)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(AppTheme.canvasBackground.ignoresSafeArea())
     }
 
     private func startBlankWorkout() {
