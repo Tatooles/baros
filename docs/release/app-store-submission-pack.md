@@ -29,6 +29,23 @@ workout, lifting, gym, strength, log, tracker, fitness, exercise, sets, reps
 
 App Store Connect "What's New in This Version" text. The highlights must match that release's in-app What's New sheet (`Baros/App/WhatsNewVersion<version>View.swift`), so update both together.
 
+### 1.5
+
+```text
+Baros 1.5 adds workout templates, supersets, and a clearer Records view.
+
+• Workout templates: Save a workout as a template and start from it next time.
+• Supersets: Group exercises so each round is checked and rested together.
+• Records that tell the story: See your heaviest rep, your estimated 1RM over time, and the set behind each record.
+
+Also in this update:
+• Add, remove, and arrange several exercises at once in Edit Workout
+• Drag around the Home ring to preview and open past workouts
+• Start from pills say what each workout was and when you last did it
+• Calmer, easier-to-read screens throughout
+• Bug fixes and performance improvements
+```
+
 ### 1.4
 
 ```text

@@ -5,6 +5,7 @@ enum WhatsNewSheetID: Equatable {
     case version1_2
     case version1_3
     case version1_4
+    case version1_5
 }
 
 struct WhatsNewRelease: Equatable {
@@ -38,7 +39,7 @@ enum AppReleaseCatalog {
         AppReleaseDefinition(version: "1.2", whatsNewSheet: .version1_2),
         AppReleaseDefinition(version: "1.3", whatsNewSheet: .version1_3),
         AppReleaseDefinition(version: "1.4", whatsNewSheet: .version1_4),
-        AppReleaseDefinition(version: "1.5", whatsNewSheet: nil),
+        AppReleaseDefinition(version: "1.5", whatsNewSheet: .version1_5),
     ]
 
     static func release(for version: String) -> AppReleaseDefinition? {

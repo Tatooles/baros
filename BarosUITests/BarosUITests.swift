@@ -2018,7 +2018,7 @@ final class BarosUITests: XCTestCase {
 
         XCTAssertTrue(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
         XCTAssertTrue(firstLaunch.staticTexts["Welcome to Baros"].exists)
-        XCTAssertFalse(firstLaunch.staticTexts["What's new in Baros 1.4"].exists)
+        XCTAssertFalse(firstLaunch.staticTexts["What's new in Baros 1.5"].exists)
         XCTAssertTrue(firstLaunch.staticTexts["Log sets in seconds"].exists)
         XCTAssertTrue(firstLaunch.staticTexts["See your progress as you lift"].exists)
         XCTAssertTrue(firstLaunch.staticTexts["No account needed"].exists)
@@ -2292,7 +2292,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testOneFourUpgradeToUnannouncedReleaseSkipsWhatsNew() {
+    func testOneFourUpgradeShowsOneFiveWhatsNewOnce() {
         let firstLaunch = makeDiskBackedApp(
             extraArguments: [
                 "--uitest-in-memory-store", "--uitest-enable-rpe",
@@ -2304,9 +2304,10 @@ final class BarosUITests: XCTestCase {
         )
         firstLaunch.launch()
 
-        XCTAssertTrue(firstLaunch.staticTexts["HomeTitle"].waitForExistence(timeout: 5))
-        XCTAssertFalse(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 1))
+        XCTAssertTrue(firstLaunch.staticTexts["What's new in Baros 1.5"].waitForExistence(timeout: 5))
         XCTAssertFalse(firstLaunch.staticTexts["Welcome to Baros"].exists)
+        firstLaunch.buttons["LaunchExperiencePrimaryButton"].tap()
+        XCTAssertTrue(firstLaunch.staticTexts["LaunchExperienceTitle"].waitForNonExistence(timeout: 3))
         firstLaunch.terminate()
 
         let secondLaunch = makeDiskBackedApp(
@@ -2340,18 +2341,18 @@ final class BarosUITests: XCTestCase {
             whatsNewButton.tap()
 
             XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitForExistence(timeout: 3))
-            XCTAssertTrue(app.staticTexts["What's new in Baros 1.4"].exists)
-            XCTAssertTrue(app.staticTexts["Year Ring Home"].exists)
-            XCTAssertTrue(app.staticTexts["Rest timers"].exists)
-            XCTAssertTrue(app.staticTexts["A dedicated Settings tab"].exists)
+            XCTAssertTrue(app.staticTexts["What's new in Baros 1.5"].exists)
+            XCTAssertTrue(app.staticTexts["Workout templates"].exists)
+            XCTAssertTrue(app.staticTexts["Supersets"].exists)
+            XCTAssertTrue(app.staticTexts["Records that tell the story"].exists)
             XCTAssertEqual(app.buttons["LaunchExperiencePrimaryButton"].label, "Continue")
 
-            attachWhatsNewScreenshot("whats-new-1.4-\(appearance)")
+            attachWhatsNewScreenshot("whats-new-1.5-\(appearance)")
             let continueButton = app.buttons["LaunchExperiencePrimaryButton"]
             XCTAssertEqual(app.buttons.matching(identifier: "LaunchExperiencePrimaryButton").count, 1)
             for _ in 0..<8 where !continueButton.isHittable { app.swipeUp() }
             XCTAssertTrue(continueButton.isHittable)
-            attachWhatsNewScreenshot("whats-new-1.4-\(appearance)-continue")
+            attachWhatsNewScreenshot("whats-new-1.5-\(appearance)-continue")
             continueButton.tap()
             XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitForNonExistence(timeout: 3))
             XCTAssertTrue(app.navigationBars["Settings"].exists)
