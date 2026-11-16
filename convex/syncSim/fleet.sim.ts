@@ -529,8 +529,6 @@ export class SimDevice {
     return `${this.name}-w${this.valueCounter}`;
   }
 
-  // Legacy builds with slow clocks lose causally later writes by design; the
-  // oracle checks causality only where the client rule can keep it.
   // Whether the oracle may hold this device's edits to causal order. Current
   // builds keep it under any clocks. An installed build with a slow clock
   // loses its causally later edits, and its pull lets any version stamped

@@ -233,8 +233,8 @@ describe("#97 delete versus edit", () => {
     expect(children.set!.deletedAt).toBe(now - 300);
   });
 
-  test("an upload stored as deleted also deletes children an older server left live", async () => {
-    for (const path of ["insert", "already deleted"] as const) {
+  test("any upload of a deleted workout also deletes children an older server left live", async () => {
+    for (const path of ["insert", "already deleted", "older upload"] as const) {
       const t = convexTest(schema, modules);
       const client = t.withIdentity(owner);
       await seedWorkout(client);
@@ -250,7 +250,7 @@ describe("#97 delete versus edit", () => {
       });
 
       await client.mutation(api.sync.upsertWorkoutSession, {
-        record: session(now - 200, { deletedAt: now - 200 }),
+        record: path === "older upload" ? session(now - 400) : session(now - 200, { deletedAt: now - 200 }),
       });
 
       const children = await t.run(async (ctx) => ({

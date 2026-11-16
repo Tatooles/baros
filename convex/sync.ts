@@ -675,6 +675,15 @@ async function upsertSyncedRecord<TRecord extends SyncPayload>(
   const nextVersion = serverVersionAllocator(ctx, ownerTokenIdentifier);
   switch (decision.action) {
     case "ignore":
+      if (existing!.deletedAt !== null) {
+        // Children an older server left live under this tombstone follow it
+        // now, as with a repeated tombstone.
+        await cascadeDeletion(ctx, ownerTokenIdentifier, table, {
+          clientId: record.clientId,
+          updatedAt: existing!.updatedAt,
+          deletedAt: existing!.deletedAt,
+        }, nextVersion);
+      }
       return {
         status: "ignored_stale",
         serverUpdatedAt: existing!.serverUpdatedAt,
