@@ -113,6 +113,7 @@ jobs:
             -destination "${IOS_TEST_DESTINATION}" \
             -only-testing:BarosUITests \
             -parallel-testing-enabled NO \
+            -maximum-concurrent-test-simulator-destinations 1 \
             -derivedDataPath "${RUNNER_TEMP}/BarosUIFullDerivedData" \
             -retry-tests-on-failure \
             -test-iterations 2 \

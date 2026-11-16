@@ -223,6 +223,7 @@ test("the nightly UI suite runs the full target serially with the smoke job's se
   const testRun = job.steps[testIndex].run;
   assert.deepEqual(testRun.match(/-only-testing:\S+/g), ["-only-testing:BarosUITests"]);
   assert.match(testRun, /-parallel-testing-enabled NO/);
+  assert.match(testRun, /-maximum-concurrent-test-simulator-destinations 1\b/);
   assert.doesNotMatch(testRun, /-parallel-testing-enabled YES|-parallel-testing-worker-count/);
   assert.ok(job.steps[testIndex]["timeout-minutes"] < job["timeout-minutes"]);
 
