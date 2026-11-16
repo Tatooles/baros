@@ -97,9 +97,9 @@ Review usually takes a day or two. End the turn; when Kevin says Apple emailed:
 
 ### 9. Release and bump the version
 
-`main` stays on this version until approval so a rejection can still ship a new build. Now move it on:
+`main` stays on this version until approval so a rejection can still ship a new build.
 
-1. ⛔ Unless `status` already shows `READY_FOR_SALE`, `node scripts/asc.mjs release <version>`, check the plan, `--apply`.
+1. ⛔ If `status` shows `PENDING_DEVELOPER_RELEASE`, `node scripts/asc.mjs release <version>`, check the plan, `--apply`.
 2. Next version = the lowest open milestone above this one (`gh api 'repos/Tatooles/baros/milestones?state=open' --jq '.[].title'`).
 3. On a branch from `main`, run `scripts/bump-version.sh <next>`. Of the tests it lists, update those asserting the current release or its upgrade path the way commit `2ddae398` (the 1.5 bump) did — the upgrade test now expects an upgrade into an unannounced release to skip What's New. Run the unit tests and the edited UI tests.
 4. Open the PR with the `file-pr` skill. ⛔ Merge it once checks are green.
@@ -108,7 +108,7 @@ Review usually takes a day or two. End the turn; when Kevin says Apple emailed:
 
 ## Phase B — record the release
 
-### 10. Confirm availability
+### 10. Release date
 
 Take the release date from Kevin's word or today's date.
 
