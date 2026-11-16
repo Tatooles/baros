@@ -177,10 +177,10 @@ When implementation is authorized, verify calculation boundaries (one, ten, and 
 ## Evidence and implementation entry points
 
 - `Baros/Features/History/ExerciseHistoryDetailView.swift`: insertion point, current unit setting, and existing workout navigation.
-- `Baros/Features/History/ExerciseHistorySummary.swift`: conservative identity resolution and heading metadata.
-- `Baros/Features/History/ExerciseHistorySessionGroup.swift`: eligible visible workout groups and occurrence/set context.
+- `BarosCore/Sources/BarosCore/Features/History/ExerciseHistorySummary.swift`: conservative identity resolution and heading metadata.
+- `BarosCore/Sources/BarosCore/Features/History/ExerciseHistorySessionGroup.swift`: eligible visible workout groups and occurrence/set context.
 - `Baros/Features/History/ExerciseHistoryPerformanceRow.swift`: log rows, set boxes, and source markers, shared with Quick History.
-- `Baros/Core/Models/LoggedSet.swift`, `Baros/Core/Domain/WorkoutNumericInputPolicy.swift`, and `Baros/Core/Domain/MeasurementUnit.swift`: stored values, numeric validation, and unit conversion.
+- `BarosCore/Sources/BarosCore/Models/LoggedSet.swift`, `BarosCore/Sources/BarosCore/Domain/WorkoutNumericInputPolicy.swift`, and `BarosCore/Sources/BarosCore/Domain/MeasurementUnit.swift`: stored values, numeric validation, and unit conversion.
 
 The selected ten-rep cap is a product boundary, not a guarantee of accuracy across exercises. [Reynolds, Gordon, and Robergs (2006)](https://www.unm.edu/~rrobergs/478RMStrengthPrediction.pdf) studied chest press and leg press, found better prediction from lower-repetition tests, and recommended no more than ten repetitions for linear prediction in those exercises. Their tests used repetition maximum effort; ordinary logged sets need the effort limitation stated above.
 

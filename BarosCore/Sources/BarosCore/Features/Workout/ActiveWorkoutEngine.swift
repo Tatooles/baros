@@ -45,6 +45,8 @@ public final class ActiveWorkoutEngine {
     @ObservationIgnored public let restTimer: RestTimerCoordinator
     @ObservationIgnored public var restSettingsOwnerTokenIdentifier: String?
 
+    /// `reportSetSaveFailure` defaults to a no-op so the package needn't depend on Sentry. The app passes
+    /// `SentrySetSaveFailureReporter.capture` (see `BarosApp`); any new app-side construction must pass it too.
     public init(restTimer: RestTimerCoordinator = RestTimerCoordinator(), reportSetSaveFailure: @escaping (ActiveWorkoutSetSaveFailure) -> Void = { _ in }) {
         self.restTimer = restTimer
         self.reportSetSaveFailure = reportSetSaveFailure
