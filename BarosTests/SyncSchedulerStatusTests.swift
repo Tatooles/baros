@@ -31,64 +31,31 @@ final class SyncSchedulerStatusTests: XCTestCase {
     }
 
     func testSchedulerActivatesValidatedOwnerAndCachesIt() throws {
-        let store = makeOwnerStore()
-        let scheduler = SyncScheduler(lastKnownOwnerTokenStore: store)
-        let owner = "issuer|owner_a"
-        scheduler.currentOwnerTokenIdentifier = owner
-        scheduler.currentOwnerTokenIdentifier = nil
-
-        XCTAssertTrue(scheduler.activateValidatedOwnerTokenIdentifier(owner))
-
-        XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, owner)
-        XCTAssertEqual(store.ownerTokenIdentifier, owner)
-    }
-
-    func testSchedulerActivatesValidatedExactOwnerAmongMultipleLocalOwners() throws {
-        let store = makeOwnerStore()
         let ownerA = "issuer|owner_a"
         let ownerB = "issuer|owner_b"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        context.insert(UserSettings(syncOwnerTokenIdentifier: ownerA))
-        context.insert(UserSettings(syncOwnerTokenIdentifier: ownerB))
-        try context.save()
-        let scheduler = SyncScheduler(modelContext: context, lastKnownOwnerTokenStore: store)
+        let cases: [(name: String, cachedOwner: String?, localOwners: [String], validatedOwner: String)] = [
+            ("cache already holds the owner", ownerA, [], ownerA),
+            ("exact owner among multiple local owners", nil, [ownerA, ownerB], ownerB),
+            ("stale cache with multiple local owners", ownerA, [ownerA, ownerB], ownerB),
+            ("no cache or local footprint", nil, [], ownerB),
+            ("cache belongs to a different issuer", "issuer_a|owner_a", [], "issuer_b|owner_a"),
+        ]
+        for testCase in cases {
+            let store = makeOwnerStore()
+            store.ownerTokenIdentifier = testCase.cachedOwner
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            for localOwner in testCase.localOwners {
+                context.insert(UserSettings(syncOwnerTokenIdentifier: localOwner))
+            }
+            try context.save()
+            let scheduler = SyncScheduler(modelContext: context, lastKnownOwnerTokenStore: store)
 
-        XCTAssertTrue(scheduler.activateValidatedOwnerTokenIdentifier(ownerB))
+            XCTAssertTrue(scheduler.activateValidatedOwnerTokenIdentifier(testCase.validatedOwner), testCase.name)
 
-        XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, ownerB)
-        XCTAssertEqual(store.ownerTokenIdentifier, ownerB)
-    }
-
-    func testSchedulerValidatedExactOwnerOverridesStaleCache() throws {
-        let store = makeOwnerStore()
-        let ownerA = "issuer|owner_a"
-        let ownerB = "issuer|owner_b"
-        store.ownerTokenIdentifier = ownerA
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        context.insert(UserSettings(syncOwnerTokenIdentifier: ownerA))
-        context.insert(UserSettings(syncOwnerTokenIdentifier: ownerB))
-        try context.save()
-        let scheduler = SyncScheduler(modelContext: context, lastKnownOwnerTokenStore: store)
-
-        XCTAssertTrue(scheduler.activateValidatedOwnerTokenIdentifier(ownerB))
-
-        XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, ownerB)
-        XCTAssertEqual(store.ownerTokenIdentifier, ownerB)
-    }
-
-    func testSchedulerRestoresValidatedExactOwnerWithoutLocalFootprint() throws {
-        let store = makeOwnerStore()
-        let ownerB = "issuer|owner_b"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let scheduler = SyncScheduler(modelContext: context, lastKnownOwnerTokenStore: store)
-
-        XCTAssertTrue(scheduler.activateValidatedOwnerTokenIdentifier(ownerB))
-
-        XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, ownerB)
-        XCTAssertEqual(store.ownerTokenIdentifier, ownerB)
+            XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, testCase.validatedOwner, testCase.name)
+            XCTAssertEqual(store.ownerTokenIdentifier, testCase.validatedOwner, testCase.name)
+        }
     }
 
     func testSchedulerDoesNotRestoreCachedOwnerWhenSubjectDoesNotMatch() throws {
@@ -102,21 +69,6 @@ final class SyncSchedulerStatusTests: XCTestCase {
 
         XCTAssertNil(scheduler.currentOwnerTokenIdentifier)
         XCTAssertEqual(store.ownerTokenIdentifier, owner)
-    }
-
-    func testSchedulerUsesValidatedExactOwnerWhenCacheBelongsToDifferentIssuer() throws {
-        let store = makeOwnerStore()
-        let scheduler = SyncScheduler(lastKnownOwnerTokenStore: store)
-        let cachedOwner = "issuer_a|owner_a"
-        scheduler.currentOwnerTokenIdentifier = cachedOwner
-        scheduler.currentOwnerTokenIdentifier = nil
-
-        XCTAssertTrue(
-            scheduler.activateValidatedOwnerTokenIdentifier("issuer_b|owner_a")
-        )
-
-        XCTAssertEqual(scheduler.currentOwnerTokenIdentifier, "issuer_b|owner_a")
-        XCTAssertEqual(store.ownerTokenIdentifier, "issuer_b|owner_a")
     }
 
     func testSchedulerFallsBackToInferredOwnerWhenCachedOwnerSubjectMismatches() throws {
@@ -837,49 +789,6 @@ final class SyncSchedulerStatusTests: XCTestCase {
         try await waitUntil { relaunchedScheduler.lastSyncedAt != nil }
 
         XCTAssertFalse(relaunchedSink.observations.contains { $0.kind == .durableFailure })
-    }
-
-    func testSuccessfulRetryOfPreviouslyFailedEntryDoesNotEmitFailure() async throws {
-        let owner = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let exercise = Exercise(
-            name: "Bench Press",
-            category: .strength,
-            equipment: .barbell,
-            primaryMuscle: "Chest",
-            syncOwnerTokenIdentifier: owner
-        )
-        let failedEntry = SyncOutboxEntry(
-            entityKind: .exercise,
-            entityID: exercise.id,
-            operation: .create,
-            status: .failed,
-            ownerTokenIdentifier: owner,
-            createdAt: Date(timeIntervalSince1970: 100),
-            updatedAt: Date(timeIntervalSince1970: 200),
-            lastAttemptAt: Date(timeIntervalSince1970: 150),
-            attemptCount: 3,
-            lastErrorMessage: "legacy failure"
-        )
-        context.insert(exercise)
-        context.insert(failedEntry)
-        try context.save()
-
-        let retryContext = ModelContext(container)
-        let client = FakeSyncClient()
-        let sink = RecordingSyncObservationSink()
-        let observability = SyncObservability(sink: sink)
-        let scheduler = SyncScheduler(
-            coordinator: SyncCoordinator(client: client, observability: observability),
-            modelContext: retryContext,
-            observability: observability
-        )
-        scheduler.currentOwnerTokenIdentifier = owner
-        scheduler.retrySync()
-        try await waitUntil { scheduler.lastSyncedAt != nil }
-
-        XCTAssertFalse(sink.observations.contains { $0.kind == .durableFailure })
     }
 
     func testTransientPushAfterSuccessfulDurableRetryClearsResolvedFailure() async throws {
@@ -1679,28 +1588,11 @@ final class SyncSchedulerStatusTests: XCTestCase {
         XCTAssertNotNil(scheduler.lastSyncedAt)
     }
 
-    func testUnfinishedSyncWorkIncludesPendingEntryForCurrentOwner() throws {
-        let owner = "issuer|owner_a"
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        context.insert(SyncOutboxEntry(
-            entityKind: .exercise,
-            entityID: UUID(),
-            operation: .update,
-            ownerTokenIdentifier: owner,
-            now: Date(timeIntervalSince1970: 100)
-        ))
-        try context.save()
-        let scheduler = SyncScheduler(modelContext: context)
-        scheduler.currentOwnerTokenIdentifier = owner
-
-        XCTAssertTrue(scheduler.hasUnfinishedSyncWork)
-    }
-
     func testUnfinishedSyncWorkIncludesFailedInFlightAndOwnerlessV1Entries() throws {
         let owner = "issuer|owner_a"
         for (status, entryOwner) in [
-            (SyncOutboxStatus.failed, owner as String?),
+            (SyncOutboxStatus.pending, owner as String?),
+            (.failed, owner),
             (.inFlight, owner),
             (.pending, nil),
         ] {

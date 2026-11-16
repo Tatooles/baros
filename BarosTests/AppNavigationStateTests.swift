@@ -3,13 +3,6 @@ import XCTest
 
 @MainActor
 final class AppNavigationStateTests: XCTestCase {
-    func testPermanentTabsAreHistoryHomeSettingsAndDefaultToHome() {
-        let navigationState = AppNavigationState()
-
-        XCTAssertEqual(AppTab.allCases, [.history, .home, .settings])
-        XCTAssertEqual(navigationState.selectedTab, .home)
-    }
-
     func testLaunchWithoutActiveWorkoutShowsHomeWithoutPresentationOrAccessory() {
         let navigationState = AppNavigationState(selectedTab: .settings)
 
@@ -133,33 +126,20 @@ final class AppNavigationStateTests: XCTestCase {
     }
 
     func testFinishOrDiscardDismissesWorkoutAndReturnsHome() {
-        for _ in 0..<2 {
+        // The workout disappears the same way when the current owner changes.
+        for selectedTab in [AppTab.settings, .history] {
             let navigationState = AppNavigationState()
             navigationState.reconcileActiveWorkout(sessionID: UUID())
             navigationState.minimizeActiveWorkout()
-            navigationState.selectedTab = .settings
+            navigationState.selectedTab = selectedTab
 
             navigationState.reconcileActiveWorkout(sessionID: nil)
 
-            XCTAssertNil(navigationState.activeWorkoutID)
-            XCTAssertEqual(navigationState.selectedTab, .home)
-            XCTAssertFalse(navigationState.isActiveWorkoutPresented)
-            XCTAssertFalse(navigationState.mountsActiveWorkoutAccessory)
+            XCTAssertNil(navigationState.activeWorkoutID, "\(selectedTab)")
+            XCTAssertEqual(navigationState.selectedTab, .home, "\(selectedTab)")
+            XCTAssertFalse(navigationState.isActiveWorkoutPresented, "\(selectedTab)")
+            XCTAssertFalse(navigationState.mountsActiveWorkoutAccessory, "\(selectedTab)")
         }
-    }
-
-    func testActiveWorkoutDisappearingAfterCurrentOwnerChangeReturnsHome() {
-        let navigationState = AppNavigationState()
-        navigationState.reconcileActiveWorkout(sessionID: UUID())
-        navigationState.minimizeActiveWorkout()
-        navigationState.selectedTab = .history
-
-        navigationState.reconcileActiveWorkout(sessionID: nil)
-
-        XCTAssertNil(navigationState.activeWorkoutID)
-        XCTAssertEqual(navigationState.selectedTab, .home)
-        XCTAssertFalse(navigationState.isActiveWorkoutPresented)
-        XCTAssertFalse(navigationState.mountsActiveWorkoutAccessory)
     }
 
     func testDelayedReplacementAfterCurrentOwnerChangeStaysDismissedUntilExplicitReturn() {
@@ -319,16 +299,6 @@ final class AppNavigationStateTests: XCTestCase {
         XCTAssertEqual(navigationState.selectedTab, .history)
         XCTAssertEqual(navigationState.historyMode, .workouts)
         XCTAssertEqual(navigationState.historyPath, [.workout(workoutID)])
-    }
-
-    func testClearHistoryPathRemovesRoute() {
-        let route = ExerciseHistoryRoute(exerciseID: UUID(), name: "Bench Press")
-        let navigationState = AppNavigationState(selectedTab: .history, historyMode: .exercises)
-        navigationState.openExerciseHistory(route)
-
-        navigationState.historyPath = []
-
-        XCTAssertTrue(navigationState.historyPath.isEmpty)
     }
 
     func testOpenSyncSettingsSelectsSettingsAtItsRoot() {

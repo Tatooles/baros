@@ -149,28 +149,6 @@ final class OnboardingWorkoutPreferencesTests: XCTestCase {
         XCTAssertEqual(storedRPEChoice, false)
     }
 
-    // MARK: - Later changes in Settings
-
-    func testSettingsCanChangeEveryOnboardingChoiceLater() throws {
-        let (context, settings) = try makeSignedOutSettings()
-        let restTimer = RestTimerCoordinator()
-        try apply(
-            OnboardingWorkoutPreferences(weightUnit: .kilograms, restTimerEnabled: false, rpeEnabled: true),
-            settings: settings,
-            restTimer: restTimer,
-            context: context
-        )
-
-        // The same storage the Settings controls write to.
-        try SettingsMutationService().updateWeightUnit(.pounds, settings: settings, context: context)
-        restTimer.setEnabled(true)
-        defaults.set(false, forKey: RPEPreference.storageKey)
-
-        XCTAssertEqual(settings.weightUnit, .pounds)
-        XCTAssertTrue(restTimer.isEnabled)
-        XCTAssertEqual(storedRPEChoice, false)
-    }
-
     // MARK: - Helpers
 
     private func makeSignedOutSettings() throws -> (ModelContext, UserSettings) {

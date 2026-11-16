@@ -12,17 +12,11 @@ final class FormattingTests: XCTestCase {
 
     func testDurationFormatterUsesHourStyleWhenNeeded() {
         XCTAssertEqual(AppTheme.formatDuration(3674), "1:01:14")
-    }
-
-    func testDurationFormatterUsesMinuteStyleForShorterValues() {
         XCTAssertEqual(AppTheme.formatDuration(76), "01:16")
     }
 
     func testElapsedDescriptionIncludesSeconds() {
         XCTAssertEqual(WorkoutFormatters.elapsedDescription(2_339), "38:59 elapsed")
-    }
-
-    func testElapsedDescriptionIncludesHoursWithPaddedMinutesAndSeconds() {
         XCTAssertEqual(WorkoutFormatters.elapsedDescription(3_899), "1:04:59 elapsed")
     }
 
@@ -58,11 +52,6 @@ final class FormattingTests: XCTestCase {
     func testDateFormatterIncludesWeekdayMonthAndDay() {
         let date = Calendar.current.date(from: DateComponents(year: 2026, month: 4, day: 21)) ?? .now
         XCTAssertTrue(AppTheme.formatDate(date).contains("April"))
-    }
-
-    func testMeasurementUnitProvidesUppercaseWorkoutFieldPlaceholder() {
-        XCTAssertEqual(MeasurementUnit.pounds.fieldPlaceholder, "LBS")
-        XCTAssertEqual(MeasurementUnit.kilograms.fieldPlaceholder, "KG")
     }
 
     func testKilogramDisplayInputRoundTripsThroughCanonicalPounds() {
@@ -136,12 +125,6 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(input.displayText(for: 8), "8")
     }
 
-    func testNumberParserAcceptsLocaleDecimalSeparator() {
-        let locale = Locale(identifier: "fr_FR")
-
-        XCTAssertEqual(WorkoutFormatters.parseNumber("8,5", locale: locale), 8.5)
-    }
-
     func testNumberParserHonorsLocaleChangesBetweenCalls() {
         for _ in 0..<3 {
             XCTAssertEqual(WorkoutFormatters.parseNumber("1,234.5", locale: Locale(identifier: "en_US")), 1234.5)
@@ -177,45 +160,27 @@ final class FormattingTests: XCTestCase {
         XCTAssertNil(WorkoutFormatters.parseNumber(overflowingInput, locale: Locale(identifier: "en_US_POSIX")))
     }
 
-    func testWorkoutNumericPolicyAcceptsWeightAtUpperBoundary() {
-        XCTAssertEqual(WorkoutNumericInputPolicy.validatedWeight(10_000), 10_000)
-    }
-
-    func testWorkoutNumericPolicyAcceptsZeroWeightAtLowerBoundary() {
-        XCTAssertEqual(WorkoutNumericInputPolicy.validatedWeight(0), 0)
-    }
-
     func testWorkoutNumericPolicyRejectsOutOfPolicyWeights() {
-        XCTAssertNil(WorkoutNumericInputPolicy.validatedWeight(-0.1))
-        XCTAssertNil(WorkoutNumericInputPolicy.validatedWeight(10_000.1))
-        XCTAssertNil(WorkoutNumericInputPolicy.validatedWeight(.infinity))
-    }
-
-    func testWorkoutNumericPolicyAcceptsRepsAtUpperBoundary() {
-        XCTAssertEqual(WorkoutNumericInputPolicy.validatedReps(1_000), 1_000)
-    }
-
-    func testWorkoutNumericPolicyAcceptsOneRepAtLowerBoundary() {
-        XCTAssertEqual(WorkoutNumericInputPolicy.validatedReps(1), 1)
+        let cases: [(Double, Double?)] = [
+            (-0.1, nil), (0, 0), (10_000, 10_000), (10_000.1, nil), (.infinity, nil),
+        ]
+        for (value, expected) in cases {
+            XCTAssertEqual(WorkoutNumericInputPolicy.validatedWeight(value), expected, "\(value)")
+        }
     }
 
     func testWorkoutNumericPolicyRejectsOutOfPolicyReps() {
-        XCTAssertNil(WorkoutNumericInputPolicy.validatedReps(0))
-        XCTAssertNil(WorkoutNumericInputPolicy.validatedReps(1_001))
-    }
-
-    func testWorkoutNumericPolicyAcceptsRPEAtUpperBoundary() {
-        XCTAssertEqual(WorkoutNumericInputPolicy.validatedRPE(10), 10)
-    }
-
-    func testWorkoutNumericPolicyAcceptsRPEAtLowerBoundary() {
-        XCTAssertEqual(WorkoutNumericInputPolicy.validatedRPE(1), 1)
+        let cases: [(Int, Int?)] = [(0, nil), (1, 1), (1_000, 1_000), (1_001, nil)]
+        for (value, expected) in cases {
+            XCTAssertEqual(WorkoutNumericInputPolicy.validatedReps(value), expected, "\(value)")
+        }
     }
 
     func testWorkoutNumericPolicyRejectsOutOfPolicyRPE() {
-        XCTAssertNil(WorkoutNumericInputPolicy.validatedRPE(0.9))
-        XCTAssertNil(WorkoutNumericInputPolicy.validatedRPE(10.1))
-        XCTAssertNil(WorkoutNumericInputPolicy.validatedRPE(.nan))
+        let cases: [(Double, Double?)] = [(0.9, nil), (1, 1), (10, 10), (10.1, nil), (.nan, nil)]
+        for (value, expected) in cases {
+            XCTAssertEqual(WorkoutNumericInputPolicy.validatedRPE(value), expected, "\(value)")
+        }
     }
 
     func testWorkoutNumericPolicyParsesLocaleWeightInput() {

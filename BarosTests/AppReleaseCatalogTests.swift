@@ -7,10 +7,21 @@ final class AppReleaseCatalogTests: XCTestCase {
     }
 
     func testVersionOneZeroUsesItsDedicatedReleaseSheet() throws {
-        let release = try XCTUnwrap(AppReleaseCatalog.whatsNew(for: "1.0"))
+        let dedicatedSheets: [(version: String, sheetID: WhatsNewSheetID)] = [
+            ("1.0", .version1_0),
+            ("1.2", .version1_2),
+            ("1.3", .version1_3),
+            ("1.4", .version1_4),
+            ("1.5", .version1_5),
+        ]
 
-        XCTAssertEqual(release.version, "1.0")
-        XCTAssertEqual(release.sheetID, .version1_0)
+        for (version, sheetID) in dedicatedSheets {
+            let release = try XCTUnwrap(AppReleaseCatalog.whatsNew(for: version), version)
+
+            XCTAssertEqual(release.version, version)
+            XCTAssertEqual(release.sheetID, sheetID, version)
+            XCTAssertEqual(AppReleaseCatalog.latestWhatsNew(upTo: version), release, version)
+        }
     }
 
     func testVersionOneOneIsCatalogedWithoutReleaseHighlights() throws {
@@ -24,38 +35,6 @@ final class AppReleaseCatalogTests: XCTestCase {
         let release = try XCTUnwrap(AppReleaseCatalog.latestWhatsNew(upTo: "1.1"))
 
         XCTAssertEqual(release.version, "1.0")
-    }
-
-    func testVersionOneTwoUsesItsDedicatedReleaseSheet() throws {
-        let release = try XCTUnwrap(AppReleaseCatalog.whatsNew(for: "1.2"))
-
-        XCTAssertEqual(release.version, "1.2")
-        XCTAssertEqual(release.sheetID, .version1_2)
-        XCTAssertEqual(AppReleaseCatalog.latestWhatsNew(upTo: "1.2"), release)
-    }
-
-    func testVersionOneThreeUsesItsDedicatedReleaseSheet() throws {
-        let release = try XCTUnwrap(AppReleaseCatalog.whatsNew(for: "1.3"))
-
-        XCTAssertEqual(release.version, "1.3")
-        XCTAssertEqual(release.sheetID, .version1_3)
-        XCTAssertEqual(AppReleaseCatalog.latestWhatsNew(upTo: "1.3"), release)
-    }
-
-    func testVersionOneFourUsesItsDedicatedReleaseSheet() throws {
-        let release = try XCTUnwrap(AppReleaseCatalog.whatsNew(for: "1.4"))
-
-        XCTAssertEqual(release.version, "1.4")
-        XCTAssertEqual(release.sheetID, .version1_4)
-        XCTAssertEqual(AppReleaseCatalog.latestWhatsNew(upTo: "1.4"), release)
-    }
-
-    func testVersionOneFiveUsesItsDedicatedReleaseSheet() throws {
-        let release = try XCTUnwrap(AppReleaseCatalog.whatsNew(for: "1.5"))
-
-        XCTAssertEqual(release.version, "1.5")
-        XCTAssertEqual(release.sheetID, .version1_5)
-        XCTAssertEqual(AppReleaseCatalog.latestWhatsNew(upTo: "1.5"), release)
     }
 
     func testUncatalogedFutureVersionCanOpenLatestReleaseHighlightsFromSettings() throws {

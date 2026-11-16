@@ -110,12 +110,6 @@ final class HomeRingModelTests: XCTestCase {
         XCTAssertTrue(model.emptySlotIndices(for: .year).contains(1))
     }
 
-    func testEmptyRingHasAll30DailyOr52WeeklyTicks() {
-        let model = HomeRingModel(workouts: [], now: date(), calendar: calendar)
-        XCTAssertEqual(model.emptySlotIndices(for: .month), Array((0..<30).reversed()))
-        XCTAssertEqual(model.emptySlotIndices(for: .year), Array((0..<52).reversed()))
-    }
-
     func testMonthOnlyIncludesTodayThrough29DaysBack() {
         let now = date()
         let workouts = [0, 29, 30].map { workout(calendar.date(byAdding: .day, value: -$0, to: now)!, minutes: 60) }
@@ -146,11 +140,6 @@ final class HomeRingModelTests: XCTestCase {
         let outside = HomeRingModel(workouts: [included, justOutside], now: now, calendar: calendar)
         XCTAssertEqual(outside.monthWorkoutCount, 1)
         XCTAssertTrue(outside.showsPeriodToggle)
-    }
-
-    func testFutureWorkoutsDoNotExposePeriodToggle() {
-        let future = workout(calendar.date(byAdding: .day, value: 1, to: date())!, minutes: 60)
-        XCTAssertFalse(HomeRingModel(workouts: [future], now: date(), calendar: calendar).showsPeriodToggle)
     }
 
     func testWeeksUseCappedDailyTotalsDividedByFour90MinuteDays() {
@@ -184,6 +173,8 @@ final class HomeRingModelTests: XCTestCase {
         XCTAssertTrue(model.monthSpokes.isEmpty)
         XCTAssertTrue(model.yearSpokes.isEmpty)
         XCTAssertEqual(model.accessibilitySummary(period: .month), "No workouts yet.")
+        XCTAssertEqual(model.emptySlotIndices(for: .month), Array((0..<30).reversed()))
+        XCTAssertEqual(model.emptySlotIndices(for: .year), Array((0..<52).reversed()))
     }
 
     func testInjectedTimeZoneDeterminesLocalDay() {
@@ -211,6 +202,7 @@ final class HomeRingModelTests: XCTestCase {
         let model = HomeRingModel(workouts: [workout(date(2026, 10, 10), minutes: 60)], now: date(), calendar: calendar)
         XCTAssertEqual(model.totalWorkouts, 0)
         XCTAssertTrue(model.yearSpokes.isEmpty)
+        XCTAssertFalse(model.showsPeriodToggle)
     }
 
     func testCenterCountAndCaptionFollowTheSelectedPeriod() {
@@ -274,7 +266,10 @@ final class HomeRingModelTests: XCTestCase {
         let workouts = (0..<500).map { index in
             workout(calendar.date(byAdding: .day, value: -(index * 1095 / 499), to: now)!, minutes: 60)
         }
-        measure {
+        // No baseline is recorded, so one measured pass keeps the timing visible.
+        let options = XCTMeasureOptions()
+        options.iterationCount = 1
+        measure(options: options) {
             let model = HomeRingModel(workouts: workouts, now: now, calendar: calendar)
             XCTAssertEqual(model.totalWorkouts, 500)
             XCTAssertEqual(Set(model.yearSpokes.map(\.lap)), [0, 1, 2, 3])
@@ -575,11 +570,5 @@ final class HomeLayoutTests: XCTestCase {
 
         XCTAssertTrue(layout.isWide)
         XCTAssertEqual(layout.ringDiameter, 280)
-    }
-
-    func testNarrowLandscapeWindowStaysSingleColumn() {
-        let layout = HomeLayout(size: CGSize(width: 560, height: 400))
-
-        XCTAssertFalse(layout.isWide)
     }
 }

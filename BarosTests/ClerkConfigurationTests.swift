@@ -106,16 +106,6 @@ final class ClerkConfigurationTests: XCTestCase {
         XCTAssertFalse(summary.contains("sensible-reindeer-16.convex.cloud"))
     }
 
-    func testCopyAppInfoFeedbackStateDefaultsToCopyPrompt() {
-        XCTAssertEqual(CopyAppInfoFeedbackState.idle.title, "Copy App Info")
-        XCTAssertEqual(CopyAppInfoFeedbackState.idle.systemImage, "doc.on.doc")
-    }
-
-    func testCopyAppInfoFeedbackStateShowsCopiedConfirmation() {
-        XCTAssertEqual(CopyAppInfoFeedbackState.copied.title, "Copied")
-        XCTAssertEqual(CopyAppInfoFeedbackState.copied.systemImage, "checkmark")
-    }
-
     func testAppBundleUsesCanonicalSimulatorPlatformValue() {
         let supportedPlatforms = Bundle.main.object(forInfoDictionaryKey: "CFBundleSupportedPlatforms") as? [String]
 

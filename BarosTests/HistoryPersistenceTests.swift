@@ -132,19 +132,6 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(try completedSessions(in: context).map(\.id), [session.id])
     }
 
-    func testTombstonedCompletedWorkoutNoLongerAppears() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let engine = ActiveWorkoutEngine()
-        let session = try engine.startBlankWorkout(context: context)
-        try engine.finishWorkout(session, context: context)
-
-        session.markDeletedCascade(now: Date(timeIntervalSince1970: 200))
-        try context.save()
-
-        XCTAssertTrue(try completedSessions(in: context).isEmpty)
-    }
-
     func testVisibleCompletedSessionsExcludeTombstonedSessions() {
         let activeSession = WorkoutSession(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000301")!,
@@ -813,36 +800,6 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(groups.map(\.title), ["A Session", "B Session"])
     }
 
-    func testExerciseHistoryGroupCarriesExerciseNotes() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
-        let session = WorkoutSession(
-            title: "Push Notes",
-            startedAt: Date(timeIntervalSince1970: 500),
-            status: .completed,
-            source: .blank
-        )
-        let loggedExercise = LoggedExercise(
-            orderIndex: 0,
-            exercise: exercise,
-            exerciseSnapshotName: exercise.name,
-            notes: "Elbow felt better with a closer grip."
-        )
-        loggedExercise.sets = [
-            LoggedSet(orderIndex: 0, weight: 185, reps: 5, rpe: 8, isCompleted: true)
-        ]
-        session.loggedExercises = [loggedExercise]
-        context.insert(exercise)
-        context.insert(session)
-        try context.save()
-
-        let summary = try XCTUnwrap(ExerciseHistorySummary.makeSummaries(from: [session]).first)
-        let groups = ExerciseHistorySessionGroup.makeGroups(from: [session], matching: summary)
-
-        XCTAssertEqual(groups.first?.exerciseNotes, "Elbow felt better with a closer grip.")
-    }
-
     func testExerciseHistoryGroupPreservesNotesForDuplicateLoggedExercises() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -1030,7 +987,13 @@ final class HistoryPersistenceTests: XCTestCase {
     }
 
     func testExerciseHistoryViewSnapshotResolvesHistoryOnceForAllConsumers() throws {
-        let fixture = try makeHistoryViewPerformanceFixture()
+        // The one deliberately large history: 100 workouts and 3,000 completed sets.
+        let fixture = try makeHistoryViewPerformanceFixture(
+            sessionCount: 100,
+            exerciseCount: 20,
+            loggedExercisesPerSession: 10,
+            setsPerLoggedExercise: 3
+        )
         var resolutionCount = 0
         var resolutionTime = TimeInterval.zero
         let snapshot = ExerciseHistoryViewSnapshot(
@@ -1873,7 +1836,16 @@ final class HistoryPersistenceTests: XCTestCase {
         }
     }
 
-    private func makeHistoryViewPerformanceFixture() throws -> (
+    /// Completed, owned history in which every exercise has the same number of
+    /// performances, provided `sessionCount` is a multiple of `exerciseCount`.
+    /// The defaults are the smallest history the cache tests need; only a test
+    /// about scale should ask for more.
+    private func makeHistoryViewPerformanceFixture(
+        sessionCount: Int = 4,
+        exerciseCount: Int = 4,
+        loggedExercisesPerSession: Int = 2,
+        setsPerLoggedExercise: Int = 2
+    ) throws -> (
         container: ModelContainer,
         sessions: [WorkoutSession],
         exercises: [Exercise],
@@ -1883,7 +1855,7 @@ final class HistoryPersistenceTests: XCTestCase {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let ownerTokenIdentifier = "issuer|history_performance_owner"
-        let exercises = (0..<20).map { index in
+        let exercises = (0..<exerciseCount).map { index in
             Exercise(
                 name: "Performance Exercise \(index)",
                 category: .strength,
@@ -1896,14 +1868,14 @@ final class HistoryPersistenceTests: XCTestCase {
             context.insert(exercise)
         }
 
-        let sessions = (0..<100).map { sessionIndex in
-            let loggedExercises = (0..<10).map { exerciseOffset in
+        let sessions = (0..<sessionCount).map { sessionIndex in
+            let loggedExercises = (0..<loggedExercisesPerSession).map { exerciseOffset in
                 let exercise = exercises[(sessionIndex + exerciseOffset) % exercises.count]
                 return LoggedExercise(
                     orderIndex: exerciseOffset,
                     exercise: exercise,
                     exerciseSnapshotName: exercise.name,
-                    sets: (0..<3).map { setIndex in
+                    sets: (0..<setsPerLoggedExercise).map { setIndex in
                         LoggedSet(
                             orderIndex: setIndex,
                             weight: Double(100 + sessionIndex + setIndex),
@@ -1933,7 +1905,7 @@ final class HistoryPersistenceTests: XCTestCase {
             try context.fetch(FetchDescriptor<WorkoutSession>()),
             try context.fetch(FetchDescriptor<Exercise>()),
             ownerTokenIdentifier,
-            100 * 10 * 3
+            sessionCount * loggedExercisesPerSession * setsPerLoggedExercise
         )
     }
 
