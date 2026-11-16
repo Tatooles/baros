@@ -14,7 +14,7 @@
 // Layout from the Baros 1.2 generator (PR #214).
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -119,6 +119,10 @@ function artworkSvg({ screenshotDataUrl, iconDataUrl, headline, glowX, fadeBotto
 }
 
 await mkdir(outputDirectory, { recursive: true });
+// A reordered or dropped shot would otherwise leave a stale PNG that asc.mjs rejects as unapproved.
+for (const name of (await readdir(outputDirectory)).filter((n) => n.endsWith(".png"))) {
+  await rm(path.join(outputDirectory, name));
+}
 const iconDataUrl = pngDataUrl(await readFile(iconPath));
 const approvedAssets = JSON.parse(await readFile(approvedAssetsPath, "utf8"));
 const approvedListing = { appStore: {} };

@@ -490,7 +490,15 @@ async function listing(versionString, opts) {
     screenshotsDiffer =
       files.length !== current.length ||
       files.some((f, i) => current[i]?.attributes.sourceFileChecksum !== f.md5);
-    console.log(`  screenshots: ${screenshotsDiffer ? `differ from ${opts.screenshots}` : `match ${opts.screenshots}`}`);
+    // Matching bytes count only once App Store Connect has processed them; a failed one is redone.
+    const deliveryState = (s) => s.attributes.assetDeliveryState?.state;
+    if (!screenshotsDiffer && current.some((s) => deliveryState(s) === "FAILED")) screenshotsDiffer = true;
+    const processing = screenshotsDiffer ? [] : current.filter((s) => deliveryState(s) !== "COMPLETE");
+    console.log(
+      `  screenshots: ${screenshotsDiffer ? `differ from ${opts.screenshots}` : `match ${opts.screenshots}`}` +
+        `${processing.length ? `, ${processing.length} still processing` : ""}`,
+    );
+    if (processing.length && opts.apply) await waitForScreenshots(processing.map((s) => s.id));
   }
 
   const lockedChanges = Object.keys(changes).filter((f) => f !== "promotionalText");
