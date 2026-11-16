@@ -102,8 +102,7 @@ Review usually takes a day or two. End the turn until Kevin says Apple emailed, 
 1. Next version = the lowest open milestone above this one (`gh api 'repos/Tatooles/baros/milestones?state=open' --jq '.[].title'`).
 2. On a branch from `main`, run `scripts/bump-version.sh <next>`. Of the tests it lists, update those asserting the current release or its upgrade path the way commit `2ddae398` (the 1.5 bump) did — the upgrade test now expects an upgrade into an unannounced release to skip What's New. Run the unit tests and the edited UI tests.
 3. Open the PR with the `file-pr` skill. ⛔ Merge it once checks are green.
-
-4. ⛔ `node scripts/asc.mjs release <version>`, check the plan, `--apply`.
+4. ⛔ Unless `status` already shows `READY_FOR_SALE`, `node scripts/asc.mjs release <version>`, check the plan, `--apply`.
 
 **Done when** the bump PR is merged and `status` shows `READY_FOR_SALE`.
 
