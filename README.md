@@ -53,6 +53,8 @@ The command must execute exactly 4 tests with no failures. CI reads the result b
 
 The canonical local UI-suite command is the `Run UI tests only` command above. Keep the full UI target out of the required PR gate until issue #63 establishes repeated full-suite stability.
 
+Before adding a UI test, read the UI-test policy in `AGENTS.md` → "UI tests"; most changes need only a unit test.
+
 Local equivalents:
 
 ```sh

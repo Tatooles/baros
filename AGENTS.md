@@ -12,6 +12,22 @@
 - Upload PR evidence directly to GitHub and verify that it renders in the PR. Never commit PR-only screenshots or recordings, including directories such as `.github/pr-assets/`.
 - If presentation-related files change without affecting visible UI or interactions, explain why in the PR description under "No visual impact."
 
+## UI tests
+
+A full `BarosUITests` run takes close to an hour, so the suite covers only behavior that lives in the UI layer.
+
+- Cover a bug fix or feature with a unit test in `BarosTests/` by default. That includes values, formatting, sorting, sync and auth decisions, and save-failure handling.
+- Add or extend a UI test only for:
+  - layout or Dynamic Type;
+  - keyboard and focus;
+  - gestures and hit targets;
+  - navigation, sheets, and presentation;
+  - persistence across relaunch or backgrounding;
+  - the end-to-end data-safety flows: sign-out, local-data reset, account deletion, and active-workout recovery.
+- Add assertions to an existing flow test that already passes through the screen before writing a new test.
+- Build on the shared helpers in `BarosUITests/BarosUITests.swift`: launch with `makeApp`, seed state with `--uitest-*` launch arguments (`UITestFixtureSeeder`), and wait with `waitToExist`, `waitToDisappear`, or `waitUntil`, not sleeps. XCTest's own waiters add about 1 s per call; the `waitUntil` doc comment explains why, and names the one case where `waitForExistence` still fits.
+- The four `ios-ui-smoke` tests and CI's `totalTestCount == 4` check change only on purpose, with the README "CI" section and `.github/workflows/app-ci.yml` updated in the same PR.
+
 ## Simulator storage
 
 - Reuse existing simulators. Never create or clone a device per issue, session, or worktree, or download/install runtimes unless the user explicitly requests that provisioning work.
