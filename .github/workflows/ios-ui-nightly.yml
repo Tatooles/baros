@@ -1,0 +1,176 @@
+name: iOS UI Nightly
+
+# Runs the full BarosUITests target to collect stability evidence for issue #63.
+# Never add pull_request or push triggers: this suite is not a PR gate yet.
+on:
+  schedule:
+    # Scheduled runs always use the default branch (main). 09:23 UTC is
+    # overnight in the US and avoids the top-of-hour scheduler backlog.
+    - cron: "23 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Queue a manual run behind an in-flight nightly instead of discarding it.
+  cancel-in-progress: false
+
+jobs:
+  ios-ui-full:
+    name: ios-ui-full
+    runs-on: macos-26
+    timeout-minutes: 120
+    outputs:
+      failed-tests: ${{ steps.failed.outputs.names }}
+    env:
+      IOS_TEST_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=26.5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.5
+        run: sudo xcode-select -s /Applications/Xcode_26.5.app
+
+      - name: Show Xcode and simulator environment
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available | grep -E "iPhone 17" || true
+
+      - name: Resolve Swift packages
+        run: |
+          for attempt in 1 2 3; do
+            if xcodebuild -resolvePackageDependencies \
+              -project Baros.xcodeproj \
+              -scheme Baros \
+              -derivedDataPath "${RUNNER_TEMP}/BarosUIFullDerivedData"; then
+              exit 0
+            fi
+            echo "Package resolution attempt ${attempt} failed."
+            sleep 20
+          done
+          exit 1
+
+      - name: Run full Baros UI test target
+        # Leaves time inside the job timeout to collect and upload diagnostics.
+        timeout-minutes: 105
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Baros.xcodeproj \
+            -scheme Baros \
+            -destination "${IOS_TEST_DESTINATION}" \
+            -only-testing:BarosUITests \
+            -parallel-testing-enabled NO \
+            -derivedDataPath "${RUNNER_TEMP}/BarosUIFullDerivedData" \
+            -retry-tests-on-failure \
+            -test-iterations 2 \
+            -resultBundlePath "${RUNNER_TEMP}/BarosUIFull.xcresult" \
+            2>&1 | tee "${RUNNER_TEMP}/BarosUIFull.log"
+
+      - name: Report UI tests that only passed on retry
+        if: ${{ !cancelled() }}
+        run: |
+          if [[ ! -d "${RUNNER_TEMP}/BarosUIFull.xcresult" ]]; then
+            echo "No result bundle was produced."
+            exit 0
+          fi
+          python3 ci_scripts/report_retried_tests.py "${RUNNER_TEMP}/BarosUIFull.xcresult"
+
+      - name: Report executed UI test count
+        if: ${{ !cancelled() }}
+        run: |
+          if [[ ! -d "${RUNNER_TEMP}/BarosUIFull.xcresult" ]]; then
+            echo "No result bundle was produced."
+            exit 0
+          fi
+          set -o pipefail
+          summary="$(
+            xcrun xcresulttool get test-results summary \
+              --path "${RUNNER_TEMP}/BarosUIFull.xcresult" \
+              --compact
+          )"
+          count() { plutil -extract "$1" raw -o - - <<< "${summary}"; }
+          line="Executed UI tests: $(count totalTestCount) (passed $(count passedTests), failed $(count failedTests), skipped $(count skippedTests))"
+          echo "${line}"
+          echo "${line}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Collect failed UI test names
+        id: failed
+        if: ${{ !cancelled() }}
+        run: |
+          failed_tests=""
+          if [[ -d "${RUNNER_TEMP}/BarosUIFull.xcresult" ]]; then
+            failed_tests="$(python3 ci_scripts/report_failed_tests.py "${RUNNER_TEMP}/BarosUIFull.xcresult")" ||
+              echo "Could not read failed tests from the result bundle."
+          fi
+          echo "${failed_tests}"
+          {
+            echo "names<<FAILED_TESTS_EOF"
+            echo "${failed_tests}"
+            echo "FAILED_TESTS_EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Upload UI suite failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BarosUIFull-xcresult
+          path: |
+            ${{ runner.temp }}/BarosUIFull.xcresult
+            ${{ runner.temp }}/BarosUIFull.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Keeps one tracking issue in sync with the nightly result on main.
+  # Branch runs from workflow_dispatch never touch the issue.
+  track-nightly-result:
+    name: track-nightly-result
+    needs: ios-ui-full
+    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.ios-ui-full.result == 'success' || needs.ios-ui-full.result == 'failure') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      ISSUE_TITLE: Nightly full UI suite is failing
+      RESULT: ${{ needs.ios-ui-full.result }}
+      FAILED_TESTS: ${{ needs.ios-ui-full.outputs.failed-tests }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      COMMIT_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Open, update, or close the tracking issue
+        run: |
+          issue_number="$(
+            gh issue list --state open --search "\"${ISSUE_TITLE}\" in:title" \
+              --json number,title \
+              --jq "map(select(.title == env.ISSUE_TITLE)) | first | .number // empty"
+          )"
+
+          if [[ "${RESULT}" == "success" ]]; then
+            if [[ -n "${issue_number}" ]]; then
+              gh issue close "${issue_number}" \
+                --comment "The nightly full UI suite passed on \`${COMMIT_SHA}\`: ${RUN_URL}"
+            fi
+            exit 0
+          fi
+
+          if [[ -n "${FAILED_TESTS//[[:space:]]/}" ]]; then
+            failures="$(sed '/^[[:space:]]*$/d; s/.*/- `&`/' <<< "${FAILED_TESTS}")"
+          else
+            failures="No failed test names were recorded. The run failed outside test execution (build, timeout, or runner); see the log."
+          fi
+          body="$(printf 'The nightly full `BarosUITests` run failed on `%s`.\n\nRun: %s\n\nFailed tests (after one retry):\n%s\n' \
+            "${COMMIT_SHA}" "${RUN_URL}" "${failures}")"
+
+          if [[ -n "${issue_number}" ]]; then
+            gh issue comment "${issue_number}" --body "${body}"
+          else
+            gh issue create --title "${ISSUE_TITLE}" \
+              --body "${body}"$'\n\nOpened by the `iOS UI Nightly` workflow. It closes this issue after the next passing run on `main`. See #63.'
+          fi
