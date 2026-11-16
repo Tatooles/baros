@@ -111,7 +111,7 @@ Review usually takes a day or two. End the turn; when Kevin says Apple emailed:
 
 A patch release skips 2–4, because `main` is already past it.
 
-**Done when** `status` shows `READY_FOR_SALE`, the listing PR is merged, and the bump PR is merged.
+**Done when** `status` shows `READY_FOR_SALE`, the listing PR is merged, and, except for a patch, the bump PR is merged.
 
 ## Phase B — record the release
 
