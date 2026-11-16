@@ -13,7 +13,7 @@ Native SwiftUI workout tracker for iPhone with a SwiftData-backed offline workou
 - Generate project: `xcodegen generate`
 - Run logic tests (macOS, no simulator): `swift test --package-path BarosCore`
 - Build simulator app: `xcodebuild build -project Baros.xcodeproj -scheme Baros -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/codex-ios-app-derived-data`
-- Run full XCTest suite: `xcodebuild test -project Baros.xcodeproj -scheme Baros -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
+- Run hosted unit and UI tests (pair with the logic tests above for full coverage): `xcodebuild test -project Baros.xcodeproj -scheme Baros -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
 - Run hosted unit tests only: `xcodebuild test -project Baros.xcodeproj -scheme BarosUnitTests -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
 - Run UI tests only: `xcodebuild test -project Baros.xcodeproj -scheme Baros -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -only-testing:BarosUITests -derivedDataPath /private/tmp/codex-ios-app-derived-data`
 

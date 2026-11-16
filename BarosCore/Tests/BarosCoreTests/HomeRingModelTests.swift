@@ -368,6 +368,8 @@ final class HomeRingModelTests: XCTestCase {
         XCTAssertEqual(HomeRingSlotPreview.durationText(3_660), "1 hr 1 min")
         XCTAssertEqual(HomeRingSlotPreview.durationText(-5), "0 min")
     }
+
+    #if DEBUG
     func testScrubHistorySeedsStressCasesAtStraightDragSlots() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -475,4 +477,5 @@ final class HomeRingModelTests: XCTestCase {
             XCTAssertTrue(weeklyCounts.values.contains { $0.count == fixture.weeklyTarget! + 1 })
         }
     }
+    #endif
 }
