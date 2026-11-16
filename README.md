@@ -31,6 +31,8 @@ requests, which preserves their required-check results without reserving a
 macOS runner. Changes to `convex/auth.config.ts` are app-relevant because the
 Swift unit suite validates that file's Clerk audience and OIDC contract.
 
+Both iOS jobs start booting the `iPhone 17` / iOS 26.5 simulator in the background at job start, run `xcodebuild build-for-testing` while it boots, wait for the boot, then run `xcodebuild test-without-building` against that device's UDID. Swift package checkouts live in `${RUNNER_TEMP}/SourcePackages` (`-clonedSourcePackagesDirPath`) and are cached with `actions/cache`, keyed on `Package.resolved`.
+
 The UI smoke job intentionally selects only the four tests below instead of making the full `BarosUITests` target part of the required PR gate. Each selected test uses the UI suite's deterministic reset and in-memory launch helper. If either iOS job fails, first inspect the GitHub Actions log. The failed workflow run also uploads its `.xcresult` bundle and test log for local Xcode inspection.
 
 Run the exact UI smoke shard locally with:

@@ -97,6 +97,31 @@ test("required iOS gates retry failed tests and report retries that passed", asy
   }
 });
 
+test("required iOS gates build while the simulator boots, then test on that device", async () => {
+  const workflow = await readWorkflow("app-ci.yml");
+
+  for (const jobName of ["ios-unit-tests", "ios-ui-smoke"]) {
+    const steps = workflow.jobs[jobName].steps;
+    const indexOf = (pattern) => steps.findIndex((step) => pattern.test(step.run ?? ""));
+    const bootIndex = indexOf(/nohup bash -c '[\s\S]*xcrun simctl bootstatus "\$1" -b[\s\S]*&\s*$/);
+    const resolveIndex = indexOf(/xcodebuild -resolvePackageDependencies/);
+    const buildIndex = indexOf(/xcodebuild build-for-testing/);
+    const waitIndex = indexOf(/xcrun simctl bootstatus "\$\{IOS_SIMULATOR_UDID\}" -b/);
+    const testIndex = indexOf(/xcodebuild test-without-building/);
+
+    assert.match(steps[bootIndex].run, /IOS_TEST_DESTINATION=platform=iOS Simulator,id=\$\{udid\}/);
+    assert.ok(
+      bootIndex >= 0 && bootIndex < resolveIndex && resolveIndex < buildIndex,
+      `${jobName} must start booting before resolving packages and building`,
+    );
+    assert.equal(waitIndex, buildIndex + 1, `${jobName} must wait for boot right after building`);
+    assert.equal(testIndex, waitIndex + 1, `${jobName} must test right after the boot wait`);
+    for (const index of [buildIndex, testIndex]) {
+      assert.match(steps[index].run, /-destination "\$\{IOS_TEST_DESTINATION\}"/);
+    }
+  }
+});
+
 test("app classification uses the correct comparison for pull requests and pushes", async () => {
   const workflow = await readWorkflow("app-ci.yml");
   const classifier = workflow.jobs["app-changes"].steps.find((step) => step.id === "detect");
