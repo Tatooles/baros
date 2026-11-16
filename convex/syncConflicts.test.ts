@@ -233,6 +233,35 @@ describe("#97 delete versus edit", () => {
     expect(children.set!.deletedAt).toBe(now - 300);
   });
 
+  test("an upload stored as deleted also deletes children an older server left live", async () => {
+    for (const path of ["insert", "already deleted"] as const) {
+      const t = convexTest(schema, modules);
+      const client = t.withIdentity(owner);
+      await seedWorkout(client);
+      await t.run(async (ctx) => {
+        const sessionRow = await ctx.db.query("workoutSessions").unique();
+        if (path === "insert") {
+          // A partial wipe removed the workout row but left its children.
+          await ctx.db.delete(sessionRow!._id);
+        } else {
+          // Old server: the workout tombstone did not cascade.
+          await ctx.db.patch(sessionRow!._id, { deletedAt: now - 300, updatedAt: now - 300 });
+        }
+      });
+
+      await client.mutation(api.sync.upsertWorkoutSession, {
+        record: session(now - 200, { deletedAt: now - 200 }),
+      });
+
+      const children = await t.run(async (ctx) => ({
+        loggedExercise: await ctx.db.query("loggedExercises").unique(),
+        set: await ctx.db.query("loggedSets").unique(),
+      }));
+      expect(children.loggedExercise!.deletedAt, path).not.toBeNull();
+      expect(children.set!.deletedAt, path).not.toBeNull();
+    }
+  });
+
   test("a delete the server receives before the record still wins when the record arrives", async () => {
     const client = convexTest(schema, modules).withIdentity(owner);
     // After a partial account wipe, one device deletes a workout the server
@@ -572,6 +601,23 @@ describe("#98 client clocks", () => {
     vi.setSystemTime((now + 600) * 1000);
     const retry = await client.mutation(api.sync.upsertExercise, { record: deviceFUpload });
     expect(retry.status).toBe("updated");
+  });
+
+  test("limitation: a current build with a fast clock outranks concurrent edits until real time passes its stamp", async () => {
+    const client = convexTest(schema, modules).withIdentity(owner);
+    const original = await client.mutation(api.sync.upsertExercise, { record: exercise(now - 1000, { name: "Original" }) });
+    // Device A runs a current build a month fast and edits after seeing the original.
+    await client.mutation(api.sync.upsertExercise, {
+      record: exercise(now + month, { name: "A", baseUpdatedAt: original.updatedAt }),
+    });
+    // Device B, offline with a correct clock, also edited the original, later in real time.
+    vi.setSystemTime((now + 7200) * 1000);
+    const deviceB = await client.mutation(api.sync.upsertExercise, {
+      record: exercise(now + 3600, { name: "B", baseUpdatedAt: original.updatedAt }),
+    });
+    // The ordering time keeps A's raw stamp so that A's retries can never win
+    // twice. The same upload from an installed build would win.
+    expect(deviceB.status).toBe("ignored_stale");
   });
 
   test("a delete that reaches the server before its workout also deletes children left without it", async () => {

@@ -91,6 +91,16 @@ const fleets: FleetShape[] = [
     dropResponseRate: 0.35,
     offlineRate: 1.2,
   },
+  {
+    // Production on deploy day. With no fast clock in the fleet, installed
+    // builds are held to causal order too.
+    name: "installed builds, honest clocks",
+    devices: [
+      { rule: "legacy", clock: "honest" },
+      { rule: "legacy", clock: "jitter" },
+      { rule: "legacy", clock: "honest" },
+    ],
+  },
 ];
 
 function seedsFor(fleetIndex: number): number[] {

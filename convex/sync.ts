@@ -690,6 +690,14 @@ async function upsertSyncedRecord<TRecord extends SyncPayload>(
         serverUpdatedAt,
         syncOrder: decision.syncOrder,
       } as Doc<"exercises">);
+      if (decision.deletedAt !== null) {
+        // Children an older server left without this row follow its deletion.
+        await cascadeDeletion(ctx, ownerTokenIdentifier, table, {
+          clientId: record.clientId,
+          updatedAt: decision.updatedAt,
+          deletedAt: decision.deletedAt,
+        }, nextVersion);
+      }
       return {
         status: decision.accepted ? "inserted" : "ignored_stale",
         serverUpdatedAt,
@@ -705,7 +713,9 @@ async function upsertSyncedRecord<TRecord extends SyncPayload>(
         serverUpdatedAt,
         ...(decision.syncOrder === undefined ? {} : { syncOrder: decision.syncOrder }),
       });
-      if (decision.becomesDeleted && decision.deletedAt !== null) {
+      if (decision.deletedAt !== null) {
+        // Also on a row that was already deleted: children an older server
+        // left live under it follow it now, as with a repeated tombstone.
         await cascadeDeletion(ctx, ownerTokenIdentifier, table, {
           clientId: record.clientId,
           updatedAt: decision.updatedAt,

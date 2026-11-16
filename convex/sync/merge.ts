@@ -52,7 +52,6 @@ export type UpsertDecision =
       takeIncomingFields: boolean;
       updatedAt: number;
       deletedAt: number | null;
-      becomesDeleted: boolean;
       // Set when the upload's fields win.
       syncOrder?: number;
       // The upload took effect as sent: its fields and its deletion state.
@@ -198,7 +197,6 @@ export function decideUpsert(
         takeIncomingFields: true,
         updatedAt: Math.max(deletionVersion(incoming.updatedAt), stored.updatedAt + versionStepSeconds),
         deletedAt: stored.deletedAt,
-        becomesDeleted: false,
         syncOrder,
         accepted: !uploaderHoldsLive,
       };
@@ -209,7 +207,6 @@ export function decideUpsert(
         takeIncomingFields: false,
         updatedAt: incoming.updatedAt + versionStepSeconds,
         deletedAt: stored.deletedAt,
-        becomesDeleted: false,
         accepted: false,
       };
     }
@@ -223,7 +220,6 @@ export function decideUpsert(
       takeIncomingFields: fieldsWin,
       updatedAt: Math.max(stored.updatedAt + versionStepSeconds, deletionVersion(incoming.updatedAt)),
       deletedAt: clampToServerTime(requestedDeletedAt, nowSeconds),
-      becomesDeleted: true,
       syncOrder: fieldsWin ? syncOrder : undefined,
       accepted: !inherited && fieldsWin,
     };
@@ -235,7 +231,6 @@ export function decideUpsert(
       takeIncomingFields: true,
       updatedAt: Math.max(incoming.updatedAt, stored.updatedAt + versionStepSeconds),
       deletedAt: null,
-      becomesDeleted: false,
       syncOrder,
       accepted: true,
     };
@@ -249,7 +244,6 @@ export function decideUpsert(
     // Same content means the uploader already shows the kept version.
     updatedAt: sameContent ? incoming.updatedAt : incoming.updatedAt + versionStepSeconds,
     deletedAt: null,
-    becomesDeleted: false,
     accepted: false,
   };
 }
