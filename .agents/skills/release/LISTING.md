@@ -24,7 +24,7 @@ Start right after step 1 fixes the base; the capture runs in the background whil
 
 ## 2. Capture and generate
 
-Capture the code that ships. When `git diff --stat <base> origin/main -- Baros` is empty, capture on `main`. Otherwise (a pinned build or a patch behind newer UI), capture in a scratch worktree at the base with the capture tooling cherry-picked onto it: `git log --format=%h origin/main -- Baros/Core/Persistence/MarketingScreenshotSeeder.swift BarosUITests/MarketingScreenshotTests.swift` lists its commits. A release fix that changes UI after approval means recapturing the affected shots and approving them again.
+Capture the code that ships. When `git diff --stat <base> origin/main -- Baros ':!Baros/App/AppReleaseCatalog.swift'` is empty (version bumps only touch the catalog), capture on `main`. Otherwise (a pinned build or a patch behind newer UI), capture in a scratch worktree at the base with the capture tooling cherry-picked onto it: `git log --format=%h origin/main -- Baros/Core/Persistence/MarketingScreenshotSeeder.swift BarosUITests/MarketingScreenshotTests.swift` lists its commits. A release fix that changes UI after approval means recapturing the affected shots and approving them again.
 
 Follow the simulator rules in `AGENTS.md` with the iPhone 17 Pro pool device; the script refuses any other. Release the device when the run ends.
 
