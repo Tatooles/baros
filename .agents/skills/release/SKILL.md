@@ -55,9 +55,9 @@ A milestone lists each change once — its issue, or the PR itself when it has n
 
 ### 3. What's New and listing
 
-Follow [WHATS-NEW.md](WHATS-NEW.md): copy for the base range only, sheet, screenshot approval, PR merged to `main`. Then follow [LISTING.md](LISTING.md) with that copy; its approval can share a message with the What's New screenshots.
+Follow [WHATS-NEW.md](WHATS-NEW.md): copy for the base range only, sheet, screenshot approval, PR merged to `main`. Alongside it, follow [LISTING.md](LISTING.md), starting its capture as soon as the base is fixed; its approval can share a message with the What's New screenshots.
 
-**Done when** the What's New PR is merged, `docs/release/app-store-submission-pack.md` on `main` holds this version's App Store text, and the listing PR is open with Kevin's approval, or LISTING.md step 1 found nothing to change.
+**Done when** the What's New PR is merged, `docs/release/app-store-submission-pack.md` on `main` holds this version's App Store text, and the listing PR is merged with the site PR open, or LISTING.md step 1 found nothing to change.
 
 ### 4. Build the candidate
 
@@ -83,7 +83,7 @@ Copy this version's text from the submission pack into a scratch file, byte for 
 
 The API cannot reach the App Privacy answers. When the range adds data collection, a tracking or analytics SDK, or changes `PrivacyInfo.xcprivacy`, ask Kevin to update App Privacy in App Store Connect (or walk the page with him in the in-app browser).
 
-Then, from a checkout of the listing PR's branch, run `node scripts/asc.mjs listing <version> --screenshots <scratch>/app-store`, read the plan, and rerun with `--apply`. A new version starts with the previous version's listing, so with no listing PR the same command, run on `main` without `--screenshots`, only confirms it.
+Then, on `main`, run `node scripts/asc.mjs listing <version> --screenshots .build/listing/<version>/app-store`, read the plan, and rerun with `--apply`. It refuses images that differ from the approved MD5s; if the directory is gone, regenerate it (LISTING.md step 2) and show Kevin anything that changed. A new version starts with the previous version's listing, so when this release changed nothing, the command without `--screenshots` only confirms it.
 
 **Done when** `status` shows the candidate build attached, `releaseType: MANUAL`, and What's New identical to the pack, and `listing` reports every field and the screenshots matching.
 
@@ -104,14 +104,14 @@ Review usually takes a day or two. End the turn; when Kevin says Apple emailed:
 
 `main` stays on this version until approval so a rejection can still ship a new build.
 
-1. ⛔ If `status` shows `PENDING_DEVELOPER_RELEASE`, `node scripts/asc.mjs release <version>`, check the plan, `--apply`, then merge the listing PR so baros.fit changes with the App Store. One yes covers both.
+1. ⛔ If `status` shows `PENDING_DEVELOPER_RELEASE`, `node scripts/asc.mjs release <version>`, check the plan, `--apply`, then merge the site PR so baros.fit changes with the App Store. One yes covers both.
 2. Next version = the lowest open milestone above this one (`gh api 'repos/Tatooles/baros/milestones?state=open' --jq '.[].title'`).
 3. On a branch from `main`, run `scripts/bump-version.sh <next>`. Of the tests it lists, update those asserting the current release or its upgrade path the way commit `2ddae398` (the 1.5 bump) did — the upgrade test now expects an upgrade into an unannounced release to skip What's New. Run the unit tests and the edited UI tests.
 4. Open the PR with the `file-pr` skill. ⛔ Merge it once checks are green.
 
 A patch release skips 2–4, because `main` is already past it.
 
-**Done when** `status` shows `READY_FOR_SALE`, the listing PR is merged, and, except for a patch, the bump PR is merged.
+**Done when** `status` shows `READY_FOR_SALE`, the site PR is merged, and, except for a patch, the bump PR is merged.
 
 ## Phase B — record the release
 

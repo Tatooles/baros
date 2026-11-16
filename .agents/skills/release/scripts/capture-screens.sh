@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Captures the raw marketing screens with MarketingScreenshotTests.
+# Captures the raw listing screens with MarketingScreenshotTests.
 #
 #   capture-screens.sh <simulator-udid> <out-dir>
 #
-# Use the iPhone 17 Pro pool device (1206x2622 captures, which baros.fit serves as-is).
-# The simulator is set to dark appearance with a 9:41 status bar for the run, then
-# restored. Writes <out-dir>/<shot>.png for every shot in docs/release/listing.json.
+# Use the iPhone 17 Pro pool device: its 1206x2622 captures are the size baros.fit serves.
+# The app renders dark on its own; this sets a 9:41 status bar for the run (agent-device has
+# no status-bar override, so this is simctl's one job here) and clears it afterwards.
+# Writes <out-dir>/<shot>.png for every shot in docs/release/listing.json.
 set -euo pipefail
 
 udid="${1:?usage: capture-screens.sh <simulator-udid> <out-dir>}"
@@ -13,18 +14,22 @@ out="${2:?usage: capture-screens.sh <simulator-udid> <out-dir>}"
 root="$(git rev-parse --show-toplevel)"
 derived="$root/.build/marketing-capture"
 result="$derived/MarketingCapture.xcresult"
+
+name="$(xcrun simctl list devices -j | node -e '
+  const udid = process.argv[1];
+  const all = Object.values(JSON.parse(require("fs").readFileSync(0, "utf8")).devices).flat();
+  process.stdout.write(all.find((d) => d.udid === udid)?.name ?? "");
+' "$udid")"
+[[ "$name" == *"iPhone 17 Pro"* ]] || {
+  echo "error: $udid is '${name:-unknown}'; capture on the iPhone 17 Pro pool device" >&2
+  exit 1
+}
+
 mkdir -p "$out"
 rm -rf "$result" "$derived/attachments"
-
 xcrun simctl boot "$udid" 2>/dev/null || true
 xcrun simctl bootstatus "$udid" >/dev/null
-previous_appearance="$(xcrun simctl ui "$udid" appearance)"
-restore() {
-  xcrun simctl status_bar "$udid" clear || true
-  xcrun simctl ui "$udid" appearance "$previous_appearance" || true
-}
-trap restore EXIT
-xcrun simctl ui "$udid" appearance dark
+trap 'xcrun simctl status_bar "$udid" clear || true' EXIT
 xcrun simctl status_bar "$udid" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
   --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
 
@@ -44,8 +49,7 @@ const manifest = JSON.parse(readFileSync(`${dir}/manifest.json`, "utf8"));
 const found = new Map();
 for (const test of manifest) {
   for (const a of test.attachments ?? []) {
-    const name = a.suggestedHumanReadableName ?? "";
-    const match = name.match(/^marketing-([a-z-]+?)(_\d+)?(_[0-9A-F-]+)?\.png$/i);
+    const match = (a.suggestedHumanReadableName ?? "").match(/^marketing-([a-z-]+?)(_\d+)?(_[0-9A-F-]+)?\.png$/i);
     if (match) found.set(match[1], a.exportedFileName);
   }
 }

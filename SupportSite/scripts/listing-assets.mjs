@@ -5,10 +5,12 @@
 // <raw-dir> holds <shot>.png for each shot in docs/release/listing.json, as written by the
 // release skill's capture-screens.sh. Writes:
 //   - <app-store-out-dir>/NN-<shot>.png: 1320x2868 framed artwork without alpha, for the
-//     6.9" iPhone slot, in listing order;
+//     6.9" iPhone slot, in listing order, and their MD5s in docs/release/listing-approved.json,
+//     which `asc.mjs listing` checks before uploading;
 //   - SupportSite/public/assets/<site>: the unframed capture as JPEG, for each shot with a
-//     `site` file, and the matching approved hashes in tests/site-identity.test.mjs.
-// macOS only, so the headlines use the same system typography as Baros.
+//     `site` file, and its SHA-256 in tests/approved-assets.json.
+// Headlines use SF Pro Display, the app's typeface. Apple's license keeps it out of the repo,
+// so the Mac needs it installed (developer.apple.com/fonts); the script stops without it.
 // Layout from the Baros 1.2 generator (PR #214).
 
 import { createHash } from "node:crypto";
@@ -22,18 +24,30 @@ const siteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const repositoryRoot = path.resolve(siteRoot, "..");
 const listing = JSON.parse(await readFile(path.join(repositoryRoot, "docs/release/listing.json"), "utf8"));
 const iconPath = path.join(siteRoot, "public/assets/baros-app-icon.png");
-const hashTestPath = path.join(siteRoot, "tests/site-identity.test.mjs");
+const approvedAssetsPath = path.join(siteRoot, "tests/approved-assets.json");
+const approvedListingPath = path.join(repositoryRoot, "docs/release/listing-approved.json");
+const font = "SF Pro Display";
 
 const canvas = { width: 1320, height: 2868 };
 const screen = { x: 139, y: 600, width: 1042, height: 2264, radius: 138 };
 
-const [rawDirectory, outputDirectory] = process.argv.slice(2).filter((arg) => arg !== "--");
+// pnpm -C runs this from SupportSite; resolve paths against where the command was typed.
+const [rawDirectory, outputDirectory] = process.argv
+  .slice(2)
+  .filter((arg) => arg !== "--")
+  .map((arg) => path.resolve(process.env.INIT_CWD ?? process.cwd(), arg));
 if (!rawDirectory || !outputDirectory) {
   console.error("usage: listing-assets.mjs <raw-dir> <app-store-out-dir>");
   process.exit(2);
 }
-if (process.platform !== "darwin") {
-  throw new Error("Listing assets need macOS so the headlines use the system typography Baros uses.");
+// An unknown family silently falls back to another font, so compare against one that cannot exist.
+async function renders(family) {
+  const svg = `<svg width="400" height="80" xmlns="http://www.w3.org/2000/svg"><text x="0" y="60" font-family="${family}" font-size="48" font-weight="760">Baros 1RM</text></svg>`;
+  return createHash("md5").update(await sharp(Buffer.from(svg)).png().toBuffer()).digest("hex");
+}
+if ((await renders(font)) === (await renders("No Such Font Baros"))) {
+  console.error(`${font} is not installed; get it from developer.apple.com/fonts, then rerun.`);
+  process.exit(1);
 }
 
 function escapeXml(value) {
@@ -89,10 +103,10 @@ function artworkSvg({ screenshotDataUrl, iconDataUrl, headline, glowX, fadeBotto
 
       <g aria-label="Baros">
         <image href="${iconDataUrl}" x="532" y="60" width="68" height="68" />
-        <text x="621" y="110" fill="#F3EBE7" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="32" font-weight="700" letter-spacing="8">BAROS</text>
+        <text x="621" y="110" fill="#F3EBE7" font-family="${font}" font-size="32" font-weight="700" letter-spacing="8">BAROS</text>
       </g>
 
-      <text text-anchor="middle" fill="#F7F7F5" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="76" font-weight="760" letter-spacing="-2">
+      <text text-anchor="middle" fill="#F7F7F5" font-family="${font}" font-size="76" font-weight="760" letter-spacing="-2">
         ${headlineLines}
       </text>
 
@@ -106,7 +120,8 @@ function artworkSvg({ screenshotDataUrl, iconDataUrl, headline, glowX, fadeBotto
 
 await mkdir(outputDirectory, { recursive: true });
 const iconDataUrl = pngDataUrl(await readFile(iconPath));
-let hashTest = await readFile(hashTestPath, "utf8");
+const approvedAssets = JSON.parse(await readFile(approvedAssetsPath, "utf8"));
+const approvedListing = { appStore: {} };
 
 for (const [index, shot] of listing.shots.entries()) {
   const source = await readFile(path.join(rawDirectory, `${shot.id}.png`));
@@ -117,18 +132,18 @@ for (const [index, shot] of listing.shots.entries()) {
   }
 
   const svg = artworkSvg({ screenshotDataUrl: pngDataUrl(source), iconDataUrl, ...shot });
-  const output = path.join(outputDirectory, `${String(index + 1).padStart(2, "0")}-${shot.id}.png`);
-  await sharp(Buffer.from(svg)).flatten({ background: "#080A0D" }).png({ compressionLevel: 9 }).toFile(output);
-  console.log(`App Store  ${output}`);
+  const fileName = `${String(index + 1).padStart(2, "0")}-${shot.id}.png`;
+  const png = await sharp(Buffer.from(svg)).flatten({ background: "#080A0D" }).png({ compressionLevel: 9 }).toBuffer();
+  await writeFile(path.join(outputDirectory, fileName), png);
+  approvedListing.appStore[fileName] = createHash("md5").update(png).digest("hex");
+  console.log(`App Store  ${path.join(outputDirectory, fileName)}`);
 
   if (shot.site) {
     const jpeg = await sharp(source).flatten({ background: "#000000" }).jpeg({ quality: 86, mozjpeg: true }).toBuffer();
     await writeFile(path.join(siteRoot, "public/assets", shot.site), jpeg);
-    const hash = createHash("sha256").update(jpeg).digest("hex");
-    const pattern = new RegExp(`(\\["assets/${shot.site.replaceAll(".", "\\.")}", ")[0-9a-f]{64}("\\])`);
-    if (!pattern.test(hashTest)) throw new Error(`${hashTestPath} has no approved hash for ${shot.site}.`);
-    hashTest = hashTest.replace(pattern, `$1${hash}$2`);
+    approvedAssets[`assets/${shot.site}`] = createHash("sha256").update(jpeg).digest("hex");
     console.log(`baros.fit  public/assets/${shot.site}`);
   }
 }
-await writeFile(hashTestPath, hashTest);
+await writeFile(approvedAssetsPath, `${JSON.stringify(approvedAssets, null, 2)}\n`);
+await writeFile(approvedListingPath, `${JSON.stringify(approvedListing, null, 2)}\n`);

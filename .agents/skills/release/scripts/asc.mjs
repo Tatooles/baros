@@ -27,6 +27,9 @@ const API = "https://api.appstoreconnect.apple.com";
 // The 6.9" iPhone slot; App Store Connect scales it for every smaller iPhone.
 const SCREENSHOT_DISPLAY_TYPE = "APP_IPHONE_67";
 const LISTING_PATH = new URL("../../../../docs/release/listing.json", import.meta.url);
+// MD5 of each approved App Store image, written by `pnpm -C SupportSite listing-assets`.
+const APPROVED_LISTING_PATH = new URL("../../../../docs/release/listing-approved.json", import.meta.url);
+const SCREENSHOT_SLOT_LIMIT = 10;
 // States in which the version's build, release type and notes can still change.
 const EDITABLE = new Set([
   "PREPARE_FOR_SUBMISSION",
@@ -458,7 +461,10 @@ async function listing(versionString, opts) {
 
   const { data: sets } = await get(`/v1/appStoreVersionLocalizations/${loc.id}/appScreenshotSets`);
   const set = sets.find((s) => s.attributes.screenshotDisplayType === SCREENSHOT_DISPLAY_TYPE);
-  const current = set ? (await get(`/v1/appScreenshotSets/${set.id}/appScreenshots?limit=10`)).data : [];
+  // The relationship lists the set in display order; the collection endpoint does not promise one.
+  const unordered = set ? (await get(`/v1/appScreenshotSets/${set.id}/appScreenshots?limit=10`)).data : [];
+  const order = set ? (await get(`/v1/appScreenshotSets/${set.id}/relationships/appScreenshots?limit=10`)).data.map((r) => r.id) : [];
+  const current = order.map((id) => unordered.find((s) => s.id === id)).filter(Boolean);
   console.log(`  screenshots (${SCREENSHOT_DISPLAY_TYPE}): ${current.map((s) => s.attributes.fileName).join(", ") || "none"}`);
 
   let files = [];
@@ -472,8 +478,14 @@ async function listing(versionString, opts) {
         const bytes = readFileSync(path);
         return { name, path, bytes, size: statSync(path).size, md5: createHash("md5").update(bytes).digest("hex") };
       });
-    if (files.length !== wanted.shots.length) {
-      fail(`${opts.screenshots} holds ${files.length} PNGs; listing.json has ${wanted.shots.length} shots.`);
+    const approved = JSON.parse(readFileSync(APPROVED_LISTING_PATH, "utf8")).appStore;
+    const unapproved = files.filter((f) => approved[f.name] !== f.md5).map((f) => f.name);
+    const absent = Object.keys(approved).filter((name) => !files.some((f) => f.name === name));
+    if (unapproved.length || absent.length) {
+      fail(
+        `${opts.screenshots} is not the approved set in docs/release/listing-approved.json` +
+          `${unapproved.length ? `; differs: ${unapproved.join(", ")}` : ""}${absent.length ? `; missing: ${absent.join(", ")}` : ""}.`,
+      );
     }
     screenshotsDiffer =
       files.length !== current.length ||
@@ -506,9 +518,12 @@ async function listing(versionString, opts) {
       });
       setId = created?.data.id ?? "<new set>";
     }
-    for (const old of current) {
-      await plan.send(`Delete screenshot ${old.attributes.fileName}`, "DELETE", `/v1/appScreenshots/${old.id}`);
-    }
+    // Upload before deleting, so a failed run leaves the old set rather than a partial one.
+    // Only what the slot cannot hold alongside the new files goes first.
+    const overflow = Math.max(0, current.length + files.length - SCREENSHOT_SLOT_LIMIT);
+    const deleteScreenshot = (old) =>
+      plan.send(`Delete old screenshot ${old.attributes.fileName}`, "DELETE", `/v1/appScreenshots/${old.id}`);
+    for (const old of current.slice(0, overflow)) await deleteScreenshot(old);
     const uploaded = [];
     for (const file of files) {
       const reserved = await plan.send(`Upload ${file.name} (${file.size} bytes)`, "POST", "/v1/appScreenshots", {
@@ -534,6 +549,10 @@ async function listing(versionString, opts) {
       uploaded.push(reserved.data.id);
     }
     if (opts.apply) await waitForScreenshots(uploaded);
+    for (const old of current.slice(overflow)) await deleteScreenshot(old);
+    await plan.send(`Order the ${files.length} screenshots as listed`, "PATCH",
+      `/v1/appScreenshotSets/${setId}/relationships/appScreenshots`,
+      { data: uploaded.map((id) => ({ type: "appScreenshots", id })) });
   }
   plan.finish();
 }

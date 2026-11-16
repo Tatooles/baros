@@ -50,8 +50,8 @@ final class MarketingScreenshotTests: XCTestCase {
     @MainActor
     func testSuperset() {
         let app = launch()
-        // Upper Body opens with a press-and-row superset; log its first round.
-        startTemplate("Upper Body", in: app)
+        // Full Body opens with a press-and-row superset; log its first round.
+        startTemplate("Full Body", in: app)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "SupersetLabel").firstMatch
             .waitToExist(timeout: timeout))
         // One check logs the whole round: the partner set completes with it.
@@ -106,10 +106,13 @@ final class MarketingScreenshotTests: XCTestCase {
     @MainActor
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
+        // The pool simulators are shared, so pin what formats dates and numbers. Resetting the
+        // app appearance restores its dark default whatever the simulator uses.
         app.launchArguments = [
             "--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-reset-app-appearance",
             "--uitest-reset-home-ring-period", "--uitest-skip-first-run-experience",
             "--uitest-seed-marketing", "--uitest-marketing-capture",
+            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
         ]
         app.launch()
         XCTAssertTrue(app.staticTexts["HomeTitle"].waitToExist(timeout: timeout))

@@ -7,6 +7,9 @@ on:
       - "SupportSite/**"
       - "docs/release/app-store/**"
       - "docs/release/app-store-submission-pack.md"
+      - "docs/release/listing.json"
+      - "docs/release/listing-approved.json"
+      - "BarosUITests/MarketingScreenshotTests.swift"
   push:
     branches:
       - main
@@ -15,6 +18,9 @@ on:
       - "SupportSite/**"
       - "docs/release/app-store/**"
       - "docs/release/app-store-submission-pack.md"
+      - "docs/release/listing.json"
+      - "docs/release/listing-approved.json"
+      - "BarosUITests/MarketingScreenshotTests.swift"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
