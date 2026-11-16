@@ -7,7 +7,7 @@ Setup: `git switch --detach <candidate sha>` in this worktree, and follow the si
 ## Baseline
 
 1. **Unit suite** — the `BarosUnitTests` scheme; every test passes.
-2. **Full UI suite** — `-only-testing:BarosUITests`. Record discovered and executed counts against README's current count. Rerun each failure alone up to twice: green on rerun is a **flake** (noted, a blocker only inside a focus area); red every time is a **blocker**.
+2. **Full UI suite** — `-only-testing:BarosUITests`. Rerun each failure alone up to twice: green on rerun is a **flake** (noted, a blocker only inside a focus area); red every time is a **blocker**.
 3. **Release build** — build the `Release` configuration for the simulator, launch it signed out, and confirm it reaches Home. This catches configuration-only breakage that Debug tests miss.
 
 ## Focus
