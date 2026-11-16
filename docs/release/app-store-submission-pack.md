@@ -23,6 +23,12 @@ The description, promotional text, keywords, and screenshot set live in [`listin
 
 App Store Connect "What's New in This Version" text. The highlights must match that release's in-app What's New sheet (`Baros/App/WhatsNewVersion<version>View.swift`), so update both together.
 
+### 1.5.1
+
+```text
+This update refreshes Baros's App Store page. The app is the same as 1.5.
+```
+
 ### 1.5
 
 ```text
