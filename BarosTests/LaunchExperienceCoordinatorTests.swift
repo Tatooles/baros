@@ -64,34 +64,27 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
         XCTAssertEqual(presentation, .onboarding)
     }
 
-    func testExistingOneOneUserReceivesUnseenOneTwoReleaseHighlights() throws {
-        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.2"))
+    func testExistingUserReceivesUnseenReleaseHighlightsAfterUpgrade() throws {
+        // The 1.1 user never saw a What's New sheet; the 1.4 user saw the previous one.
+        let upgrades: [(current: String, lastProcessed: String, lastSeen: String?)] = [
+            ("1.2", "1.1", nil),
+            ("1.5", "1.4", "1.4"),
+        ]
 
-        let presentation = LaunchExperienceCoordinator.nextPresentation(
-            state: LaunchExperienceState(
-                hasCompletedOnboarding: true,
-                lastProcessedAppVersion: "1.1",
-                lastSeenWhatsNewVersion: nil
-            ),
-            currentRelease: release
-        )
+        for upgrade in upgrades {
+            let release = try XCTUnwrap(AppReleaseCatalog.release(for: upgrade.current), upgrade.current)
 
-        XCTAssertEqual(presentation, .whatsNew(try XCTUnwrap(release.whatsNew)))
-    }
+            let presentation = LaunchExperienceCoordinator.nextPresentation(
+                state: LaunchExperienceState(
+                    hasCompletedOnboarding: true,
+                    lastProcessedAppVersion: upgrade.lastProcessed,
+                    lastSeenWhatsNewVersion: upgrade.lastSeen
+                ),
+                currentRelease: release
+            )
 
-    func testExistingOneFourUserReceivesUnseenOneFiveReleaseHighlights() throws {
-        let release = try XCTUnwrap(AppReleaseCatalog.release(for: "1.5"))
-
-        let presentation = LaunchExperienceCoordinator.nextPresentation(
-            state: LaunchExperienceState(
-                hasCompletedOnboarding: true,
-                lastProcessedAppVersion: "1.4",
-                lastSeenWhatsNewVersion: "1.4"
-            ),
-            currentRelease: release
-        )
-
-        XCTAssertEqual(presentation, .whatsNew(try XCTUnwrap(release.whatsNew)))
+            XCTAssertEqual(presentation, .whatsNew(try XCTUnwrap(release.whatsNew)), upgrade.current)
+        }
     }
 
     func testExistingUserDoesNotReceiveSeenReleaseHighlights() throws {

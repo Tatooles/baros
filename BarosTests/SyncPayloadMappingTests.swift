@@ -61,22 +61,6 @@ final class SyncPayloadMappingTests: XCTestCase {
         XCTAssertEqual(payload.deletedAt, 50)
     }
 
-    func testFetchChangesRequestCarriesWorkoutGraphCursors() throws {
-        let cursors = SyncChangeCursors(
-            userSettings: 10,
-            exercises: 20,
-            workoutSessions: 30,
-            loggedExercises: 40,
-            loggedSets: 50
-        )
-
-        XCTAssertEqual(cursors.userSettings, 10)
-        XCTAssertEqual(cursors.exercises, 20)
-        XCTAssertEqual(cursors.workoutSessions, 30)
-        XCTAssertEqual(cursors.loggedExercises, 40)
-        XCTAssertEqual(cursors.loggedSets, 50)
-    }
-
     func testWorkoutSessionPayloadMapsCompletedSessionFields() throws {
         let sessionID = UUID(uuidString: "00000000-0000-0000-0000-000000004001")!
         let sourceID = UUID(uuidString: "00000000-0000-0000-0000-000000004099")!

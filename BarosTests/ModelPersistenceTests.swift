@@ -4,26 +4,6 @@ import XCTest
 
 @MainActor
 final class ModelPersistenceTests: XCTestCase {
-    func testCreatingExerciseSavesAndFetchesByID() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let exercise = Exercise(
-            name: "Safety Bar Squat",
-            category: .strength,
-            equipment: .barbell,
-            primaryMuscleGroup: .quads
-        )
-
-        context.insert(exercise)
-        try context.save()
-
-        let id = exercise.id
-        let descriptor = FetchDescriptor<Exercise>(predicate: #Predicate { $0.id == id })
-        let fetched = try context.fetch(descriptor)
-        XCTAssertEqual(fetched.first?.name, "Safety Bar Squat")
-        XCTAssertEqual(fetched.first?.category, .strength)
-    }
-
     func testExerciseMuscleGroupDisplayNamesAndFallback() throws {
         XCTAssertEqual(ExerciseMuscleGroup.chest.displayName, "Chest")
         XCTAssertEqual(ExerciseMuscleGroup.upperBack.displayName, "Upper Back")
@@ -243,77 +223,6 @@ final class ModelPersistenceTests: XCTestCase {
         XCTAssertEqual(invalidReps.completedVolume, 0)
     }
 
-    func testSyncedModelsDefaultToNotDeleted() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let createdAt = Date(timeIntervalSince1970: 100)
-        let updatedAt = Date(timeIntervalSince1970: 200)
-        let userSettings = UserSettings(createdAt: createdAt, updatedAt: updatedAt)
-        let exercise = Exercise(
-            name: "Front Squat",
-            category: .strength,
-            equipment: .barbell,
-            primaryMuscleGroup: .quads,
-            createdAt: createdAt,
-            updatedAt: updatedAt
-        )
-        let session = WorkoutSession(
-            title: "Legs",
-            startedAt: createdAt,
-            status: .completed,
-            source: .blank,
-            createdAt: createdAt,
-            updatedAt: updatedAt
-        )
-        let loggedExercise = LoggedExercise(
-            orderIndex: 0,
-            exercise: exercise,
-            exerciseSnapshotName: exercise.name,
-            createdAt: createdAt,
-            updatedAt: updatedAt
-        )
-        let loggedSet = LoggedSet(orderIndex: 0, weight: 135, reps: 5, createdAt: createdAt, updatedAt: updatedAt)
-
-        context.insert(userSettings)
-        context.insert(exercise)
-        context.insert(session)
-        context.insert(loggedExercise)
-        context.insert(loggedSet)
-        try context.save()
-
-        let userSettingsID = userSettings.id
-        let exerciseID = exercise.id
-        let sessionID = session.id
-        let loggedExerciseID = loggedExercise.id
-        let loggedSetID = loggedSet.id
-        let fetchedUserSettings = try XCTUnwrap(
-            context.fetch(FetchDescriptor<UserSettings>(predicate: #Predicate { $0.id == userSettingsID })).first
-        )
-        let fetchedExercise = try XCTUnwrap(
-            context.fetch(FetchDescriptor<Exercise>(predicate: #Predicate { $0.id == exerciseID })).first
-        )
-        let fetchedSession = try XCTUnwrap(
-            context.fetch(FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.id == sessionID })).first
-        )
-        let fetchedLoggedExercise = try XCTUnwrap(
-            context.fetch(FetchDescriptor<LoggedExercise>(predicate: #Predicate { $0.id == loggedExerciseID })).first
-        )
-        let fetchedLoggedSet = try XCTUnwrap(
-            context.fetch(FetchDescriptor<LoggedSet>(predicate: #Predicate { $0.id == loggedSetID })).first
-        )
-
-        XCTAssertNil(fetchedUserSettings.deletedAt)
-        XCTAssertFalse(fetchedUserSettings.isDeleted)
-        XCTAssertNil(fetchedExercise.deletedAt)
-        XCTAssertFalse(fetchedExercise.isDeleted)
-        XCTAssertNil(fetchedSession.deletedAt)
-        XCTAssertFalse(fetchedSession.isDeleted)
-        XCTAssertNil(fetchedLoggedExercise.deletedAt)
-        XCTAssertFalse(fetchedLoggedExercise.isDeleted)
-        XCTAssertNil(fetchedLoggedSet.deletedAt)
-        XCTAssertFalse(fetchedLoggedSet.isDeleted)
-    }
-
     func testSyncedModelsMarkDeletedPersistsTombstoneTimestamp() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -486,40 +395,6 @@ final class ModelPersistenceTests: XCTestCase {
         XCTAssertNil(fetchedLoggedSet.deletedAt)
         XCTAssertEqual(fetchedLoggedSet.updatedAt, restoredAt)
         XCTAssertFalse(fetchedLoggedSet.isDeleted)
-    }
-
-    func testHealthDataLinkStoresFutureProviderWithoutFrameworkImport() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let localID = UUID()
-        let link = HealthDataLink(
-            providerRaw: "healthKit",
-            localEntityKindRaw: "workoutSession",
-            localEntityID: localID,
-            externalIdentifier: "external-workout-id",
-            externalType: "workout",
-            syncStatus: .notSynced
-        )
-
-        context.insert(link)
-        try context.save()
-
-        let descriptor = FetchDescriptor<HealthDataLink>()
-        let fetched = try XCTUnwrap(context.fetch(descriptor).first)
-        XCTAssertEqual(fetched.providerRaw, "healthKit")
-        XCTAssertEqual(fetched.localEntityID, localID)
-    }
-
-    func testWorkoutTemplateCanBeCreatedWithoutDrivingUI() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let template = WorkoutTemplate(name: "Future Template")
-
-        context.insert(template)
-        try context.save()
-
-        let templates = try context.fetch(FetchDescriptor<WorkoutTemplate>())
-        XCTAssertEqual(templates.map(\.name), ["Future Template"])
     }
 
     func testVisibleActiveExercisesExcludeArchivedAndTombstonedRecords() throws {

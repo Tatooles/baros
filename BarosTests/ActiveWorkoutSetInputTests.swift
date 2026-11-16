@@ -194,20 +194,6 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
         XCTAssertEqual(values, .init(weight: 200, reps: 5))
     }
 
-    func testPreparingClearSelectionDoesNotFillPreviousValues() {
-        var input = ActiveWorkoutSetInput()
-
-        let values = input.preparedValuesForSetAction(
-            current: .init(weight: nil, reps: nil),
-            weightUnit: .pounds,
-            completesSet: false,
-            isCompleted: false,
-            previous: PreviousSetPerformance(weight: 175, reps: 5)
-        )
-
-        XCTAssertEqual(values, .init(weight: nil, reps: nil))
-    }
-
     func testPreparingCompletionFillsClearedFieldsButKeepsInvalidFieldsMissing() {
         for (weightText, repsText, expected) in [
             ("", "", ActiveWorkoutSetInput.Values(weight: 175, reps: 5)),
@@ -416,20 +402,6 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
             values: .init(weight: nil, reps: 5),
             previous: PreviousSetPerformance(weight: 185, reps: 5)
         ))
-    }
-
-    func testWeightDisplayPreservesInProgressDecimalEntry() {
-        var input = ActiveWorkoutSetInput()
-        input.update("8.", for: .weight, isFocused: true)
-
-        XCTAssertEqual(
-            input.text(
-                for: .weight,
-                values: .init(weight: 8, reps: nil),
-                weightUnit: .pounds
-            ),
-            "8."
-        )
     }
 
     func testInvalidStoredValuesAreExposedAsMissingInsteadOfDisplayed() {

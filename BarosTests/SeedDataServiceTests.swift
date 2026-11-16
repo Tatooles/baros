@@ -16,15 +16,6 @@ final class SeedDataServiceTests: XCTestCase {
         XCTAssertEqual(backSquat.name, "Back Squat")
         XCTAssertEqual(backSquat.category, .strength)
         XCTAssertEqual(backSquat.equipment, .barbell)
-    }
-
-    func testSeedServiceUsesControlledPrimaryMuscleGroups() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-
-        try SeedDataService.seedIfNeeded(context: context)
-
-        let exercises = try context.fetch(FetchDescriptor<Exercise>())
         XCTAssertEqual(exercises.first { $0.seedIdentifier == "back-squat" }?.primaryMuscleGroup, .quads)
         XCTAssertEqual(exercises.first { $0.seedIdentifier == "conventional-deadlift" }?.primaryMuscleGroup, .glutes)
         XCTAssertEqual(exercises.first { $0.seedIdentifier == "pull-up" }?.primaryMuscleGroup, .lats)
@@ -67,16 +58,9 @@ final class SeedDataServiceTests: XCTestCase {
         let metadata = try context.fetch(FetchDescriptor<SeedMetadata>())
         XCTAssertEqual(exercises.filter(\.isSeeded).count, 20)
         XCTAssertEqual(metadata.filter { $0.key == "exerciseSeed" }.count, 1)
-    }
-
-    func testSettingsSingletonIsCreatedExactlyOnce() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-
-        try SeedDataService.seedIfNeeded(context: context)
-        try SeedDataService.seedIfNeeded(context: context)
-
-        XCTAssertEqual(try context.fetch(FetchDescriptor<UserSettings>()).count, 1)
+        let settings = try context.fetch(FetchDescriptor<UserSettings>())
+        XCTAssertEqual(settings.count, 1)
+        XCTAssertEqual(settings.first?.weightUnit, .pounds)
     }
 
     func testSeedServiceCreatesDefaultsForActiveOwnerWhenOtherOwnerRowsExist() throws {
@@ -258,10 +242,12 @@ final class SeedDataServiceTests: XCTestCase {
             Set(activeSession.sortedLoggedExercises.flatMap(\.sortedSets).map(\.id)).count
         )
 
-        let completedSetCount = completedSessions.reduce(0) {
-            $0 + $1.sortedLoggedExercises.flatMap(\.sortedSets).count
-        }
-        XCTAssertEqual(completedSetCount, 5_000)
-        XCTAssertTrue(completedSessions.allSatisfy { $0.sortedLoggedExercises.allSatisfy { $0.sortedSets.count == 5 } })
+        // Counted in the store instead of walking the relationships of all 100 workouts:
+        // 10 exercises x 5 sets for the active workout and for each completed one.
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<LoggedExercise>()), 1_010)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<LoggedSet>()), 5_050)
+        let sampleCompletedSession = try XCTUnwrap(completedSessions.first)
+        XCTAssertEqual(sampleCompletedSession.sortedLoggedExercises.count, 10)
+        XCTAssertTrue(sampleCompletedSession.sortedLoggedExercises.allSatisfy { $0.sortedSets.count == 5 })
     }
 }

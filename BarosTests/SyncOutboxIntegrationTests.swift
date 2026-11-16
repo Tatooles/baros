@@ -446,26 +446,6 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertEqual(scheduler.requestCount, 0)
     }
 
-    func testConfiguredSchedulerRunsRequestedSync() async throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let client = FakeSyncClient()
-        let coordinator = SyncCoordinator(client: client)
-        let scheduler = SyncScheduler(coordinator: coordinator, modelContext: context)
-        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
-        let fetchCompleted = expectation(description: "scheduler runs sync fetch")
-        client.onFetchChanges = {
-            fetchCompleted.fulfill()
-        }
-
-        scheduler.requestSync()
-        await fulfillment(of: [fetchCompleted], timeout: 1.0)
-
-        XCTAssertEqual(scheduler.requestCount, 1)
-        XCTAssertEqual(client.fetchRequests.count, 1)
-        XCTAssertEqual(client.fetchRequests.first?.cursors, SyncChangeCursors(userSettings: 0, exercises: 0, workoutTemplates: 0))
-    }
-
     func testConfiguredSchedulerSeedsDefaultsForCurrentOwner() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -1629,7 +1609,9 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         let settings = UserSettings(weightUnit: .pounds, syncOwnerTokenIdentifier: owner)
         context.insert(settings)
 
-        for index in 0..<100 {
+        // 40 workouts bootstrap over 120 outbox entries, enough to need three 50-entry
+        // push pages; the behaviour under test is the multi-page drain, not scale.
+        for index in 0..<40 {
             let session = WorkoutSession(
                 title: "Workout \(index)",
                 startedAt: Date(timeIntervalSince1970: Double(index)),
@@ -1672,7 +1654,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         XCTAssertNil(scheduler.lastFailure)
         XCTAssertNotNil(scheduler.lastSyncedAt)
         XCTAssertTrue(try fetchEntries(context).isEmpty)
-        XCTAssertEqual(client.upsertedLoggedSets.count, 100)
+        XCTAssertEqual(client.upsertedLoggedSets.count, 40)
         XCTAssertEqual(client.upsertedSettings.count, 1)
     }
 

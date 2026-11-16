@@ -4,29 +4,6 @@ import XCTest
 
 @MainActor
 final class SettingsTests: XCTestCase {
-    func testSettingsSingletonExistsAfterSeed() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-
-        try SeedDataService.seedIfNeeded(context: context)
-
-        let settings = try context.fetch(FetchDescriptor<UserSettings>())
-        XCTAssertEqual(settings.count, 1)
-        XCTAssertEqual(settings.first?.weightUnit, .pounds)
-    }
-
-    func testUpdatingWeightUnitPersists() throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        try SeedDataService.seedIfNeeded(context: context)
-
-        let settings = try XCTUnwrap(context.fetch(FetchDescriptor<UserSettings>()).first)
-        try settings.updateWeightUnit(.kilograms, context: context)
-
-        let fetched = try XCTUnwrap(context.fetch(FetchDescriptor<UserSettings>()).first)
-        XCTAssertEqual(fetched.weightUnit, .kilograms)
-    }
-
     func testUpdatingWeightUnitDoesNotRewriteExistingLoggedWeights() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

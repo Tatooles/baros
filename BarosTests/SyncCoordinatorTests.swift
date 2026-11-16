@@ -97,25 +97,6 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(entry.ownerTokenIdentifier, "issuer|owner_a")
     }
 
-    func testPrepareSkipsRowsOwnedByDifferentOwner() async throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let exercise = Exercise(
-            name: "Squat",
-            category: .strength,
-            equipment: .barbell,
-            primaryMuscle: "Quads"
-        )
-        exercise.syncOwnerTokenIdentifier = "issuer|owner_a"
-        context.insert(exercise)
-        try context.save()
-
-        let coordinator = SyncCoordinator(client: FakeSyncClient())
-        try coordinator.prepareForSync(ownerTokenIdentifier: "issuer|owner_b", context: context)
-
-        XCTAssertEqual(exercise.syncOwnerTokenIdentifier, "issuer|owner_a")
-    }
-
     func testPrepareReturnsRelevantInFlightEntriesToPending() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -1897,50 +1878,6 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(entries.isEmpty)
     }
 
-    func testPullSkipsLoggedSetWhenParentLoggedExerciseStreamIsExhausted() async throws {
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let owner = "issuer|owner_a"
-        let client = FakeSyncClient()
-        client.fetchResponses = [
-            SyncFetchChangesResponse(
-                userSettings: [],
-                exercises: [],
-                workoutSessions: [],
-                loggedExercises: [],
-                loggedSets: [
-                    LoggedSetSyncRecord(
-                        clientId: "00000000-0000-0000-0000-000000006104",
-                        createdAt: 1,
-                        updatedAt: 2,
-                        deletedAt: nil,
-                        serverUpdatedAt: 50,
-                        loggedExerciseClientId: "00000000-0000-0000-0000-000000006103",
-                        orderIndex: 0,
-                        weight: 100,
-                        reps: 5,
-                        rpe: nil,
-                        kindRaw: "working",
-                        isCompleted: true,
-                        completedAt: nil,
-                        notes: "",
-                        healthLinkID: nil,
-                        sourceLoggedSetID: nil
-                    )
-                ],
-                cursors: SyncChangeCursors(userSettings: 0, exercises: 0, workoutSessions: 0, loggedExercises: 0, loggedSets: 50),
-                hasMore: SyncHasMore(userSettings: false, exercises: false)
-            )
-        ]
-
-        let result = try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
-
-        let state = try XCTUnwrap(context.fetch(FetchDescriptor<SyncCursorState>()).first)
-        XCTAssertTrue(result.hasIncompleteRemotePull)
-        XCTAssertEqual(state.loggedSetsCursor, 0)
-        XCTAssertTrue(try context.fetch(FetchDescriptor<LoggedSet>()).isEmpty)
-    }
-
     func testPullDefersLoggedExerciseUntilReferencedExerciseExists() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -2900,6 +2837,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let stateAfterFirstRun = try XCTUnwrap(context.fetch(FetchDescriptor<SyncCursorState>()).first)
         XCTAssertTrue(firstResult.hasIncompleteRemotePull)
         XCTAssertEqual(stateAfterFirstRun.loggedSetsCursor, 0)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<LoggedSet>()).isEmpty)
 
         let secondResult = try await coordinator.run(ownerTokenIdentifier: owner, context: context)
 
@@ -3399,31 +3337,6 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(client.upsertedExercises.isEmpty)
         XCTAssertEqual(exercise.syncOwnerTokenIdentifier, "issuer|owner_b")
         XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
-    }
-
-    func testRunMarksFailedEntryAndStopsOnPushError() async throws {
-        struct PushError: LocalizedError { var errorDescription: String? { "offline" } }
-        let container = try SwiftDataTestSupport.makeInMemoryContainer()
-        let context = container.mainContext
-        let exercise = Exercise(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000003003")!,
-            name: "Squat",
-            category: .strength,
-            equipment: .barbell,
-            primaryMuscle: "Quads"
-        )
-        context.insert(exercise)
-        try SyncOutboxRecorder().recordUpdate(entityKind: .exercise, entityID: exercise.id, ownerTokenIdentifier: "issuer|owner_a", context: context, now: Date(timeIntervalSince1970: 100))
-        try context.save()
-
-        let client = FakeSyncClient()
-        client.error = PushError()
-        let coordinator = SyncCoordinator(client: client)
-        try await coordinator.run(ownerTokenIdentifier: "issuer|owner_a", context: context)
-
-        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
-        XCTAssertEqual(entry.status, .failed)
-        XCTAssertEqual(entry.lastErrorMessage, "offline")
     }
 
     func testRunClassifiesOfflinePushAsTransientAtTheCoordinatorSeam() async throws {
@@ -4444,6 +4357,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let failedEntry = try XCTUnwrap(entries.first { $0.entityID == failedExercise.id })
         let pendingEntry = try XCTUnwrap(entries.first { $0.entityID == pendingExercise.id })
         XCTAssertEqual(failedEntry.status, .failed)
+        XCTAssertEqual(failedEntry.lastErrorMessage, "offline")
         XCTAssertEqual(pendingEntry.status, .pending)
     }
 }

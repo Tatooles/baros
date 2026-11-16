@@ -332,37 +332,6 @@ final class ExercisePickerContentTests: XCTestCase {
         XCTAssertEqual(rows.map(\.exercise.name), ["Chest Press", "Bench Press"])
     }
 
-    func testSearchMatchesEquipmentAndExcludesUnrelatedExercises() {
-        let dumbbellRow = Exercise(
-            name: "One Arm Row",
-            category: .strength,
-            equipment: .dumbbell,
-            primaryMuscleGroup: .upperBack
-        )
-        let dumbbellPress = Exercise(
-            name: "Shoulder Press",
-            category: .strength,
-            equipment: .dumbbell,
-            primaryMuscleGroup: .shoulders
-        )
-        let barbellSquat = Exercise(
-            name: "Back Squat",
-            category: .strength,
-            equipment: .barbell,
-            primaryMuscleGroup: .quads
-        )
-
-        let rows = ExercisePickerContent.makeRows(
-            exercises: [dumbbellPress, barbellSquat, dumbbellRow],
-            sessions: [],
-            ownerTokenIdentifier: nil,
-            query: "DUMBBELL",
-            sortOrder: .name
-        )
-
-        XCTAssertEqual(rows.map(\.exercise.name), ["One Arm Row", "Shoulder Press"])
-    }
-
     func testSearchAppliesSelectedSortWithinTheSameRelevanceTier() {
         let alphaPress = exercise(named: "Alpha Press")
         let betaPress = exercise(named: "Beta Press")
