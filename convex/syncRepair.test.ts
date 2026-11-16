@@ -345,12 +345,16 @@ describe("sync damage audit and repair", () => {
 
     const byDefault = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, { sessionRowId: session._id });
     expect(byDefault).toMatchObject({ loggedExercises: 1, sets: 1, leftOut: { loggedExercises: 1, sets: 2 } });
+    // The sequential tombstones landed seconds apart: deleted together.
+    expect(byDefault.largestDeletionGapSeconds).toBeCloseTo(2, 3);
 
     const wider = await t.mutation(internal.syncRepair.restoreWorkoutAsCopy, {
       sessionRowId: session._id,
       childrenDeletedSince: t1 - 4 * day,
     });
     expect(wider).toMatchObject({ loggedExercises: 2, sets: 3, leftOut: { loggedExercises: 0, sets: 0 } });
+    // The dry run shows that the wider cut-off brings back days-old removals.
+    expect(wider.largestDeletionGapSeconds).toBeGreaterThan(2 * day);
   });
 
   test("a restored copy starts with no conflict history from the original", async () => {

@@ -430,7 +430,9 @@ export const syncRepairLogForRun = internalQuery({
 // each deletion time at its arrival, so children deleted with the workout can
 // carry slightly earlier times. By default every child deleted up to a day
 // before the workout comes back; pass childrenDeletedSince (seconds) to choose
-// another cut-off. The result says how many children the cut-off left out.
+// another cut-off. The result says how many children the cut-off left out,
+// and how long before the workout the earliest child it brings back was
+// deleted: seconds mean deleted together, longer may mean removed on purpose.
 //
 // Each restore is logged in syncRepairLog under runId "restore:<sessionRowId>",
 // and a second restore of the same workout is refused unless force: true, so
@@ -460,6 +462,11 @@ export const restoreWorkoutAsCopy = internalMutation({
     const leftOut = { loggedExercises: 0, sets: 0 };
     const deletedWithWorkout = (row: { deletedAt: number | null }) =>
       row.deletedAt === null || row.deletedAt >= childrenDeletedSince;
+    let largestDeletionGapSeconds = 0;
+    const noteRestoredChild = (row: { deletedAt: number | null }) => {
+      if (row.deletedAt === null) return;
+      largestDeletionGapSeconds = Math.max(largestDeletionGapSeconds, session.deletedAt! - row.deletedAt);
+    };
     const owner = session.ownerTokenIdentifier;
     const loggedExercises: Doc<"loggedExercises">[] = [];
     const setsByLoggedExercise = new Map<string, Doc<"loggedSets">[]>();
@@ -471,6 +478,7 @@ export const restoreWorkoutAsCopy = internalMutation({
       const keepsExercise = deletedWithWorkout(loggedExercise);
       if (keepsExercise) {
         loggedExercises.push(loggedExercise);
+        noteRestoredChild(loggedExercise);
       } else {
         leftOut.loggedExercises += 1;
       }
@@ -483,6 +491,7 @@ export const restoreWorkoutAsCopy = internalMutation({
         // A set under a left-out exercise is left out with it.
         if (keepsExercise && deletedWithWorkout(set)) {
           sets.push(set);
+          noteRestoredChild(set);
         } else {
           leftOut.sets += 1;
         }
@@ -523,6 +532,7 @@ export const restoreWorkoutAsCopy = internalMutation({
       sets: setCount,
       childrenDeletedSince,
       leftOut,
+      largestDeletionGapSeconds,
       clearedExerciseReferences,
     };
     if (args.dryRun !== false) {
