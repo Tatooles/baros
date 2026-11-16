@@ -160,7 +160,7 @@ final class FormattingTests: XCTestCase {
         XCTAssertNil(WorkoutFormatters.parseNumber(overflowingInput, locale: Locale(identifier: "en_US_POSIX")))
     }
 
-    func testWorkoutNumericPolicyRejectsOutOfPolicyWeights() {
+    func testWorkoutNumericPolicyValidatesWeightBoundaries() {
         let cases: [(Double, Double?)] = [
             (-0.1, nil), (0, 0), (10_000, 10_000), (10_000.1, nil), (.infinity, nil),
         ]
@@ -169,14 +169,14 @@ final class FormattingTests: XCTestCase {
         }
     }
 
-    func testWorkoutNumericPolicyRejectsOutOfPolicyReps() {
+    func testWorkoutNumericPolicyValidatesRepsBoundaries() {
         let cases: [(Int, Int?)] = [(0, nil), (1, 1), (1_000, 1_000), (1_001, nil)]
         for (value, expected) in cases {
             XCTAssertEqual(WorkoutNumericInputPolicy.validatedReps(value), expected, "\(value)")
         }
     }
 
-    func testWorkoutNumericPolicyRejectsOutOfPolicyRPE() {
+    func testWorkoutNumericPolicyValidatesRPEBoundaries() {
         let cases: [(Double, Double?)] = [(0.9, nil), (1, 1), (10, 10), (10.1, nil), (.nan, nil)]
         for (value, expected) in cases {
             XCTAssertEqual(WorkoutNumericInputPolicy.validatedRPE(value), expected, "\(value)")

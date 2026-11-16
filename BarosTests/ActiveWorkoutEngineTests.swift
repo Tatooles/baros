@@ -1714,6 +1714,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
                     try context.save()
                 }
             )
+            XCTAssertEqual(set.rpe, rpe)
         }
 
         XCTAssertEqual(saveCount, 2, "Only changing RPE and clearing it need saves.")

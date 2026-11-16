@@ -6,7 +6,7 @@ final class AppReleaseCatalogTests: XCTestCase {
         XCTAssertNotNil(AppReleaseCatalog.release(for: AppBuildInfo.current.version))
     }
 
-    func testVersionOneZeroUsesItsDedicatedReleaseSheet() throws {
+    func testCatalogedVersionsUseTheirDedicatedReleaseSheets() throws {
         let dedicatedSheets: [(version: String, sheetID: WhatsNewSheetID)] = [
             ("1.0", .version1_0),
             ("1.2", .version1_2),
