@@ -141,5 +141,5 @@ Append `Shipped <date>: <release url>` to the milestone's existing description (
 
 - **Milestone**: create `<x.y.z> release` at step 2, its description naming why the patch ships.
 - **Base and candidate**: the base is the newest tag of the live release (`v<x.y>.0` or its latest patch) plus only the fixes. The candidate always takes the release-branch path: `release/<x.y.z>` from that tag, `scripts/bump-version.sh <x.y.z>`, then `git cherry-pick -m 1 <merge>` for each fix.
-- **What's New**: App Store text only, no sheet, covering only the patch. When users will notice nothing, `Bug fixes and improvements.` is the honest text.
+- **What's New**: App Store text only, no sheet, covering only the patch. A listing-only patch says so plainly: `This update refreshes Baros's App Store page. The app is the same as <x.y>.`
 - **Regression**: when `release-diff.mjs <tag> <candidate>` shows only the version bump, the baseline's Release-build check is the whole regression; any fix gets the full one.
