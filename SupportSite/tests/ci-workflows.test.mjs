@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { parse } from "yaml";
@@ -253,7 +256,11 @@ test("the nightly tracking issue uses minimal permissions and only follows main"
   const workflow = await readWorkflow("ios-ui-nightly.yml");
   const tracker = workflow.jobs["track-nightly-result"];
 
-  assert.deepEqual(Object.keys(workflow.jobs).sort(), ["ios-ui-full", "track-nightly-result"]);
+  assert.deepEqual(Object.keys(workflow.jobs).sort(), [
+    "ios-ui-full",
+    "main-changes",
+    "track-nightly-result",
+  ]);
   assert.deepEqual(workflow.permissions, { contents: "read" });
   assert.equal(workflow.jobs["ios-ui-full"].permissions, undefined);
   assert.deepEqual(tracker.permissions, { issues: "write" });
@@ -268,4 +275,96 @@ test("the nightly tracking issue uses minimal permissions and only follows main"
   assert.match(script, /gh issue comment/);
   assert.match(script, /gh issue create/);
   assert.match(script, /RUN_URL/);
+});
+
+test("the nightly gate runs on ubuntu before the macOS job and fails open", async () => {
+  const workflow = await readWorkflow("ios-ui-nightly.yml");
+  const gate = workflow.jobs["main-changes"];
+  const suite = workflow.jobs["ios-ui-full"];
+
+  assert.equal(gate["runs-on"], "ubuntu-latest");
+  assert.deepEqual(gate.permissions, { actions: "read" });
+  assert.equal(gate.outputs.run, "${{ steps.decide.outputs.run }}");
+  assert.equal(gate.env.EVENT_NAME, "${{ github.event_name }}");
+  assert.equal(gate.env.HEAD_SHA, "${{ github.sha }}");
+  assert.equal(suite.needs, "main-changes");
+  assert.equal(
+    suite.if,
+    "${{ !cancelled() && (needs.main-changes.result != 'success' || needs.main-changes.outputs.run == 'true') }}",
+  );
+});
+
+async function runNightlyGate({ eventName, headSha, ghOutput = "", ghExitCode = 0 }) {
+  const workflow = await readWorkflow("ios-ui-nightly.yml");
+  const script = workflow.jobs["main-changes"].steps.find((step) => step.id === "decide").run;
+  const directory = await mkdtemp(join(tmpdir(), "nightly-gate-"));
+
+  try {
+    const fakeGh = join(directory, "gh");
+    await writeFile(
+      fakeGh,
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "${directory}/gh-calls"\nprintf '%s' "$FAKE_GH_OUTPUT"\nexit "$FAKE_GH_EXIT"\n`,
+    );
+    await chmod(fakeGh, 0o755);
+    for (const file of ["output", "summary", "gh-calls"]) {
+      await writeFile(join(directory, file), "");
+    }
+
+    const result = spawnSync("bash", ["-e", "-c", script], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH}`,
+        EVENT_NAME: eventName,
+        HEAD_SHA: headSha,
+        FAKE_GH_OUTPUT: ghOutput,
+        FAKE_GH_EXIT: String(ghExitCode),
+        GITHUB_OUTPUT: join(directory, "output"),
+        GITHUB_STEP_SUMMARY: join(directory, "summary"),
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+
+    return {
+      output: await readFile(join(directory, "output"), "utf8"),
+      ghCalls: await readFile(join(directory, "gh-calls"), "utf8"),
+    };
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+test("manual dispatch always runs the nightly suite without consulting run history", async () => {
+  const { output, ghCalls } = await runNightlyGate({
+    eventName: "workflow_dispatch",
+    headSha: "abc123",
+    ghOutput: "abc123",
+  });
+
+  assert.equal(output, "run=true\n");
+  assert.equal(ghCalls, "");
+});
+
+test("a scheduled run skips only when main matches the last scheduled run", async () => {
+  const unchanged = await runNightlyGate({
+    eventName: "schedule",
+    headSha: "abc123",
+    ghOutput: "abc123",
+  });
+  assert.equal(unchanged.output, "run=false\n");
+  assert.match(unchanged.ghCalls, /^run list --workflow ios-ui-nightly\.yml --event schedule --branch main --status completed /);
+
+  const changed = await runNightlyGate({ eventName: "schedule", headSha: "def456", ghOutput: "abc123" });
+  assert.equal(changed.output, "run=true\n");
+
+  const firstRun = await runNightlyGate({ eventName: "schedule", headSha: "abc123", ghOutput: "" });
+  assert.equal(firstRun.output, "run=true\n");
+
+  const apiFailure = await runNightlyGate({
+    eventName: "schedule",
+    headSha: "abc123",
+    ghOutput: "abc123",
+    ghExitCode: 1,
+  });
+  assert.equal(apiFailure.output, "run=true\n");
 });

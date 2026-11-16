@@ -18,8 +18,57 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Cheap gate so an unchanged main does not reserve a macOS runner every night.
+  main-changes:
+    name: nightly-change-detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      EVENT_NAME: ${{ github.event_name }}
+      HEAD_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Skip scheduled runs when main has not changed
+        id: decide
+        run: |
+          if [[ "${EVENT_NAME}" != "schedule" ]]; then
+            echo "Manual dispatch always runs the suite."
+            echo "run=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          # Cancelled runs produced no evidence, so they never justify a skip.
+          if ! last_sha="$(
+            gh run list --workflow ios-ui-nightly.yml --event schedule --branch main \
+              --status completed --limit 20 --json headSha,conclusion \
+              --jq 'map(select(.conclusion != "cancelled")) | first | .headSha // empty'
+          )"; then
+            echo "::warning::Could not read previous scheduled runs, so running the suite."
+            echo "run=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if [[ -n "${last_sha}" && "${last_sha}" == "${HEAD_SHA}" ]]; then
+            message="Skipped: main is still at ${HEAD_SHA}, which the last scheduled run already tested."
+            echo "${message}"
+            echo "${message}" >> "${GITHUB_STEP_SUMMARY}"
+            echo "run=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "main is at ${HEAD_SHA}; the last scheduled run tested ${last_sha:-nothing yet}."
+            echo "run=true" >> "${GITHUB_OUTPUT}"
+          fi
+
   ios-ui-full:
     name: ios-ui-full
+    needs: main-changes
+    # Fails open: if the gate itself breaks, run the suite rather than skip it.
+    if: ${{ !cancelled() && (needs.main-changes.result != 'success' || needs.main-changes.outputs.run == 'true') }}
     runs-on: macos-26
     timeout-minutes: 120
     outputs:
