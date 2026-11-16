@@ -206,6 +206,10 @@ enum UITestFixtureSeeder {
             try seedHistoryShowcase(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         }
 
+        if arguments.contains(MarketingScreenshotSeeder.seedArgument) {
+            try MarketingScreenshotSeeder.seed(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
         if arguments.contains("--uitest-seed-strength-records") {
             try seedStrengthRecords(
                 scenario: values(after: "--uitest-strength-records-scenario", in: arguments).first,

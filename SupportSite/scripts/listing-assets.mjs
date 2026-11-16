@@ -1,0 +1,134 @@
+// Turns raw marketing captures into the App Store screenshot set and the baros.fit images.
+//
+//   pnpm -C SupportSite listing-assets <raw-dir> <app-store-out-dir>
+//
+// <raw-dir> holds <shot>.png for each shot in docs/release/listing.json, as written by the
+// release skill's capture-screens.sh. Writes:
+//   - <app-store-out-dir>/NN-<shot>.png: 1320x2868 framed artwork without alpha, for the
+//     6.9" iPhone slot, in listing order;
+//   - SupportSite/public/assets/<site>: the unframed capture as JPEG, for each shot with a
+//     `site` file, and the matching approved hashes in tests/site-identity.test.mjs.
+// macOS only, so the headlines use the same system typography as Baros.
+// Layout from the Baros 1.2 generator (PR #214).
+
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import sharp from "sharp";
+
+const siteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryRoot = path.resolve(siteRoot, "..");
+const listing = JSON.parse(await readFile(path.join(repositoryRoot, "docs/release/listing.json"), "utf8"));
+const iconPath = path.join(siteRoot, "public/assets/baros-app-icon.png");
+const hashTestPath = path.join(siteRoot, "tests/site-identity.test.mjs");
+
+const canvas = { width: 1320, height: 2868 };
+const screen = { x: 139, y: 600, width: 1042, height: 2264, radius: 138 };
+
+const [rawDirectory, outputDirectory] = process.argv.slice(2).filter((arg) => arg !== "--");
+if (!rawDirectory || !outputDirectory) {
+  console.error("usage: listing-assets.mjs <raw-dir> <app-store-out-dir>");
+  process.exit(2);
+}
+if (process.platform !== "darwin") {
+  throw new Error("Listing assets need macOS so the headlines use the system typography Baros uses.");
+}
+
+function escapeXml(value) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function pngDataUrl(buffer) {
+  return `data:image/png;base64,${buffer.toString("base64")}`;
+}
+
+function artworkSvg({ screenshotDataUrl, iconDataUrl, headline, glowX, fadeBottom = false }) {
+  const headlineLines = headline
+    .map((line, index) => `<tspan x="660" y="${250 + index * 88}">${escapeXml(line)}</tspan>`)
+    .join("");
+  const bottomFade = fadeBottom
+    ? `<rect x="${screen.x}" y="2320" width="${screen.width}" height="544" fill="url(#screenFade)" clip-path="url(#screenClip)" />`
+    : "";
+
+  return `
+    <svg width="${canvas.width}" height="${canvas.height}" viewBox="0 0 ${canvas.width} ${canvas.height}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#080A0D" />
+          <stop offset="0.58" stop-color="#050608" />
+          <stop offset="1" stop-color="#020305" />
+        </linearGradient>
+        <radialGradient id="cobaltGlow" cx="${glowX}" cy="42%" r="64%">
+          <stop offset="0" stop-color="#1768E5" stop-opacity="0.28" />
+          <stop offset="0.42" stop-color="#1C66C7" stop-opacity="0.12" />
+          <stop offset="1" stop-color="#09121D" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="silverGlow" cx="76%" cy="34%" r="54%">
+          <stop offset="0" stop-color="#F3EBE7" stop-opacity="0.08" />
+          <stop offset="1" stop-color="#F3EBE7" stop-opacity="0" />
+        </radialGradient>
+        <linearGradient id="screenFade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#000000" stop-opacity="0" />
+          <stop offset="0.2" stop-color="#000000" />
+          <stop offset="1" stop-color="#000000" />
+        </linearGradient>
+        <filter id="phoneShadow" x="-30%" y="-20%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="26" stdDeviation="34" flood-color="#000000" flood-opacity="0.72" />
+          <feDropShadow dx="0" dy="0" stdDeviation="22" flood-color="#1768E5" flood-opacity="0.12" />
+        </filter>
+        <clipPath id="screenClip">
+          <rect x="${screen.x}" y="${screen.y}" width="${screen.width}" height="${screen.height}" rx="${screen.radius}" />
+        </clipPath>
+      </defs>
+
+      <rect width="1320" height="2868" fill="url(#background)" />
+      <rect width="1320" height="2868" fill="url(#cobaltGlow)" />
+      <rect width="1320" height="2868" fill="url(#silverGlow)" />
+
+      <g aria-label="Baros">
+        <image href="${iconDataUrl}" x="532" y="60" width="68" height="68" />
+        <text x="621" y="110" fill="#F3EBE7" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="32" font-weight="700" letter-spacing="8">BAROS</text>
+      </g>
+
+      <text text-anchor="middle" fill="#F7F7F5" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="76" font-weight="760" letter-spacing="-2">
+        ${headlineLines}
+      </text>
+
+      <rect x="116" y="576" width="1088" height="2374" rx="166" fill="#020307" stroke="#2A3440" stroke-width="4" filter="url(#phoneShadow)" />
+      <image href="${screenshotDataUrl}" x="${screen.x}" y="${screen.y}" width="${screen.width}" height="${screen.height}" preserveAspectRatio="xMidYMin slice" clip-path="url(#screenClip)" />
+      ${bottomFade}
+      <rect x="${screen.x}" y="${screen.y}" width="${screen.width}" height="${screen.height}" rx="${screen.radius}" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="3" />
+    </svg>
+  `;
+}
+
+await mkdir(outputDirectory, { recursive: true });
+const iconDataUrl = pngDataUrl(await readFile(iconPath));
+let hashTest = await readFile(hashTestPath, "utf8");
+
+for (const [index, shot] of listing.shots.entries()) {
+  const source = await readFile(path.join(rawDirectory, `${shot.id}.png`));
+  const { width, height } = await sharp(source).metadata();
+  // Any current iPhone capture fits the frame; a different shape would crop the UI.
+  if (Math.abs(width / height - screen.width / screen.height) > 0.01) {
+    throw new Error(`${shot.id}.png is ${width}x${height}; capture on an iPhone 17 Pro.`);
+  }
+
+  const svg = artworkSvg({ screenshotDataUrl: pngDataUrl(source), iconDataUrl, ...shot });
+  const output = path.join(outputDirectory, `${String(index + 1).padStart(2, "0")}-${shot.id}.png`);
+  await sharp(Buffer.from(svg)).flatten({ background: "#080A0D" }).png({ compressionLevel: 9 }).toFile(output);
+  console.log(`App Store  ${output}`);
+
+  if (shot.site) {
+    const jpeg = await sharp(source).flatten({ background: "#000000" }).jpeg({ quality: 86, mozjpeg: true }).toBuffer();
+    await writeFile(path.join(siteRoot, "public/assets", shot.site), jpeg);
+    const hash = createHash("sha256").update(jpeg).digest("hex");
+    const pattern = new RegExp(`(\\["assets/${shot.site.replaceAll(".", "\\.")}", ")[0-9a-f]{64}("\\])`);
+    if (!pattern.test(hashTest)) throw new Error(`${hashTestPath} has no approved hash for ${shot.site}.`);
+    hashTest = hashTest.replace(pattern, `$1${hash}$2`);
+    console.log(`baros.fit  public/assets/${shot.site}`);
+  }
+}
+await writeFile(hashTestPath, hashTest);

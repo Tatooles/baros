@@ -7,7 +7,7 @@ The [Baros authentication domain migration record](baros-auth-domain-migration-r
 ## App Metadata
 
 - App name: Baros: Workout Tracker
-- Subtitle: Simple workout logging
+- Subtitle: Fast, private lifting log
 - Primary category: Health & Fitness
 - Pricing: Free
 - Support URL: https://baros.fit/support
@@ -15,15 +15,9 @@ The [Baros authentication domain migration record](baros-auth-domain-migration-r
 - Support contact: support@tatooles.dev
 - Copyright: 2026 Kevin Tatooles
 
-## Description Draft
+## Store Listing
 
-Baros is a private workout tracker for iPhone. Record exercises, sets, weights, reps, notes, and completed workouts without needing an account. Sign in when you want account-backed sync across devices.
-
-The app focuses on fast workout entry, offline-first local logging, workout history, exercise management, data export, and clear privacy controls.
-
-## Keywords Draft
-
-workout, lifting, gym, strength, log, tracker, fitness, exercise, sets, reps
+The description, promotional text, keywords, and screenshot set live in [`listing.json`](listing.json), which the release skill keeps in sync with App Store Connect and baros.fit. See `.agents/skills/release/LISTING.md`.
 
 ## Release Notes
 
@@ -136,16 +130,6 @@ Production services:
 - Clerk production associated domain: webcredentials:clerk.baros.fit
 - Clerk production publishable key: pk_live_Y2xlcmsuYmFyb3MuZml0JA
 - Convex production deployment URL: https://sensible-reindeer-16.convex.cloud
-
-## Screenshot Plan
-
-Capture final screenshots after UI stabilizes:
-
-- Start workout screen.
-- Active workout with exercises and sets.
-- Workout history.
-- Exercise library.
-- Profile or Settings showing sync/export/privacy controls.
 
 ## Release Checklist
 
