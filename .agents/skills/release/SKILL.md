@@ -65,7 +65,7 @@ The **candidate** is the build that ships: the exact binary the regression tests
 
 - **Kevin named a build that already holds this release's sheet, or the release has no sheet**: the candidate is the base's build, unchanged — the named build, or else the newest `main` build at or before the base.
 - **No build named**: the candidate is the newest `main` build containing the What's New merge — `node scripts/asc.mjs runs`. Xcode Cloud only builds `main` when app paths change, so it can trail `main` by docs-only commits; wait for any run still building. When the check shows other PRs merged after the base, ⛔ ask Kevin to either widen the base to that build (rerun steps 1–3 for the added PRs) or take the release-branch path from the original base.
-- **Otherwise — a named build without the sheet, or a base that needs fixes `main` cannot supply alone** — the release branch: cut `release/<version>` from the base and cherry-pick what it needs (`git cherry-pick -m 1 <merge>` for the What's New merge and each fix). Resolve any conflict so the code matches what `main` merged, then run the unit tests. ⛔ Push the branch. Xcode Cloud's "Main Branch Build" workflow also builds `release/` branches; the candidate is that run (`node scripts/asc.mjs runs --branch release/<version>`).
+- **Otherwise — a named build without the sheet, or a base that needs fixes `main` cannot supply alone** — the release branch: cut `release/<version>` from the base and cherry-pick what it needs (`git cherry-pick -m 1 <merge>` for the What's New merge and each fix). Resolve any conflict so the code matches what `main` merged, then run both unit suites (`swift test --package-path BarosCore` and the `BarosUnitTests` scheme). ⛔ Push the branch. Xcode Cloud's "Main Branch Build" workflow also builds `release/` branches; the candidate is that run (`node scripts/asc.mjs runs --branch release/<version>`).
 
 Check GitHub's checks on a `main` candidate: `gh api repos/Tatooles/baros/commits/<sha>/check-runs --jq '.check_runs[] | "\(.name) \(.conclusion)"'`. A release branch gets no GitHub Actions run; the regression's unit and UI suites stand in.
 
@@ -106,7 +106,7 @@ Review usually takes a day or two. End the turn; when Kevin says Apple emailed:
 
 1. ⛔ If `status` shows `PENDING_DEVELOPER_RELEASE`, `node scripts/asc.mjs release <version>`, check the plan, `--apply`. Then, whatever the status, merge the release's site PR if it is still open, so baros.fit changes with the App Store. One yes covers both.
 2. Next version = the lowest open milestone above this one (`gh api 'repos/Tatooles/baros/milestones?state=open' --jq '.[].title'`).
-3. On a branch from `main`, run `scripts/bump-version.sh <next>`. Of the tests it lists, update those asserting the current release or its upgrade path the way commit `2ddae398` (the 1.5 bump) did — the upgrade test now expects an upgrade into an unannounced release to skip What's New. Run the unit tests and the edited UI tests.
+3. On a branch from `main`, run `scripts/bump-version.sh <next>`. Of the tests it lists, update those asserting the current release or its upgrade path the way commit `2ddae398` (the 1.5 bump) did — the upgrade test now expects an upgrade into an unannounced release to skip What's New. Run both unit suites (`swift test --package-path BarosCore` and the `BarosUnitTests` scheme) and the edited UI tests.
 4. Open the PR with the `file-pr` skill. ⛔ Merge it once checks are green.
 
 A patch release skips 2–4, because `main` is already past it.
