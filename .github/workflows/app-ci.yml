@@ -86,7 +86,8 @@ jobs:
     runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
     timeout-minutes: 30
     env:
-      IOS_TEST_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=26.5
+      IOS_SIMULATOR_NAME: iPhone 17
+      IOS_SIMULATOR_OS: "26.5"
 
     steps:
       - name: Require successful app change classification
@@ -104,13 +105,41 @@ jobs:
           xcodebuild -version
           xcrun simctl list devices available | grep -E "iPhone 17" || true
 
+      - name: Start booting the iOS simulator
+        run: |
+          set -o pipefail
+          runtime="com.apple.CoreSimulator.SimRuntime.iOS-${IOS_SIMULATOR_OS//./-}"
+          udid="$(
+            xcrun simctl list devices available --json |
+              jq -er --arg runtime "${runtime}" --arg name "${IOS_SIMULATOR_NAME}" \
+                '[.devices[$runtime] // [] | .[] | select(.name == $name)][0].udid'
+          )"
+          echo "Booting ${IOS_SIMULATOR_NAME} (iOS ${IOS_SIMULATOR_OS}) ${udid} in the background."
+          echo "IOS_SIMULATOR_UDID=${udid}" >> "${GITHUB_ENV}"
+          echo "IOS_TEST_DESTINATION=platform=iOS Simulator,id=${udid}" >> "${GITHUB_ENV}"
+          date +%s > "${RUNNER_TEMP}/simulator-boot-started"
+          nohup bash -c '
+            xcrun simctl bootstatus "$1" -b > "$2/simulator-boot.log" 2>&1
+            echo "$?" > "$2/simulator-boot-exit"
+            date +%s > "$2/simulator-boot-finished"
+          ' _ "${udid}" "${RUNNER_TEMP}" > /dev/null 2>&1 &
+
+      - name: Restore Swift package cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: swiftpm-${{ runner.os }}-${{ runner.arch }}-xcode-26.5-${{ hashFiles('Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-${{ runner.arch }}-xcode-26.5-
+
       - name: Resolve Swift packages
         run: |
           for attempt in 1 2 3; do
             if xcodebuild -resolvePackageDependencies \
               -project Baros.xcodeproj \
               -scheme BarosUnitTests \
-              -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData"; then
+              -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData" \
+              -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages"; then
               exit 0
             fi
             echo "Package resolution attempt ${attempt} failed."
@@ -118,14 +147,41 @@ jobs:
           done
           exit 1
 
-      - name: Run Baros unit tests
+      - name: Build Baros unit tests
         run: |
           set -o pipefail
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -project Baros.xcodeproj \
             -scheme BarosUnitTests \
             -destination "${IOS_TEST_DESTINATION}" \
             -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData" \
+            -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages" \
+            2>&1 | tee "${RUNNER_TEMP}/BarosTestsBuild.log"
+
+      - name: Wait for the iOS simulator to finish booting
+        run: |
+          wait_started="$(date +%s)"
+          xcrun simctl bootstatus "${IOS_SIMULATOR_UDID}" -b
+          now="$(date +%s)"
+          boot_started="$(cat "${RUNNER_TEMP}/simulator-boot-started")"
+          echo "Waited $((now - wait_started))s for boot here."
+          if [[ -f "${RUNNER_TEMP}/simulator-boot-finished" ]]; then
+            boot_finished="$(cat "${RUNNER_TEMP}/simulator-boot-finished")"
+            echo "Background boot took $((boot_finished - boot_started))s (exit $(cat "${RUNNER_TEMP}/simulator-boot-exit"))."
+          else
+            echo "Booted $((now - boot_started))s after the background boot started."
+          fi
+          tail -n 20 "${RUNNER_TEMP}/simulator-boot.log" || true
+
+      - name: Run Baros unit tests
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project Baros.xcodeproj \
+            -scheme BarosUnitTests \
+            -destination "${IOS_TEST_DESTINATION}" \
+            -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData" \
+            -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages" \
             -retry-tests-on-failure \
             -test-iterations 2 \
             -resultBundlePath "${RUNNER_TEMP}/BarosTests.xcresult" \
@@ -142,6 +198,8 @@ jobs:
           path: |
             ${{ runner.temp }}/BarosTests.xcresult
             ${{ runner.temp }}/BarosTests.log
+            ${{ runner.temp }}/BarosTestsBuild.log
+            ${{ runner.temp }}/simulator-boot.log
           if-no-files-found: warn
           retention-days: 14
 
@@ -152,7 +210,8 @@ jobs:
     runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
     timeout-minutes: 35
     env:
-      IOS_TEST_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=26.5
+      IOS_SIMULATOR_NAME: iPhone 17
+      IOS_SIMULATOR_OS: "26.5"
 
     steps:
       - name: Require successful app change classification
@@ -170,13 +229,41 @@ jobs:
           xcodebuild -version
           xcrun simctl list devices available | grep -E "iPhone 17" || true
 
+      - name: Start booting the iOS simulator
+        run: |
+          set -o pipefail
+          runtime="com.apple.CoreSimulator.SimRuntime.iOS-${IOS_SIMULATOR_OS//./-}"
+          udid="$(
+            xcrun simctl list devices available --json |
+              jq -er --arg runtime "${runtime}" --arg name "${IOS_SIMULATOR_NAME}" \
+                '[.devices[$runtime] // [] | .[] | select(.name == $name)][0].udid'
+          )"
+          echo "Booting ${IOS_SIMULATOR_NAME} (iOS ${IOS_SIMULATOR_OS}) ${udid} in the background."
+          echo "IOS_SIMULATOR_UDID=${udid}" >> "${GITHUB_ENV}"
+          echo "IOS_TEST_DESTINATION=platform=iOS Simulator,id=${udid}" >> "${GITHUB_ENV}"
+          date +%s > "${RUNNER_TEMP}/simulator-boot-started"
+          nohup bash -c '
+            xcrun simctl bootstatus "$1" -b > "$2/simulator-boot.log" 2>&1
+            echo "$?" > "$2/simulator-boot-exit"
+            date +%s > "$2/simulator-boot-finished"
+          ' _ "${udid}" "${RUNNER_TEMP}" > /dev/null 2>&1 &
+
+      - name: Restore Swift package cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: swiftpm-${{ runner.os }}-${{ runner.arch }}-xcode-26.5-${{ hashFiles('Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-${{ runner.arch }}-xcode-26.5-
+
       - name: Resolve Swift packages
         run: |
           for attempt in 1 2 3; do
             if xcodebuild -resolvePackageDependencies \
               -project Baros.xcodeproj \
               -scheme Baros \
-              -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData"; then
+              -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData" \
+              -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages"; then
               exit 0
             fi
             echo "Package resolution attempt ${attempt} failed."
@@ -184,11 +271,37 @@ jobs:
           done
           exit 1
 
+      - name: Build Baros UI smoke tests
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project Baros.xcodeproj \
+            -scheme Baros \
+            -destination "${IOS_TEST_DESTINATION}" \
+            -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData" \
+            -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages" \
+            2>&1 | tee "${RUNNER_TEMP}/BarosUISmokeBuild.log"
+
+      - name: Wait for the iOS simulator to finish booting
+        run: |
+          wait_started="$(date +%s)"
+          xcrun simctl bootstatus "${IOS_SIMULATOR_UDID}" -b
+          now="$(date +%s)"
+          boot_started="$(cat "${RUNNER_TEMP}/simulator-boot-started")"
+          echo "Waited $((now - wait_started))s for boot here."
+          if [[ -f "${RUNNER_TEMP}/simulator-boot-finished" ]]; then
+            boot_finished="$(cat "${RUNNER_TEMP}/simulator-boot-finished")"
+            echo "Background boot took $((boot_finished - boot_started))s (exit $(cat "${RUNNER_TEMP}/simulator-boot-exit"))."
+          else
+            echo "Booted $((now - boot_started))s after the background boot started."
+          fi
+          tail -n 20 "${RUNNER_TEMP}/simulator-boot.log" || true
+
       - name: Run Baros UI smoke tests
         timeout-minutes: 25
         run: |
           set -o pipefail
-          xcodebuild test \
+          xcodebuild test-without-building \
             -project Baros.xcodeproj \
             -scheme Baros \
             -destination "${IOS_TEST_DESTINATION}" \
@@ -197,6 +310,7 @@ jobs:
             -only-testing:BarosUITests/BarosUITests/testSettingsEditRequestsSyncInUITestMode \
             -only-testing:BarosUITests/BarosUITests/testDeleteLocalDataReturnsToSettingsAfterReset \
             -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData" \
+            -clonedSourcePackagesDirPath "${RUNNER_TEMP}/SourcePackages" \
             -retry-tests-on-failure \
             -test-iterations 2 \
             -resultBundlePath "${RUNNER_TEMP}/BarosUISmoke.xcresult" \
@@ -230,5 +344,7 @@ jobs:
           path: |
             ${{ runner.temp }}/BarosUISmoke.xcresult
             ${{ runner.temp }}/BarosUISmoke.log
+            ${{ runner.temp }}/BarosUISmokeBuild.log
+            ${{ runner.temp }}/simulator-boot.log
           if-no-files-found: warn
           retention-days: 14
