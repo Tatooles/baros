@@ -103,7 +103,7 @@ enum MarketingScreenshotSeeder {
                       let startedAt = calendar.date(bySettingHour: slot == 3 ? 10 : 18,
                                                     minute: [5, 20, 35, 10][(weeksBack + slot) % 4], second: 0, of: day)
                 else { continue }
-                let duration = (50 + (weeksBack * 7 + slot * 11) % 24) * 60 + (weeksBack * 37 + slot * 13) % 60
+                let duration = (52 + (weeksBack * 7 + slot * 11) % 24) * 60 + (weeksBack * 37 + slot * 13 + 23) % 60
                 let setCount = plan.lifts.reduce(0) { $0 + $1.sets }
                 let groups = Dictionary(uniqueKeysWithValues: Set(plan.lifts.compactMap(\.superset)).map { ($0, UUID()) })
                 var elapsed = 4.0 * 60
