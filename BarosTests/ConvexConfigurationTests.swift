@@ -1,3 +1,4 @@
+@testable import BarosCore
 import XCTest
 import ConvexMobile
 @testable import Baros

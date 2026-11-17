@@ -22,7 +22,7 @@ On a branch from `main`, follow `git show --stat 1aa83132` (the 1.4 sheet) — i
 - the tests that pin the newest sheet (`AppReleaseCatalogTests`, `FirstRunExperienceStoreTests`, `LaunchExperienceCoordinatorTests`, and every `BarosUITests` test asserting `What's new in Baros <previous>` or its highlights, including the upgrade test);
 - the version's section at the top of "Release Notes" in the submission pack.
 
-Run the unit tests and the edited UI tests.
+Run both unit suites (`swift test --package-path BarosCore` and the `BarosUnitTests` scheme) and the edited UI tests.
 
 ## 3. ⛔ Screenshot approval
 

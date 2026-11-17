@@ -1,3 +1,4 @@
+import BarosCore
 import Charts
 import SwiftUI
 

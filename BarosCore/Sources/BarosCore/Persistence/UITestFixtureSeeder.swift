@@ -1,0 +1,963 @@
+import Foundation
+import SwiftData
+
+#if DEBUG
+public enum UITestFixtureSeeder {
+    static let completedBenchWorkoutArgument = "--uitest-seed-completed-bench-workout"
+    static let futureCompletedBenchWorkoutArgument = "--uitest-seed-future-completed-bench-workout"
+    static let historyExerciseNoteArgument = "--uitest-seed-history-exercise-note"
+    static let historyUncompletedSetArgument = "--uitest-seed-history-uncompleted-set"
+    static let concurrentHistorySaveArgument = "--uitest-concurrent-history-save"
+    @MainActor private static var concurrentHistorySaveSessionIDs: Set<UUID> = []
+    static let exerciseHistoryPerformanceArgument = "--uitest-seed-exercise-history-performance"
+    static let matchingExercisePerformanceWorkoutsArgument =
+        "--uitest-seed-matching-exercise-performance-workouts"
+    static let largeActiveWorkoutArgument = "--uitest-seed-large-active-workout"
+    static let largeActiveWorkoutTitle = "Performance Workout 10x5"
+    static let longNameActiveWorkoutArgument = "--uitest-seed-long-name-active-workout"
+    /// With the long-name workout: exercise 1 alone, 2–3 as a pair and 4–6 as a giant set.
+    static let supersetsArgument = "--uitest-seed-supersets"
+    static let homeRingHistoryArgument = "--uitest-seed-home-ring-history"
+    /// Fourteen months of named workouts with varied exercises and double days, for scrub previews.
+    static let homeRingScrubHistoryArgument = "--uitest-seed-home-ring-scrub-history"
+    /// Twelve weeks of progressive push/pull/leg training with linked library exercises,
+    /// for reviewing History and Records against believable data.
+    static let historyShowcaseArgument = "--uitest-seed-history-showcase"
+    /// Seeds fixtures for an owner who is no longer signed in, as after an expired session.
+    static let signedOutOwnerArgument = "--uitest-seed-signed-out-owner"
+
+    public static func signedOutOwner(in arguments: [String]) -> String? {
+        values(after: signedOutOwnerArgument, in: arguments).first
+    }
+
+    /// Reproduces a newer saved value arriving after the Edit sheet snapshots its draft.
+    /// Restricted to disposable in-memory UI-test stores; the editor still uses its real save path.
+    @MainActor
+    public static func simulateConcurrentHistorySave(session: WorkoutSession, context: ModelContext) throws {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains(concurrentHistorySaveArgument),
+              arguments.contains("--uitest-in-memory-store"),
+              !concurrentHistorySaveSessionIDs.contains(session.id),
+              let set = session.sortedLoggedExercises.first?.sortedSets.first else { return }
+        let now = Date.now
+        set.weight = (set.weight ?? 0) + 25
+        set.updatedAt = now
+        session.durationSeconds = session.effectiveDurationSeconds() + 600
+        session.endedAt = session.startedAt.addingTimeInterval(TimeInterval(session.durationSeconds))
+        session.updatedAt = now
+        try context.save()
+        concurrentHistorySaveSessionIDs.insert(session.id)
+    }
+
+    public static func seedFixtures(
+        from arguments: [String],
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext
+    ) throws {
+        // Disposable reproduction: repeated A, with an independently added exercise from B.
+        if arguments.contains("--uitest-seed-previous-missing-source"),
+           arguments.contains("--uitest-in-memory-store") {
+            let sourceExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                sets: [LoggedSet(orderIndex: 0, weight: 185, reps: 5, isCompleted: true)])
+            let source = WorkoutSession(title: "Source A", startedAt: .now.addingTimeInterval(-7200),
+                status: .completed, source: .blank, syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                loggedExercises: [sourceExercise])
+            let independent = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Back Squat",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                sets: [LoggedSet(orderIndex: 0, weight: 225, reps: 8, isCompleted: true)])
+            let history = WorkoutSession(title: "Surviving B", startedAt: .now.addingTimeInterval(-3600),
+                status: .completed, source: .blank, syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                loggedExercises: [independent])
+            let linked = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                sourceLoggedExerciseID: sourceExercise.id,
+                sets: [LoggedSet(orderIndex: 0, sourceLoggedSetID: sourceExercise.sets[0].id)])
+            let added = LoggedExercise(orderIndex: 1, exerciseSnapshotName: "Back Squat",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                sets: [LoggedSet(orderIndex: 0)])
+            let active = WorkoutSession(title: "Repeated A + added squat", startedAt: .now, status: .active,
+                source: .pastWorkout, sourceSessionID: source.id,
+                syncOwnerTokenIdentifier: ownerTokenIdentifier, loggedExercises: [linked, added])
+            context.insert(source)
+            context.insert(history)
+            context.insert(active)
+            try context.save()
+        }
+
+        if arguments.contains("--uitest-seed-owner-loss-workout") {
+            context.insert(WorkoutSession(title: "Private expired-session workout", startedAt: .now,
+                status: .active, source: .blank,
+                syncOwnerTokenIdentifier: signedOutOwner(in: arguments)))
+            try context.save()
+        }
+
+        // A retained outgoing-owner workout needs no exercise catalog to block updates.
+        if arguments.contains("--uitest-update-hidden-active-workout"),
+           arguments.contains("--uitest-in-memory-store") {
+            context.insert(WorkoutSession(
+                title: "Outgoing owner workout", startedAt: .now, status: .active, source: .blank,
+                deletedAt: arguments.contains("--uitest-update-hidden-workout-deleted") ? .now : nil,
+                syncOwnerTokenIdentifier: "issuer|outgoing_owner"
+            ))
+            try context.save()
+        }
+
+        if arguments.contains(homeRingHistoryArgument) {
+            try seedHomeRingHistory(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
+        if arguments.contains(homeRingScrubHistoryArgument) {
+            try seedHomeRingScrubHistory(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
+        for title in values(after: completedBenchWorkoutArgument, in: arguments) {
+            try seedCompletedBenchWorkout(
+                title: title,
+                exerciseNotes: arguments.contains(historyExerciseNoteArgument)
+                    ? "Pause at the bottom\nKeep wrists stacked"
+                    : "",
+                includesUncompletedSet: arguments.contains(historyUncompletedSetArgument),
+                includesSecondExerciseWithNote: arguments.contains("--uitest-seed-history-mixed-notes"),
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+
+        if arguments.contains("--uitest-seed-history-blocks") {
+            try seedHistoryBlocks(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
+        if arguments.contains("--uitest-seed-workout-history-layout") {
+            try seedWorkoutHistoryLayoutFixture(context: context)
+        }
+
+        for title in values(after: futureCompletedBenchWorkoutArgument, in: arguments) {
+            try seedCompletedBenchWorkout(
+                title: title,
+                startedAt: Date(timeIntervalSince1970: 1_924_972_200),
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+
+        if arguments.contains(exerciseHistoryPerformanceArgument) {
+            try seedExerciseHistoryPerformanceFixture(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+
+        if arguments.contains(matchingExercisePerformanceWorkoutsArgument) {
+            try seedMatchingExercisePerformanceWorkouts(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+
+        if arguments.contains(largeActiveWorkoutArgument) {
+            try seedActiveWorkoutPerformanceFixture(
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+
+        if arguments.contains("--uitest-seed-edit-workout") {
+            try seedLongNameActiveWorkout(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            if let session = try context.fetch(FetchDescriptor<WorkoutSession>()).first(where: { $0.status == .active }) {
+                session.title = "Edit Workout"
+                for exercise in session.sortedLoggedExercises.dropFirst(4) {
+                    for set in exercise.sets { context.delete(set) }
+                    session.loggedExercises.removeAll { $0.id == exercise.id }
+                    context.delete(exercise)
+                }
+                if let first = session.sortedLoggedExercises.first {
+                    first.exerciseSnapshotName = "Bench Press"
+                    for set in first.sortedSets where set.isCompleted {
+                        set.completedAt = .now
+                    }
+                }
+                try context.save()
+            }
+        }
+
+        if arguments.contains(longNameActiveWorkoutArgument) {
+            try seedLongNameActiveWorkout(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            if arguments.contains(supersetsArgument) {
+                try groupLongNameActiveWorkout(context: context)
+            }
+            if arguments.contains("--uitest-reorder-minimal"),
+               let session = try context.fetch(FetchDescriptor<WorkoutSession>()).first(where: { $0.status == .active }) {
+                for exercise in session.sortedLoggedExercises.dropFirst(3) { exercise.deletedAt = .now }
+                try context.save()
+            }
+        }
+
+        if arguments.contains("--uitest-rest-30-seconds"),
+           let settings = UserSettings.visibleSettingsRecords(
+               from: try context.fetch(FetchDescriptor<UserSettings>()),
+               ownerTokenIdentifier: ownerTokenIdentifier
+           ).first {
+            settings.defaultRestTimerSeconds = 30
+            try context.save()
+        }
+
+        if arguments.contains(historyShowcaseArgument) {
+            try seedHistoryShowcase(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
+        if arguments.contains(MarketingScreenshotSeeder.seedArgument) {
+            try MarketingScreenshotSeeder.seed(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
+        if arguments.contains("--uitest-seed-strength-records") {
+            try seedStrengthRecords(
+                scenario: values(after: "--uitest-strength-records-scenario", in: arguments).first,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+    }
+
+    /// Separate from value-only ring fixtures: real, idempotent SwiftData history for live-query QA.
+    static func seedHomeRingHistory(
+        ownerTokenIdentifier: String?, context: ModelContext, now: Date = .now, calendar: Calendar = .current
+    ) throws {
+        let existingIDs = Set(try context.fetch(FetchDescriptor<WorkoutSession>()).map(\.id))
+        let today = calendar.startOfDay(for: now)
+        let names = ["Push Day", "Pull Day", "Leg Day", "Upper"]
+        for index in 0..<500 {
+            let id = stableUUID(String(format: "00000312-0000-4000-8000-%012d", index))
+            guard !existingIDs.contains(id) else { continue }
+            // Calendar arithmetic covers three years, year boundaries and both DST transitions.
+            let daysBack = index * 1095 / 499
+            guard let day = calendar.date(byAdding: .day, value: -daysBack, to: today),
+                  let startedAt = calendar.date(bySettingHour: daysBack == 0 ? 0 : 17,
+                                                minute: 0, second: 0, of: day) else { continue }
+            let duration = Double(20 + (index * 17) % 71) * 60
+            let endedAt = min(now, startedAt.addingTimeInterval(duration))
+            context.insert(WorkoutSession(
+                id: id, title: names[index % names.count], startedAt: startedAt, endedAt: endedAt,
+                durationSeconds: Int(endedAt.timeIntervalSince(startedAt)), status: .completed, source: .blank,
+                syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                loggedExercises: [LoggedExercise(
+                    orderIndex: 0, exerciseSnapshotName: "Bench Press",
+                    exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                    sets: (0..<3).map { LoggedSet(orderIndex: $0, weight: 185, reps: 5, isCompleted: true) }
+                )]
+            ))
+        }
+        try context.save()
+    }
+
+    /// Idempotent: Mon/Wed/Fri/Sat plans with skipped days and double days, plus stress cases that a
+    /// straight drag reaches. Month: a long name 8 days back, a long double 15 back, a triple 22 back.
+    /// Year: 7 workouts 13 weeks back, 5 long names 26 back, and 6 with a double day 39 back.
+    static func seedHomeRingScrubHistory(
+        ownerTokenIdentifier: String?, context: ModelContext, now: Date = .now, calendar: Calendar = .current
+    ) throws {
+        let existingIDs = Set(try context.fetch(FetchDescriptor<WorkoutSession>()).map(\.id))
+        let today = calendar.startOfDay(for: now)
+        let thisWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
+        let exercises: [String: [String]] = [
+            "Push Day": ["Bench Press", "Incline Dumbbell Press", "Overhead Press", "Lateral Raise", "Triceps Pushdown"],
+            "Pull Day": ["Deadlift", "Pull-Up", "Barbell Row", "Face Pull", "Hammer Curl", "Biceps Curl"],
+            "Leg Day": ["Back Squat", "Romanian Deadlift", "Leg Press", "Walking Lunge"],
+            "Upper Body": ["Bench Press", "Pull-Up", "Dumbbell Shoulder Press", "Cable Row", "Dip", "Curl", "Pushdown"],
+        ]
+        let plans = ["Push Day", "Pull Day", "Leg Day", "Upper Body"]
+        let specialDays: [Int: [String]] = [
+            8: ["Upper Body Push/Pull Superset Session"],
+            15: ["Heavy Lower Body – Squat Focus Week 3", "Posterior Chain & Core Accessory Work"],
+            22: ["Push Day", "Zone 2 Conditioning", "Mobility & Stretch"],
+        ]
+        let specialWeeks: [Int: [[String]]] = [
+            13: [["Push Day"], ["Lower Body Strength"], ["Pull Day"], ["Zone 2 + Mobility"],
+                 ["Upper Hypertrophy"], ["Full Body Conditioning Circuit"], ["Long Run"]],
+            26: [["Heavy Lower Body – Squat Focus Week 3"], [], ["Upper Body Push/Pull Superset Session"], [],
+                 ["Olympic Lifting Technique Practice"], ["Posterior Chain & Core Accessory Work"], ["Deload Full Body"]],
+            39: [["Push Day", "Conditioning"], [], ["Leg Day"], ["Pull Day"], [], ["Upper Body"], ["Leg Day"]],
+        ]
+        var entries: [(day: Date, titles: [String])] = []
+        for daysBack in (0..<425).reversed() {
+            guard let day = calendar.date(byAdding: .day, value: -daysBack, to: today) else { continue }
+            let week = calendar.dateInterval(of: .weekOfYear, for: day)?.start ?? day
+            let weeksBack = (calendar.dateComponents([.day], from: week, to: thisWeek).day ?? 0) / 7
+            if let special = specialWeeks[weeksBack] {
+                let offset = calendar.dateComponents([.day], from: week, to: day).day ?? 0
+                if special.indices.contains(offset), !special[offset].isEmpty { entries.append((day, special[offset])) }
+                continue
+            }
+            if let special = specialDays[daysBack] {
+                entries.append((day, special))
+                continue
+            }
+            let weekday = calendar.component(.weekday, from: day)
+            let doubled = daysBack == 2 || daysBack == 40
+            guard [2, 4, 6, 7].contains(weekday) || doubled, daysBack % 11 != 5,
+                  !(150..<164).contains(daysBack) else { continue }
+            let plan = plans[entries.count % plans.count]
+            entries.append((day, doubled ? [plan, "Conditioning"] : [plan]))
+        }
+        var index = 0
+        for entry in entries {
+            for (session, title) in entry.titles.enumerated() {
+                defer { index += 1 }
+                let id = stableUUID(String(format: "00000311-0000-4000-8000-%012d", index))
+                guard !existingIDs.contains(id),
+                      let startedAt = calendar.date(bySettingHour: 7 + session * 5, minute: 0, second: 0, of: entry.day),
+                      startedAt <= now else { continue }
+                let names = exercises[title] ?? ["Rower", "Kettlebell Swing", "Goblet Squat"]
+                let duration = Double(session > 0 ? 25 : 38 + (index * 13) % 45) * 60
+                let endedAt = min(now, startedAt.addingTimeInterval(duration))
+                context.insert(WorkoutSession(
+                    id: id, title: title, startedAt: startedAt, endedAt: endedAt,
+                    durationSeconds: Int(endedAt.timeIntervalSince(startedAt)), status: .completed, source: .blank,
+                    syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                    loggedExercises: names.enumerated().map { order, name in
+                        LoggedExercise(orderIndex: order, exerciseSnapshotName: name,
+                                       sets: (0..<3).map { LoggedSet(orderIndex: $0, weight: 95, reps: 8, isCompleted: true) })
+                    }
+                ))
+            }
+        }
+        try context.save()
+    }
+
+    /// Six exercise blocks with mixed notes, plus two older Bench Press sessions.
+    private static func seedHistoryBlocks(ownerTokenIdentifier: String?, context: ModelContext) throws {
+        let date = Date(timeIntervalSince1970: 1_788_544_800)
+        for (index, title) in ["Full Body", "Upper Body", "Push Day"].enumerated() {
+            try seedCompletedBenchWorkout(
+                title: title,
+                exerciseNotes: index == 0 ? "Pause at the bottom\nKeep wrists stacked" : "",
+                includesUncompletedSet: index == 0,
+                startedAt: date.addingTimeInterval(Double(-index) * 86_400 * 3),
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context
+            )
+        }
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        guard let workout = sessions.first(where: {
+            $0.title == "Full Body" && $0.syncOwnerTokenIdentifier == ownerTokenIdentifier
+        }), workout.loggedExercises.count == 1 else { return }
+        let accessories: [(String, ExerciseEquipment, String)] = [
+            ("Cable Row", .cable, ""),
+            ("Goblet Squat", .dumbbell, "Controlled tempo"),
+            ("Romanian Deadlift", .barbell, ""),
+            ("Lateral Raise", .dumbbell, "Keep shoulders relaxed"),
+            ("Triceps Pushdown", .cable, ""),
+        ]
+        for (index, accessory) in accessories.enumerated() {
+            workout.loggedExercises.append(LoggedExercise(
+                orderIndex: index + 1,
+                exerciseSnapshotName: accessory.0,
+                exerciseSnapshotEquipmentRaw: accessory.1.rawValue,
+                notes: accessory.2,
+                sets: (0..<3).map { LoggedSet(orderIndex: $0, weight: 40, reps: 10, isCompleted: true) }
+            ))
+        }
+        try context.save()
+    }
+
+    static func seedHistoryShowcase(
+        ownerTokenIdentifier: String?, context: ModelContext, now: Date = .now, calendar: Calendar = .current
+    ) throws {
+        let library = Exercise.visibleActiveExercises(
+            from: try context.fetch(FetchDescriptor<Exercise>()),
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
+        // (seed, set count, starting weight, weekly increment, reps)
+        typealias Lift = (seed: String, sets: Int, start: Double, step: Double, reps: Int)
+        let plans: [(title: String, weekday: Int, lifts: [Lift])] = [
+            ("Push Day", 2, [("bench-press", 3, 185, 2.5, 5), ("overhead-press", 3, 105, 1.25, 6),
+                             ("incline-dumbbell-press", 3, 60, 1, 10), ("triceps-pushdown", 3, 50, 1, 12)]),
+            ("Pull Day", 4, [("conventional-deadlift", 2, 275, 5, 5), ("barbell-row", 3, 135, 2.5, 8),
+                             ("lat-pulldown", 3, 120, 2.5, 10), ("biceps-curl", 3, 25, 0.5, 12)]),
+            ("Leg Day", 6, [("back-squat", 3, 225, 5, 5), ("romanian-deadlift", 3, 185, 2.5, 8),
+                            ("leg-press", 3, 270, 10, 10), ("calf-raise", 3, 140, 5, 12)]),
+        ]
+        let today = calendar.startOfDay(for: now)
+        let thisWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
+        var index = 0
+        for week in 0..<12 {
+            let weeksBack = 11 - week
+            guard let weekStart = calendar.date(byAdding: .day, value: -7 * weeksBack, to: thisWeek) else { continue }
+            for plan in plans {
+                defer { index += 1 }
+                guard let day = calendar.date(byAdding: .day, value: plan.weekday - 1, to: weekStart),
+                      let startedAt = calendar.date(bySettingHour: 18, minute: 10, second: 0, of: day),
+                      startedAt < now else { continue }
+                let durationSeconds = (48 + (index * 7) % 22) * 60
+                let endedAt = startedAt.addingTimeInterval(TimeInterval(durationSeconds))
+                // A deload in week 7 keeps the progression believable.
+                let progress = Double(week >= 7 ? week - 2 : week)
+                let occurrences = plan.lifts.enumerated().compactMap { order, lift -> LoggedExercise? in
+                    guard let exercise = library.first(where: { $0.seedIdentifier == lift.seed }) else { return nil }
+                    let increment = lift.start < 60 ? 2.5 : 5
+                    let weight = ((lift.start + lift.step * progress) / increment).rounded() * increment
+                    var sets = (0..<lift.sets).map { setIndex in
+                        LoggedSet(
+                            orderIndex: setIndex,
+                            weight: weight,
+                            reps: setIndex == lift.sets - 1 && week % 3 == 2 ? lift.reps + 1 : lift.reps,
+                            rpe: setIndex == lift.sets - 1 && order == 0 ? 8 + Double(week % 3) * 0.5 : nil,
+                            isCompleted: true,
+                            completedAt: endedAt,
+                            createdAt: startedAt,
+                            updatedAt: endedAt
+                        )
+                    }
+                    // One heavy single sets Heaviest Rep apart from the best estimate.
+                    if lift.seed == "bench-press", week == 9 {
+                        sets.append(LoggedSet(orderIndex: sets.count, weight: 235, reps: 1, rpe: 9.5,
+                                              isCompleted: true, completedAt: endedAt,
+                                              createdAt: startedAt, updatedAt: endedAt))
+                    }
+                    return LoggedExercise(
+                        orderIndex: order,
+                        exercise: exercise,
+                        exerciseSnapshotName: exercise.name,
+                        exerciseSnapshotEquipmentRaw: exercise.equipmentRaw,
+                        exerciseSnapshotPrimaryMuscleGroupRaw: exercise.primaryMuscleGroupRaw,
+                        notes: lift.seed == "bench-press" && week == 9 ? "Worked up to a heavy single. Felt fast." : "",
+                        createdAt: startedAt,
+                        updatedAt: endedAt,
+                        sets: sets
+                    )
+                }
+                context.insert(WorkoutSession(
+                    id: stableUUID(String(format: "00000368-0000-4000-8000-%012d", index)),
+                    title: plan.title, startedAt: startedAt, endedAt: endedAt,
+                    durationSeconds: durationSeconds, status: .completed, source: .blank,
+                    createdAt: startedAt, updatedAt: endedAt,
+                    syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                    loggedExercises: occurrences
+                ))
+            }
+        }
+        try context.save()
+    }
+
+    private static func seedStrengthRecords(scenario: String?, ownerTokenIdentifier: String?, context: ModelContext) throws {
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        let benchPress = Exercise.visibleActiveExercises(from: exercises, ownerTokenIdentifier: ownerTokenIdentifier)
+            .first { $0.seedIdentifier == "bench-press" }
+        var performances: [(Date, [(Double?, Int)])] = [
+            (Date(timeIntervalSince1970: 1_788_544_800), [(185, 5), (205, 3), (225, 1)]),
+            (Date(timeIntervalSince1970: 1_788_372_000), [(205, 5), (210, 5), (195, 6)]),
+        ]
+        switch scenario {
+        case "same-set": performances = [(performances[0].0, [(185, 5), (205, 3), (225, 5)])]
+        case "no-estimate": performances = [(performances[0].0, [(185, 12), (205, 12), (225, 12)])]
+        case "empty": performances = [(performances[0].0, [(nil, 5)])]
+        case "review-layout": performances = [(Date(timeIntervalSince1970: 1_735_819_200), [(185, 5), (9999.99, 1000), (225, 1)])]
+        case "accessibility-limits": performances = [(performances[0].0, [(10000, 1000), (9999.99, 1000), (225, 1)])]
+        default: break
+        }
+        for (date, values) in performances {
+            let sets = values.enumerated().map { index, value in
+                LoggedSet(orderIndex: index, weight: value.0, reps: value.1, isCompleted: true)
+            }
+            if scenario == "review-layout" { sets[0].isCompleted = false }
+            if scenario == "rpe-layout" {
+                sets[0].rpe = 10
+                sets[1].rpe = 9.5
+            }
+            let occurrence = LoggedExercise(
+                orderIndex: 0,
+                exercise: benchPress,
+                exerciseSnapshotName: "Bench Press",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
+                sets: sets
+            )
+            var occurrences = [occurrence]
+            if scenario == "review-layout" {
+                occurrence.notes = "First occurrence note"
+                occurrences.append(LoggedExercise(
+                    orderIndex: 1,
+                    exercise: benchPress,
+                    exerciseSnapshotName: "Bench Press",
+                    exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                    exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
+                    notes: "Second occurrence note",
+                    sets: [LoggedSet(orderIndex: 0, weight: 225, reps: 1, isCompleted: true)]
+                ))
+            }
+            context.insert(WorkoutSession(
+                title: scenario == "same-set" ? "Upper Body — Bench Press, Paused Reps and Accessories" : "Upper Body",
+                startedAt: date,
+                endedAt: date.addingTimeInterval(3_600),
+                durationSeconds: 3_600,
+                status: .completed,
+                source: .blank,
+                syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                loggedExercises: occurrences
+            ))
+        }
+        try context.save()
+    }
+
+    private static func seedWorkoutHistoryLayoutFixture(context: ModelContext) throws {
+        let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        for (index, duration) in [2_723, 929_536].enumerated() {
+            let endedAt = startedAt.addingTimeInterval(Double(duration))
+            let exercises = (0..<9).map { exerciseIndex in
+                LoggedExercise(
+                    orderIndex: exerciseIndex,
+                    exerciseSnapshotName: "Exercise \(exerciseIndex + 1)",
+                    sets: (0..<(exerciseIndex < 4 ? 3 : 2)).map { setIndex in
+                        LoggedSet(orderIndex: setIndex, isCompleted: true, completedAt: endedAt)
+                    }
+                )
+            }
+            context.insert(WorkoutSession(
+                title: index == 0 ? "Workout" : "Long Workout",
+                startedAt: startedAt.addingTimeInterval(Double(-index)),
+                endedAt: endedAt.addingTimeInterval(Double(-index)),
+                durationSeconds: duration,
+                status: .completed,
+                source: .blank,
+                loggedExercises: exercises
+            ))
+        }
+        try context.save()
+    }
+
+    static func seedCompletedBenchWorkout(
+        title: String,
+        exerciseNotes: String = "",
+        includesUncompletedSet: Bool = false,
+        includesSecondExerciseWithNote: Bool = false,
+        startedAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext
+    ) throws {
+        let fixtureTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !fixtureTitle.isEmpty else { return }
+
+        let existingSessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        guard !existingSessions.contains(where: {
+            $0.title == fixtureTitle
+                && $0.status == .completed
+                && !$0.isDeleted
+                && $0.syncOwnerTokenIdentifier == ownerTokenIdentifier
+        }) else {
+            return
+        }
+
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        let benchPress = Exercise.visibleActiveExercises(from: exercises, ownerTokenIdentifier: ownerTokenIdentifier)
+            .first { $0.seedIdentifier == "bench-press" }
+
+        let endedAt = startedAt.addingTimeInterval(3_600)
+        let set = LoggedSet(
+            orderIndex: 0,
+            weight: 185,
+            reps: 5,
+            rpe: 8,
+            isCompleted: true,
+            completedAt: endedAt,
+            createdAt: startedAt,
+            updatedAt: endedAt
+        )
+        var sets = [set]
+        if includesUncompletedSet {
+            sets.append(
+                LoggedSet(
+                    orderIndex: 1,
+                    weight: 155,
+                    reps: 8,
+                    rpe: 7.5,
+                    isCompleted: false,
+                    createdAt: startedAt,
+                    updatedAt: endedAt
+                )
+            )
+        }
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: benchPress,
+            exerciseSnapshotName: "Bench Press",
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
+            notes: exerciseNotes,
+            createdAt: startedAt,
+            updatedAt: endedAt,
+            sets: sets
+        )
+        var loggedExercises = [loggedExercise]
+        if includesSecondExerciseWithNote {
+            loggedExercises.append(LoggedExercise(
+                orderIndex: 1,
+                exerciseSnapshotName: "Triceps Pushdown",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.cable.rawValue,
+                notes: "Keep elbows close",
+                sets: [LoggedSet(orderIndex: 0, weight: 50, reps: 12, isCompleted: true)]
+            ))
+        }
+        let session = WorkoutSession(
+            title: fixtureTitle,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSeconds: 3_600,
+            notes: "Previous workout narrative",
+            status: .completed,
+            source: .blank,
+            createdAt: startedAt,
+            updatedAt: endedAt,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier,
+            loggedExercises: loggedExercises
+        )
+
+        context.insert(session)
+        try context.save()
+    }
+
+    static func seedMatchingExercisePerformanceWorkouts(
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext
+    ) throws {
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        guard let benchPress = Exercise.visibleActiveExercises(
+            from: exercises,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        ).first(where: { $0.seedIdentifier == "bench-press" }) else {
+            return
+        }
+
+        let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let endedAt = startedAt.addingTimeInterval(3_600)
+
+        func loggedExercise(
+            id: String,
+            orderIndex: Int,
+            weight: Double
+        ) -> LoggedExercise {
+            LoggedExercise(
+                id: stableUUID(id),
+                orderIndex: orderIndex,
+                exercise: benchPress,
+                exerciseSnapshotName: "Bench Press",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue,
+                exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.chest.rawValue,
+                createdAt: startedAt,
+                updatedAt: endedAt,
+                sets: [
+                    LoggedSet(
+                        id: stableUUID("\(id)-set"),
+                        orderIndex: 0,
+                        weight: weight,
+                        reps: 5,
+                        rpe: 8,
+                        isCompleted: true,
+                        completedAt: endedAt,
+                        createdAt: startedAt,
+                        updatedAt: endedAt
+                    ),
+                ]
+            )
+        }
+
+        let alphaSession = WorkoutSession(
+            id: stableUUID("00000000-0000-4000-8000-000000012601"),
+            title: "Matching Push",
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSeconds: 3_600,
+            notes: "Identity Alpha",
+            status: .completed,
+            source: .blank,
+            createdAt: startedAt,
+            updatedAt: endedAt,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier,
+            loggedExercises: [
+                loggedExercise(
+                    id: "00000000-0000-4000-8000-000000012611",
+                    orderIndex: 0,
+                    weight: 185
+                ),
+                loggedExercise(
+                    id: "00000000-0000-4000-8000-000000012612",
+                    orderIndex: 1,
+                    weight: 195
+                ),
+            ]
+        )
+        let betaSession = WorkoutSession(
+            id: stableUUID("00000000-0000-4000-8000-000000012602"),
+            title: "Matching Push",
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSeconds: 3_600,
+            notes: "Identity Beta",
+            status: .completed,
+            source: .blank,
+            createdAt: startedAt,
+            updatedAt: endedAt,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier,
+            loggedExercises: [
+                loggedExercise(
+                    id: "00000000-0000-4000-8000-000000012621",
+                    orderIndex: 0,
+                    weight: 225
+                ),
+            ]
+        )
+
+        context.insert(alphaSession)
+        context.insert(betaSession)
+        try context.save()
+    }
+
+    static func seedExerciseHistoryPerformanceFixture(
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext
+    ) throws {
+        let exercises = try context.fetch(
+            FetchDescriptor<Exercise>(sortBy: [SortDescriptor(\Exercise.name)])
+        ).filter { $0.isVisible(to: ownerTokenIdentifier) }
+        let fixtureExercises = Array(exercises.prefix(20))
+        guard fixtureExercises.count == 20 else { return }
+
+        for sessionIndex in 0..<100 {
+            let startedAt = Date(timeIntervalSince1970: TimeInterval(1_700_000_000 + sessionIndex))
+            let loggedExercises = (0..<10).map { exerciseOffset in
+                let exercise = fixtureExercises[(sessionIndex + exerciseOffset) % fixtureExercises.count]
+                let sets = (0..<3).map { setIndex in
+                    LoggedSet(
+                        orderIndex: setIndex,
+                        weight: Double(100 + sessionIndex + setIndex),
+                        reps: 5 + setIndex,
+                        rpe: 8,
+                        isCompleted: true,
+                        completedAt: startedAt,
+                        createdAt: startedAt,
+                        updatedAt: startedAt
+                    )
+                }
+                return LoggedExercise(
+                    orderIndex: exerciseOffset,
+                    exercise: exercise,
+                    exerciseSnapshotName: exercise.name,
+                    exerciseSnapshotEquipmentRaw: exercise.equipmentRaw,
+                    exerciseSnapshotPrimaryMuscleGroupRaw: exercise.primaryMuscleGroupRaw,
+                    createdAt: startedAt,
+                    updatedAt: startedAt,
+                    sets: sets
+                )
+            }
+            context.insert(
+                WorkoutSession(
+                    title: "Performance Workout \(sessionIndex)",
+                    startedAt: startedAt,
+                    endedAt: startedAt.addingTimeInterval(3_600),
+                    durationSeconds: 3_600,
+                    status: .completed,
+                    source: .blank,
+                    createdAt: startedAt,
+                    updatedAt: startedAt,
+                    syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                    loggedExercises: loggedExercises
+                )
+            )
+        }
+        try context.save()
+    }
+
+    static func seedActiveWorkoutPerformanceFixture(
+        ownerTokenIdentifier: String? = nil,
+        context: ModelContext
+    ) throws {
+        let exercises = try context.fetch(
+            FetchDescriptor<Exercise>(sortBy: [SortDescriptor(\Exercise.name)])
+        ).filter { $0.isVisible(to: ownerTokenIdentifier) }
+        let fixtureExercises = Array(exercises.prefix(10))
+        guard fixtureExercises.count == 10 else { return }
+
+        let baseDate = Date(timeIntervalSince1970: 1_700_100_000)
+        let activeTitle = largeActiveWorkoutTitle
+        let existingSessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        guard !existingSessions.contains(where: {
+            $0.title == activeTitle
+                && $0.status == .active
+                && !$0.isDeleted
+                && $0.syncOwnerTokenIdentifier == ownerTokenIdentifier
+        }) else { return }
+
+        let activeSession = makePerformanceSession(
+            id: stableUUID("00000000-0000-4000-8000-000000000001"),
+            title: activeTitle,
+            startedAt: .now,
+            status: .active,
+            exercises: fixtureExercises,
+            setCount: 5,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            stableIDSeed: "00000000-0000-4000-8000-0000001"
+        )
+        context.insert(activeSession)
+
+        for sessionIndex in 0..<100 {
+            let startedAt = baseDate.addingTimeInterval(-Double((sessionIndex + 1) * 86_400))
+            let completedSession = makePerformanceSession(
+                id: stableUUID(String(format: "00000000-0000-4000-8000-%012d", sessionIndex + 2)),
+                title: String(format: "Performance History %03d", sessionIndex + 1),
+                startedAt: startedAt,
+                status: .completed,
+                exercises: fixtureExercises,
+                setCount: 5,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                stableIDSeed: String(format: "00000000-0000-4000-8001-%07d", sessionIndex + 1)
+            )
+            context.insert(completedSession)
+        }
+
+        try context.save()
+    }
+
+    /// Real-world exercise names long enough to wrap, with completed, entered-only and blank sets.
+    static func seedLongNameActiveWorkout(ownerTokenIdentifier: String?, context: ModelContext) throws {
+        let id = stableUUID("00000327-0000-4000-8000-000000000001")
+        guard try !context.fetch(FetchDescriptor<WorkoutSession>()).contains(where: { $0.id == id }) else { return }
+        let library = try context.fetch(FetchDescriptor<Exercise>()).filter { $0.isVisible(to: ownerTokenIdentifier) }
+        // (library seed, displayed name, completed sets, entered-but-unchecked sets)
+        let plan: [(String, String, Int, Int)] = [
+            ("bench-press", "Slingshot Pause Bench Press", 2, 0),
+            ("pull-up", "Pull-Up", 0, 1),
+            ("incline-dumbbell-press", "Incline Dumbbell Press", 0, 0),
+            ("dumbbell-row", "Chest Supported Row", 0, 0),
+            ("triceps-pushdown", "Cable Overhead Triceps Extension", 1, 0),
+            ("face-pull", "Single-Arm Cable Lateral Raise", 0, 0),
+        ]
+        let startedAt = Date.now
+        let exercises = plan.enumerated().compactMap { index, entry -> LoggedExercise? in
+            let (seed, name, completed, entered) = entry
+            guard let exercise = library.first(where: { $0.seedIdentifier == seed }) else { return nil }
+            let sets = (0..<3).map { setIndex in
+                let isCompleted = setIndex < completed
+                let hasValues = setIndex < completed + entered
+                return LoggedSet(
+                    id: stableUUID("00000327-set-\(index)-\(setIndex)"),
+                    orderIndex: setIndex,
+                    weight: hasValues ? 135 : nil,
+                    reps: hasValues ? 8 : nil,
+                    isCompleted: isCompleted,
+                    completedAt: isCompleted ? startedAt : nil,
+                    createdAt: startedAt,
+                    updatedAt: startedAt
+                )
+            }
+            return LoggedExercise(
+                id: stableUUID("00000327-exercise-\(index)"),
+                orderIndex: index,
+                exercise: exercise,
+                exerciseSnapshotName: name,
+                exerciseSnapshotEquipmentRaw: exercise.equipmentRaw,
+                exerciseSnapshotPrimaryMuscleGroupRaw: exercise.primaryMuscleGroupRaw,
+                createdAt: startedAt,
+                updatedAt: startedAt,
+                sets: sets
+            )
+        }
+        context.insert(WorkoutSession(
+            id: id,
+            title: "Upper",
+            startedAt: startedAt,
+            status: .active,
+            source: .blank,
+            createdAt: startedAt,
+            updatedAt: startedAt,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier,
+            loggedExercises: exercises
+        ))
+        try context.save()
+    }
+
+    private static func groupLongNameActiveWorkout(context: ModelContext) throws {
+        let id = stableUUID("00000327-0000-4000-8000-000000000001")
+        guard let session = try context.fetch(FetchDescriptor<WorkoutSession>()).first(where: { $0.id == id }) else { return }
+        let exercises = session.sortedLoggedExercises
+        guard exercises.count >= 6 else { return }
+        let pair = stableUUID("00000101-pair"), trio = stableUUID("00000101-trio")
+        for exercise in exercises[1...2] { exercise.supersetGroupID = pair }
+        for exercise in exercises[3...5] { exercise.supersetGroupID = trio }
+        try context.save()
+    }
+
+    private static func makePerformanceSession(
+        id: UUID,
+        title: String,
+        startedAt: Date,
+        status: WorkoutSessionStatus,
+        exercises: [Exercise],
+        setCount: Int,
+        ownerTokenIdentifier: String?,
+        stableIDSeed: String
+    ) -> WorkoutSession {
+        let endedAt = status == .completed ? startedAt.addingTimeInterval(3_600) : nil
+        let loggedExercises = exercises.enumerated().map { exerciseIndex, exercise in
+            let sets = (0..<setCount).map { setIndex in
+                LoggedSet(
+                    id: stableUUID("\(stableIDSeed)-\(exerciseIndex)-\(setIndex)"),
+                    orderIndex: setIndex,
+                    weight: Double(100 + exerciseIndex),
+                    reps: 5,
+                    rpe: 8,
+                    isCompleted: status == .completed,
+                    completedAt: endedAt,
+                    createdAt: startedAt,
+                    updatedAt: endedAt ?? startedAt
+                )
+            }
+            return LoggedExercise(
+                id: stableUUID("\(stableIDSeed)-exercise-\(exerciseIndex)"),
+                orderIndex: exerciseIndex,
+                exercise: exercise,
+                exerciseSnapshotName: exercise.name,
+                exerciseSnapshotEquipmentRaw: exercise.equipmentRaw,
+                exerciseSnapshotPrimaryMuscleGroupRaw: exercise.primaryMuscleGroupRaw,
+                createdAt: startedAt,
+                updatedAt: endedAt ?? startedAt,
+                sets: sets
+            )
+        }
+        return WorkoutSession(
+            id: id,
+            title: title,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSeconds: status == .completed ? 3_600 : 0,
+            status: status,
+            source: .blank,
+            createdAt: startedAt,
+            updatedAt: endedAt ?? startedAt,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier,
+            loggedExercises: loggedExercises
+        )
+    }
+
+    private static func stableUUID(_ string: String) -> UUID {
+        if let uuid = UUID(uuidString: string) {
+            return uuid
+        }
+
+        var hash = UInt64(1469598103934665603)
+        for byte in string.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1099511628211
+        }
+        let suffix = String(format: "%012llx", hash & 0x0000_FFFF_FFFF_FFFF)
+        return UUID(uuidString: "00000000-0000-4000-8000-\(suffix)")!
+    }
+
+    private static func values(after argument: String, in arguments: [String]) -> [String] {
+        arguments.indices.compactMap { index in
+            guard arguments[index] == argument else { return nil }
+            let valueIndex = arguments.index(after: index)
+            guard valueIndex < arguments.endIndex else { return nil }
+            return arguments[valueIndex]
+        }
+    }
+}
+#endif

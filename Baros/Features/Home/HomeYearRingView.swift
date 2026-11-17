@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftUI
 
 /// A finite animation. Only the fixed-size Canvas interpolates each frame.

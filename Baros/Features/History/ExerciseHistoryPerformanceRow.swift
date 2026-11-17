@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftUI
 
 /// One Exercise Performance in the Exercise History log and Quick History:
