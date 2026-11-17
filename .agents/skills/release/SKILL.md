@@ -47,11 +47,12 @@ A milestone lists each change once — its issue, or the PR itself when it has n
 
 - each PR in the base range belongs on the milestone as its closing issue (`gh pr view <n> --json closingIssuesReferences`), or as itself when it closes none — add what is missing;
 - each open milestone issue is *shipped* (its fix is in the range → close it) or *deferred* (→ the next open milestone), and anything merged after the base moves to the next milestone too;
+- a PR in the range that a patch of the previous release already shipped stays on that patch's closed milestone: `main` holds the original merge and the patch tag holds its cherry-pick, so the range lists it again. Leave it there, and leave it out of this release's notes;
 - an open bug that should block the release is Kevin's call — raise it.
 
 ⛔ The list of closes, moves, and additions.
 
-**Done when** the milestone holds exactly the changes the base range ships, each once, with none open.
+**Done when** the milestone holds exactly the changes the base range ships that no patch shipped first, each once, with none open.
 
 ### 3. What's New and listing
 
@@ -141,5 +142,5 @@ Append `Shipped <date>: <release url>` to the milestone's existing description (
 
 - **Milestone**: when the patch cherry-picks any fix, tracked by an issue or not, create or reuse `<x.y.z> release` at step 2, its description naming why the patch ships, and reconcile it from the fix PRs chosen at step 1. A listing-only patch cherry-picks nothing and gets no milestone, which step 4 confirms when `release-diff.mjs <tag> <candidate>` shows only the version bump: skip steps 2 and 13, leave the milestone link out of the GitHub Release, and still report the Release URL, tags, and build to Kevin. A fix that joins later (a regression blocker or a binary rejection) goes through step 2 again with the full list of fix PRs, which creates the milestone if the patch has none; steps 12 and 13 then apply to it. Resume every patch by name (`/release <x.y.z>`): step 0 finds a release through its App Store version and open milestone, and a patch has no App Store version until step 6 and, if listing-only, no milestone at all.
 - **Base and candidate**: the base is the newest tag of the live release (`v<x.y>.0` or its latest patch) plus only the fixes. The candidate always takes the release-branch path: `release/<x.y.z>` from that tag, `scripts/bump-version.sh <x.y.z>`, then `git cherry-pick -m 1 <merge>` for each fix.
-- **What's New**: App Store text only, no sheet, covering only the patch. A listing-only patch says so plainly: `This update refreshes Baros's App Store page. The app is the same as <x.y>.`
+- **What's New**: App Store text only, no sheet, covering only the patch. A listing-only patch says so plainly: `This update refreshes Baros's App Store page. The app is the same as <x.y>.` A fix that joins a listing-only patch later makes that sentence false: redo step 3's App Store text to cover the fix before `prepare` runs with the new build.
 - **Regression**: when `release-diff.mjs <tag> <candidate>` shows only the version bump, the baseline's Release-build check is the whole regression; any fix gets the full one.
