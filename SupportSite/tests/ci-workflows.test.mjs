@@ -13,6 +13,7 @@ const repositoryRoot = process.env.CI_WORKFLOW_ROOT
 const appPaths = [
   ".github/workflows/app-ci.yml",
   "Baros/**",
+  "BarosCore/**",
   "BarosLiveActivity/**",
   "BarosTests/**",
   "BarosUITests/**",
@@ -83,8 +84,32 @@ function requireFailClosedGate(job) {
 test("required iOS gates fail closed when app-change classification fails or is cancelled", async () => {
   const workflow = await readWorkflow("app-ci.yml");
 
+  requireFailClosedGate(workflow.jobs["baros-core-tests"]);
   requireFailClosedGate(workflow.jobs["ios-unit-tests"]);
   requireFailClosedGate(workflow.jobs["ios-ui-smoke"]);
+});
+
+test("BarosCore package tests run once on macOS without a simulator", async () => {
+  const workflow = await readWorkflow("app-ci.yml");
+  const job = workflow.jobs["baros-core-tests"];
+  const steps = job.steps;
+  const testStep = steps.find((step) => step.name === "Run BarosCore package tests");
+
+  // Branch protection requires this check by name.
+  assert.equal(job.name, "baros-core-tests");
+  assert.ok(testStep, "baros-core-tests must run the package tests");
+  assert.equal(
+    testStep.run,
+    'set -o pipefail\nswift test --package-path BarosCore 2>&1 | tee "${RUNNER_TEMP}/BarosCoreTests.log"\n',
+  );
+  assert.ok(
+    steps.every((step) => !step.run?.includes("retry")),
+    "package test failures must fail the job instead of retrying",
+  );
+  assert.ok(
+    steps.every((step) => !step.run?.includes("xcodebuild")),
+    "the package gate must not build the app or boot a simulator",
+  );
 });
 
 test("required iOS gates retry failed tests and report retries that passed", async () => {

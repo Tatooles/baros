@@ -12,11 +12,18 @@
 - Upload PR evidence directly to GitHub and verify that it renders in the PR. Never commit PR-only screenshots or recordings, including directories such as `.github/pr-assets/`.
 - If presentation-related files change without affecting visible UI or interactions, explain why in the PR description under "No visual impact."
 
+## Testing
+
+- Logic lives in the `BarosCore` package. Test it on macOS with `swift test --package-path BarosCore`; that is the default loop for any change outside SwiftUI views and app wiring.
+- New logic and its tests go in `BarosCore` when they need only Foundation, SwiftData, or other cross-platform frameworks. Code that imports SwiftUI, UIKit, ActivityKit, StoreKit, Clerk, Sentry, or ConvexMobile stays in `Baros/`; when package code needs it, define a protocol in the package and keep the adapter in the app, as `CurrentOwnerAdapters` and `ConvexClientFactory` do. Mark only what the app uses `public`.
+- Name test `UserDefaults` suites `"<TestType>.\(UUID().uuidString)"`. Every `swift test` process on the Mac shares one preferences store, so a fixed suite name collides with other worktrees' runs.
+- Reserve a simulator only for hosted `BarosTests` (UI types, app lifecycle, the real bundle and entitlements, launch order), `BarosUITests`, and final PR evidence.
+
 ## UI tests
 
 A full `BarosUITests` run takes close to an hour, so the suite covers only behavior that lives in the UI layer.
 
-- Cover a bug fix or feature with a unit test in `BarosTests/` by default. That includes values, formatting, sorting, sync and auth decisions, and save-failure handling.
+- Cover a bug fix or feature with a unit test by default: in `BarosCore/Tests` for package logic, or `BarosTests/` for app-layer code (see Testing). That includes values, formatting, sorting, sync and auth decisions, and save-failure handling.
 - Add or extend a UI test only for:
   - layout or Dynamic Type;
   - keyboard and focus;

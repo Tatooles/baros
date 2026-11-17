@@ -35,8 +35,9 @@ for (const record of records) {
   }
 }
 
-// Changed files grouped into areas.
-const numstat = git("diff", "--numstat", range)
+// Changed files grouped into areas. --no-renames lists a moved file at both its old
+// and new path, so the path-based signals below still see it.
+const numstat = git("diff", "--numstat", "--no-renames", range)
   .split("\n")
   .filter(Boolean)
   .map((l) => {
@@ -48,6 +49,9 @@ function area(path) {
   const parts = path.split("/");
   if (parts[0] === "Baros" && ["Features", "Core"].includes(parts[1]) && parts.length > 3) {
     return parts.slice(0, 3).join("/");
+  }
+  if (parts[0] === "BarosCore" && parts[1] === "Sources" && parts.length > 4) {
+    return parts.slice(0, 4).join("/");
   }
   if (["Baros", "convex", "docs", "SupportSite"].includes(parts[0]) && parts.length > 2) {
     return parts.slice(0, 2).join("/");
@@ -75,7 +79,7 @@ const signals = {
     ...touched(/\.entitlements$|Info\.plist$|PrivacyInfo\.xcprivacy$/),
     ...(projectYmlChanges.length ? [`project.yml (${projectYmlChanges.length} non-version lines)`] : []),
   ],
-  "Upgrade test (persisted model or schema)": touched(/^Baros\/Core\/Persistence\/|^Baros\/(Core\/)?Models?\//).filter(
+  "Upgrade test (persisted model or schema)": touched(/^Baros\/Core\/Persistence\/|^Baros\/(Core\/)?Models?\/|^BarosCore\/Sources\/BarosCore\/(Persistence|Models)\//).filter(
     (p) => !p.includes("UITestFixture"),
   ),
   "Dependencies (Swift packages)": touched(/Package\.resolved$/),

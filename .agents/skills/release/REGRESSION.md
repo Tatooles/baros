@@ -6,7 +6,7 @@ Setup: `git switch --detach <candidate sha>` in this worktree, and follow the si
 
 ## Baseline
 
-1. **Unit suite** — the `BarosUnitTests` scheme; every test passes.
+1. **Unit suite** — the `BarosUnitTests` scheme (the hosted tests), plus `swift test --package-path BarosCore` (the logic tests) when the candidate has `BarosCore/Package.swift` (#385 on); every test passes.
 2. **Full UI suite** — `-only-testing:BarosUITests`. Rerun each failure alone up to twice: green on rerun is a **flake** (noted, a blocker only inside a focus area); red every time is a **blocker**.
 3. **Release build** — build the `Release` configuration for the simulator, launch it signed out, and confirm it reaches Home. This catches configuration-only breakage that Debug tests miss.
 
@@ -14,7 +14,7 @@ Setup: `git switch --detach <candidate sha>` in this worktree, and follow the si
 
 From the base range's `release-diff.mjs` output, name the 2–5 areas this release put most at risk: the largest user-facing changes first, then anything that can lose or corrupt data — persistence, sync, account transitions, the active workout. For each, list the PRs behind it.
 
-For each area, drive the flows on the simulator with the device tools, the way a lifter would, from each PR's described behavior out to its edges: empty and long content, backgrounding and relaunch mid-flow, larger text (`--uitest-accessibility-dynamic-type`), dark appearance, and its interaction with the release's other changes. Use the UI-test seed arguments (`git grep -ho -- '--uitest-seed-[a-z-]*' Baros | sort -u`) to reach states quickly. Capture a screenshot per area. Where an area has no UI-test coverage (grep `BarosUITests` for its accessibility identifiers), record the gap for a follow-up issue.
+For each area, drive the flows on the simulator with the device tools, the way a lifter would, from each PR's described behavior out to its edges: empty and long content, backgrounding and relaunch mid-flow, larger text (`--uitest-accessibility-dynamic-type`), dark appearance, and its interaction with the release's other changes. Use the UI-test seed arguments (`git grep -ho -- '--uitest-seed-[a-z-]*' Baros BarosCore/Sources | sort -u`) to reach states quickly. Capture a screenshot per area. Where an area has no UI-test coverage (grep `BarosUITests` for its accessibility identifiers), record the gap for a follow-up issue.
 
 The diff's **signals** add mandatory focus:
 

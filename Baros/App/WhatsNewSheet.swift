@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftUI
 
 /// Resolves the release catalog's stable sheet identifier to its native

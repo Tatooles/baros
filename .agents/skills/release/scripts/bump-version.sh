@@ -12,7 +12,7 @@ next="${1:?usage: bump-version.sh <next-version>}"
 
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
-catalog="Baros/App/AppReleaseCatalog.swift"
+catalog="BarosCore/Sources/BarosCore/App/AppReleaseCatalog.swift"
 pbxproj="Baros.xcodeproj/project.pbxproj"
 
 current="$(sed -n -E 's/^[[:space:]]*MARKETING_VERSION:[[:space:]]*([0-9.]+).*/\1/p' project.yml)"
@@ -40,4 +40,4 @@ fi
 
 echo "Bumped $current -> $next (project.yml, $pbx_count pbxproj entries, catalog)."
 echo "Tests mentioning $current or the upgrade path (change only those asserting the current release):"
-git grep -n -E "\"${current//./\\.}\"|Baros ${current//./\\.}|lastProcessedAppVersion|lastSeenWhatsNewVersion" -- BarosTests BarosUITests || echo "  none"
+git grep -n -E "\"${current//./\\.}\"|Baros ${current//./\\.}|lastProcessedAppVersion|lastSeenWhatsNewVersion" -- BarosTests BarosUITests BarosCore/Tests || echo "  none"

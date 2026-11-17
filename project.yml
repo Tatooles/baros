@@ -9,6 +9,8 @@ settings:
     # Xcode Cloud overrides CFBundleVersion for archive uploads.
     CURRENT_PROJECT_VERSION: 1
 packages:
+  BarosCore:
+    path: BarosCore
   Clerk:
     url: https://github.com/clerk/clerk-ios
     from: 1.1.3
@@ -43,6 +45,7 @@ targets:
     sources:
       - path: Baros
     dependencies:
+      - package: BarosCore
       - package: Clerk
         product: ClerkKit
       - package: Clerk

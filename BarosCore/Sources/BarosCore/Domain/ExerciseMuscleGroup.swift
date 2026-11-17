@@ -1,0 +1,108 @@
+import Foundation
+
+public enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable, Sendable {
+    case abductors
+    case adductors
+    case biceps
+    case calves
+    case cardio
+    case chest
+    case core
+    case forearms
+    case fullBody
+    case glutes
+    case hamstrings
+    case lats
+    case lowerBack
+    case lowerBody
+    case neck
+    case other
+    case quads
+    case shoulders
+    case traps
+    case triceps
+    case upperBack
+    case upperBody
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .chest: return "Chest"
+        case .lats: return "Lats"
+        case .upperBack: return "Upper Back"
+        case .traps: return "Traps"
+        case .lowerBack: return "Lower Back"
+        case .shoulders: return "Shoulders"
+        case .biceps: return "Biceps"
+        case .triceps: return "Triceps"
+        case .forearms: return "Forearms"
+        case .quads: return "Quads"
+        case .hamstrings: return "Hamstrings"
+        case .glutes: return "Glutes"
+        case .abductors: return "Abductors"
+        case .adductors: return "Adductors"
+        case .calves: return "Calves"
+        case .core: return "Core"
+        case .neck: return "Neck"
+        case .fullBody: return "Full Body"
+        case .upperBody: return "Upper Body"
+        case .lowerBody: return "Lower Body"
+        case .cardio: return "Cardio"
+        case .other: return "Other"
+        }
+    }
+
+    public struct PickerSection: Identifiable, Sendable {
+        public let title: String
+        public let groups: [ExerciseMuscleGroup]
+
+        public var id: String { title }
+    }
+
+    /// Every group exactly once. Upper holds everything Upper Body highlights,
+    /// Lower everything Lower Body highlights, each ordered top to bottom.
+    public static let pickerSections: [PickerSection] = [
+        PickerSection(
+            title: "Upper",
+            groups: [
+                .upperBody, .neck, .traps, .shoulders, .chest, .upperBack, .lats,
+                .biceps, .triceps, .forearms, .core, .lowerBack,
+            ]
+        ),
+        PickerSection(
+            title: "Lower",
+            groups: [.lowerBody, .glutes, .abductors, .adductors, .quads, .hamstrings, .calves]
+        ),
+        PickerSection(title: "General", groups: [.fullBody, .cardio, .other]),
+    ]
+
+    static func legacyGroup(for rawValue: String) -> ExerciseMuscleGroup {
+        let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        switch normalized {
+        case "quads", "quadriceps": return .quads
+        case "hamstrings": return .hamstrings
+        case "glutes", "gluteals", "posterior chain": return .glutes
+        case "chest", "pecs", "pectorals": return .chest
+        case "back", "upper back": return .upperBack
+        case "lats", "latissimus dorsi": return .lats
+        case "traps", "trapezius": return .traps
+        case "lower back", "spinal erectors", "erectors": return .lowerBack
+        case "rear delts", "rear deltoids", "shoulders", "delts": return .shoulders
+        case "biceps": return .biceps
+        case "triceps": return .triceps
+        case "forearms": return .forearms
+        case "abductors", "hip abductors": return .abductors
+        case "adductors", "hip adductors": return .adductors
+        case "calves": return .calves
+        case "core", "abs", "abdominals": return .core
+        case "neck": return .neck
+        case "full body", "full-body": return .fullBody
+        case "upper body", "full upper body": return .upperBody
+        case "lower body", "full lower body": return .lowerBody
+        case "cardio": return .cardio
+        default: return .other
+        }
+    }
+}

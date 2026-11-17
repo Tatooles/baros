@@ -1,13 +1,6 @@
+import BarosCore
 import SwiftData
 import SwiftUI
-
-enum WorkoutField: Hashable {
-    case workoutTitle
-    case workoutNotes
-    case exerciseNotes(UUID)
-    case setWeight(UUID)
-    case setReps(UUID)
-}
 
 extension Animation {
     /// Clearing workout focus with this animation collapses the keyboard bar's

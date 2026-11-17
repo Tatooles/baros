@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftUI
 
 enum WorkoutLiveActivityOwnerResolutionPolicy {
