@@ -6,7 +6,7 @@ Setup: `git switch --detach <candidate sha>` in this worktree, and follow the si
 
 ## Baseline
 
-1. **Unit suite** — `swift test --package-path BarosCore` (the logic tests) and the `BarosUnitTests` scheme (the hosted tests); every test in both passes.
+1. **Unit suite** — the `BarosUnitTests` scheme (the hosted tests), plus `swift test --package-path BarosCore` (the logic tests) when the candidate has `BarosCore/Package.swift` (#385 on); every test passes.
 2. **Full UI suite** — `-only-testing:BarosUITests`. Rerun each failure alone up to twice: green on rerun is a **flake** (noted, a blocker only inside a focus area); red every time is a **blocker**.
 3. **Release build** — build the `Release` configuration for the simulator, launch it signed out, and confirm it reaches Home. This catches configuration-only breakage that Debug tests miss.
 
