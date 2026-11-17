@@ -18,13 +18,13 @@ Start right after step 1 fixes the base; the capture runs in the background whil
 
 - **Text**: every What's New highlight appears in the description, and the promotional text names this release's headline features (`New in Baros <version>: …`). Keywords change only on Kevin's request.
 - **Shots**: a headline feature with no shot gets one, replacing the weakest when the set already holds 10. A headline is two lines that say only what the screen shows, with `glowX` alternating sides. A new shot needs a test in `MarketingScreenshotTests` that calls `capture("<id>")`, plus seed data if its screen needs it.
-- **Recapture** whenever the range touches app UI (`Baros/Features`, `Baros/Shared`, `Baros/App`), the seeder, the capture tests, or the shots in `listing.json`. Otherwise the current approved set stands.
+- **Recapture** whenever the range touches app UI (`Baros/Features`, `Baros/Shared`, `Baros/App`) or the logic behind it (`BarosCore/Sources`), the seeder, the capture tests, or the shots in `listing.json`. Otherwise the current approved set stands.
 
 **Done when** `listing.json` names every headline feature and you know whether to recapture.
 
 ## 2. Capture and generate
 
-Capture the code that ships. When `git diff --stat <base> origin/main -- Baros ':!Baros/App/AppReleaseCatalog.swift'` is empty (version bumps only touch the catalog), capture on `main`. Otherwise (a pinned build or a patch behind newer UI), capture in a scratch worktree at the base with the capture tooling cherry-picked onto it: `git log --format=%h origin/main -- Baros/Core/Persistence/MarketingScreenshotSeeder.swift BarosUITests/MarketingScreenshotTests.swift` lists its commits. A release fix that changes UI after approval means recapturing the affected shots and approving them again.
+Capture the code that ships. When `git diff --stat <base> origin/main -- Baros BarosCore/Sources ':!BarosCore/Sources/BarosCore/App/AppReleaseCatalog.swift'` is empty (version bumps only touch the catalog), capture on `main`. Otherwise (a pinned build or a patch behind newer UI), capture in a scratch worktree at the base with the capture tooling cherry-picked onto it: `git log --format=%h origin/main -- BarosCore/Sources/BarosCore/Persistence/MarketingScreenshotSeeder.swift Baros/Core/Persistence/MarketingScreenshotSeeder.swift BarosUITests/MarketingScreenshotTests.swift` (the seeder moved into `BarosCore` in #385) lists its commits. A release fix that changes UI after approval means recapturing the affected shots and approving them again.
 
 Follow the simulator rules in `AGENTS.md` with the iPhone 17 Pro pool device; the script refuses any other. Release the device when the run ends.
 
