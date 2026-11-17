@@ -55,6 +55,30 @@ The canonical local UI-suite command is the `Run UI tests only` command above. K
 
 Before adding a UI test, read the UI-test policy in `AGENTS.md` → "UI tests"; most changes need only a unit test.
 
+### Nightly full UI suite
+
+`.github/workflows/ios-ui-nightly.yml` runs the whole `BarosUITests` target (`-only-testing:BarosUITests`) every night at 09:23 UTC on `main`, unless `main` hasn't changed since the last scheduled run (see below). It has no `pull_request` or `push` trigger, so it is never a PR check. Its `ios-ui-full` job uses the smoke job's Xcode 26.5 / iOS 26.5 simulator setup, runs on one simulator with parallel testing disabled, has a 120-minute timeout, and retries a failing test once, like the smoke gate. The run log and step summary list:
+
+- the executed, passed, failed, and skipped test counts from the `.xcresult`
+- tests that passed only on retry, from `ci_scripts/report_retried_tests.py`
+- tests that still failed, from `ci_scripts/report_failed_tests.py`
+
+A failed run uploads its `.xcresult` and log as the `BarosUIFull-xcresult` artifact.
+
+Before any macOS job, a cheap `nightly-change-detection` job on `ubuntu-latest` compares `main`'s HEAD SHA with the head SHA of the last completed scheduled run of this workflow (cancelled runs are ignored). If they match, the scheduled run skips `ios-ui-full` and never reserves a macOS runner, and the tracking issue is left as it is. A manual `workflow_dispatch` always runs the suite. If the run history can't be read, the gate runs the suite rather than skipping it.
+
+Runs on `main` keep one tracking issue, **Nightly full UI suite is failing**, in sync. A failed run opens the issue, or comments on it if it is already open, with the run link and the failed test names. The next passing run closes it. Runs on other branches leave the issue alone.
+
+Trigger a run manually from the Actions tab (**iOS UI Nightly** → **Run workflow**), or with:
+
+```sh
+gh workflow run ios-ui-nightly.yml --ref main
+```
+
+Use `--ref <branch>` to test a branch. GitHub only dispatches workflows whose file already exists on `main`.
+
+Repeated green nightly runs are the evidence issue #63 needs before a 15–20 test tier is promoted into the PR gate. If the suite outgrows the timeout, shard it across 2–3 jobs by test class. Most tests are currently in the `BarosUITests` class, so that class would have to be split first for the shards to be balanced.
+
 Local equivalents:
 
 ```sh
