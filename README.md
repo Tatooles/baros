@@ -53,6 +53,8 @@ The command must execute exactly 4 tests with no failures. CI reads the result b
 
 The canonical local UI-suite command is the `Run UI tests only` command above. Keep the full UI target out of the required PR gate until issue #63 establishes repeated full-suite stability.
 
+Before adding a UI test, read the UI-test policy in `AGENTS.md` → "UI tests"; most changes need only a unit test.
+
 ### Nightly full UI suite
 
 `.github/workflows/ios-ui-nightly.yml` runs the whole `BarosUITests` target (`-only-testing:BarosUITests`) every night at 09:23 UTC on `main`, unless `main` hasn't changed since the last scheduled run (see below). It has no `pull_request` or `push` trigger, so it is never a PR check. Its `ios-ui-full` job uses the smoke job's Xcode 26.5 / iOS 26.5 simulator setup, runs on one simulator with parallel testing disabled, has a 120-minute timeout, and retries a failing test once, like the smoke gate. The run log and step summary list:

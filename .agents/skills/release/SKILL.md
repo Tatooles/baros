@@ -1,6 +1,6 @@
 ---
 name: release
-description: Ship the next Baros version — scope, What's New, regression, App Store submission, and the post-release record. Optionally name the build to ship.
+description: Ship the next Baros version — scope, What's New, listing, regression, App Store submission, and the post-release record. Optionally name the build to ship, or a patch version.
 disable-model-invocation: true
 ---
 
@@ -8,13 +8,16 @@ disable-model-invocation: true
 
 Takes the version in `project.yml` (`MARKETING_VERSION`) from merged work to **Pending Developer Release** in App Store Connect, releases it, and records the release.
 
-`/release` ships from the newest `main`. `/release build <n>` ships the code of App Store Connect build `<n>` instead, so a release never has to wait for `main` to settle.
+`/release` ships from the newest `main`. `/release build <n>` ships the code of App Store Connect build `<n>` instead, so a release never has to wait for `main` to settle. `/release <x.y.z>` ships a patch to the live release; see [Patch releases](#patch-releases).
+
+Every release keeps the **listing** (the App Store page and baros.fit) showing the app that ships: [LISTING.md](LISTING.md).
 
 **Gate** (⛔): stop, show Kevin exactly what the next action will do, and wait for an explicit yes in this conversation. A yes covers that one action. Everything outside a gate the skill does on its own.
 
 Scripts are in `scripts/` beside this file:
 
-- `asc.mjs` — App Store Connect client (`check`, `runs`, `status`, `prepare`, `submit`, `release`). Writes print a plan and send only with `--apply`.
+- `asc.mjs` — App Store Connect client (`check`, `runs`, `versions`, `status`, `prepare`, `listing`, `submit`, `release`). Writes print a plan and send only with `--apply`.
+- `capture-screens.sh` — captures the listing's app screens on a simulator.
 - `release-diff.mjs` — merged PRs, changed areas, and regression signals between two refs.
 - `bump-version.sh`, `tag-release.sh` — mechanical edits; each prints what it changed.
 
@@ -22,13 +25,13 @@ Credentials live outside the repo in `~/.appstoreconnect/release.env` (Team key,
 
 ## 0. Locate the release
 
-`git fetch --tags origin`, then `node scripts/asc.mjs versions`. The **release version** is the one it reports as active — the newest App Store version whose `"<version> release"` milestone is still open (step 13 closes it last) — or, when none is, `MARKETING_VERSION`. `project.yml` moves to the next version at step 9, before the release is recorded, so it identifies the release only when nothing is in flight. Then `node scripts/asc.mjs status <version>` and resume at:
+`git fetch --tags origin`, then `node scripts/asc.mjs versions`. The **release version** is the patch version Kevin named, else the one it reports as active — the newest App Store version whose `"<version> release"` milestone is still open (step 13 closes it last) — or, when none is, `MARKETING_VERSION`. `project.yml` moves to the next version at step 9, before the release is recorded, so it identifies the release only when nothing is in flight. Then `node scripts/asc.mjs status <version>` and resume at:
 
 - no version, `PREPARE_FOR_SUBMISSION`, or `DEVELOPER_REJECTED` → the first Phase A step whose **Done when** fails
 - `WAITING_FOR_REVIEW` / `IN_REVIEW` → step 8
 - `REJECTED`, `METADATA_REJECTED`, `INVALID_BINARY`, or an `UNRESOLVED_ISSUES` submission → step 8's Rejected branch
 - `PENDING_DEVELOPER_RELEASE` → step 9
-- `READY_FOR_SALE` → step 9 while `MARKETING_VERSION` still equals the release version, otherwise the first Phase B step whose **Done when** fails
+- `READY_FOR_SALE` → step 9 while its **Done when** fails, otherwise the first Phase B step whose **Done when** fails
 
 ## Phase A — prepare and submit
 
@@ -50,11 +53,11 @@ A milestone lists each change once — its issue, or the PR itself when it has n
 
 **Done when** the milestone holds exactly the changes the base range ships, each once, with none open.
 
-### 3. What's New
+### 3. What's New and listing
 
-Follow [WHATS-NEW.md](WHATS-NEW.md): copy for the base range only, sheet, screenshot approval, PR merged to `main`.
+Follow [WHATS-NEW.md](WHATS-NEW.md): copy for the base range only, sheet, screenshot approval, PR merged to `main`. Alongside it, follow [LISTING.md](LISTING.md), starting its capture as soon as the base is fixed; its approval can share a message with the What's New screenshots.
 
-**Done when** the What's New PR is merged and `docs/release/app-store-submission-pack.md` on `main` holds this version's App Store text.
+**Done when** the What's New PR is merged, `docs/release/app-store-submission-pack.md` on `main` holds this version's App Store text, and the listing PR is merged with the site PR open, or LISTING.md step 1 found nothing to change.
 
 ### 4. Build the candidate
 
@@ -80,11 +83,13 @@ Copy this version's text from the submission pack into a scratch file, byte for 
 
 The API cannot reach the App Privacy answers. When the range adds data collection, a tracking or analytics SDK, or changes `PrivacyInfo.xcprivacy`, ask Kevin to update App Privacy in App Store Connect (or walk the page with him in the in-app browser).
 
-**Done when** `status` shows the candidate build attached, `releaseType: MANUAL`, and What's New identical to the pack.
+Then, on `main`, run `node scripts/asc.mjs listing <version>`, adding `--screenshots .build/listing/<version>/app-store` when this release recaptured, read the plan, and rerun with `--apply`. A new version starts with the previous version's listing, so without `--screenshots` the current images stay. The command refuses images that differ from the approved MD5s; if the directory is gone, regenerate it (LISTING.md step 2) and show Kevin anything that changed.
+
+**Done when** `status` shows the candidate build attached, `releaseType: MANUAL`, and What's New identical to the pack, and `listing` reports every field and the screenshots matching.
 
 ### 7. ⛔ Submit for review
 
-Show Kevin the `status` output and the regression report. On yes: `node scripts/asc.mjs submit <version>`, check the plan, `--apply`.
+Show Kevin the `status` and `listing` output and the regression report. On yes: `node scripts/asc.mjs submit <version>`, check the plan, `--apply`.
 
 **Done when** `status` shows the submission `WAITING_FOR_REVIEW`.
 
@@ -99,12 +104,14 @@ Review usually takes a day or two. End the turn; when Kevin says Apple emailed:
 
 `main` stays on this version until approval so a rejection can still ship a new build.
 
-1. ⛔ If `status` shows `PENDING_DEVELOPER_RELEASE`, `node scripts/asc.mjs release <version>`, check the plan, `--apply`.
+1. ⛔ If `status` shows `PENDING_DEVELOPER_RELEASE`, `node scripts/asc.mjs release <version>`, check the plan, `--apply`. Then, whatever the status, merge the release's site PR if it is still open, so baros.fit changes with the App Store. One yes covers both.
 2. Next version = the lowest open milestone above this one (`gh api 'repos/Tatooles/baros/milestones?state=open' --jq '.[].title'`).
 3. On a branch from `main`, run `scripts/bump-version.sh <next>`. Of the tests it lists, update those asserting the current release or its upgrade path the way commit `2ddae398` (the 1.5 bump) did — the upgrade test now expects an upgrade into an unannounced release to skip What's New. Run the unit tests and the edited UI tests.
 4. Open the PR with the `file-pr` skill. ⛔ Merge it once checks are green.
 
-**Done when** `status` shows `READY_FOR_SALE` and the bump PR is merged.
+A patch release skips 2–4, because `main` is already past it.
+
+**Done when** `status` shows `READY_FOR_SALE`, no site PR for this release is still open, and, except for a patch, the bump PR is merged.
 
 ## Phase B — record the release
 
@@ -127,3 +134,12 @@ Skip to step 13 when `gh release view v<semver>` already finds it. Draft the bod
 Append `Shipped <date>: <release url>` to the milestone's existing description (keep its scope text) and close it: `gh api -X PATCH repos/Tatooles/baros/milestones/<number> -f state=closed -f description=<existing + shipped line>`.
 
 **Done when** the Release is public and the milestone is closed. Report the Release URL, tags, and build to Kevin.
+
+## Patch releases
+
+`/release <x.y.z>` patches the live release `x.y`: a fix or a listing change that cannot wait for the next version, since App Store Connect locks a live version's screenshots and description. The steps run as above, with these differences:
+
+- **Milestone**: create `<x.y.z> release` at step 2, its description naming why the patch ships.
+- **Base and candidate**: the base is the newest tag of the live release (`v<x.y>.0` or its latest patch) plus only the fixes. The candidate always takes the release-branch path: `release/<x.y.z>` from that tag, `scripts/bump-version.sh <x.y.z>`, then `git cherry-pick -m 1 <merge>` for each fix.
+- **What's New**: App Store text only, no sheet, covering only the patch. A listing-only patch says so plainly: `This update refreshes Baros's App Store page. The app is the same as <x.y>.`
+- **Regression**: when `release-diff.mjs <tag> <candidate>` shows only the version bump, the baseline's Release-build check is the whole regression; any fix gets the full one.

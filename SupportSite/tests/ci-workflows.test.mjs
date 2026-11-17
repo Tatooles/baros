@@ -34,6 +34,9 @@ const supportSitePaths = [
   "SupportSite/**",
   "docs/release/app-store/**",
   "docs/release/app-store-submission-pack.md",
+  "docs/release/listing.json",
+  "docs/release/listing-approved.json",
+  "BarosUITests/MarketingScreenshotTests.swift",
 ];
 const requiredGateCondition = [
   "${{ always() && (needs.app-changes.result != 'success'",

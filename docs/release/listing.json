@@ -1,0 +1,66 @@
+{
+  "description": "Baros is a private, focused workout tracker for iPhone. Log exercises, sets, weight, reps, RPE, rest time, and notes without creating an account.\n\nBuilt for fast, distraction-free training:\n\n• Start from a template, repeat a past workout, or begin from scratch\n• Track every set with weight, reps, and optional RPE\n• Rest between sets on a timer, with a Live Activity on your Lock Screen\n• Group exercises into supersets that are checked and rested together\n• See your heaviest rep and estimated 1RM for every lift\n• Review your workout history, notes, and a year of training at a glance\n• Create and manage your exercise library\n• Export your workout history\n• Keep your data local while signed out\n\nCreate an account only when you want account-backed sync across devices. Baros gives you the tools to record your training without social feeds, ads, or unnecessary clutter.",
+  "promotionalText": "New in Baros 1.5: workout templates, supersets, and strength records that show your heaviest rep and estimated 1RM over time.",
+  "keywords": "lifting,gym,strength,exercise,sets,reps,weight,training,bodybuilding,barbell,dumbbell,RPE,logging",
+  "shots": [
+    {
+      "id": "home-year",
+      "headline": [
+        "Your year of training",
+        "at a glance"
+      ],
+      "glowX": "50%"
+    },
+    {
+      "id": "active-rest",
+      "headline": [
+        "Log every set.",
+        "Rest on a timer."
+      ],
+      "glowX": "22%",
+      "site": "baros-active-workout.jpg"
+    },
+    {
+      "id": "templates",
+      "headline": [
+        "Save your routines",
+        "as templates"
+      ],
+      "glowX": "78%"
+    },
+    {
+      "id": "superset",
+      "headline": [
+        "Supersets, checked and",
+        "rested together"
+      ],
+      "glowX": "26%"
+    },
+    {
+      "id": "strength-records",
+      "headline": [
+        "Strength records",
+        "for every lift"
+      ],
+      "glowX": "74%"
+    },
+    {
+      "id": "workout-detail",
+      "headline": [
+        "Every workout, set,",
+        "and note preserved"
+      ],
+      "glowX": "28%",
+      "site": "baros-workout-history.jpg"
+    },
+    {
+      "id": "settings",
+      "headline": [
+        "Private by default.",
+        "Sync when you want."
+      ],
+      "glowX": "74%",
+      "fadeBottom": true
+    }
+  ]
+}

@@ -14,15 +14,22 @@
 //   node asc.mjs prepare <version> --build <number> --whats-new <file> [--apply]
 //   node asc.mjs submit <version> [--apply]
 //   node asc.mjs release <version> [--apply]
+//   node asc.mjs listing <version> [--screenshots <dir>] [--apply]
 
-import { readFileSync } from "node:fs";
-import { createSign } from "node:crypto";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { createHash, createSign } from "node:crypto";
 import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 
 const BUNDLE_ID = "com.kevintatooles.LiftingLog";
 const LOCALE = "en-US";
 const API = "https://api.appstoreconnect.apple.com";
+// The 6.9" iPhone slot; App Store Connect scales it for every smaller iPhone.
+const SCREENSHOT_DISPLAY_TYPE = "APP_IPHONE_67";
+const LISTING_PATH = new URL("../../../../docs/release/listing.json", import.meta.url);
+// MD5 of each approved App Store image, written by `pnpm -C SupportSite listing-assets`.
+const APPROVED_LISTING_PATH = new URL("../../../../docs/release/listing-approved.json", import.meta.url);
+const SCREENSHOT_SLOT_LIMIT = 10;
 // States in which the version's build, release type and notes can still change.
 const EDITABLE = new Set([
   "PREPARE_FOR_SUBMISSION",
@@ -420,6 +427,168 @@ async function release(versionString, opts) {
   if (opts.apply) await status(versionString);
 }
 
+// The App Store listing against docs/release/listing.json: description, keywords and
+// promotional text, plus the 6.9" screenshot set when --screenshots names the generated
+// directory. Promotional text can change on a live version; the rest only on an editable one.
+async function listing(versionString, opts) {
+  requireVersion(versionString);
+  const wanted = JSON.parse(readFileSync(LISTING_PATH, "utf8"));
+  const app = await appId();
+  const version = await findVersion(app, versionString);
+  if (!version) fail(`Version ${versionString} does not exist; run prepare first.`);
+  const { appStoreState, appVersionState } = version.attributes;
+  const editable = EDITABLE.has(appStoreState) || EDITABLE.has(appVersionState);
+  const { data: locs } = await get(`/v1/appStoreVersions/${version.id}/appStoreVersionLocalizations`);
+  const loc = locs.find((l) => l.attributes.locale === LOCALE);
+  if (!loc) fail(`Version ${versionString} has no ${LOCALE} localization.`);
+
+  console.log(`Version ${versionString}: ${appVersionState}${editable ? "" : " (only promotional text can change)"}`);
+  const fields = { description: "description", promotionalText: "promotional text", keywords: "keywords" };
+  const changes = {};
+  for (const [field, label] of Object.entries(fields)) {
+    const current = (loc.attributes[field] ?? "").trim();
+    const target = wanted[field].trim();
+    if (current === target) {
+      console.log(`  ${label}: matches listing.json`);
+    } else {
+      console.log(`  ${label}: differs\n    App Store:    ${oneLine(current)}\n    listing.json: ${oneLine(target)}`);
+      changes[field] = target;
+    }
+  }
+  if (wanted.promotionalText.length > 170) fail(`Promotional text is ${wanted.promotionalText.length} characters; the limit is 170.`);
+  if (wanted.keywords.length > 100) fail(`Keywords are ${wanted.keywords.length} characters; the limit is 100.`);
+  if (wanted.description.length > 4000) fail(`Description is ${wanted.description.length} characters; the limit is 4000.`);
+
+  const { data: sets } = await get(`/v1/appStoreVersionLocalizations/${loc.id}/appScreenshotSets`);
+  const set = sets.find((s) => s.attributes.screenshotDisplayType === SCREENSHOT_DISPLAY_TYPE);
+  // The relationship lists the set in display order; the collection endpoint does not promise one.
+  const unordered = set ? (await get(`/v1/appScreenshotSets/${set.id}/appScreenshots?limit=10`)).data : [];
+  const order = set ? (await get(`/v1/appScreenshotSets/${set.id}/relationships/appScreenshots?limit=10`)).data.map((r) => r.id) : [];
+  const current = order.map((id) => unordered.find((s) => s.id === id)).filter(Boolean);
+  console.log(`  screenshots (${SCREENSHOT_DISPLAY_TYPE}): ${current.map((s) => s.attributes.fileName).join(", ") || "none"}`);
+
+  let files = [];
+  let screenshotsDiffer = false;
+  if (opts.screenshots) {
+    files = readdirSync(opts.screenshots)
+      .filter((f) => f.endsWith(".png"))
+      .sort()
+      .map((name) => {
+        const path = `${opts.screenshots}/${name}`;
+        const bytes = readFileSync(path);
+        return { name, path, bytes, size: statSync(path).size, md5: createHash("md5").update(bytes).digest("hex") };
+      });
+    const approved = JSON.parse(readFileSync(APPROVED_LISTING_PATH, "utf8")).appStore;
+    const unapproved = files.filter((f) => approved[f.name] !== f.md5).map((f) => f.name);
+    const absent = Object.keys(approved).filter((name) => !files.some((f) => f.name === name));
+    if (unapproved.length || absent.length) {
+      fail(
+        `${opts.screenshots} is not the approved set in docs/release/listing-approved.json` +
+          `${unapproved.length ? `; differs: ${unapproved.join(", ")}` : ""}${absent.length ? `; missing: ${absent.join(", ")}` : ""}.`,
+      );
+    }
+    screenshotsDiffer =
+      files.length !== current.length ||
+      files.some((f, i) => current[i]?.attributes.sourceFileChecksum !== f.md5);
+    // Matching bytes count only once App Store Connect has processed them; a failed one is redone.
+    const deliveryState = (s) => s.attributes.assetDeliveryState?.state;
+    if (!screenshotsDiffer && current.some((s) => deliveryState(s) === "FAILED")) screenshotsDiffer = true;
+    const processing = screenshotsDiffer ? [] : current.filter((s) => deliveryState(s) !== "COMPLETE");
+    console.log(
+      `  screenshots: ${screenshotsDiffer ? `differ from ${opts.screenshots}` : `match ${opts.screenshots}`}` +
+        `${processing.length ? `, ${processing.length} still processing` : ""}`,
+    );
+    if (processing.length && opts.apply) await waitForScreenshots(processing.map((s) => s.id));
+  }
+
+  const lockedChanges = Object.keys(changes).filter((f) => f !== "promotionalText");
+  if (!editable && (lockedChanges.length || screenshotsDiffer)) {
+    console.log(`  ${[...lockedChanges, ...(screenshotsDiffer ? ["screenshots"] : [])].join(", ")} need an editable version; only promotional text will change.`);
+    for (const f of lockedChanges) delete changes[f];
+    screenshotsDiffer = false;
+  }
+
+  const plan = new Plan(opts.apply);
+  if (Object.keys(changes).length) {
+    await plan.send(`Set ${LOCALE} ${Object.keys(changes).map((f) => fields[f]).join(", ")}`, "PATCH",
+      `/v1/appStoreVersionLocalizations/${loc.id}`,
+      { data: { type: "appStoreVersionLocalizations", id: loc.id, attributes: changes } });
+  }
+  if (screenshotsDiffer) {
+    let setId = set?.id;
+    if (!setId) {
+      const created = await plan.send(`Create the ${SCREENSHOT_DISPLAY_TYPE} screenshot set`, "POST", "/v1/appScreenshotSets", {
+        data: {
+          type: "appScreenshotSets",
+          attributes: { screenshotDisplayType: SCREENSHOT_DISPLAY_TYPE },
+          relationships: { appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: loc.id } } },
+        },
+      });
+      setId = created?.data.id ?? "<new set>";
+    }
+    // Upload before deleting, so a failed run leaves the old set rather than a partial one.
+    // Only what the slot cannot hold alongside the new files goes first.
+    const overflow = Math.max(0, current.length + files.length - SCREENSHOT_SLOT_LIMIT);
+    const deleteScreenshot = (old) =>
+      plan.send(`Delete old screenshot ${old.attributes.fileName}`, "DELETE", `/v1/appScreenshots/${old.id}`);
+    for (const old of current.slice(0, overflow)) await deleteScreenshot(old);
+    const uploaded = [];
+    for (const file of files) {
+      const reserved = await plan.send(`Upload ${file.name} (${file.size} bytes)`, "POST", "/v1/appScreenshots", {
+        data: {
+          type: "appScreenshots",
+          attributes: { fileName: file.name, fileSize: file.size },
+          relationships: { appScreenshotSet: { data: { type: "appScreenshotSets", id: setId } } },
+        },
+      });
+      if (!reserved) continue;
+      for (const op of reserved.data.attributes.uploadOperations) {
+        const headers = Object.fromEntries(op.requestHeaders.map((h) => [h.name, h.value]));
+        const res = await fetch(op.url, {
+          method: op.method,
+          headers,
+          body: file.bytes.subarray(op.offset, op.offset + op.length),
+        });
+        if (!res.ok) fail(`Uploading ${file.name} failed: HTTP ${res.status}`);
+      }
+      await api("PATCH", `/v1/appScreenshots/${reserved.data.id}`, {
+        data: { type: "appScreenshots", id: reserved.data.id, attributes: { uploaded: true, sourceFileChecksum: file.md5 } },
+      });
+      uploaded.push(reserved.data.id);
+    }
+    if (opts.apply) await waitForScreenshots(uploaded);
+    for (const old of current.slice(overflow)) await deleteScreenshot(old);
+    await plan.send(`Order the ${files.length} screenshots as listed`, "PATCH",
+      `/v1/appScreenshotSets/${setId}/relationships/appScreenshots`,
+      { data: uploaded.map((id) => ({ type: "appScreenshots", id })) });
+  }
+  plan.finish();
+}
+
+// App Store Connect processes each upload before it counts toward the set.
+async function waitForScreenshots(ids) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const states = await Promise.all(
+      ids.map(async (id) => (await get(`/v1/appScreenshots/${id}?fields[appScreenshots]=fileName,assetDeliveryState`)).data),
+    );
+    const failed = states.filter((s) => s.attributes.assetDeliveryState?.state === "FAILED");
+    if (failed.length) {
+      fail(`Processing failed: ${failed.map((s) => `${s.attributes.fileName} ${JSON.stringify(s.attributes.assetDeliveryState.errors)}`).join("; ")}`);
+    }
+    if (states.every((s) => s.attributes.assetDeliveryState?.state === "COMPLETE")) {
+      console.log(`     ${ids.length} screenshots processed`);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+  }
+  fail("Screenshots are still processing after two minutes; rerun listing to check them.");
+}
+
+function oneLine(text) {
+  const flat = text.replaceAll("\n", " ⏎ ");
+  return flat.length > 140 ? `${flat.slice(0, 140)}…` : flat || "(empty)";
+}
+
 // ---------- helpers ----------
 
 class Plan {
@@ -481,9 +650,10 @@ const commands = {
   prepare: () => prepare(positional[0], opts),
   submit: () => submit(positional[0], opts),
   release: () => release(positional[0], opts),
+  listing: () => listing(positional[0], opts),
 };
 if (!commands[command]) {
-  console.error("usage: asc.mjs check | runs [--build <n>] [--commit <sha>] [--branch <name>] | versions | status <v> | prepare <v> --build <n> --whats-new <file> [--apply] | submit <v> [--apply] | release <v> [--apply]");
+  console.error("usage: asc.mjs check | runs [--build <n>] [--commit <sha>] [--branch <name>] | versions | status <v> | prepare <v> --build <n> --whats-new <file> [--apply] | submit <v> [--apply] | release <v> [--apply] | listing <v> [--screenshots <dir>] [--apply]");
   process.exit(2);
 }
 await commands[command]();

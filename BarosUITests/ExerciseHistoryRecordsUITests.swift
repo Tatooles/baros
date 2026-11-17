@@ -243,8 +243,13 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         confirm.tap()
         let menu = app.buttons["ExerciseMenuButton-0"]
         XCTAssertTrue(menu.waitToExist(timeout: 5))
+        // At this size the card's menu starts under the pinned Edit/Add Exercise actions,
+        // which take the tap, so bring it above them first.
+        app.revealAboveWorkoutActions(menu)
         menu.tap()
-        app.buttons["ExerciseHistoryButton-0"].tap()
+        let viewHistory = app.buttons["ExerciseHistoryButton-0"]
+        XCTAssertTrue(viewHistory.waitToExist(timeout: 3))
+        viewHistory.tap()
         XCTAssertTrue(app.descendants(matching: .any)["QuickExerciseHistoryHeading"].waitToExist(timeout: 5))
         assertMaximumValuesFit(in: app, identifierPrefix: "ExerciseHistorySetValue-", screen: "quick-history")
     }
