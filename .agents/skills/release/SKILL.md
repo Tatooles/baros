@@ -139,7 +139,7 @@ Append `Shipped <date>: <release url>` to the milestone's existing description (
 
 `/release <x.y.z>` patches the live release `x.y`: a fix or a listing change that cannot wait for the next version, since App Store Connect locks a live version's screenshots and description. The steps run as above, with these differences:
 
-- **Milestone**: only when the patch fixes tracked issues — then create `<x.y.z> release` at step 2, its description naming why the patch ships. Otherwise skip steps 2 and 13, leave the milestone link out of the GitHub Release, and resume the patch by name (`/release <x.y.z>`), since step 0 finds no open milestone for it.
+- **Milestone**: create `<x.y.z> release` at step 2, its description naming why the patch ships, unless the patch ships no change: `release-diff.mjs <tag> <candidate>` shows only the version bump, as in a listing-only patch. Then skip steps 2 and 13, leave the milestone link out of the GitHub Release, and resume the patch by name (`/release <x.y.z>`), since step 0 finds no open milestone for it.
 - **Base and candidate**: the base is the newest tag of the live release (`v<x.y>.0` or its latest patch) plus only the fixes. The candidate always takes the release-branch path: `release/<x.y.z>` from that tag, `scripts/bump-version.sh <x.y.z>`, then `git cherry-pick -m 1 <merge>` for each fix.
 - **What's New**: App Store text only, no sheet, covering only the patch. A listing-only patch says so plainly: `This update refreshes Baros's App Store page. The app is the same as <x.y>.`
 - **Regression**: when `release-diff.mjs <tag> <candidate>` shows only the version bump, the baseline's Release-build check is the whole regression; any fix gets the full one.
