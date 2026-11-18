@@ -251,6 +251,15 @@ test("the nightly UI suite runs the full target serially with the smoke job's se
   const testRun = job.steps[testIndex].run;
   assert.deepEqual(testRun.match(/-only-testing:\S+/g), ["-only-testing:BarosUITests"]);
   assert.match(testRun, /-parallel-testing-enabled NO/);
+  // A stuck test must fail by itself instead of using up the whole step.
+  assert.match(testRun, /-test-timeouts-enabled YES/);
+  const allowances = [
+    ...testRun.matchAll(/-(?:default|maximum)-test-execution-time-allowance (\d+)/g),
+  ].map((match) => Number(match[1]));
+  assert.equal(allowances.length, 2, "set both the default and maximum per-test allowance");
+  for (const seconds of allowances) {
+    assert.ok(seconds >= 180 && seconds * 4 <= job.steps[testIndex]["timeout-minutes"] * 60);
+  }
   assert.match(testRun, /-maximum-concurrent-test-simulator-destinations 1\b/);
   assert.doesNotMatch(testRun, /-parallel-testing-enabled YES|-parallel-testing-worker-count/);
   assert.ok(job.steps[testIndex]["timeout-minutes"] < job["timeout-minutes"]);
@@ -260,18 +269,29 @@ test("the nightly UI suite runs the full target serially with the smoke job's se
   for (const flag of ["-retry-tests-on-failure", "-test-iterations 2"]) {
     assert.ok(smokeRun.includes(flag) && testRun.includes(flag), `both jobs must pass ${flag}`);
   }
-  assert.match(job.steps[testIndex + 1].run, /ci_scripts\/report_retried_tests\.py/);
+  const bundleStep = job.steps[testIndex + 1];
+  assert.equal(bundleStep.id, "bundle");
+  assert.equal(bundleStep.if, "${{ !cancelled() }}");
+  assert.match(bundleStep.run, /readable=true/);
+  assert.match(bundleStep.run, /readable=false/);
+  const retriedStep = job.steps[testIndex + 2];
+  assert.match(retriedStep.run, /ci_scripts\/report_retried_tests\.py/);
 
   const countStep = stepNamed(job.steps, "Report executed UI test count");
   assert.match(countStep.run, /xcresulttool get test-results summary/);
   assert.match(countStep.run, /totalTestCount/);
 
   const failedStep = job.steps.find((step) => step.id === "failed");
-  assert.match(failedStep.run, /ci_scripts\/report_failed_tests\.py/);
+  assert.match(failedStep.run, /ci_scripts\/report_failed_tests\.py\s+\\\s+"\$\{RUNNER_TEMP\}\/BarosUIFull\.xcresult"\s+\\\s+"\$\{RUNNER_TEMP\}\/BarosUIFull\.log"/);
+  assert.equal(failedStep.if, "${{ !cancelled() }}", "failed names must be collected after any failure");
   assert.equal(job.outputs["failed-tests"], "${{ steps.failed.outputs.names }}");
 
-  for (const step of [job.steps[testIndex + 1], countStep, failedStep]) {
-    assert.equal(step.if, "${{ !cancelled() }}", `${step.name} must also run after test failures`);
+  for (const step of [retriedStep, countStep]) {
+    assert.equal(
+      step.if,
+      "${{ !cancelled() && steps.bundle.outputs.readable == 'true' }}",
+      `${step.name} must run after test failures whenever the result bundle is readable`,
+    );
   }
 
   const upload = stepNamed(job.steps, "Upload UI suite failure diagnostics");
@@ -396,4 +416,48 @@ test("a scheduled run skips only when main matches the last scheduled run", asyn
     ghExitCode: 1,
   });
   assert.equal(apiFailure.output, "run=true\n");
+});
+
+test("failed UI test names fall back to the log when the result bundle is unreadable", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "failed-tests-"));
+  try {
+    const log = join(directory, "BarosUIFull.log");
+    await writeFile(
+      log,
+      [
+        "Test Case '-[BarosUITests.BarosUITests testStable]' started (Iteration 1 of 2).",
+        "Test Case '-[BarosUITests.BarosUITests testStable]' passed (2.000 seconds).",
+        "Test Case '-[BarosUITests.BarosUITests testFlaky]' started (Iteration 1 of 2).",
+        "Test Case '-[BarosUITests.BarosUITests testFlaky]' failed (3.000 seconds).",
+        "Test Case '-[BarosUITests.BarosUITests testFlaky]' started (Iteration 2 of 2).",
+        "Test Case '-[BarosUITests.BarosUITests testFlaky]' passed (3.000 seconds).",
+        "Test Case '-[BarosUITests.SupersetUITests testBroken]' started (Iteration 1 of 2).",
+        "Test Case '-[BarosUITests.SupersetUITests testBroken]' failed (4.000 seconds).",
+        "Test Case '-[BarosUITests.SupersetUITests testBroken]' started (Iteration 2 of 2).",
+        "Test Case '-[BarosUITests.SupersetUITests testBroken]' failed (4.000 seconds).",
+        "Test Case '-[BarosUITests.BarosUITests testCutOff]' started (Iteration 1 of 2).",
+        "##[error]The action 'Run full Baros UI test target' has timed out after 105 minutes.",
+        "",
+      ].join("\n"),
+    );
+
+    const script = new URL("ci_scripts/report_failed_tests.py", repositoryRoot);
+    const result = spawnSync(
+      "python3",
+      ["-I", script.pathname, join(directory, "missing.xcresult"), log],
+      { encoding: "utf8", env: { ...process.env, GITHUB_STEP_SUMMARY: "" } },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      result.stdout,
+      [
+        "SupersetUITests/testBroken()",
+        "BarosUITests/testCutOff() (still running when the log ended)",
+        "",
+      ].join("\n"),
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

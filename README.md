@@ -76,13 +76,15 @@ Before adding a UI test, read the UI-test policy in `AGENTS.md` → "UI tests"; 
 
 ### Nightly full UI suite
 
-`.github/workflows/ios-ui-nightly.yml` runs the whole `BarosUITests` target (`-only-testing:BarosUITests`) every night at 09:23 UTC on `main`, unless `main` hasn't changed since the last scheduled run (see below). It has no `pull_request` or `push` trigger, so it is never a PR check. Its `ios-ui-full` job uses the smoke job's Xcode 26.5 / iOS 26.5 simulator setup, runs on one simulator with parallel testing disabled, has a 120-minute timeout, and retries a failing test once, like the smoke gate. The run log and step summary list:
+`.github/workflows/ios-ui-nightly.yml` runs the whole `BarosUITests` target (`-only-testing:BarosUITests`) every night at 09:23 UTC (3:23 AM US Central) on `main`, unless `main` hasn't changed since the last scheduled run (see below). It has no `pull_request` or `push` trigger, so it is never a PR check. Its `ios-ui-full` job uses the smoke job's Xcode 26.5 / iOS 26.5 simulator setup, runs on one simulator with parallel testing disabled, has a 120-minute timeout, and retries a failing test once, like the smoke gate. Each test attempt gets at most 300 seconds, so one stuck test fails on its own instead of using up the run. The run log and step summary list:
 
 - the executed, passed, failed, and skipped test counts from the `.xcresult`
 - tests that passed only on retry, from `ci_scripts/report_retried_tests.py`
-- tests that still failed, from `ci_scripts/report_failed_tests.py`
+- tests that still failed, from `ci_scripts/report_failed_tests.py`. If the run was cut off before the `.xcresult` was finished, the script reads the names from the log instead. It also reports the test that was still running when the log ended.
 
 A failed run uploads its `.xcresult` and log as the `BarosUIFull-xcresult` artifact.
+
+GitHub starts scheduled runs on a best-effort basis and can delay them by hours when it is busy, so a "nightly" failure email may arrive in the afternoon.
 
 Before any macOS job, a cheap `nightly-change-detection` job on `ubuntu-latest` compares `main`'s HEAD SHA with the head SHA of the last completed scheduled run of this workflow (cancelled runs are ignored). If they match, the scheduled run skips `ios-ui-full` and never reserves a macOS runner, and the tracking issue is left as it is. A manual `workflow_dispatch` always runs the suite. If the run history can't be read, the gate runs the suite rather than skipping it.
 

@@ -104,6 +104,8 @@ jobs:
 
       - name: Run full Baros UI test target
         # Leaves time inside the job timeout to collect and upload diagnostics.
+        # The per-test 300 s allowance fails a stuck test instead of letting it
+        # use up the step (the slowest healthy test takes about 3 minutes on CI).
         timeout-minutes: 105
         run: |
           set -o pipefail
@@ -114,28 +116,36 @@ jobs:
             -only-testing:BarosUITests \
             -parallel-testing-enabled NO \
             -maximum-concurrent-test-simulator-destinations 1 \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 300 \
+            -maximum-test-execution-time-allowance 300 \
             -derivedDataPath "${RUNNER_TEMP}/BarosUIFullDerivedData" \
             -retry-tests-on-failure \
             -test-iterations 2 \
             -resultBundlePath "${RUNNER_TEMP}/BarosUIFull.xcresult" \
             2>&1 | tee "${RUNNER_TEMP}/BarosUIFull.log"
 
-      - name: Report UI tests that only passed on retry
+      - name: Check the result bundle
+        id: bundle
         if: ${{ !cancelled() }}
         run: |
-          if [[ ! -d "${RUNNER_TEMP}/BarosUIFull.xcresult" ]]; then
-            echo "No result bundle was produced."
-            exit 0
+          # A step timeout stops xcodebuild before it finalizes the bundle.
+          if xcrun xcresulttool get test-results summary \
+            --path "${RUNNER_TEMP}/BarosUIFull.xcresult" --compact > /dev/null 2>&1; then
+            echo "readable=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::warning::The result bundle is missing or incomplete, so counts and retries are unavailable. Failed tests come from the log."
+            echo "readable=false" >> "${GITHUB_OUTPUT}"
           fi
+
+      - name: Report UI tests that only passed on retry
+        if: ${{ !cancelled() && steps.bundle.outputs.readable == 'true' }}
+        run: |
           python3 ci_scripts/report_retried_tests.py "${RUNNER_TEMP}/BarosUIFull.xcresult"
 
       - name: Report executed UI test count
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.bundle.outputs.readable == 'true' }}
         run: |
-          if [[ ! -d "${RUNNER_TEMP}/BarosUIFull.xcresult" ]]; then
-            echo "No result bundle was produced."
-            exit 0
-          fi
           set -o pipefail
           summary="$(
             xcrun xcresulttool get test-results summary \
@@ -151,10 +161,14 @@ jobs:
         id: failed
         if: ${{ !cancelled() }}
         run: |
-          failed_tests=""
-          if [[ -d "${RUNNER_TEMP}/BarosUIFull.xcresult" ]]; then
-            failed_tests="$(python3 ci_scripts/report_failed_tests.py "${RUNNER_TEMP}/BarosUIFull.xcresult")" ||
-              echo "Could not read failed tests from the result bundle."
+          # Falls back to the log when the result bundle is incomplete.
+          if ! failed_tests="$(
+            python3 ci_scripts/report_failed_tests.py \
+              "${RUNNER_TEMP}/BarosUIFull.xcresult" \
+              "${RUNNER_TEMP}/BarosUIFull.log"
+          )"; then
+            failed_tests=""
+            echo "Could not read failed tests from the result bundle or the log."
           fi
           echo "${failed_tests}"
           {
