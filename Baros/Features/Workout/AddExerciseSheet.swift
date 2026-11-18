@@ -49,6 +49,14 @@ struct SwapExerciseSheet: View {
     @Bindable var engine: ActiveWorkoutEngine
     @State private var swapErrorMessage: String?
     @State private var isSwapping = false
+    /// Taken when the sheet opens: a committed swap deletes the sets, and the bar must not change while the sheet closes.
+    @State private var impact: SwapExerciseImpact
+
+    init(loggedExercise: LoggedExercise, engine: ActiveWorkoutEngine) {
+        self.loggedExercise = loggedExercise
+        self.engine = engine
+        _impact = State(initialValue: SwapExerciseImpact(original: loggedExercise))
+    }
 
     private var isErrorPresented: Binding<Bool> {
         Binding(
@@ -65,7 +73,7 @@ struct SwapExerciseSheet: View {
     var body: some View {
         NavigationStack {
             // The picker's confirm bar states what the swap removes, so it commits without another prompt.
-            ExercisePickerView(mode: .swap(SwapExerciseImpact(original: loggedExercise))) { exercises in
+            ExercisePickerView(mode: .swap(impact)) { exercises in
                 if let replacement = exercises.first {
                     swap(with: replacement)
                 }
