@@ -70,7 +70,7 @@ jobs:
     # Fails open: if the gate itself breaks, run the suite rather than skip it.
     if: ${{ !cancelled() && (needs.main-changes.result != 'success' || needs.main-changes.outputs.run == 'true') }}
     runs-on: macos-26
-    timeout-minutes: 215
+    timeout-minutes: 255
     outputs:
       failed-tests: ${{ steps.failed.outputs.names }}
     env:
@@ -104,14 +104,16 @@ jobs:
 
       - name: Run full Baros UI test target
         # Leaves time inside the job timeout to collect and upload diagnostics.
-        # The hosted runner ran the first nightly's tests about 2.4x slower than a
-        # local Mac (median of 94 tests). A local full run takes about 51 minutes,
-        # so the target needs roughly 125 minutes here, plus a 9-minute build.
-        # The per-test 1,200 s allowance is a hang guard, not a speed check: the
+        # The hosted runner ran the first nightly's tests about 2.5x slower than a
+        # local Mac (time-weighted; up to about 3.3x for the slowest tenth). A local
+        # full run takes about 51 minutes, so the target projects to roughly 130
+        # minutes here, plus a 9-minute build. 240 minutes fits a slow night plus
+        # two hangs.
+        # The per-test 1,800 s allowance is a hang guard, not a speed check: the
         # slowest healthy test, testLinkModeKeepsScrolledCardsInPlaceInBothLists,
-        # takes about 460 s locally, so about 1,100 s here. XCTest doesn't retry a
-        # test that exceeds its allowance.
-        timeout-minutes: 200
+        # takes 460-500 s locally, which projects to 1,150-1,650 s here. XCTest
+        # doesn't retry a test that exceeds its allowance.
+        timeout-minutes: 240
         run: |
           set -o pipefail
           xcodebuild test \
@@ -122,8 +124,8 @@ jobs:
             -parallel-testing-enabled NO \
             -maximum-concurrent-test-simulator-destinations 1 \
             -test-timeouts-enabled YES \
-            -default-test-execution-time-allowance 1200 \
-            -maximum-test-execution-time-allowance 1200 \
+            -default-test-execution-time-allowance 1800 \
+            -maximum-test-execution-time-allowance 1800 \
             -derivedDataPath "${RUNNER_TEMP}/BarosUIFullDerivedData" \
             -retry-tests-on-failure \
             -test-iterations 2 \
