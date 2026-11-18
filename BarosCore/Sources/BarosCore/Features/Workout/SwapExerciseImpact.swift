@@ -15,6 +15,15 @@ public struct SwapExerciseImpact {
         hasNote = !original.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// An exercise in the completed-workout editor, counting what its draft holds now.
+    public init(original: CompletedWorkoutEditExerciseDraft) {
+        originalExerciseID = original.exerciseID
+        originalName = original.exerciseSnapshotName
+        muscleGroup = original.muscleGroup
+        loggedSetCount = original.visibleSets.filter(\.hasLoggedValues).count
+        hasNote = !original.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     public var losesWork: Bool { loggedSetCount > 0 || hasNote }
 
     public var lossMessage: String {
