@@ -114,14 +114,15 @@ public struct PreviousSetPerformance: Equatable {
             (exerciseID: $0.id, routeID: ExerciseHistoryRoute(loggedExercise: $0).id)
         }
         let routeCounts = Dictionary(routeIDsByExerciseID.map { ($0.routeID, 1) }, uniquingKeysWith: +)
-        let latestEntriesByRouteID = latestEntriesByRouteID(
+        // Only sessions ranked before the source are newer than it.
+        let newerEntriesByRouteID = latestEntriesByRouteID(
             matching: Set(routeCounts.filter { $0.value == 1 }.keys),
-            in: sortedSessions
+            in: Array(sortedSessions.prefix(sourceRank))
         )
 
         var result: [UUID: [SetKind]] = [:]
         for (exerciseID, routeID) in routeIDsByExerciseID {
-            guard let entry = latestEntriesByRouteID[routeID], entry.sessionRank < sourceRank else { continue }
+            guard let entry = newerEntriesByRouteID[routeID] else { continue }
             result[exerciseID] = entry.sets.map(\.kind)
         }
         return result
@@ -192,11 +193,16 @@ public struct PreviousSetPerformance: Equatable {
             from: sessions,
             ownerTokenIdentifier: ownerTokenIdentifier
         )
+        // The id tie-break keeps the rank independent of input order, so the
+        // review screen, the start, and Previous agree about which is newer.
         .sorted { lhs, rhs in
-            if lhs.startedAt == rhs.startedAt {
+            if lhs.startedAt != rhs.startedAt {
+                return lhs.startedAt > rhs.startedAt
+            }
+            if lhs.title != rhs.title {
                 return lhs.title < rhs.title
             }
-            return lhs.startedAt > rhs.startedAt
+            return lhs.id.uuidString < rhs.id.uuidString
         }
     }
 

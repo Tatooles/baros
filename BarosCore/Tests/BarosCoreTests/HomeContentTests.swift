@@ -68,7 +68,7 @@ final class HomeContentTests: XCTestCase {
             endedAt: date(2026, 8, 19, hour: 1)
         )
 
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout, sessions: [], ownerTokenIdentifier: nil)
 
         XCTAssertEqual(presentation.completedAt, date(2026, 8, 19, hour: 1))
     }
@@ -82,7 +82,7 @@ final class HomeContentTests: XCTestCase {
             source: .blank
         )
 
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout, sessions: [], ownerTokenIdentifier: nil)
 
         XCTAssertEqual(presentation.completedAt, startedAt)
     }
@@ -105,7 +105,7 @@ final class HomeContentTests: XCTestCase {
             ]
         )
 
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout, sessions: [], ownerTokenIdentifier: nil)
         let copiedSets = completedWorkout.sortedLoggedExercises.flatMap(\.sortedSets)
 
         XCTAssertGreaterThan(copiedSets.count, copiedSets.filter(\.isCompleted).count)
@@ -162,7 +162,7 @@ final class HomeContentTests: XCTestCase {
         )
         completedWorkout.loggedExercises = [cableFly, benchPress]
 
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout, sessions: [], ownerTokenIdentifier: nil)
 
         XCTAssertEqual(
             presentation.exercises,
@@ -200,7 +200,7 @@ final class HomeContentTests: XCTestCase {
         )
         completedWorkout.loggedExercises = [exercise]
 
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout, sessions: [], ownerTokenIdentifier: nil)
 
         XCTAssertEqual(presentation.structureSummary, "1 exercise · 1 set")
         XCTAssertEqual(presentation.exercises[0].copiedSetDescription, "1 set")

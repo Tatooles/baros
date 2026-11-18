@@ -54,7 +54,7 @@ public struct HomePastWorkoutReviewPresentation: Equatable {
     /// Counts the rows each exercise will start with, which follow a newer
     /// performance of the exercise in `sessions` when there is one, the way
     /// `ActiveWorkoutEngine.startWorkout(fromPast:)` seeds them.
-    public init(session: WorkoutSession, sessions: [WorkoutSession] = [], ownerTokenIdentifier: String? = nil) {
+    public init(session: WorkoutSession, sessions: [WorkoutSession], ownerTokenIdentifier: String?) {
         let newerSetKinds = PreviousSetPerformance.newerCompletedSetKindsByExerciseID(
             for: session,
             in: sessions,

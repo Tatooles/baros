@@ -1346,6 +1346,30 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(exercises.map { previous[$0.id]?.count }, [3, 1, 2])
     }
 
+    func testNewerPerformanceRankDoesNotDependOnHistoryOrderForTiedWorkouts() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(bench)
+        // Same start and title, so only the id can order them.
+        let startedAt = Date(timeIntervalSince1970: 100)
+        let first = try insertCompletedWorkout(
+            startedAt: startedAt, entries: [(bench, [(.working, true), (.working, true)])], in: context
+        )
+        let second = try insertCompletedWorkout(
+            startedAt: startedAt, entries: [(bench, [(.working, true), (.working, true), (.working, true)])], in: context
+        )
+
+        for source in [first, second] {
+            let results = [[first, second], [second, first]].map {
+                PreviousSetPerformance.newerCompletedSetKindsByExerciseID(
+                    for: source, in: $0, ownerTokenIdentifier: nil
+                )
+            }
+            XCTAssertEqual(results[0], results[1])
+        }
+    }
+
     func testRepeatingPastWorkoutCopiesSourceRowsWhenNewerPerformanceDoesNotApply() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
