@@ -61,7 +61,7 @@ private final class CloudDeletionUITestClient: SyncClient, @unchecked Sendable {
         if ProcessInfo.processInfo.arguments.contains("--uitest-delay-cloud-deletion") {
             try await Task.sleep(for: .seconds(4))
         }
-        await CloudDeletionUITestGate.waitForRelease()
+        await CloudDeletionUITestGate.shared.waitForRelease()
         let shouldFail = lock.withLock {
             if hasFailed { return false }
             hasFailed = true
@@ -89,18 +89,24 @@ private final class CloudDeletionUITestClient: SyncClient, @unchecked Sendable {
 /// the test taps `UITestReleaseCloudDeletionButton`. A fixed delay races slow CI runners
 /// when a test checks that nothing happens while the request is still running.
 @MainActor
-enum CloudDeletionUITestGate {
-    static let isEnabled = ProcessInfo.processInfo.arguments.contains("--uitest-hold-cloud-deletion")
-    private static var isReleased = false
-    private static var waiters: [CheckedContinuation<Void, Never>] = []
+@Observable
+final class CloudDeletionUITestGate {
+    static let shared = CloudDeletionUITestGate()
+    private static let isEnabled = ProcessInfo.processInfo.arguments.contains("--uitest-hold-cloud-deletion")
+    /// True only while a request is parked, so the release control proves one is pending.
+    private(set) var isHoldingRequest = false
+    private var isReleased = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
 
-    static func waitForRelease() async {
-        guard isEnabled, !isReleased else { return }
+    func waitForRelease() async {
+        guard Self.isEnabled, !isReleased else { return }
+        isHoldingRequest = true
         await withCheckedContinuation { waiters.append($0) }
     }
 
-    static func release() {
+    func release() {
         isReleased = true
+        isHoldingRequest = false
         waiters.forEach { $0.resume() }
         waiters.removeAll()
     }
@@ -108,8 +114,8 @@ enum CloudDeletionUITestGate {
 
 struct CloudDeletionUITestReleaseControl: View {
     var body: some View {
-        if CloudDeletionUITestGate.isEnabled {
-            Button("Release Cloud Deletion") { CloudDeletionUITestGate.release() }
+        if CloudDeletionUITestGate.shared.isHoldingRequest {
+            Button("Release Cloud Deletion") { CloudDeletionUITestGate.shared.release() }
                 .font(.caption2)
                 .accessibilityIdentifier("UITestReleaseCloudDeletionButton")
         }

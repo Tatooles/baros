@@ -67,8 +67,11 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Discard Workout and Sign Out"].exists)
         attachAccountEvidence("Account resolution choices", app: app)
         app.buttons["Cancel"].tap()
+        // Wait out the first alert so the second Finish tap can only reach the new one.
+        XCTAssertTrue(app.alerts.firstMatch.waitToDisappear(timeout: 3))
         XCTAssertTrue(app.buttons["AccountSignOutButton"].exists)
         app.buttons["AccountSignOutButton"].tap()
+        XCTAssertTrue(finish.waitToExist(timeout: 3))
         finish.tap()
         XCTAssertTrue(app.buttons["AccountSignOutButton"].waitToDisappear(timeout: 3))
         XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitToDisappear(timeout: 3))

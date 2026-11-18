@@ -110,10 +110,13 @@ final class AppUpdatePromptUITests: XCTestCase {
         finish.tap()
         // Resolving the workout returns to Home while the cloud action is still awaiting.
         // The fixture holds that request until released, so the check below cannot race it.
+        // The release control appears only once the request is parked.
         XCTAssertTrue(app.staticTexts["HomeTitle"].waitToExist(timeout: 5))
         XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
+        let release = app.buttons["UITestReleaseCloudDeletionButton"]
+        XCTAssertTrue(release.waitToExist(timeout: 5))
         XCTAssertFalse(app.alerts["Update available"].waitForExistence(timeout: 2))
-        app.buttons["UITestReleaseCloudDeletionButton"].tap()
+        release.tap()
         XCTAssertTrue(app.alerts["Update available"].waitToExist(timeout: 5))
         app.alerts["Update available"].buttons["Later"].tap()
     }

@@ -14,6 +14,10 @@ struct AccountTransitionButton<Label: View>: View {
     /// this gate, never on a later one, so a late action cannot reach another request.
     @State private var choiceGate: WorkoutAccountTransition?
     @State private var errorMessage: String?
+    /// A failure from a choice waits here until the choice alert's binding has read
+    /// `false`, so the error gets its own presentation instead of replacing the
+    /// payload of an alert that is still closing.
+    @State private var pendingError: String?
     let destination: WorkoutAccountTransition.Destination
     var role: ButtonRole? = nil
     let action: () async throws -> Void
@@ -33,7 +37,7 @@ struct AccountTransitionButton<Label: View>: View {
     }
 
     /// One alert presents both the choice and any failure. Two `.alert` modifiers on one
-    /// view let SwiftUI drop the error under load after the choice alert closed (#403).
+    /// view may let SwiftUI drop the error under load after the choice alert closes (#403).
     private var prompt: Prompt? {
         if let choiceGate { return .choices(choiceGate) }
         return errorMessage.map(Prompt.error)
@@ -43,10 +47,9 @@ struct AccountTransitionButton<Label: View>: View {
         Binding(
             get: { prompt != nil },
             set: { isPresented in
-                guard !isPresented else { return }
-                // Dismissal closes whatever is showing. An error that arrives while the
-                // choice is still closing survives and is presented next.
-                if choiceGate != nil { choiceGate = nil } else { errorMessage = nil }
+                // Only the choice is cleared here. An error is cleared by its OK button,
+                // so an extra dismissal write can never discard an error before it shows.
+                if !isPresented { choiceGate = nil }
             }
         )
     }
@@ -56,6 +59,9 @@ struct AccountTransitionButton<Label: View>: View {
             let gate = WorkoutAccountTransition(context: context, engine: engine,
                 syncScheduler: scheduler, owner: { currentOwner.localDataOwnerTokenIdentifier })
             transition = gate
+            choiceGate = nil
+            errorMessage = nil
+            pendingError = nil
             Task {
                 await gate.request(destination: destination, action)
                 if gate.needsResolution {
@@ -75,7 +81,7 @@ struct AccountTransitionButton<Label: View>: View {
                 }
                 Button("Cancel", role: .cancel) { gate.cancel() }
             case .error:
-                Button("OK", role: .cancel) {}
+                Button("OK", role: .cancel) { errorMessage = nil }
             }
         } message: { prompt in
             switch prompt {
@@ -84,6 +90,9 @@ struct AccountTransitionButton<Label: View>: View {
             case .error(let message):
                 Text(message)
             }
+        }
+        .onChange(of: choiceGate == nil) { _, isChoiceClosed in
+            if isChoiceClosed { presentPendingError() }
         }
         .onDisappear { transition?.cancel() }
     }
@@ -98,8 +107,16 @@ struct AccountTransitionButton<Label: View>: View {
     private func resolve(_ resolution: WorkoutAccountTransition.Resolution, on gate: WorkoutAccountTransition) {
         Task {
             await gate.resolve(resolution)
-            if let message = gate.errorMessage { errorMessage = message }
+            guard let message = gate.errorMessage else { return }
+            pendingError = message
+            if choiceGate == nil { presentPendingError() }
         }
+    }
+
+    private func presentPendingError() {
+        guard let pendingError else { return }
+        errorMessage = pendingError
+        self.pendingError = nil
     }
 }
 
