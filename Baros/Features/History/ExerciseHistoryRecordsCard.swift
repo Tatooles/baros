@@ -161,7 +161,7 @@ struct ExerciseHistoryRecordsCard: View {
             Text("No estimate yet")
                 .font(.headline)
                 .foregroundStyle(AppTheme.textPrimary)
-            Text("Needs a completed set of 1–10 reps with weight.")
+            Text("Needs a completed working set with weight.")
                 .font(.subheadline)
                 .foregroundStyle(AppTheme.textSecondary)
         }
@@ -460,11 +460,11 @@ private struct StrengthRecordsInformationView: View {
                         Text("The heaviest weight you've recorded for at least one completed rep in a finished workout.")
                     }
                     section("Estimated 1RM") {
-                        Text("An estimate from your completed sets of 1–10 reps. For 2–10 reps, we use the Epley formula:")
+                        Text("An estimate from your completed sets, using the Epley formula:")
                         Text("Weight × (1 + reps ÷ 30)")
                             .font(.body.monospacedDigit())
                             .foregroundStyle(AppTheme.textPrimary)
-                        Text("A single rep uses its recorded weight. Warmup and drop sets don't count.")
+                        Text("A single rep uses its recorded weight. The formula is less reliable past 10 reps, so a longer set counts as 10. Warmup and drop sets don't count.")
                         Text("The estimate does not account for effort.")
                         Text("The chart shows the best estimate from each workout.")
                     }
@@ -472,7 +472,7 @@ private struct StrengthRecordsInformationView: View {
                         Text("Records use matching equipment. Bodyweight and resistance-band exercises are not included. Weight means the load you recorded.")
                     }
                     section("Source sets") {
-                        Text("Tap a record to see the set behind it in your workouts. That set is marked with the record's name. For equal records, the most recent workout counts. Records update when your saved workouts change.")
+                        Text("Tap a record to see the set behind it in your workouts. That set is marked with the record's name. For equal records, the set with more reps counts, then the most recent workout. Records update when your saved workouts change.")
                     }
                 }
                 .padding(AppTheme.shellPadding)
