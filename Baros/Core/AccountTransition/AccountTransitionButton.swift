@@ -15,7 +15,7 @@ struct AccountTransitionButton<Label: View>: View {
     @State private var choiceGate: WorkoutAccountTransition?
     @State private var errorMessage: String?
     /// A failure from a choice waits here. It is promoted only after a view update in
-    /// which neither alert is presented, so it gets its own presentation instead of
+    /// which no prompt is presented, so it gets its own presentation instead of
     /// replacing the payload of the choice alert as that alert closes.
     @State private var pendingError: String?
     let destination: WorkoutAccountTransition.Destination
