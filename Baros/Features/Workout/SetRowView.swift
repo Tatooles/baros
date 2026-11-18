@@ -6,6 +6,7 @@ struct SetRowView: View, @MainActor Equatable {
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage(RPEPreference.storageKey) private var rpeEnabled = false
     let set: LoggedSet
     let setID: UUID
     let weight: Double?
@@ -331,9 +332,15 @@ struct SetRowView: View, @MainActor Equatable {
     }
 
     private var timeButton: some View {
-        let time = WorkoutNumericInputPolicy.validatedDuration(durationSeconds).map(WorkoutFormatters.setDuration)
+        let seconds = WorkoutNumericInputPolicy.validatedDuration(durationSeconds)
+        let time = seconds.map(WorkoutFormatters.setDuration)
         let suggestion = suggestionText(for: .duration)
         let placeholder = trackingMethod.fieldLabel
+        // Spoken as a length of time, not as the punctuation on screen.
+        let spokenSuggestion = suggestion == nil ? nil : WorkoutFormatters.setDurationAccessibilityDescription(
+            inputValues.timePickerStart(suggestions: suggestions, previous: nil)
+        )
+        let spokenTime = seconds.map(WorkoutFormatters.setDurationAccessibilityDescription)
         return Button {
             presentTimePicker()
         } label: {
@@ -355,12 +362,12 @@ struct SetRowView: View, @MainActor Equatable {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(placeholder)
-        .accessibilityValue(suggestion.map { "Suggested \($0)" } ?? time ?? placeholder)
+        .accessibilityValue(spokenSuggestion.map { "Suggested \($0)" } ?? spokenTime ?? "No time")
         .accessibilityHint(suggestion == nil ? "Opens the time picker."
             : "Complete the set to use this value, or open the time picker.")
         .accessibilityIdentifier("\(measureIdentifierPrefix)Field-\(exerciseIndex)-\(index)")
         .sheet(item: $timePickerRequest) { request in
-            SetTimePickerSheet(request: request, onSave: saveTime)
+            SetTimePickerSheet(request: request, onSave: saveTime, onSelectRPE: saveTimeAndRPE)
         }
     }
 
@@ -387,8 +394,32 @@ struct SetRowView: View, @MainActor Equatable {
         timePickerRequest = SetTimePickerRequest(
             title: name.isEmpty ? "Set \(index + 1)" : "\(name), Set \(index + 1)",
             startingSeconds: inputValues.timePickerStart(suggestions: suggestions, previous: previous),
-            hasTime: WorkoutNumericInputPolicy.validatedDuration(durationSeconds) != nil
+            hasTime: WorkoutNumericInputPolicy.validatedDuration(durationSeconds) != nil,
+            rpe: rpeEnabled || set.rpe != nil
+                ? .init(selected: WorkoutNumericInputPolicy.validatedRPE(set.rpe)) : nil
         )
+    }
+
+    /// The sheet's RPE chips act as the keyboard's do: the set takes the
+    /// value, and choosing one completes it. Zeroed wheels leave the time
+    /// alone, so completing still fills it the usual way.
+    private func saveTimeAndRPE(_ seconds: Int?, rpe: Double?) {
+        if let seconds { saveTime(seconds) }
+        guard !engine.hasPendingSetSave, canEditSet else { return }
+        let preparedValues = prepareValuesForSetAction(completesSet: rpe != nil)
+        withAnimation(.easeInOut(duration: 0.2)) {
+            do {
+                try RPEChipSelectionAction.apply(
+                    value: rpe,
+                    preparedValues: preparedValues,
+                    to: set,
+                    engine: engine,
+                    context: modelContext
+                )
+            } catch {
+                // The engine retains the action and the session's alert offers recovery.
+            }
+        }
     }
 
     private func saveTime(_ seconds: Int?) {
@@ -404,7 +435,13 @@ struct SetRowView: View, @MainActor Equatable {
     private var rpeBadge: some View {
         if let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe) {
             Button {
-                onEditRPE(set)
+                // A timed set has no reps field to hold the keyboard and its
+                // RPE chips, so its picker sheet offers RPE instead.
+                if trackingMethod == .duration {
+                    presentTimePicker()
+                } else {
+                    onEditRPE(set)
+                }
             } label: {
                 Text("@\(WorkoutFormatters.number(rpe))")
                     .font(.caption2.weight(.bold))

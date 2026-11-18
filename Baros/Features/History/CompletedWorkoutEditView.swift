@@ -440,12 +440,15 @@ struct CompletedWorkoutEditView: View {
         let exercise = draft.exercises[exerciseIndex]
         let seconds = WorkoutNumericInputPolicy.validatedDuration(exercise.sets[setIndex].durationSeconds)
         let placeholder = exercise.trackingMethod.fieldLabel
+        // An empty set starts from the set above, as it would have in the workout.
+        let setAbove = exercise.sets[..<setIndex].last { !$0.isRemoved }
+        let startingSeconds = seconds ?? WorkoutNumericInputPolicy.validatedDuration(setAbove?.durationSeconds) ?? 0
         return Button {
             focusedField = nil
             timeEdit = CompletedWorkoutSetTimeEdit(
                 request: SetTimePickerRequest(
                     title: "\(exercise.exerciseSnapshotName), Set \(visibleIndex + 1)",
-                    startingSeconds: seconds ?? 0,
+                    startingSeconds: startingSeconds,
                     hasTime: seconds != nil
                 ),
                 exerciseIndex: exerciseIndex,
@@ -467,7 +470,7 @@ struct CompletedWorkoutEditView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(placeholder)
-        .accessibilityValue(seconds.map(WorkoutFormatters.setDuration) ?? placeholder)
+        .accessibilityValue(seconds.map(WorkoutFormatters.setDurationAccessibilityDescription) ?? "No time")
         .accessibilityHint("Opens the time picker.")
         .accessibilityIdentifier("HistorySetTimeField-\(exerciseIndex)-\(visibleIndex)")
     }

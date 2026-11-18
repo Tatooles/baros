@@ -11,21 +11,38 @@ struct SetTimePickerRequest: Identifiable {
     let startingSeconds: Int
     /// Whether the set has a time to clear.
     let hasTime: Bool
+    /// Set to offer RPE under the wheels. A time cell opens no keyboard, so
+    /// the keyboard bar's RPE chips cannot serve a timed set.
+    var rpe: RPE?
+
+    struct RPE {
+        let selected: Double?
+    }
 }
 
 /// Hours, minutes, and seconds wheels for one set's time, like the Clock
-/// app's timer. Nothing is saved until Done; all zeros clears the time.
+/// app's timer. Nothing is saved until Done or an RPE is chosen.
 struct SetTimePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let request: SetTimePickerRequest
+    /// The chosen time; nil clears it.
     let onSave: (Int?) -> Void
+    /// The wheels' time with the tapped RPE, or nil RPE to clear it. As with
+    /// the keyboard's chips, choosing an RPE finishes the set.
+    var onSelectRPE: ((Int?, Double?) -> Void)?
     @State private var hours: Int
     @State private var minutes: Int
     @State private var seconds: Int
 
-    init(request: SetTimePickerRequest, onSave: @escaping (Int?) -> Void) {
+    init(
+        request: SetTimePickerRequest,
+        onSave: @escaping (Int?) -> Void,
+        onSelectRPE: ((Int?, Double?) -> Void)? = nil
+    ) {
         self.request = request
         self.onSave = onSave
+        self.onSelectRPE = onSelectRPE
         let start = max(0, request.startingSeconds)
         _hours = State(initialValue: min(23, start / 3_600))
         _minutes = State(initialValue: start % 3_600 / 60)
@@ -34,26 +51,43 @@ struct SetTimePickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 4) {
-                HStack(spacing: 0) {
-                    wheel($hours, in: 0..<24, unit: "hours", identifier: "SetTimeHoursWheel")
-                    wheel($minutes, in: 0..<60, unit: "min", identifier: "SetTimeMinutesWheel")
-                    wheel($seconds, in: 0..<60, unit: "sec", identifier: "SetTimeSecondsWheel")
-                }
-                .accessibilityElement(children: .contain)
-
-                if request.hasTime {
-                    Button("Clear Time", role: .destructive) {
-                        onSave(nil)
-                        dismiss()
+            ScrollView {
+                VStack(spacing: 8) {
+                    HStack(spacing: 0) {
+                        wheel($hours, in: 0..<24, unit: "hours", spokenUnit: "Hours", identifier: "SetTimeHoursWheel")
+                        wheel($minutes, in: 0..<60, unit: "min", spokenUnit: "Minutes", identifier: "SetTimeMinutesWheel")
+                        wheel($seconds, in: 0..<60, unit: "sec", spokenUnit: "Seconds", identifier: "SetTimeSecondsWheel")
                     }
-                    .font(.subheadline.weight(.semibold))
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("ClearSetTimeButton")
+                    .accessibilityElement(children: .contain)
+
+                    if let rpe = request.rpe, let onSelectRPE {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("RPE")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .accessibilityAddTraits(.isHeader)
+                            RPEChipRow(selected: rpe.selected) { value in
+                                onSelectRPE(chosenSeconds, value)
+                                dismiss()
+                            }
+                            // Nine chips share one row; past this size they truncate.
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                        }
+                    }
+
+                    if request.hasTime {
+                        Button("Clear Time", role: .destructive) {
+                            onSave(nil)
+                            dismiss()
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("ClearSetTimeButton")
+                    }
                 }
+                .padding(.horizontal, AppTheme.shellPadding)
             }
-            .padding(.horizontal, AppTheme.shellPadding)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .scrollBounceBehavior(.basedOnSize)
             .background(AppTheme.canvasBackground.ignoresSafeArea())
             .navigationTitle(request.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -64,45 +98,76 @@ struct SetTimePickerSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        let total = hours * 3_600 + minutes * 60 + seconds
-                        onSave(total > 0 ? total : nil)
+                        onSave(chosenSeconds)
                         dismiss()
                     }
+                    // Zero is not a time. Removing one is Clear Time's job.
+                    .disabled(chosenSeconds == nil)
                     .accessibilityIdentifier("DoneSetTimeButton")
                 }
             }
         }
-        .presentationDetents([.height(request.hasTime ? 340 : 296)])
+        .presentationDetents(detents)
         .presentationDragIndicator(.visible)
+    }
+
+    private var chosenSeconds: Int? {
+        let total = hours * 3_600 + minutes * 60 + seconds
+        return total > 0 ? total : nil
+    }
+
+    /// Standard sizes fit a short sheet that leaves the workout in view.
+    /// Accessibility sizes stack the unit names over taller rows and scroll.
+    private var detents: Set<PresentationDetent> {
+        if dynamicTypeSize.isAccessibilitySize { return [.large] }
+        var height: CGFloat = 296
+        if request.hasTime { height += 44 }
+        if request.rpe != nil { height += 72 }
+        return [.height(height)]
     }
 
     private func wheel(
         _ selection: Binding<Int>,
         in range: Range<Int>,
         unit: String,
+        spokenUnit: String,
         identifier: String
     ) -> some View {
-        HStack(spacing: 2) {
-            Picker(unit, selection: selection) {
-                ForEach(range, id: \.self) { value in
-                    Text("\(value)")
-                        .font(.title3.weight(.semibold).monospacedDigit())
-                        .tag(value)
-                }
+        let picker = Picker(spokenUnit, selection: selection) {
+            ForEach(range, id: \.self) { value in
+                Text("\(value)")
+                    .font(.title3.weight(.semibold).monospacedDigit())
+                    .tag(value)
             }
-            .pickerStyle(.wheel)
-            .frame(maxWidth: .infinity)
-            // Neighbouring wheels otherwise take each other's touches.
-            .clipped()
-            .contentShape(Rectangle())
-            .accessibilityLabel(unit)
-            .accessibilityIdentifier(identifier)
+        }
+        .pickerStyle(.wheel)
+        // A wheel's rows keep one height, so larger digits would overlap.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .frame(maxWidth: .infinity)
+        // Neighbouring wheels otherwise take each other's touches.
+        .clipped()
+        .contentShape(Rectangle())
+        .accessibilityLabel(spokenUnit)
+        .accessibilityIdentifier(identifier)
 
-            Text(unit)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(AppTheme.textSecondary)
-                .fixedSize()
-                .accessibilityHidden(true)
+        let label = Text(unit)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(AppTheme.textSecondary)
+            .fixedSize()
+            .accessibilityHidden(true)
+
+        // Beside the wheel the name would squeeze large digits, so it goes above.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 0))
+            : AnyLayout(HStackLayout(spacing: 2))
+        return layout {
+            if dynamicTypeSize.isAccessibilitySize {
+                label
+                picker
+            } else {
+                picker
+                label
+            }
         }
         .frame(maxWidth: .infinity)
     }

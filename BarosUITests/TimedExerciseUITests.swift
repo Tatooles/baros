@@ -10,7 +10,8 @@ final class TimedExerciseUITests: XCTestCase {
     func testTimePickerSetsATimeAndTheLoggedTimeReachesHistory() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-reset-app-appearance",
+            "--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth",
+            "--uitest-reset-app-appearance",
             "--uitest-skip-first-run-experience", "--uitest-disable-animations",
             "--uitest-seed-timed-exercises", "--uitest-seed-timed-active-workout",
         ]
@@ -33,32 +34,36 @@ final class TimedExerciseUITests: XCTestCase {
         wheel("SetTimeSecondsWheel", in: app).adjust(toPickerWheelValue: "30")
         attachScreenshot("Choosing a time", app: app)
         app.buttons["CancelSetTimeButton"].tap()
-        XCTAssertTrue(waitForValue(time, "TIME"), "Cancel leaves the set without a time")
+        XCTAssertTrue(waitForValue(time, "No time"), "Cancel leaves the set without a time")
 
         time.tap()
         wheel("SetTimeSecondsWheel", in: app).adjust(toPickerWheelValue: "30")
         app.buttons["DoneSetTimeButton"].tap()
-        XCTAssertTrue(waitForValue(time, "1:30"))
+        XCTAssertTrue(waitForValue(time, "1 minute, 30 seconds"))
 
         app.buttons["SetCompletionButton-0-0"].tap()
         XCTAssertTrue(waitUntil(timeout: 3) { app.buttons["SetCompletionButton-0-0"].label == "Mark set incomplete" })
-        XCTAssertEqual(time.value as? String, "1:30")
+        XCTAssertEqual(time.value as? String, "1 minute, 30 seconds")
 
         // An empty timed set completes with the time from the set above.
         app.buttons["SetCompletionButton-0-1"].tap()
-        XCTAssertTrue(waitForValue(app.buttons["SetTimeField-0-1"], "1:30"))
+        XCTAssertTrue(waitForValue(app.buttons["SetTimeField-0-1"], "1 minute, 30 seconds"))
 
-        // Typing a weight and then opening the picker keeps the weight.
+        // Typing a weight and then opening the picker keeps the weight. The
+        // sheet offers RPE, since a time cell opens no keyboard to hold the
+        // chips; choosing one saves the time and completes the set.
         let carry = app.buttons["SetTimeField-1-0"]
         app.revealAboveWorkoutActions(carry)
         app.textFields["SetWeightField-1-0"].tap()
         app.textFields["SetWeightField-1-0"].typeText("80")
         carry.tap()
-        XCTAssertTrue(app.buttons["DoneSetTimeButton"].waitToExist(timeout: 3))
-        app.buttons["DoneSetTimeButton"].tap()
-        XCTAssertTrue(waitForValue(carry, "1:30"))
+        XCTAssertTrue(app.buttons["RPEChip-8"].waitToExist(timeout: 3))
+        attachScreenshot("Time picker with RPE", app: app)
+        app.buttons["RPEChip-8"].tap()
+        XCTAssertTrue(waitForValue(carry, "1 minute, 30 seconds"))
         XCTAssertEqual(app.textFields["SetWeightField-1-0"].value as? String, "80")
-        app.buttons["SetCompletionButton-1-0"].tap()
+        XCTAssertTrue(waitUntil(timeout: 3) { app.buttons["SetCompletionButton-1-0"].label == "Mark set incomplete" })
+        XCTAssertTrue(app.buttons["SetRPEBadge-1-0"].exists)
         attachScreenshot("Timed sets logged", app: app)
 
         app.buttons["FinishWorkoutButton"].tap()
@@ -73,7 +78,7 @@ final class TimedExerciseUITests: XCTestCase {
         XCTAssertEqual(logged.label, "Set 1, 1 minute, 30 seconds")
         XCTAssertEqual(
             app.descendants(matching: .any).matching(identifier: "WorkoutHistorySetSummary-1-0").firstMatch.label,
-            "Set 1, 80 pounds, 1 minute, 30 seconds"
+            "Set 1, 80 pounds, 1 minute, 30 seconds, RPE 8"
         )
         attachScreenshot("Workout history with timed sets", app: app)
 
@@ -81,7 +86,7 @@ final class TimedExerciseUITests: XCTestCase {
         app.buttons["EditWorkoutButton"].tap()
         let edited = app.buttons["HistorySetTimeField-0-0"]
         XCTAssertTrue(edited.waitToExist(timeout: 3))
-        XCTAssertEqual(edited.value as? String, "1:30")
+        XCTAssertEqual(edited.value as? String, "1 minute, 30 seconds")
         XCTAssertFalse(app.textFields["HistorySetRepsField-0-0"].exists)
         edited.tap()
         XCTAssertTrue(app.buttons["ClearSetTimeButton"].waitToExist(timeout: 3))
@@ -89,7 +94,7 @@ final class TimedExerciseUITests: XCTestCase {
         wheel("SetTimeSecondsWheel", in: app).adjust(toPickerWheelValue: "0")
         attachScreenshot("Editing a timed set", app: app)
         app.buttons["DoneSetTimeButton"].tap()
-        XCTAssertTrue(waitForValue(edited, "13:00"))
+        XCTAssertTrue(waitForValue(edited, "13 minutes"))
         app.buttons["SaveCompletedWorkoutEditButton"].tap()
         XCTAssertTrue(waitUntil(timeout: 5) { logged.exists && logged.label == "Set 1, 13 minutes" })
     }
