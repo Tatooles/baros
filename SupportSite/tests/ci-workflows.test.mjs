@@ -4,7 +4,7 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse } from "yaml";
 
 const repositoryRoot = process.env.CI_WORKFLOW_ROOT
@@ -240,7 +240,7 @@ test("the nightly UI suite runs the full target serially with the smoke job's se
   const stepNamed = (steps, name) => steps.find((step) => step.name === name);
 
   assert.equal(job["runs-on"], "macos-26");
-  assert.equal(job["timeout-minutes"], 120);
+  assert.equal(job["timeout-minutes"], 155);
   assert.equal(job.strategy, undefined, "the full suite must stay one job until sharding is planned");
   assert.deepEqual(job.env, smoke.env);
   for (const name of ["Check out repository", "Select Xcode 26.5", "Show Xcode and simulator environment"]) {
@@ -253,12 +253,14 @@ test("the nightly UI suite runs the full target serially with the smoke job's se
   assert.match(testRun, /-parallel-testing-enabled NO/);
   // A stuck test must fail by itself instead of using up the whole step.
   assert.match(testRun, /-test-timeouts-enabled YES/);
-  const allowances = [
-    ...testRun.matchAll(/-(?:default|maximum)-test-execution-time-allowance (\d+)/g),
-  ].map((match) => Number(match[1]));
-  assert.equal(allowances.length, 2, "set both the default and maximum per-test allowance");
-  for (const seconds of allowances) {
-    assert.ok(seconds >= 180 && seconds * 4 <= job.steps[testIndex]["timeout-minutes"] * 60);
+  for (const flag of ["default", "maximum"]) {
+    const matches = [...testRun.matchAll(new RegExp(`-${flag}-test-execution-time-allowance (\\d+)`, "g"))];
+    assert.equal(matches.length, 1, `set -${flag}-test-execution-time-allowance exactly once`);
+    const seconds = Number(matches[0][1]);
+    // Above the slowest healthy CI attempt (183 s), in whole minutes as XCTest rounds,
+    // and small next to the step budget, since XCTest doesn't retry a test that exceeds it.
+    assert.ok(seconds > 183 && seconds % 60 === 0, `${flag} allowance ${seconds} s`);
+    assert.ok(seconds * 10 <= job.steps[testIndex]["timeout-minutes"] * 60);
   }
   assert.match(testRun, /-maximum-concurrent-test-simulator-destinations 1\b/);
   assert.doesNotMatch(testRun, /-parallel-testing-enabled YES|-parallel-testing-worker-count/);
@@ -282,7 +284,11 @@ test("the nightly UI suite runs the full target serially with the smoke job's se
   assert.match(countStep.run, /totalTestCount/);
 
   const failedStep = job.steps.find((step) => step.id === "failed");
-  assert.match(failedStep.run, /ci_scripts\/report_failed_tests\.py\s+\\\s+"\$\{RUNNER_TEMP\}\/BarosUIFull\.xcresult"\s+\\\s+"\$\{RUNNER_TEMP\}\/BarosUIFull\.log"/);
+  const failedCommand = failedStep.run.replace(/\\\n\s*/g, " ");
+  assert.match(
+    failedCommand,
+    /ci_scripts\/report_failed_tests\.py\s+"\$\{RUNNER_TEMP\}\/BarosUIFull\.xcresult"\s+"\$\{RUNNER_TEMP\}\/BarosUIFull\.log"/,
+  );
   assert.equal(failedStep.if, "${{ !cancelled() }}", "failed names must be collected after any failure");
   assert.equal(job.outputs["failed-tests"], "${{ steps.failed.outputs.names }}");
 
@@ -435,6 +441,18 @@ test("failed UI test names fall back to the log when the result bundle is unread
         "Test Case '-[BarosUITests.SupersetUITests testBroken]' failed (4.000 seconds).",
         "Test Case '-[BarosUITests.SupersetUITests testBroken]' started (Iteration 2 of 2).",
         "Test Case '-[BarosUITests.SupersetUITests testBroken]' failed (4.000 seconds).",
+        // Real xcodebuild output for a test killed by its allowance, then for a crash.
+        // Neither prints "failed", and XCTest doesn't retry either.
+        "Test Case '-[BarosUITests.BarosUITests testHang]' started (Iteration 1 of 2).",
+        "Test Case '-[BarosUITests.BarosUITests testHang]' exceeded execution time allowance of 6 minutes. The test may have hung; check Xcode's test report for additional diagnostics.",
+        "Restarting after unexpected exit, crash, or test timeout; summary will include totals from previous launches.",
+        "Test Case '-[BarosUITests.BarosUITests testCrash]' started (Iteration 1 of 2).",
+        "Swift/ContiguousArrayBuffer.swift:695: Fatal error: Index out of range",
+        "Restarting after unexpected exit, crash, or test timeout; summary will include totals from previous launches.",
+        // A test that starts but never reports, followed by another test.
+        "Test Case '-[BarosUITests.BarosUITests testLost]' started (Iteration 1 of 2).",
+        "Test Case '-[BarosUITests.BarosUITests testAfterLost]' started (Iteration 1 of 2).",
+        "Test Case '-[BarosUITests.BarosUITests testAfterLost]' passed (1.000 seconds).",
         "Test Case '-[BarosUITests.BarosUITests testCutOff]' started (Iteration 1 of 2).",
         "##[error]The action 'Run full Baros UI test target' has timed out after 105 minutes.",
         "",
@@ -444,7 +462,7 @@ test("failed UI test names fall back to the log when the result bundle is unread
     const script = new URL("ci_scripts/report_failed_tests.py", repositoryRoot);
     const result = spawnSync(
       "python3",
-      ["-I", script.pathname, join(directory, "missing.xcresult"), log],
+      ["-I", fileURLToPath(script), join(directory, "missing.xcresult"), log],
       { encoding: "utf8", env: { ...process.env, GITHUB_STEP_SUMMARY: "" } },
     );
 
@@ -453,6 +471,9 @@ test("failed UI test names fall back to the log when the result bundle is unread
       result.stdout,
       [
         "SupersetUITests/testBroken()",
+        "BarosUITests/testHang() (exceeded its execution time allowance)",
+        "BarosUITests/testCrash() (crashed or was killed before recording a result)",
+        "BarosUITests/testLost() (no result recorded)",
         "BarosUITests/testCutOff() (still running when the log ended)",
         "",
       ].join("\n"),

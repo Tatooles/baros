@@ -70,7 +70,7 @@ jobs:
     # Fails open: if the gate itself breaks, run the suite rather than skip it.
     if: ${{ !cancelled() && (needs.main-changes.result != 'success' || needs.main-changes.outputs.run == 'true') }}
     runs-on: macos-26
-    timeout-minutes: 120
+    timeout-minutes: 155
     outputs:
       failed-tests: ${{ steps.failed.outputs.names }}
     env:
@@ -104,9 +104,12 @@ jobs:
 
       - name: Run full Baros UI test target
         # Leaves time inside the job timeout to collect and upload diagnostics.
-        # The per-test 300 s allowance fails a stuck test instead of letting it
-        # use up the step (the slowest healthy test takes about 3 minutes on CI).
-        timeout-minutes: 105
+        # The first run averaged about 35 s per test after a 9-minute build, so the
+        # whole target needs roughly 110 minutes on the hosted runner.
+        # The per-test 360 s allowance fails a stuck test instead of letting it use
+        # up the step. XCTest doesn't retry a test that exceeds it, and the slowest
+        # healthy attempt on CI took 183 s.
+        timeout-minutes: 140
         run: |
           set -o pipefail
           xcodebuild test \
@@ -117,8 +120,8 @@ jobs:
             -parallel-testing-enabled NO \
             -maximum-concurrent-test-simulator-destinations 1 \
             -test-timeouts-enabled YES \
-            -default-test-execution-time-allowance 300 \
-            -maximum-test-execution-time-allowance 300 \
+            -default-test-execution-time-allowance 360 \
+            -maximum-test-execution-time-allowance 360 \
             -derivedDataPath "${RUNNER_TEMP}/BarosUIFullDerivedData" \
             -retry-tests-on-failure \
             -test-iterations 2 \
@@ -134,7 +137,7 @@ jobs:
             --path "${RUNNER_TEMP}/BarosUIFull.xcresult" --compact > /dev/null 2>&1; then
             echo "readable=true" >> "${GITHUB_OUTPUT}"
           else
-            echo "::warning::The result bundle is missing or incomplete, so counts and retries are unavailable. Failed tests come from the log."
+            echo "::warning::The result bundle is missing or incomplete, so counts and retries are unavailable. Failed tests come from the xcodebuild log, if there is one."
             echo "readable=false" >> "${GITHUB_OUTPUT}"
           fi
 
@@ -229,7 +232,7 @@ jobs:
           else
             failures="No failed test names were recorded. The run failed outside test execution (build, timeout, or runner); see the log."
           fi
-          body="$(printf 'The nightly full `BarosUITests` run failed on `%s`.\n\nRun: %s\n\nFailed tests (after one retry):\n%s\n' \
+          body="$(printf 'The nightly full `BarosUITests` run failed on `%s`.\n\nRun: %s\n\nFailed or interrupted tests (ordinary failures were retried once):\n%s\n' \
             "${COMMIT_SHA}" "${RUN_URL}" "${failures}")"
 
           if [[ -n "${issue_number}" ]]; then
