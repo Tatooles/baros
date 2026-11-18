@@ -197,6 +197,8 @@ private struct ExercisePickerList: View {
     }
 
     var body: some View {
+        let similarRows = self.similarRows
+        let similarIDs = Set(similarRows.map(\.id))
         List {
             if let noMatchesSuggestion {
                 ExerciseNoMatchesSection(
@@ -218,7 +220,7 @@ private struct ExercisePickerList: View {
                     }
                 }
                 Section {
-                    ForEach(rows.filter { row in !similarRows.contains { $0.id == row.id } }) { row in
+                    ForEach(rows.filter { !similarIDs.contains($0.id) }) { row in
                         pickerRow(row)
                     }
 
@@ -398,13 +400,14 @@ private struct ExercisePickerList: View {
                 Text(replacement.map(impact.confirmTitle(for:)) ?? "Choose a Replacement")
                     .font(.headline)
                     // Wraps rather than truncating, so the equipment of a same-name variant stays readable.
-                    .lineLimit(3)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
             }
             .buttonStyle(.glassProminent)
-            .accessibilityHint(impact.losesWork ? impact.lossMessage : "")
+            // A value, not a hint, so VoiceOver reads the loss even with hints turned off.
+            .accessibilityValue(impact.losesWork ? impact.lossMessage : "")
             .tint(impact.losesWork ? AppTheme.destructiveFill : AppTheme.brandAccentFill)
             .disabled(replacement == nil)
             .accessibilityIdentifier("ExercisePickerConfirmSwapButton")
