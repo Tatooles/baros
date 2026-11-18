@@ -61,6 +61,7 @@ private final class CloudDeletionUITestClient: SyncClient, @unchecked Sendable {
         if ProcessInfo.processInfo.arguments.contains("--uitest-delay-cloud-deletion") {
             try await Task.sleep(for: .seconds(4))
         }
+        await CloudDeletionUITestGate.shared.waitForRelease()
         let shouldFail = lock.withLock {
             if hasFailed { return false }
             hasFailed = true
@@ -82,6 +83,43 @@ private final class CloudDeletionUITestClient: SyncClient, @unchecked Sendable {
     func upsertWorkoutTemplate(_ record: WorkoutTemplateSyncPayload) async throws -> SyncMutationResult { throw FixtureError.unexpectedSync }
     func tombstone(entityKind: SyncEntityKind, clientId: UUID, deletedAt: Date) async throws -> SyncMutationResult { throw FixtureError.unexpectedSync }
     func fetchChanges(cursors: SyncChangeCursors, limit: Int) async throws -> SyncFetchChangesResponse { throw FixtureError.unexpectedSync }
+}
+
+/// With `--uitest-hold-cloud-deletion`, the fixture's cloud request stays pending until
+/// the test taps `UITestReleaseCloudDeletionButton`. A fixed delay races slow CI runners
+/// when a test checks that nothing happens while the request is still running.
+@MainActor
+@Observable
+final class CloudDeletionUITestGate {
+    static let shared = CloudDeletionUITestGate()
+    private static let isEnabled = ProcessInfo.processInfo.arguments.contains("--uitest-hold-cloud-deletion")
+    /// True only while a request is parked, so the release control proves one is pending.
+    private(set) var isHoldingRequest = false
+    private var isReleased = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func waitForRelease() async {
+        guard Self.isEnabled, !isReleased else { return }
+        isHoldingRequest = true
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func release() {
+        isReleased = true
+        isHoldingRequest = false
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
+    }
+}
+
+struct CloudDeletionUITestReleaseControl: View {
+    var body: some View {
+        if CloudDeletionUITestGate.shared.isHoldingRequest {
+            Button("Release Cloud Deletion") { CloudDeletionUITestGate.shared.release() }
+                .font(.caption2)
+                .accessibilityIdentifier("UITestReleaseCloudDeletionButton")
+        }
+    }
 }
 
 @MainActor

@@ -67,8 +67,11 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Discard Workout and Sign Out"].exists)
         attachAccountEvidence("Account resolution choices", app: app)
         app.buttons["Cancel"].tap()
+        // Wait out the first alert so the second Finish tap can only reach the new one.
+        XCTAssertTrue(app.alerts.firstMatch.waitToDisappear(timeout: 3))
         XCTAssertTrue(app.buttons["AccountSignOutButton"].exists)
         app.buttons["AccountSignOutButton"].tap()
+        XCTAssertTrue(finish.waitToExist(timeout: 3))
         finish.tap()
         XCTAssertTrue(app.buttons["AccountSignOutButton"].waitToDisappear(timeout: 3))
         XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitToDisappear(timeout: 3))
@@ -3675,12 +3678,9 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testEarlierSetSuggestionsStayUnrecordedUntilCheckmarkOrRPE() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "--uitest-in-memory-store", "--uitest-enable-rpe",
-            "--uitest-force-signed-out-auth",
-            "--uitest-skip-first-run-experience",
-        ]
+        // makeApp turns UIKit animations off. With them on, iOS 26.5 on CI never reported
+        // this screen idle after the keyboard closed, so each step waited 60 s (#417).
+        let app = makeApp()
         app.launch()
         startBlankWorkoutWithBenchPress(in: app)
         addSets(2, in: app)

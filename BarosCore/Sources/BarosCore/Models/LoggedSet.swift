@@ -67,7 +67,10 @@ public final class LoggedSet: Identifiable {
         return weight * Double(reps)
     }
 
-    var isDeleted: Bool {
+    /// Public on purpose: outside BarosCore an internal `isDeleted` is invisible, so
+    /// `isDeleted` there silently means SwiftData's `PersistentModel.isDeleted`, which
+    /// stays false for a soft-deleted (tombstoned) record.
+    public var isDeleted: Bool {
         deletedAt != nil
     }
 
