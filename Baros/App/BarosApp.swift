@@ -213,6 +213,9 @@ struct BarosApp: App {
             .overlay(alignment: .trailing) {
                 CurrentOwnerSwitchUITestControl(syncScheduler: syncScheduler)
             }
+            .overlay(alignment: .leading) {
+                CloudDeletionUITestReleaseControl()
+            }
             .overlay(alignment: .top) {
                 if let uiTestClerkSessionProvider {
                     VStack {

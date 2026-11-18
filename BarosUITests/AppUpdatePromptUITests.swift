@@ -4,8 +4,11 @@ import XCTest
 final class AppUpdatePromptUITests: XCTestCase {
     private func app(extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
+        // UIKit animations stay off, as in BarosUITests.makeApp: XCUITest waits for them
+        // after every action, and on CI some never reported done (60 s per step, #417).
         app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth",
-                               "--uitest-skip-first-run-experience", "--uitest-update-available"] + extra
+                               "--uitest-skip-first-run-experience", "--uitest-update-available",
+                               "--uitest-disable-animations"] + extra
         return app
     }
 
@@ -82,7 +85,7 @@ final class AppUpdatePromptUITests: XCTestCase {
         let app = app(extra: [
             "--uitest-update-reset", "--uitest-force-signed-in-auth",
             "--uitest-sync-owner", "issuer|ui_owner", "--uitest-seed-large-active-workout",
-            "--uitest-fail-cloud-deletion-once", "--uitest-delay-cloud-deletion",
+            "--uitest-fail-cloud-deletion-once", "--uitest-hold-cloud-deletion",
         ])
         app.launchArguments.removeAll { $0 == "--uitest-force-signed-out-auth" }
         app.launch()
@@ -106,9 +109,11 @@ final class AppUpdatePromptUITests: XCTestCase {
         XCTAssertTrue(finish.waitToExist(timeout: 3))
         finish.tap()
         // Resolving the workout returns to Home while the cloud action is still awaiting.
-        XCTAssertTrue(app.staticTexts["HomeTitle"].waitToExist(timeout: 2))
+        // The fixture holds that request until released, so the check below cannot race it.
+        XCTAssertTrue(app.staticTexts["HomeTitle"].waitToExist(timeout: 5))
         XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
         XCTAssertFalse(app.alerts["Update available"].waitForExistence(timeout: 2))
+        app.buttons["UITestReleaseCloudDeletionButton"].tap()
         XCTAssertTrue(app.alerts["Update available"].waitToExist(timeout: 5))
         app.alerts["Update available"].buttons["Later"].tap()
     }

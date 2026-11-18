@@ -68,7 +68,13 @@ public final class WorkoutAccountTransition {
     }
 
     public func resolve(_ resolution: Resolution) async {
-        guard needsResolution, !isRunning, !engine.isAccountTransitionInProgress else { return }
+        guard !isRunning, !engine.isAccountTransitionInProgress else { return }
+        // A choice whose request was cancelled must say so; returning silently left
+        // the person tapping Finish with nothing happening.
+        guard needsResolution else {
+            errorMessage = TransitionError.choiceExpired.localizedDescription
+            return
+        }
         isRunning = true
         defer { isRunning = false }
         do {
@@ -135,7 +141,7 @@ public final class WorkoutAccountTransition {
     }
 
     private enum TransitionError: LocalizedError {
-        case hiddenWorkout, ownerChanged, workoutsChanged, pendingSetSave
+        case hiddenWorkout, ownerChanged, workoutsChanged, pendingSetSave, choiceExpired
         var errorDescription: String? {
             switch self {
             case .hiddenWorkout:
@@ -146,6 +152,8 @@ public final class WorkoutAccountTransition {
                 "The unfinished workouts changed. Review them and try again."
             case .pendingSetSave:
                 "A set could not be saved. Return to the workout to retry or discard that edit before continuing."
+            case .choiceExpired:
+                "Your choice wasn’t applied. Your workout and account are unchanged. Try again."
             }
         }
     }

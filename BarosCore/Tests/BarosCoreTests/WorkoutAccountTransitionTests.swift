@@ -17,10 +17,25 @@ final class WorkoutAccountTransitionTests: XCTestCase {
         await h.request()
         XCTAssertTrue(h.gate.needsResolution)
         h.gate.cancel()
+        XCTAssertNil(h.gate.errorMessage)
         await h.gate.resolve(.discard)
         XCTAssertEqual(h.calls, 0)
         XCTAssertEqual(session.status, .active)
         XCTAssertEqual(h.owner, "issuer|a")
+    }
+
+    func testChoiceAfterCancellationReportsThatNothingChanged() async throws {
+        for resolution in [WorkoutAccountTransition.Resolution.finish, .discard] {
+            let h = try Harness()
+            let session = try h.start()
+            await h.request()
+            h.gate.cancel()
+            await h.gate.resolve(resolution)
+            XCTAssertEqual(h.calls, 0)
+            XCTAssertEqual(session.status, .active)
+            XCTAssertEqual(h.gate.errorMessage,
+                "Your choice wasn’t applied. Your workout and account are unchanged. Try again.")
+        }
     }
 
     func testFinishAndDiscardPersistBeforeAccountAction() async throws {
