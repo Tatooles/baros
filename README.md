@@ -78,8 +78,8 @@ Before adding a UI test, read the UI-test policy in `AGENTS.md` → "UI tests"; 
 
 `.github/workflows/ios-ui-nightly.yml` runs the whole `BarosUITests` target (`-only-testing:BarosUITests`) every night at 09:23 UTC (3:23 AM CST, 4:23 AM CDT) on `main`, unless `main` hasn't changed since the last scheduled run (see below). It has no `pull_request` or `push` trigger, so it is never a PR check. Its `ios-ui-full` job uses the smoke job's Xcode 26.5 / iOS 26.5 simulator setup and runs on one simulator with parallel testing disabled. It retries a test that fails an assertion once, like the smoke gate.
 
-- **Per-test limit:** each test attempt gets at most 360 seconds. A test that exceeds it fails without a retry, and the suite continues, so one stuck test can't use up the run.
-- **Step and job limits:** the test step has 140 minutes and the job 155. The first run averaged about 35 s per test after a 9-minute build, so the whole target needs roughly 110 minutes on the hosted runner. Sharding by test class is the next step if it outgrows that.
+- **Per-test limit:** each test attempt gets at most 20 minutes. A test that exceeds it fails without a retry, and the suite continues, so one stuck test can't use up the run. The limit guards against hangs, not slowness: the slowest healthy test, `testLinkModeKeepsScrolledCardsInPlaceInBothLists`, takes about 8 minutes locally and about 18 minutes on the hosted runner.
+- **Step and job limits:** the test step has 200 minutes and the job 215. The hosted runner ran the first nightly's tests about 2.4 times slower than a local Mac, so the whole target needs roughly 125 minutes there, plus a 9-minute build. Sharding by test class is the next step if it outgrows that.
 
 The run log and step summary list:
 

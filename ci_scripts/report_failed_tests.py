@@ -63,7 +63,7 @@ def failed_tests_from_log(path):
             test_class, test_name, outcome = match.groups()
             identifier = f"{test_class}/{test_name}()"
             outcomes[identifier] = outcome
-            current = identifier if outcome in ("started", "exceeded") else None
+            current = identifier if outcome == "started" else None
 
     if current and outcomes[current] == "started":
         outcomes[current] = "running"
@@ -79,7 +79,11 @@ def main():
             print("Neither the result bundle nor the xcodebuild log could be read.", file=sys.stderr)
             sys.exit(1)
         print("Result bundle unreadable; reading failed tests from the log.", file=sys.stderr)
-        tests = failed_tests_from_log(sys.argv[2])
+        try:
+            tests = failed_tests_from_log(sys.argv[2])
+        except OSError as error:
+            print(f"Could not read the xcodebuild log: {error}", file=sys.stderr)
+            sys.exit(1)
         source = "log"
 
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
