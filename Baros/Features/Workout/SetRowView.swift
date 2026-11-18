@@ -30,6 +30,7 @@ struct SetRowView: View, @MainActor Equatable {
     @State private var hasFailedRemoval = false
     @State private var input = ActiveWorkoutSetInput()
     @State private var commitRegistrationID: UUID?
+    @State private var timePickerRequest: SetTimePickerRequest?
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.setID == rhs.setID
@@ -301,28 +302,101 @@ struct SetRowView: View, @MainActor Equatable {
         return previous.displayText(weightUnit: weightUnit)
     }
 
-    /// Reps, or time for a timed exercise. Both sit in the same slot and
-    /// share the row's second focus target.
-    private var measureInput: ActiveWorkoutSetInput.Field {
-        trackingMethod == .duration ? .duration : .reps
-    }
-
     private var measureIdentifierPrefix: String {
         trackingMethod == .duration ? "SetTime" : "SetReps"
     }
 
+    /// Reps are typed; a timed exercise's time is chosen from wheels. Both
+    /// sit in the same slot.
+    @ViewBuilder
     private var measureField: some View {
-        numericField(
-            placeholder: trackingMethod.fieldLabel,
-            suggestion: suggestionText(for: measureInput),
-            text: measureBinding,
-            keyboard: .numberPad,
-            focusTarget: .setReps(set.id),
-            isFocused: isRepsFocused,
-            accessibilityIdentifier: "\(measureIdentifierPrefix)Field-\(exerciseIndex)-\(index)"
-        )
+        Group {
+            if trackingMethod == .duration {
+                timeButton
+            } else {
+                numericField(
+                    placeholder: trackingMethod.fieldLabel,
+                    suggestion: suggestionText(for: .reps),
+                    text: repsBinding,
+                    keyboard: .numberPad,
+                    focusTarget: .setReps(set.id),
+                    isFocused: isRepsFocused,
+                    accessibilityIdentifier: "\(measureIdentifierPrefix)Field-\(exerciseIndex)-\(index)"
+                )
+            }
+        }
         .overlay(alignment: .topTrailing) {
             rpeBadge
+        }
+    }
+
+    private var timeButton: some View {
+        let time = WorkoutNumericInputPolicy.validatedDuration(durationSeconds).map(WorkoutFormatters.setDuration)
+        let suggestion = suggestionText(for: .duration)
+        let placeholder = trackingMethod.fieldLabel
+        return Button {
+            presentTimePicker()
+        } label: {
+            timeText(time: time, suggestion: suggestion, placeholder: placeholder)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(
+                    RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                )
+                .background {
+                    // The same quiet well the typed fields rest in.
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(set.isCompleted ? Color.clear : AppTheme.setFieldWell)
+                        .padding(.vertical, 4)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(placeholder)
+        .accessibilityValue(suggestion.map { "Suggested \($0)" } ?? time ?? placeholder)
+        .accessibilityHint(suggestion == nil ? "Opens the time picker."
+            : "Complete the set to use this value, or open the time picker.")
+        .accessibilityIdentifier("\(measureIdentifierPrefix)Field-\(exerciseIndex)-\(index)")
+        .sheet(item: $timePickerRequest) { request in
+            SetTimePickerSheet(request: request, onSave: saveTime)
+        }
+    }
+
+    /// Matches the typed fields: an entered value, a quieter suggestion, or
+    /// the small column label when there is neither.
+    private func timeText(time: String?, suggestion: String?, placeholder: String) -> Text {
+        if let value = time ?? suggestion {
+            return Text(value)
+                .font(.body.weight(.semibold).monospacedDigit())
+                .fontDesign(.rounded)
+                .foregroundStyle(time == nil ? AppTheme.textSecondary : AppTheme.textPrimary)
+        }
+        return Text(placeholder)
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(AppTheme.textSecondary)
+    }
+
+    private func presentTimePicker() {
+        // Save whatever is still being typed, then give the sheet the screen.
+        setInputRegistry.commit(focusedField.wrappedValue)
+        guard !engine.hasPendingSetSave, canEditSet else { return }
+        focusedField.wrappedValue = nil
+        let name = set.loggedExercise?.exerciseSnapshotName ?? ""
+        timePickerRequest = SetTimePickerRequest(
+            title: name.isEmpty ? "Set \(index + 1)" : "\(name), Set \(index + 1)",
+            startingSeconds: inputValues.timePickerStart(suggestions: suggestions, previous: previous),
+            hasTime: WorkoutNumericInputPolicy.validatedDuration(durationSeconds) != nil
+        )
+    }
+
+    private func saveTime(_ seconds: Int?) {
+        guard !engine.hasPendingSetSave, canEditSet else { return }
+        do {
+            try engine.commitActiveSetDraft(set, values: inputValues.settingDuration(seconds), context: modelContext)
+        } catch {
+            // The engine restored the model and owns the attempted values for Retry.
         }
     }
 
@@ -435,19 +509,18 @@ struct SetRowView: View, @MainActor Equatable {
         )
     }
 
-    private var measureBinding: Binding<String> {
-        let field = measureInput
-        return Binding(
-            get: { input.text(for: field, values: inputValues, weightUnit: weightUnit) },
+    private var repsBinding: Binding<String> {
+        Binding(
+            get: { input.text(for: .reps, values: inputValues, weightUnit: weightUnit) },
             set: { value in
                 guard value != input.text(
-                    for: field,
+                    for: .reps,
                     values: inputValues,
                     weightUnit: weightUnit
                 ) else { return }
                 input.update(
                     value,
-                    for: field,
+                    for: .reps,
                     isFocused: isRepsFocused
                 )
                 publishPreview()

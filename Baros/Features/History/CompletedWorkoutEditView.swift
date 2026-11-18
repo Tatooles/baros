@@ -22,6 +22,7 @@ struct CompletedWorkoutEditView: View {
     @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var errorMessage: String?
     @State private var removalCandidate: CompletedWorkoutSetRemovalCandidate?
+    @State private var timeEdit: CompletedWorkoutSetTimeEdit?
     @FocusState private var focusedField: CompletedWorkoutEditFocusedField?
 
     init(session: WorkoutSession, draft: CompletedWorkoutEditDraft, weightUnit: MeasurementUnit) {
@@ -91,6 +92,13 @@ struct CompletedWorkoutEditView: View {
                     selection: $durationSelection,
                     hasEditedDuration: $hasEditedDuration
                 )
+            }
+            .sheet(item: $timeEdit) { edit in
+                SetTimePickerSheet(request: edit.request) { seconds in
+                    updateDraftSet(exerciseIndex: edit.exerciseIndex, setIndex: edit.setIndex) { set in
+                        set.durationSeconds = seconds
+                    }
+                }
             }
             .alert(
                 "Remove Set?",
@@ -314,19 +322,20 @@ struct CompletedWorkoutEditView: View {
                     accessibilityIdentifier: "HistorySetWeightField-\(exerciseIndex)-\(visibleIndex)"
                 )
 
-                // Reps, or time for a timed exercise, in the same slot.
-                let isTimed = draft.exercises[exerciseIndex].trackingMethod == .duration
-                WorkoutNumericTextField(
-                    placeholder: draft.exercises[exerciseIndex].trackingMethod.fieldLabel,
-                    text: isTimed
-                        ? durationBinding(exerciseIndex: exerciseIndex, setIndex: setIndex)
-                        : repsBinding(exerciseIndex: exerciseIndex, setIndex: setIndex),
-                    keyboard: .numberPad,
-                    focusTarget: .setReps(exerciseIndex, setIndex),
-                    focusedField: $focusedField,
-                    accessibilityIdentifier: "HistorySet\(isTimed ? "Time" : "Reps")Field-\(exerciseIndex)-\(visibleIndex)",
-                    reformat: timeReformat(isTimed)
-                )
+                // Reps are typed; a timed exercise's time is chosen from
+                // wheels. Both sit in the same slot.
+                if draft.exercises[exerciseIndex].trackingMethod == .duration {
+                    timeButton(exerciseIndex: exerciseIndex, setIndex: setIndex, visibleIndex: visibleIndex)
+                } else {
+                    WorkoutNumericTextField(
+                        placeholder: draft.exercises[exerciseIndex].trackingMethod.fieldLabel,
+                        text: repsBinding(exerciseIndex: exerciseIndex, setIndex: setIndex),
+                        keyboard: .numberPad,
+                        focusTarget: .setReps(exerciseIndex, setIndex),
+                        focusedField: $focusedField,
+                        accessibilityIdentifier: "HistorySetRepsField-\(exerciseIndex)-\(visibleIndex)"
+                    )
+                }
 
                 if showsRPE {
                     WorkoutNumericTextField(
@@ -427,31 +436,40 @@ struct CompletedWorkoutEditView: View {
         )
     }
 
-    private func timeReformat(_ isTimed: Bool) -> ((String) -> String)? {
-        isTimed ? { WorkoutFormatters.setDurationDraft($0) } : nil
-    }
-
-    private func durationBinding(exerciseIndex: Int, setIndex: Int) -> Binding<String> {
-        let focusTarget = CompletedWorkoutEditFocusedField.setReps(exerciseIndex, setIndex)
-
-        return Binding(
-            get: {
-                guard draftSetExists(exerciseIndex: exerciseIndex, setIndex: setIndex) else {
-                    return numberInputTexts[focusTarget]?.displayText(for: nil) ?? ""
-                }
-                let duration = WorkoutNumericInputPolicy.validatedDuration(
-                    draft.exercises[exerciseIndex].sets[setIndex].durationSeconds
+    private func timeButton(exerciseIndex: Int, setIndex: Int, visibleIndex: Int) -> some View {
+        let exercise = draft.exercises[exerciseIndex]
+        let seconds = WorkoutNumericInputPolicy.validatedDuration(exercise.sets[setIndex].durationSeconds)
+        let placeholder = exercise.trackingMethod.fieldLabel
+        return Button {
+            focusedField = nil
+            timeEdit = CompletedWorkoutSetTimeEdit(
+                request: SetTimePickerRequest(
+                    title: "\(exercise.exerciseSnapshotName), Set \(visibleIndex + 1)",
+                    startingSeconds: seconds ?? 0,
+                    hasTime: seconds != nil
+                ),
+                exerciseIndex: exerciseIndex,
+                setIndex: setIndex
+            )
+        } label: {
+            Text(seconds.map(WorkoutFormatters.setDuration) ?? placeholder)
+                .font(.body.weight(.semibold).monospacedDigit())
+                .fontDesign(.rounded)
+                .foregroundStyle(seconds == nil ? AppTheme.textTertiary : AppTheme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(
+                    AppTheme.fieldSurface,
+                    in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
                 )
-                return numberInputTexts[focusTarget, default: WorkoutNumberInputText()]
-                    .displayText(fallback: duration.map(WorkoutFormatters.setDuration) ?? "")
-            },
-            set: { value in
-                updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in
-                    numberInputTexts[focusTarget, default: WorkoutNumberInputText()].updateDraft(value)
-                    set.durationSeconds = WorkoutNumericInputPolicy.parseDuration(value)
-                }
-            }
-        )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(placeholder)
+        .accessibilityValue(seconds.map(WorkoutFormatters.setDuration) ?? placeholder)
+        .accessibilityHint("Opens the time picker.")
+        .accessibilityIdentifier("HistorySetTimeField-\(exerciseIndex)-\(visibleIndex)")
     }
 
     private func rpeBinding(exerciseIndex: Int, setIndex: Int) -> Binding<String> {
@@ -590,6 +608,15 @@ struct CompletedWorkoutEditView: View {
             errorMessage = error.localizedDescription
         }
     }
+}
+
+/// The set whose time the picker sheet is editing.
+private struct CompletedWorkoutSetTimeEdit: Identifiable {
+    let request: SetTimePickerRequest
+    let exerciseIndex: Int
+    let setIndex: Int
+
+    var id: UUID { request.id }
 }
 
 private struct CompletedWorkoutDurationEditor: View {

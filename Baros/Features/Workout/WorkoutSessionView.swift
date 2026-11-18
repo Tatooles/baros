@@ -548,7 +548,8 @@ struct WorkoutSessionView: View {
                 swappingLoggedExercise = loggedExercise
             },
             onEditRPE: { set in
-                focusedField = .setReps(set.id)
+                // A timed set has no reps field to hold the keyboard.
+                focusedField = set.trackingMethod == .duration ? .setWeight(set.id) : .setReps(set.id)
                 rpeEditingSetID = set.id
             }
         )

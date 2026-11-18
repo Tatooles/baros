@@ -40,6 +40,22 @@ public struct ActiveWorkoutSetInput {
             self.init(weight: set.weight, reps: set.reps, durationSeconds: set.durationSeconds)
         }
 
+        /// These values with the time a picker chose; nil clears it.
+        public func settingDuration(_ seconds: Int?) -> Values {
+            var values = validated
+            values.durationSeconds = WorkoutNumericInputPolicy.validatedDuration(seconds)
+            return values
+        }
+
+        /// Where a time picker starts: this set's time, else the time
+        /// completing the set would fill in, else zero.
+        public func timePickerStart(suggestions: Values, previous: PreviousSetPerformance?) -> Int {
+            WorkoutNumericInputPolicy.validatedDuration(durationSeconds)
+                ?? WorkoutNumericInputPolicy.validatedDuration(suggestions.durationSeconds)
+                ?? WorkoutNumericInputPolicy.validatedDuration(previous?.durationSeconds)
+                ?? 0
+        }
+
         var validated: Values {
             Values(
                 weight: WorkoutNumericInputPolicy.validatedWeight(weight),
@@ -62,10 +78,8 @@ public struct ActiveWorkoutSetInput {
 
     private var weightInput = WorkoutNumberInputText()
     private var repsInput = WorkoutNumberInputText()
-    private var durationInput = WorkoutNumberInputText()
     private var rejectedWeight = false
     private var rejectedReps = false
-    private var rejectedDuration = false
 
     public init() {}
 
@@ -76,7 +90,8 @@ public struct ActiveWorkoutSetInput {
         case .reps:
             repsInput.updateDraft(text, isFocused: isFocused)
         case .duration:
-            durationInput.updateDraft(WorkoutFormatters.setDurationDraft(text), isFocused: isFocused)
+            // A time is chosen in a picker and saved at once, so it has no draft.
+            break
         }
     }
 
@@ -91,7 +106,7 @@ public struct ActiveWorkoutSetInput {
             return repsInput.displayText(fallback: validReps.map(String.init) ?? "")
         case .duration:
             let validDuration = WorkoutNumericInputPolicy.validatedDuration(values.durationSeconds)
-            return durationInput.displayText(fallback: validDuration.map(WorkoutFormatters.setDuration) ?? "")
+            return validDuration.map(WorkoutFormatters.setDuration) ?? ""
         }
     }
 
@@ -114,8 +129,7 @@ public struct ActiveWorkoutSetInput {
             else { return nil }
             return WorkoutNumericInputPolicy.validatedReps(suggestions.reps).map(String.init)
         case .duration:
-            guard durationInput.draftText == nil, !rejectedDuration,
-                  WorkoutNumericInputPolicy.validatedDuration(current.durationSeconds) == nil
+            guard WorkoutNumericInputPolicy.validatedDuration(current.durationSeconds) == nil
             else { return nil }
             return WorkoutNumericInputPolicy.validatedDuration(suggestions.durationSeconds)
                 .map(WorkoutFormatters.setDuration)
@@ -130,7 +144,7 @@ public struct ActiveWorkoutSetInput {
     }
 
     private var hasDraft: Bool {
-        weightInput.draftText != nil || repsInput.draftText != nil || durationInput.draftText != nil
+        weightInput.draftText != nil || repsInput.draftText != nil
     }
 
     public mutating func commit(current: Values, weightUnit: MeasurementUnit) -> Commit {
@@ -158,19 +172,10 @@ public struct ActiveWorkoutSetInput {
             reps = WorkoutNumericInputPolicy.validatedReps(current.reps)
         }
 
-        let duration: Int?
-        if let durationDraft = durationInput.draftText {
-            duration = WorkoutNumericInputPolicy.parseDuration(durationDraft)
-            rejectedDuration = !durationDraft.isEmpty && duration == nil
-        } else {
-            duration = storedValues.durationSeconds
-        }
-
         weightInput.endEditing()
         repsInput.endEditing()
-        durationInput.endEditing()
 
-        let values = Values(weight: weight, reps: reps, durationSeconds: duration)
+        let values = Values(weight: weight, reps: reps, durationSeconds: storedValues.durationSeconds)
         return Commit(values: values, shouldPersist: values != storedValues)
     }
 
@@ -230,8 +235,7 @@ public struct ActiveWorkoutSetInput {
             && WorkoutNumericInputPolicy.validatedReps(values.reps) == nil
             ? WorkoutNumericInputPolicy.validatedReps(previous.reps)
             : nil
-        let duration = !rejectedDuration
-            && WorkoutNumericInputPolicy.validatedDuration(values.durationSeconds) == nil
+        let duration = WorkoutNumericInputPolicy.validatedDuration(values.durationSeconds) == nil
             ? WorkoutNumericInputPolicy.validatedDuration(previous.durationSeconds)
             : nil
 
@@ -245,9 +249,6 @@ public struct ActiveWorkoutSetInput {
         }
         if WorkoutNumericInputPolicy.validatedReps(values.reps) != nil {
             rejectedReps = false
-        }
-        if WorkoutNumericInputPolicy.validatedDuration(values.durationSeconds) != nil {
-            rejectedDuration = false
         }
     }
 }

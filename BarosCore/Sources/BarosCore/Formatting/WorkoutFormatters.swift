@@ -31,21 +31,6 @@ public enum WorkoutFormatters {
         return parts.isEmpty ? "0 seconds" : parts.joined(separator: ", ")
     }
 
-    /// Typed digits with colons placed from the right, so the field reads as a
-    /// time while it is edited: "130" becomes "1:30". Keeps the last six
-    /// digits, so typing past the end shifts the time along instead of sticking.
-    public static func setDurationDraft(_ text: String) -> String {
-        let digits = Array(text.filter(\.isWholeNumber).suffix(6))
-        var groups: [String] = []
-        var end = digits.count
-        while end > 0 {
-            let start = max(0, end - 2)
-            groups.insert(String(digits[start..<end]), at: 0)
-            end = start
-        }
-        return groups.joined(separator: ":")
-    }
-
     public static func elapsedDescription(_ seconds: Int) -> String {
         elapsedCompactDescription(seconds) + " elapsed"
     }

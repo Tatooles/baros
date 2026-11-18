@@ -8,24 +8,12 @@ import XCTest
 final class TimedExerciseTests: XCTestCase {
     // MARK: Entry and display
 
-    func testTypedDigitsReadFromTheRightLikeAKitchenTimer() {
-        XCTAssertEqual(WorkoutNumericInputPolicy.parseDuration("45"), 45)
-        XCTAssertEqual(WorkoutNumericInputPolicy.parseDuration("130"), 90)
-        XCTAssertEqual(WorkoutNumericInputPolicy.parseDuration("1:30"), 90)
-        XCTAssertEqual(WorkoutNumericInputPolicy.parseDuration("10500"), 3_900)
-        XCTAssertEqual(WorkoutNumericInputPolicy.parseDuration("90"), 90, "Seconds past 59 carry into minutes")
-        XCTAssertEqual(WorkoutNumericInputPolicy.parseDuration("175"), 135)
-        XCTAssertEqual(WorkoutNumericInputPolicy.parseDuration("995959"), 359_999)
-    }
-
-    func testEmptyZeroAndOutOfRangeTimesAreNotRecorded() {
-        for text in ["", "0", "0:00", "abc", "999999", "1234567"] {
-            XCTAssertNil(WorkoutNumericInputPolicy.parseDuration(text), text)
-        }
+    func testZeroAndOutOfRangeTimesAreNotRecorded() {
         XCTAssertNil(WorkoutNumericInputPolicy.validatedDuration(0))
         XCTAssertNil(WorkoutNumericInputPolicy.validatedDuration(-5))
-        XCTAssertNil(WorkoutNumericInputPolicy.validatedDuration(360_000))
+        XCTAssertNil(WorkoutNumericInputPolicy.validatedDuration(86_400), "The picker stops at 23:59:59")
         XCTAssertEqual(WorkoutNumericInputPolicy.validatedDuration(1), 1)
+        XCTAssertEqual(WorkoutNumericInputPolicy.validatedDuration(86_399), 86_399)
     }
 
     func testSetTimesDisplayWithoutLeadingZeroMinutes() {
@@ -37,35 +25,20 @@ final class TimedExerciseTests: XCTestCase {
         XCTAssertEqual(WorkoutFormatters.setDurationAccessibilityDescription(3_601), "1 hour, 1 second")
     }
 
-    func testDraftGainsColonsAsDigitsAreTyped() {
-        XCTAssertEqual(WorkoutFormatters.setDurationDraft("5"), "5")
-        XCTAssertEqual(WorkoutFormatters.setDurationDraft("45"), "45")
-        XCTAssertEqual(WorkoutFormatters.setDurationDraft("130"), "1:30")
-        XCTAssertEqual(WorkoutFormatters.setDurationDraft("1:300"), "13:00")
-        XCTAssertEqual(WorkoutFormatters.setDurationDraft("10500"), "1:05:00")
-        XCTAssertEqual(WorkoutFormatters.setDurationDraft("1:3"), "13", "Deleting a digit re-flows the rest")
-        XCTAssertEqual(WorkoutFormatters.setDurationDraft("12:34:567"), "23:45:67", "A seventh digit pushes the first out")
-        XCTAssertEqual(WorkoutFormatters.setDurationDraft(""), "")
+    func testAPickedTimeReplacesOnlyTheTime() {
+        let stored = ActiveWorkoutSetInput.Values(weight: 45, durationSeconds: 60)
+        XCTAssertEqual(stored.settingDuration(90), .init(weight: 45, durationSeconds: 90))
+        XCTAssertEqual(stored.settingDuration(nil), .init(weight: 45), "Clearing removes the time")
+        XCTAssertEqual(stored.settingDuration(0), .init(weight: 45), "Zero is no time")
     }
 
-    func testTimeFieldCommitsItsDraftAndLeavesRepsAlone() {
-        var input = ActiveWorkoutSetInput()
-        let stored = ActiveWorkoutSetInput.Values(weight: 45)
-        input.update("130", for: .duration, isFocused: true)
-        XCTAssertEqual(input.text(for: .duration, values: stored, weightUnit: .pounds), "1:30")
-        XCTAssertEqual(input.previewValues(current: stored, weightUnit: .pounds),
-                       .init(weight: 45, durationSeconds: 90))
-        XCTAssertEqual(input.commit(current: stored, weightUnit: .pounds),
-                       .init(values: .init(weight: 45, durationSeconds: 90), shouldPersist: true))
-        XCTAssertEqual(input.text(for: .duration, values: .init(weight: 45, durationSeconds: 90), weightUnit: .pounds), "1:30")
-    }
-
-    func testClearingTheTimeFieldRemovesTheTime() {
+    func testATypedWeightKeepsTheStoredTime() {
         var input = ActiveWorkoutSetInput()
         let stored = ActiveWorkoutSetInput.Values(durationSeconds: 90)
-        input.update("", for: .duration, isFocused: true)
+        input.update("45", for: .weight, isFocused: true)
         XCTAssertEqual(input.commit(current: stored, weightUnit: .pounds),
-                       .init(values: .init(), shouldPersist: true))
+                       .init(values: .init(weight: 45, durationSeconds: 90), shouldPersist: true))
+        XCTAssertEqual(input.text(for: .duration, values: stored, weightUnit: .pounds), "1:30")
     }
 
     func testCompletingAnEmptyTimedSetFillsFromTheSetAboveThenLastTime() {
@@ -80,16 +53,6 @@ final class TimedExerciseTests: XCTestCase {
         )
         XCTAssertEqual(input.suggestionText(for: .duration, current: .init(), suggestions: .init(durationSeconds: 75),
                                             weightUnit: .pounds), "1:15")
-    }
-
-    func testARejectedTimeIsNotReplacedByASuggestion() {
-        var input = ActiveWorkoutSetInput()
-        input.update("0", for: .duration, isFocused: true)
-        let values = input.preparedValuesForSetAction(
-            current: .init(), weightUnit: .pounds, completesSet: true, isCompleted: false,
-            previous: PreviousSetPerformance(weight: nil, reps: nil, durationSeconds: 60, trackingMethod: .duration)
-        )
-        XCTAssertNil(values.durationSeconds)
     }
 
     func testSuggestionsCarryTimeDownTheSets() {
