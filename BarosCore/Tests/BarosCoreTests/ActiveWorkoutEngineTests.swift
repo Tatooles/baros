@@ -1368,6 +1368,13 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             }
             XCTAssertEqual(results[0], results[1])
         }
+        // Exactly one of the tied workouts ranks as newer than the other.
+        let seededSources = [first, second].filter {
+            !PreviousSetPerformance.newerCompletedSetKindsByExerciseID(
+                for: $0, in: [first, second], ownerTokenIdentifier: nil
+            ).isEmpty
+        }
+        XCTAssertEqual(seededSources.count, 1)
     }
 
     func testRepeatingPastWorkoutCopiesSourceRowsWhenNewerPerformanceDoesNotApply() throws {
