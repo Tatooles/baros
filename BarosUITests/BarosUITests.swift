@@ -2419,11 +2419,11 @@ final class BarosUITests: XCTestCase {
         startBlankWorkoutWithBenchPress(in: app)
         assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
 
-        // Leaving the swap picker with Done, or cancelling its confirmation, changes nothing.
+        // Cancelling the swap picker, even with a replacement chosen, changes nothing.
         app.buttons["ExerciseMenuButton-0"].tap()
         app.buttons["SwapExerciseButton-0"].tap()
         XCTAssertTrue(app.navigationBars["Swap Exercise"].waitToExist(timeout: 3))
-        app.buttons["Done"].tap()
+        app.buttons["ExercisePickerCancelButton"].tap()
         assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
 
         app.buttons["ExerciseMenuButton-0"].tap()
@@ -2433,14 +2433,8 @@ final class BarosUITests: XCTestCase {
         cancelSearchField.tap()
         cancelSearchField.typeText("Overhead Press")
         app.buttons["ExercisePickerRow-Overhead Press-Barbell"].tap()
-        let cancelButton = app.buttons["Cancel"].firstMatch
-        XCTAssertTrue(cancelButton.waitToExist(timeout: 3))
-        cancelButton.tap()
-        let closeSearchButton = app.buttons["close"].firstMatch
-        XCTAssertTrue(closeSearchButton.waitToExist(timeout: 3))
-        closeSearchButton.tap()
-        XCTAssertTrue(app.navigationBars["Swap Exercise"].waitToExist(timeout: 3))
-        app.buttons["Done"].tap()
+        XCTAssertEqual(app.buttons["ExercisePickerConfirmSwapButton"].label, "Swap for Overhead Press")
+        app.buttons["ExercisePickerCancelButton"].tap()
         assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
 
         app.buttons["ExerciseMenuButton-0"].tap()
@@ -2455,20 +2449,26 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(currentExercise.isEnabled)
         XCTAssertTrue(currentExercise.label.contains("Current exercise"))
 
+        // Search sits at the top, as in Add Exercises, and nothing commits until the bar is tapped.
         let searchField = app.searchFields.firstMatch
         XCTAssertTrue(searchField.waitToExist(timeout: 3))
+        XCTAssertLessThan(searchField.frame.midY, app.frame.midY)
+        let confirmButton = app.buttons["ExercisePickerConfirmSwapButton"]
+        XCTAssertFalse(confirmButton.isEnabled)
+        XCTAssertEqual(confirmButton.label, "Choose a Replacement")
+        XCTAssertEqual(
+            app.staticTexts["ExercisePickerSwapImpactText"].label,
+            "Bench Press has nothing logged yet"
+        )
         searchField.tap()
         searchField.typeText("Overhead Press")
         let replacementRow = app.buttons["ExercisePickerRow-Overhead Press-Barbell"]
         XCTAssertTrue(replacementRow.waitToExist(timeout: 3))
         replacementRow.tap()
 
-        XCTAssertTrue(app.staticTexts["Swap Bench Press for Overhead Press?"].waitToExist(timeout: 3))
-        XCTAssertTrue(
-            app.staticTexts["This removes Bench Press, its sets, and its exercise note from this workout."].exists
-        )
-        let confirmButton = app.buttons["ConfirmSwapExerciseButton"].firstMatch
-        XCTAssertTrue(confirmButton.waitToExist(timeout: 3))
+        XCTAssertTrue(replacementRow.isSelected)
+        assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
+        XCTAssertEqual(confirmButton.label, "Swap for Overhead Press")
         confirmButton.tap()
 
         assertActiveWorkoutExerciseOrder(["Overhead Press"], in: app)
@@ -2479,7 +2479,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testCreatingExerciseFromSwapPickerUsesSwapConfirmation() {
+    func testCreatingExerciseFromSwapPickerSelectsItForTheSwap() {
         let app = makeApp()
         app.launch()
         startBlankWorkoutWithBenchPress(in: app)
@@ -2502,8 +2502,11 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(app.textFields["ExerciseNameField"].value as? String, "Swap Test Press")
         app.buttons["ExerciseEditorSaveButton"].tap()
 
-        XCTAssertTrue(app.staticTexts["Swap Bench Press for Swap Test Press?"].waitToExist(timeout: 3))
-        app.buttons["ConfirmSwapExerciseButton"].firstMatch.tap()
+        // The new exercise is chosen, not swapped in, so the bar still confirms it.
+        let confirmButton = app.buttons["ExercisePickerConfirmSwapButton"]
+        XCTAssertTrue(app.navigationBars["Swap Exercise"].waitToExist(timeout: 3))
+        XCTAssertTrue(waitUntil(timeout: 3) { confirmButton.label == "Swap for Swap Test Press" })
+        confirmButton.tap()
 
         assertActiveWorkoutExerciseOrder(["Swap Test Press"], in: app)
     }
