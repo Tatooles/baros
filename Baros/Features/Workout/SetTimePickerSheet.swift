@@ -20,8 +20,8 @@ struct SetTimePickerRequest: Identifiable {
     }
 }
 
-/// Hours, minutes, and seconds wheels for one set's time, like the Clock
-/// app's timer. Nothing is saved until Done or an RPE is chosen.
+/// Minutes and seconds wheels for one set's time. Nothing is saved until
+/// Done or an RPE is chosen.
 struct SetTimePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -31,7 +31,6 @@ struct SetTimePickerSheet: View {
     /// The wheels' time with the tapped RPE, or nil RPE to clear it. As with
     /// the keyboard's chips, choosing an RPE finishes the set.
     var onSelectRPE: ((Int?, Double?) -> Void)?
-    @State private var hours: Int
     @State private var minutes: Int
     @State private var seconds: Int
 
@@ -43,9 +42,8 @@ struct SetTimePickerSheet: View {
         self.request = request
         self.onSave = onSave
         self.onSelectRPE = onSelectRPE
-        let start = max(0, request.startingSeconds)
-        _hours = State(initialValue: min(23, start / 3_600))
-        _minutes = State(initialValue: start % 3_600 / 60)
+        let start = min(max(0, request.startingSeconds), 59 * 60 + 59)
+        _minutes = State(initialValue: start / 60)
         _seconds = State(initialValue: start % 60)
     }
 
@@ -54,7 +52,6 @@ struct SetTimePickerSheet: View {
             ScrollView {
                 VStack(spacing: 8) {
                     HStack(spacing: 0) {
-                        wheel($hours, in: 0..<24, unit: "hours", spokenUnit: "Hours", identifier: "SetTimeHoursWheel")
                         wheel($minutes, in: 0..<60, unit: "min", spokenUnit: "Minutes", identifier: "SetTimeMinutesWheel")
                         wheel($seconds, in: 0..<60, unit: "sec", spokenUnit: "Seconds", identifier: "SetTimeSecondsWheel")
                     }
@@ -117,7 +114,7 @@ struct SetTimePickerSheet: View {
     }
 
     private var chosenSeconds: Int? {
-        let total = hours * 3_600 + minutes * 60 + seconds
+        let total = minutes * 60 + seconds
         return total > 0 ? total : nil
     }
 

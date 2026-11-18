@@ -11,9 +11,9 @@ final class TimedExerciseTests: XCTestCase {
     func testZeroAndOutOfRangeTimesAreNotRecorded() {
         XCTAssertNil(WorkoutNumericInputPolicy.validatedDuration(0))
         XCTAssertNil(WorkoutNumericInputPolicy.validatedDuration(-5))
-        XCTAssertNil(WorkoutNumericInputPolicy.validatedDuration(86_400), "The picker stops at 23:59:59")
+        XCTAssertNil(WorkoutNumericInputPolicy.validatedDuration(3_600), "The picker stops at 59:59")
         XCTAssertEqual(WorkoutNumericInputPolicy.validatedDuration(1), 1)
-        XCTAssertEqual(WorkoutNumericInputPolicy.validatedDuration(86_399), 86_399)
+        XCTAssertEqual(WorkoutNumericInputPolicy.validatedDuration(3_599), 3_599)
     }
 
     func testSetTimesDisplayWithoutLeadingZeroMinutes() {
@@ -312,13 +312,13 @@ final class TimedExerciseTests: XCTestCase {
     func testCSVAddsTimeInSecondsAsTheLastColumn() throws {
         let context = try makeContext()
         let plank = try insertExercise("Plank", .duration, into: context)
-        let session = try insertCompletedWorkout(of: plank, sets: [(nil, 90), (25, 3_900)], into: context)
+        let session = try insertCompletedWorkout(of: plank, sets: [(nil, 90), (25, 2_700)], into: context)
         let lines = WorkoutDataExportService().csv(for: [session], unit: .pounds)
             .split(separator: "\n").map { $0.split(separator: ",", omittingEmptySubsequences: false).map(String.init) }
         XCTAssertEqual(lines[0].last, "duration_seconds")
         XCTAssertEqual(lines[0].firstIndex(of: "reps"), 10, "Existing columns keep their positions")
         XCTAssertEqual(lines.dropFirst().map { $0[10] }, ["", ""])
-        XCTAssertEqual(lines.dropFirst().map(\.last), ["90", "3900"])
+        XCTAssertEqual(lines.dropFirst().map(\.last), ["90", "2700"])
         XCTAssertEqual(lines.dropFirst().map { $0[9] }, ["", "25"])
     }
 
