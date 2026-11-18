@@ -3309,6 +3309,18 @@ final class BarosUITests: XCTestCase {
         app.buttons["HistorySetCompletionButton-0-1"].tap()
         dismissKeyboardIfNeeded(in: app)
 
+        // An exercise added while editing saves with the workout.
+        app.buttons["AddHistoryExerciseButton"].tap()
+        XCTAssertTrue(app.navigationBars["Add Exercises"].waitToExist(timeout: 3))
+        XCTAssertFalse(app.buttons["ExercisePickerRow-Bench Press-Barbell"].isEnabled)
+        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        app.buttons["ExercisePickerAddSelectedButton"].tap()
+        XCTAssertTrue(app.textFields["HistorySetWeightField-1-0"].waitToExist(timeout: 3))
+        replaceText(in: app.textFields["HistorySetWeightField-1-0"], with: "185")
+        replaceText(in: app.textFields["HistorySetRepsField-1-0"], with: "5")
+        app.buttons["HistorySetCompletionButton-1-0"].tap()
+        dismissKeyboardIfNeeded(in: app)
+
         app.buttons["SaveCompletedWorkoutEditButton"].tap()
 
         XCTAssertTrue(workoutHistoryHeading("Edited Push", in: app).waitToExist(timeout: 3))
@@ -3316,6 +3328,20 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["WorkoutHistorySummary"].label.contains("45:00"))
         XCTAssertTrue(workoutHistorySetValue("205.5 pounds, 6 reps, RPE 8", in: app).exists)
         XCTAssertTrue(workoutHistorySetValue("135 pounds, 8 reps, RPE 7.5", in: app).exists)
+        XCTAssertTrue(workoutHistorySetValue("185 pounds, 5 reps", in: app).exists)
+
+        // Removing it from the exercise menu takes its sets with it.
+        app.buttons["EditWorkoutButton"].tap()
+        XCTAssertTrue(app.buttons["HistoryExerciseMenuButton-1"].waitToExist(timeout: 3))
+        app.buttons["HistoryExerciseMenuButton-1"].tap()
+        app.buttons["RemoveHistoryExerciseButton-1"].tap()
+        // The dialog nests a copy of its action under the same identifier.
+        app.buttons["ConfirmRemoveHistoryExerciseButton"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["HistoryExerciseMenuButton-1"].waitToDisappear(timeout: 3))
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+        XCTAssertTrue(workoutHistoryHeading("Edited Push", in: app).waitToExist(timeout: 3))
+        XCTAssertFalse(workoutHistorySetValue("185 pounds, 5 reps", in: app).exists)
+        XCTAssertTrue(workoutHistorySetValue("205.5 pounds, 6 reps, RPE 8", in: app).exists)
 
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
@@ -3469,7 +3495,9 @@ final class BarosUITests: XCTestCase {
         app.buttons["EditWorkoutButton"].tap()
         XCTAssertTrue(noteField.waitToExist(timeout: 3))
         replaceText(in: noteField, with: "")
-        app.textFields["CompletedWorkoutTitleField"].tap()
+        // Ending the edit, not a tap on the title: with the keyboard up, the
+        // title scrolls out from under the navigation bar.
+        dismissKeyboardIfNeeded(in: app)
         XCTAssertTrue(addNoteButton.waitToExist(timeout: 3))
         app.buttons["SaveCompletedWorkoutEditButton"].tap()
 

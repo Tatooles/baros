@@ -7,11 +7,18 @@ struct SwapExerciseConfirmationContent {
     let message: String
 
     init(original: LoggedExercise, replacement: Exercise) {
-        let originalName = original.exerciseSnapshotName
+        self.init(
+            originalName: original.exerciseSnapshotName,
+            originalEquipmentName: original.snapshotEquipment?.displayName,
+            replacement: replacement
+        )
+    }
+
+    init(originalName: String, originalEquipmentName: String?, replacement: Exercise) {
         let replacementName = replacement.name
         let hasMatchingNames = originalName.localizedCaseInsensitiveCompare(replacementName) == .orderedSame
         let originalDescription = hasMatchingNames
-            ? "\(originalName) (\(original.snapshotEquipment?.displayName ?? "Other"))"
+            ? "\(originalName) (\(originalEquipmentName ?? "Other"))"
             : originalName
         let replacementDescription = hasMatchingNames
             ? "\(replacementName) (\(replacement.equipment.displayName))"
