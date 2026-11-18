@@ -14,9 +14,9 @@ struct AccountTransitionButton<Label: View>: View {
     /// this gate, never on a later one, so a late action cannot reach another request.
     @State private var choiceGate: WorkoutAccountTransition?
     @State private var errorMessage: String?
-    /// A failure from a choice waits here until the choice alert's binding has read
-    /// `false`, so the error gets its own presentation instead of replacing the
-    /// payload of an alert that is still closing.
+    /// A failure from a choice waits here. It is promoted only after a view update in
+    /// which neither alert is presented, so it gets its own presentation instead of
+    /// replacing the payload of the choice alert as that alert closes.
     @State private var pendingError: String?
     let destination: WorkoutAccountTransition.Destination
     var role: ButtonRole? = nil
@@ -91,8 +91,8 @@ struct AccountTransitionButton<Label: View>: View {
                 Text(message)
             }
         }
-        .onChange(of: choiceGate == nil) { _, isChoiceClosed in
-            if isChoiceClosed { presentPendingError() }
+        .onChange(of: choiceGate == nil && pendingError != nil) { _, isReady in
+            if isReady { presentPendingError() }
         }
         .onDisappear { transition?.cancel() }
     }
@@ -107,9 +107,7 @@ struct AccountTransitionButton<Label: View>: View {
     private func resolve(_ resolution: WorkoutAccountTransition.Resolution, on gate: WorkoutAccountTransition) {
         Task {
             await gate.resolve(resolution)
-            guard let message = gate.errorMessage else { return }
-            pendingError = message
-            if choiceGate == nil { presentPendingError() }
+            if let message = gate.errorMessage { pendingError = message }
         }
     }
 
