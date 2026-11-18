@@ -51,14 +51,22 @@ public struct HomePastWorkoutReviewPresentation: Equatable {
         return "\(exercises.count) \(exerciseLabel) · \(copiedSetCount) \(setLabel)"
     }
 
-    public init(session: WorkoutSession) {
+    /// Counts the rows each exercise will start with, which follow a newer
+    /// performance of the exercise in `sessions` when there is one, the way
+    /// `ActiveWorkoutEngine.startWorkout(fromPast:)` seeds them.
+    public init(session: WorkoutSession, sessions: [WorkoutSession] = [], ownerTokenIdentifier: String? = nil) {
+        let newerSetKinds = PreviousSetPerformance.newerCompletedSetKindsByExerciseID(
+            for: session,
+            in: sessions,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
         completedAt = session.endedAt ?? session.startedAt
         exercises = session.sortedLoggedExercises.map { loggedExercise in
             Exercise(
                 id: loggedExercise.id,
                 name: loggedExercise.exerciseSnapshotName,
                 equipment: loggedExercise.snapshotEquipment?.displayName,
-                copiedSetCount: loggedExercise.sortedSets.count,
+                copiedSetCount: newerSetKinds[loggedExercise.id]?.count ?? loggedExercise.sortedSets.count,
                 supersetGroupID: loggedExercise.supersetGroupID
             )
         }

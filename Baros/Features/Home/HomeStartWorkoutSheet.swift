@@ -44,6 +44,8 @@ struct HomeStartWorkoutSheet: View {
                         if let session = content.completedSessions.first(where: { $0.id == sessionID }) {
                             HomePastWorkoutReviewView(
                                 session: session,
+                                history: content.completedSessions,
+                                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                                 startWorkout: { startWorkout(fromPast: session) }
                             )
                         } else {
@@ -258,6 +260,8 @@ struct HomeQuickStartReviewSheet: View {
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     /// Nil when the workout is no longer visible to the Current Owner.
     let session: WorkoutSession?
+    /// The Current Owner's completed workouts.
+    let history: [WorkoutSession]
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     let onWorkoutStarted: (WorkoutSession) -> Void
     @State private var actionError: HomeStartWorkoutActionError?
@@ -266,7 +270,11 @@ struct HomeQuickStartReviewSheet: View {
         NavigationStack {
             Group {
                 if let session {
-                    HomePastWorkoutReviewView(session: session) { startWorkout(from: session) }
+                    HomePastWorkoutReviewView(
+                        session: session,
+                        history: history,
+                        ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
+                    ) { startWorkout(from: session) }
                 } else {
                     EmptyStateView(
                         title: "Workout Unavailable",

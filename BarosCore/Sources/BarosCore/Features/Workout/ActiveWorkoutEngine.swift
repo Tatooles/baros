@@ -137,6 +137,11 @@ public final class ActiveWorkoutEngine {
         isStartingWorkout = true
         defer { isStartingWorkout = false }
 
+        let newerSetKindsByPastExerciseID = PreviousSetPerformance.newerCompletedSetKindsByExerciseID(
+            for: pastSession,
+            in: try context.fetch(FetchDescriptor<WorkoutSession>()),
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
         let session = WorkoutSession(
             title: pastSession.title,
             startedAt: now,
@@ -152,6 +157,14 @@ public final class ActiveWorkoutEngine {
         let pastLoggedExercises = pastSession.sortedLoggedExercises
         let copiedGroupIDs = SupersetGrouping.copied(pastLoggedExercises.map(\.supersetGroupID))
         for (pastLoggedExercise, supersetGroupID) in zip(pastLoggedExercises, copiedGroupIDs) {
+            // When a newer session logged the exercise, its rows follow that
+            // performance, unlinked, as a template start's do. Otherwise they
+            // stay linked copies of the chosen workout's rows.
+            let newerSetKinds = newerSetKindsByPastExerciseID[pastLoggedExercise.id]
+            let rows: [(orderIndex: Int, kind: SetKind, sourceLoggedSetID: UUID?)] = newerSetKinds.map {
+                $0.enumerated().map { ($0.offset, $0.element, nil) }
+            } ?? pastLoggedExercise.sortedSets.map { ($0.orderIndex, $0.kind, $0.id) }
+
             let resolvedEquipmentRaw = pastLoggedExercise.resolvedSnapshotEquipmentRaw
             let resolvedPrimaryMuscleGroupRaw = pastLoggedExercise.resolvedSnapshotPrimaryMuscleGroupRaw
             let loggedExercise = LoggedExercise(
@@ -160,7 +173,7 @@ public final class ActiveWorkoutEngine {
                 exerciseSnapshotName: pastLoggedExercise.exerciseSnapshotName,
                 exerciseSnapshotEquipmentRaw: resolvedEquipmentRaw,
                 exerciseSnapshotPrimaryMuscleGroupRaw: resolvedPrimaryMuscleGroupRaw,
-                sourceLoggedExerciseID: pastLoggedExercise.id,
+                sourceLoggedExerciseID: newerSetKinds == nil ? pastLoggedExercise.id : nil,
                 supersetGroupID: supersetGroupID,
                 createdAt: now,
                 updatedAt: now
@@ -170,14 +183,14 @@ public final class ActiveWorkoutEngine {
             loggedExercise.session = session
             context.insert(loggedExercise)
 
-            for pastSet in pastLoggedExercise.sortedSets {
+            for row in rows {
                 let set = LoggedSet(
-                    orderIndex: pastSet.orderIndex,
-                    kind: pastSet.kind,
+                    orderIndex: row.orderIndex,
+                    kind: row.kind,
                     isCompleted: false,
                     createdAt: now,
                     updatedAt: now,
-                    sourceLoggedSetID: pastSet.id
+                    sourceLoggedSetID: row.sourceLoggedSetID
                 )
                 set.loggedExercise = loggedExercise
                 context.insert(set)

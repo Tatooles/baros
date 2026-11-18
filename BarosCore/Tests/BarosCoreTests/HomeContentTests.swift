@@ -112,6 +112,32 @@ final class HomeContentTests: XCTestCase {
         XCTAssertEqual(presentation.copiedSetCount, copiedSets.count)
     }
 
+    func testPastWorkoutReviewCountsTheSetsANewerPerformanceStartsWith() {
+        func workout(startedAt: Date, crunchSetCount: Int) -> WorkoutSession {
+            let session = WorkoutSession(title: "Arms", startedAt: startedAt, status: .completed, source: .blank)
+            container.mainContext.insert(session)
+            let crunch = LoggedExercise(
+                orderIndex: 0,
+                exerciseSnapshotName: "Ab Crunch",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.machine.rawValue
+            )
+            crunch.sets = (0..<crunchSetCount).map { LoggedSet(orderIndex: $0, isCompleted: true) }
+            session.loggedExercises = [crunch]
+            return session
+        }
+        let source = workout(startedAt: date(2026, 11, 2), crunchSetCount: 2)
+        let newer = workout(startedAt: date(2026, 11, 14), crunchSetCount: 3)
+
+        let presentation = HomePastWorkoutReviewPresentation(
+            session: source,
+            sessions: [source, newer],
+            ownerTokenIdentifier: nil
+        )
+
+        XCTAssertEqual(presentation.exercises.map(\.copiedSetDescription), ["3 sets"])
+        XCTAssertEqual(presentation.structureSummary, "1 exercise · 3 sets")
+    }
+
     func testPastWorkoutReviewPresentsCopiedExercisesInSourceOrder() {
         let cableFly = LoggedExercise(
             orderIndex: 1,

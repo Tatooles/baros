@@ -97,6 +97,7 @@ struct HomeView: View {
             // Re-resolve against the Current Owner before displaying a past workout.
             HomeQuickStartReviewSheet(
                 session: content.completedSessions.first { $0.id == selection.id },
+                history: content.completedSessions,
                 activeWorkoutEngine: activeWorkoutEngine,
                 onWorkoutStarted: handOffStartedWorkout
             )
