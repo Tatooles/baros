@@ -3,10 +3,24 @@ import SwiftUI
 
 struct HomePastWorkoutReviewView: View {
     let session: WorkoutSession
+    private let presentation: HomePastWorkoutReviewPresentation
     let startWorkout: () -> Void
 
-    private var presentation: HomePastWorkoutReviewPresentation {
-        HomePastWorkoutReviewPresentation(session: session)
+    /// `history` is the Current Owner's completed workouts, so each exercise's
+    /// set count matches the rows the started workout will have.
+    init(
+        session: WorkoutSession,
+        history: [WorkoutSession],
+        ownerTokenIdentifier: String?,
+        startWorkout: @escaping () -> Void
+    ) {
+        self.session = session
+        presentation = HomePastWorkoutReviewPresentation(
+            session: session,
+            sessions: history,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
+        self.startWorkout = startWorkout
     }
 
     var body: some View {

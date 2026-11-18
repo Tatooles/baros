@@ -68,7 +68,7 @@ final class HomeContentTests: XCTestCase {
             endedAt: date(2026, 8, 19, hour: 1)
         )
 
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout, sessions: [], ownerTokenIdentifier: nil)
 
         XCTAssertEqual(presentation.completedAt, date(2026, 8, 19, hour: 1))
     }
@@ -82,7 +82,7 @@ final class HomeContentTests: XCTestCase {
             source: .blank
         )
 
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout, sessions: [], ownerTokenIdentifier: nil)
 
         XCTAssertEqual(presentation.completedAt, startedAt)
     }
@@ -105,11 +105,37 @@ final class HomeContentTests: XCTestCase {
             ]
         )
 
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout, sessions: [], ownerTokenIdentifier: nil)
         let copiedSets = completedWorkout.sortedLoggedExercises.flatMap(\.sortedSets)
 
         XCTAssertGreaterThan(copiedSets.count, copiedSets.filter(\.isCompleted).count)
         XCTAssertEqual(presentation.copiedSetCount, copiedSets.count)
+    }
+
+    func testPastWorkoutReviewCountsTheSetsANewerPerformanceStartsWith() {
+        func workout(startedAt: Date, crunchSetCount: Int) -> WorkoutSession {
+            let session = WorkoutSession(title: "Arms", startedAt: startedAt, status: .completed, source: .blank)
+            container.mainContext.insert(session)
+            let crunch = LoggedExercise(
+                orderIndex: 0,
+                exerciseSnapshotName: "Ab Crunch",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.machine.rawValue
+            )
+            crunch.sets = (0..<crunchSetCount).map { LoggedSet(orderIndex: $0, isCompleted: true) }
+            session.loggedExercises = [crunch]
+            return session
+        }
+        let source = workout(startedAt: date(2026, 11, 2), crunchSetCount: 2)
+        let newer = workout(startedAt: date(2026, 11, 14), crunchSetCount: 3)
+
+        let presentation = HomePastWorkoutReviewPresentation(
+            session: source,
+            sessions: [source, newer],
+            ownerTokenIdentifier: nil
+        )
+
+        XCTAssertEqual(presentation.exercises.map(\.copiedSetDescription), ["3 sets"])
+        XCTAssertEqual(presentation.structureSummary, "1 exercise · 3 sets")
     }
 
     func testPastWorkoutReviewPresentsCopiedExercisesInSourceOrder() {
@@ -136,7 +162,7 @@ final class HomeContentTests: XCTestCase {
         )
         completedWorkout.loggedExercises = [cableFly, benchPress]
 
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout, sessions: [], ownerTokenIdentifier: nil)
 
         XCTAssertEqual(
             presentation.exercises,
@@ -174,7 +200,7 @@ final class HomeContentTests: XCTestCase {
         )
         completedWorkout.loggedExercises = [exercise]
 
-        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout)
+        let presentation = HomePastWorkoutReviewPresentation(session: completedWorkout, sessions: [], ownerTokenIdentifier: nil)
 
         XCTAssertEqual(presentation.structureSummary, "1 exercise · 1 set")
         XCTAssertEqual(presentation.exercises[0].copiedSetDescription, "1 set")

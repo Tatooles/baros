@@ -94,11 +94,47 @@ public struct PreviousSetPerformance: Equatable {
         )[route.id]?.sets.map(\.kind) ?? []
     }
 
+    /// For each exercise of `pastSession` that a newer completed session logged,
+    /// that session's completed set kinds in set order. Repeating the workout
+    /// seeds those exercises from the newer performance instead of copying the
+    /// source rows, using the same newer-than-source test as the Previous
+    /// column. An exercise that appears more than once in `pastSession` is left
+    /// out, since the newer performance can't be paired with one occurrence.
+    static func newerCompletedSetKindsByExerciseID(
+        for pastSession: WorkoutSession,
+        in sessions: [WorkoutSession],
+        ownerTokenIdentifier: String?
+    ) -> [UUID: [SetKind]] {
+        let sortedSessions = sortedCompletedSessions(sessions, ownerTokenIdentifier: ownerTokenIdentifier)
+        guard let sourceRank = sortedSessions.firstIndex(where: { $0.id == pastSession.id }) else {
+            return [:]
+        }
+
+        let routeIDsByExerciseID = pastSession.sortedLoggedExercises.map {
+            (exerciseID: $0.id, routeID: ExerciseHistoryRoute(loggedExercise: $0).id)
+        }
+        let routeCounts = Dictionary(routeIDsByExerciseID.map { ($0.routeID, 1) }, uniquingKeysWith: +)
+        // Only sessions ranked before the source are newer than it.
+        let newerEntriesByRouteID = latestEntriesByRouteID(
+            matching: Set(routeCounts.filter { $0.value == 1 }.keys),
+            in: Array(sortedSessions.prefix(sourceRank))
+        )
+
+        var result: [UUID: [SetKind]] = [:]
+        for (exerciseID, routeID) in routeIDsByExerciseID {
+            guard let entry = newerEntriesByRouteID[routeID] else { continue }
+            result[exerciseID] = entry.sets.map(\.kind)
+        }
+        return result
+    }
+
     /// A repeated workout's rows stay linked to the sets they were copied from,
     /// but Previous still shows the exercise's most recent performance. Copied
     /// rows read the source workout's own sets only while no later session has
     /// logged the exercise; otherwise each copied row reads the latest
-    /// session's set at its source set's position.
+    /// session's set at its source set's position. Exercises seeded from a
+    /// newer performance (`newerCompletedSetKindsByExerciseID`) carry no source
+    /// link and read the latest session by position.
     private static func lastCompletedSetsByExerciseIDFromSourceSession(
         for loggedExercises: [LoggedExercise],
         in sessions: [WorkoutSession],
@@ -157,11 +193,16 @@ public struct PreviousSetPerformance: Equatable {
             from: sessions,
             ownerTokenIdentifier: ownerTokenIdentifier
         )
+        // The id tie-break keeps the rank independent of input order, so the
+        // review screen, the start, and Previous agree about which is newer.
         .sorted { lhs, rhs in
-            if lhs.startedAt == rhs.startedAt {
+            if lhs.startedAt != rhs.startedAt {
+                return lhs.startedAt > rhs.startedAt
+            }
+            if lhs.title != rhs.title {
                 return lhs.title < rhs.title
             }
-            return lhs.startedAt > rhs.startedAt
+            return lhs.id.uuidString < rhs.id.uuidString
         }
     }
 
