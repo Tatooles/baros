@@ -20,8 +20,8 @@ struct SetTimePickerRequest: Identifiable {
     }
 }
 
-/// Minutes and seconds wheels for one set's time. Nothing is saved until
-/// Done or an RPE is chosen.
+/// Minutes and seconds wheels for one set's time, with seconds in steps of
+/// five. Nothing is saved until Done or an RPE is chosen.
 struct SetTimePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -33,6 +33,9 @@ struct SetTimePickerSheet: View {
     var onSelectRPE: ((Int?, Double?) -> Void)?
     @State private var minutes: Int
     @State private var seconds: Int
+    /// Every fifth second, plus the starting second when it falls between
+    /// steps, so opening the picker never changes a time already recorded.
+    private let secondChoices: [Int]
 
     init(
         request: SetTimePickerRequest,
@@ -45,6 +48,7 @@ struct SetTimePickerSheet: View {
         let start = min(max(0, request.startingSeconds), 59 * 60 + 59)
         _minutes = State(initialValue: start / 60)
         _seconds = State(initialValue: start % 60)
+        secondChoices = Set(stride(from: 0, to: 60, by: 5)).union([start % 60]).sorted()
     }
 
     var body: some View {
@@ -52,8 +56,8 @@ struct SetTimePickerSheet: View {
             ScrollView {
                 VStack(spacing: 8) {
                     HStack(spacing: 0) {
-                        wheel($minutes, in: 0..<60, unit: "min", spokenUnit: "Minutes", identifier: "SetTimeMinutesWheel")
-                        wheel($seconds, in: 0..<60, unit: "sec", spokenUnit: "Seconds", identifier: "SetTimeSecondsWheel")
+                        wheel($minutes, in: Array(0..<60), unit: "min", spokenUnit: "Minutes", identifier: "SetTimeMinutesWheel")
+                        wheel($seconds, in: secondChoices, unit: "sec", spokenUnit: "Seconds", identifier: "SetTimeSecondsWheel")
                     }
                     .accessibilityElement(children: .contain)
 
@@ -130,13 +134,13 @@ struct SetTimePickerSheet: View {
 
     private func wheel(
         _ selection: Binding<Int>,
-        in range: Range<Int>,
+        in choices: [Int],
         unit: String,
         spokenUnit: String,
         identifier: String
     ) -> some View {
         let picker = Picker(spokenUnit, selection: selection) {
-            ForEach(range, id: \.self) { value in
+            ForEach(choices, id: \.self) { value in
                 Text("\(value)")
                     .font(.title3.weight(.semibold).monospacedDigit())
                     .tag(value)
