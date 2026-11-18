@@ -67,14 +67,16 @@ struct SetTimePickerSheet: View {
                                 .foregroundStyle(AppTheme.textSecondary)
                                 .accessibilityAddTraits(.isHeader)
                             RPEChipRow(selected: rpe.selected) { value in
+                                // An RPE completes the set, and zero is not a time to
+                                // complete it with. Clearing one needs no time.
+                                guard value == nil || chosenSeconds != nil else { return }
                                 onSelectRPE(chosenSeconds, value)
                                 dismiss()
                             }
                             // Nine chips share one row; past this size they truncate.
                             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                            // An RPE completes the set, and zero is not a time to complete it with.
-                            .disabled(chosenSeconds == nil)
-                            .opacity(chosenSeconds == nil ? 0.4 : 1)
+                            .disabled(chosenSeconds == nil && rpe.selected == nil)
+                            .opacity(chosenSeconds == nil && rpe.selected == nil ? 0.4 : 1)
                         }
                     }
 
