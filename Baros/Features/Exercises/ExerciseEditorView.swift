@@ -15,6 +15,7 @@ struct ExerciseEditorView: View {
     @State private var category: ExerciseCategory
     @State private var equipment: ExerciseEquipment
     @State private var primaryMuscleGroup: ExerciseMuscleGroup
+    @State private var trackingMethod: ExerciseTrackingMethod
     @State private var notes: String
     @State private var validationMessage: String?
 
@@ -29,6 +30,7 @@ struct ExerciseEditorView: View {
         _category = State(initialValue: exercise?.category ?? .strength)
         _equipment = State(initialValue: exercise?.equipment ?? .barbell)
         _primaryMuscleGroup = State(initialValue: exercise?.primaryMuscleGroup ?? .chest)
+        _trackingMethod = State(initialValue: exercise?.trackingMethod ?? .reps)
         _notes = State(initialValue: exercise?.notes ?? "")
     }
 
@@ -49,6 +51,20 @@ struct ExerciseEditorView: View {
                     Text(validationMessage)
                         .foregroundStyle(AppTheme.destructiveForeground)
                 }
+            }
+
+            Section {
+                Picker("Log Sets By", selection: $trackingMethod) {
+                    ForEach(ExerciseTrackingMethod.allCases) { method in
+                        Text(method.displayName).tag(method)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("ExerciseTrackingMethodPicker")
+            } header: {
+                Text("Log Sets By")
+            } footer: {
+                Text(trackingMethodFooter)
             }
 
             Section {
@@ -85,6 +101,15 @@ struct ExerciseEditorView: View {
         }
     }
 
+    private var trackingMethodFooter: String {
+        let summary = switch trackingMethod {
+        case .reps: "Each set records reps, with optional weight."
+        case .duration: "Each set records a time, like a plank or a carry, with optional weight."
+        }
+        guard let exercise, exercise.trackingMethod != trackingMethod else { return summary }
+        return summary + " Workouts you’ve already logged keep how they were recorded."
+    }
+
     private func save() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
@@ -114,6 +139,7 @@ struct ExerciseEditorView: View {
                     category: category,
                     equipment: equipment,
                     primaryMuscle: primaryMuscleGroup.displayName,
+                    trackingMethod: trackingMethod,
                     notes: notes,
                     context: modelContext
                 )
@@ -124,6 +150,7 @@ struct ExerciseEditorView: View {
                     category: category,
                     equipment: equipment,
                     primaryMuscle: primaryMuscleGroup.displayName,
+                    trackingMethod: trackingMethod,
                     notes: notes,
                     context: modelContext
                 )

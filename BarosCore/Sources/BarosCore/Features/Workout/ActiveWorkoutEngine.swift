@@ -173,6 +173,10 @@ public final class ActiveWorkoutEngine {
                 exerciseSnapshotName: pastLoggedExercise.exerciseSnapshotName,
                 exerciseSnapshotEquipmentRaw: resolvedEquipmentRaw,
                 exerciseSnapshotPrimaryMuscleGroupRaw: resolvedPrimaryMuscleGroupRaw,
+                // A linked copy is logged the way the chosen workout was, even
+                // if the library exercise has changed method since. Rows that
+                // follow a newer session take the exercise's current method.
+                trackingMethod: newerSetKinds == nil ? pastLoggedExercise.trackingMethod : nil,
                 sourceLoggedExerciseID: newerSetKinds == nil ? pastLoggedExercise.id : nil,
                 supersetGroupID: supersetGroupID,
                 createdAt: now,
@@ -761,12 +765,9 @@ public final class ActiveWorkoutEngine {
         save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws -> Bool {
         guard !hasPendingSetSave else { return false }
-        let weight = WorkoutNumericInputPolicy.validatedWeight(values.weight)
-        let reps = WorkoutNumericInputPolicy.validatedReps(values.reps)
-        guard weight != WorkoutNumericInputPolicy.validatedWeight(set.weight)
-            || reps != WorkoutNumericInputPolicy.validatedReps(set.reps) else { return false }
-        try saveSetAction(.draft(.init(weight: weight, reps: reps)), for: set,
-                          context: context, now: now, save: save)
+        let validated = values.validated
+        guard validated != ActiveWorkoutSetInput.Values(set).validated else { return false }
+        try saveSetAction(.draft(validated), for: set, context: context, now: now, save: save)
         return true
     }
 
@@ -790,10 +791,12 @@ public final class ActiveWorkoutEngine {
         now: Date = .now
     ) throws {
         guard !set.isCompleted else { return }
-        let current = preparedValues ?? .init(weight: set.weight, reps: set.reps)
+        let current = preparedValues ?? .init(set)
         let values = ActiveWorkoutSetInput.Values(
             weight: WorkoutNumericInputPolicy.validatedWeight(previous.weight) ?? current.weight,
-            reps: WorkoutNumericInputPolicy.validatedReps(previous.reps) ?? current.reps
+            reps: WorkoutNumericInputPolicy.validatedReps(previous.reps) ?? current.reps,
+            durationSeconds: WorkoutNumericInputPolicy.validatedDuration(previous.durationSeconds)
+                ?? current.durationSeconds
         )
         try commitActiveSetDraft(set, values: values, context: context, now: now)
     }
@@ -807,7 +810,7 @@ public final class ActiveWorkoutEngine {
     ) throws {
         guard !hasPendingSetSave else { return }
         try saveSetAction(
-            .completion(preparedValues ?? .init(weight: set.weight, reps: set.reps), !set.isCompleted),
+            .completion(preparedValues ?? .init(set), !set.isCompleted),
             for: set, context: context, now: now, save: save
         )
     }
@@ -882,23 +885,19 @@ public final class ActiveWorkoutEngine {
         let before = SetSaveSnapshot(set)
         switch action {
         case let .draft(values):
-            set.weight = values.weight
-            set.reps = values.reps
+            values.write(to: set)
             set.touchActiveDraft(now: now)
         case let .rpe(values, selection):
             let rpe = WorkoutNumericInputPolicy.validatedRPE(selection)
-            let weight = WorkoutNumericInputPolicy.validatedWeight(values.weight)
-            let reps = WorkoutNumericInputPolicy.validatedReps(values.reps)
+            let validated = values.validated
             let completesSet = rpe != nil && !set.isCompleted
             guard completesSet
-                || weight != WorkoutNumericInputPolicy.validatedWeight(set.weight)
-                || reps != WorkoutNumericInputPolicy.validatedReps(set.reps)
+                || validated != ActiveWorkoutSetInput.Values(set).validated
                 || rpe != WorkoutNumericInputPolicy.validatedRPE(set.rpe) else {
                 discardSetSave()
                 return
             }
-            set.weight = weight
-            set.reps = reps
+            validated.write(to: set)
             set.rpe = rpe
             if completesSet {
                 set.isCompleted = true
@@ -908,8 +907,7 @@ public final class ActiveWorkoutEngine {
                 set.touchActiveDraft(now: now)
             }
         case let .completion(values, isCompleted):
-            set.weight = WorkoutNumericInputPolicy.validatedWeight(values.weight)
-            set.reps = WorkoutNumericInputPolicy.validatedReps(values.reps)
+            values.validated.write(to: set)
             set.isCompleted = isCompleted
             set.completedAt = isCompleted ? now : nil
             set.touch(now: now)
@@ -983,18 +981,17 @@ public final class ActiveWorkoutEngine {
             guard sets.indices.contains(position), !sets[position].isCompleted else { continue }
             let partner = sets[position]
             let snapshot = SetSaveSnapshot(partner)
-            let above = ActiveWorkoutSetSuggestions.resolve(for: sets.map { .init(weight: $0.weight, reps: $0.reps) })[position]
+            let above = ActiveWorkoutSetSuggestions.resolve(for: sets.map { .init($0) })[position]
             let previous = previousSetsByLoggedExerciseID[partnerExercise.id].flatMap {
                 $0.indices.contains(position) ? $0[position] : nil
             }
             // A mounted row owns draft/rejection state. Use exactly the same
             // preparation as its direct check; nil means there is no editor.
             let values = setInputRegistry?.prepareLinkedSet(id: partner.id,
-                current: .init(weight: partner.weight, reps: partner.reps), previous: previous, suggestions: above)
+                current: .init(partner), previous: previous, suggestions: above)
                 ?? ActiveWorkoutSetInput().preparedLinkedValues(
-                    current: .init(weight: partner.weight, reps: partner.reps), previous: previous, suggestions: above)
-            partner.weight = values.weight
-            partner.reps = values.reps
+                    current: .init(partner), previous: previous, suggestions: above)
+            values.write(to: partner)
             partner.isCompleted = true
             partner.completedAt = now
             partner.touch(now: now)
@@ -1005,8 +1002,7 @@ public final class ActiveWorkoutEngine {
 
     /// Only the fields changed by a set edit, never the whole model context.
     private struct SetSaveSnapshot {
-        let weight: Double?
-        let reps: Int?
+        let values: ActiveWorkoutSetInput.Values
         let rpe: Double?
         let isCompleted: Bool
         let completedAt: Date?
@@ -1015,8 +1011,7 @@ public final class ActiveWorkoutEngine {
         let sessionUpdatedAt: Date?
 
         init(_ set: LoggedSet) {
-            weight = set.weight
-            reps = set.reps
+            values = .init(set)
             rpe = set.rpe
             isCompleted = set.isCompleted
             completedAt = set.completedAt
@@ -1026,8 +1021,7 @@ public final class ActiveWorkoutEngine {
         }
 
         func restore(_ set: LoggedSet) {
-            set.weight = weight
-            set.reps = reps
+            values.write(to: set)
             set.rpe = rpe
             set.isCompleted = isCompleted
             set.completedAt = completedAt

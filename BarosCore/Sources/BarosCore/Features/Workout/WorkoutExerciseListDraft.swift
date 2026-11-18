@@ -8,6 +8,7 @@ public struct WorkoutExerciseListSnapshot: Equatable {
         let orderIndex: Int
         let weight: Double?
         let reps: Int?
+        let durationSeconds: Int?
         let rpe: Double?
         let isCompleted: Bool
         let completedAt: Date?
@@ -20,6 +21,7 @@ public struct WorkoutExerciseListSnapshot: Equatable {
             orderIndex = set.orderIndex
             weight = set.weight
             reps = set.reps
+            durationSeconds = set.durationSeconds
             rpe = set.rpe
             isCompleted = set.isCompleted
             completedAt = set.completedAt
@@ -28,7 +30,7 @@ public struct WorkoutExerciseListSnapshot: Equatable {
             updatedAt = set.updatedAt
         }
 
-        var hasLoggedValues: Bool { isCompleted || weight != nil || reps != nil }
+        var hasLoggedValues: Bool { isCompleted || weight != nil || reps != nil || durationSeconds != nil }
     }
 
     public struct ExerciseState: Identifiable, Equatable {

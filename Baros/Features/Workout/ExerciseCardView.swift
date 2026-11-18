@@ -176,7 +176,7 @@ struct ExerciseCardView: View {
                 if !isCollapsed {
                     let previousSetsForRows = previousSets
                     let suggestions = ActiveWorkoutSetSuggestions.resolve(for: sortedSets.map {
-                        setPreviews[$0.id] ?? .init(weight: $0.weight, reps: $0.reps)
+                        setPreviews[$0.id] ?? .init($0)
                     })
                     VStack(spacing: 14) {
                         if !dynamicTypeSize.isAccessibilitySize {
@@ -184,7 +184,7 @@ struct ExerciseCardView: View {
                                 Color.clear.frame(width: 28)
                                 WorkoutSetColumnHeader(title: "PREVIOUS")
                                 WorkoutSetColumnHeader(title: weightUnit.fieldLabel)
-                                WorkoutSetColumnHeader(title: "REPS")
+                                WorkoutSetColumnHeader(title: loggedExercise.trackingMethod.fieldLabel)
                                 Color.clear.frame(width: 44)
                             }
                             .padding(.horizontal, 16)
@@ -198,6 +198,8 @@ struct ExerciseCardView: View {
                                         setID: set.id,
                                         weight: set.weight,
                                         reps: set.reps,
+                                        durationSeconds: set.durationSeconds,
+                                        trackingMethod: loggedExercise.trackingMethod,
                                         isCompleted: set.isCompleted,
                                         rpe: set.rpe,
                                         exerciseIndex: exerciseIndex,

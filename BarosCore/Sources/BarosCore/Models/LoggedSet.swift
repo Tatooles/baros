@@ -7,6 +7,8 @@ public final class LoggedSet: Identifiable {
     public var orderIndex: Int
     public var weight: Double?
     public var reps: Int?
+    /// A timed set's length. Rep-based sets leave it nil; time is never stored as reps.
+    public var durationSeconds: Int?
     public var rpe: Double?
     var kindRaw: String
     public var isCompleted: Bool
@@ -24,6 +26,7 @@ public final class LoggedSet: Identifiable {
         orderIndex: Int,
         weight: Double? = nil,
         reps: Int? = nil,
+        durationSeconds: Int? = nil,
         rpe: Double? = nil,
         kind: SetKind = .working,
         isCompleted: Bool = false,
@@ -39,6 +42,7 @@ public final class LoggedSet: Identifiable {
         self.orderIndex = orderIndex
         self.weight = weight
         self.reps = reps
+        self.durationSeconds = durationSeconds
         self.rpe = rpe
         self.kindRaw = kind.rawValue
         self.isCompleted = isCompleted
@@ -72,6 +76,11 @@ public final class LoggedSet: Identifiable {
     /// stays false for a soft-deleted (tombstoned) record.
     public var isDeleted: Bool {
         deletedAt != nil
+    }
+
+    /// Whether this set records reps or time, as its exercise was logged.
+    public var trackingMethod: ExerciseTrackingMethod {
+        loggedExercise?.trackingMethod ?? .reps
     }
 
     func touch(now: Date = .now) {

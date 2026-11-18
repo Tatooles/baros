@@ -407,7 +407,7 @@ struct WorkoutSessionView: View {
             let preparedValues = setInputRegistry.prepareSetValues(
                 for: .setReps(set.id),
                 completesSet: value != nil
-            ) ?? .init(weight: set.weight, reps: set.reps)
+            ) ?? .init(set)
             withAnimation(.easeInOut(duration: 0.2)) {
                 do {
                     try RPEChipSelectionAction.apply(

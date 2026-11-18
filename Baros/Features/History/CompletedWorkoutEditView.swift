@@ -244,7 +244,7 @@ struct CompletedWorkoutEditView: View {
                     HStack(spacing: 10) {
                         Color.clear.frame(width: 18)
                         WorkoutSetColumnHeader(title: weightUnit.fieldLabel)
-                        WorkoutSetColumnHeader(title: "REPS")
+                        WorkoutSetColumnHeader(title: exercise.trackingMethod.fieldLabel)
                         if showsRPE { WorkoutSetColumnHeader(title: "RPE") }
                         Color.clear.frame(width: 44)
                         Color.clear.frame(width: 34)
@@ -314,13 +314,18 @@ struct CompletedWorkoutEditView: View {
                     accessibilityIdentifier: "HistorySetWeightField-\(exerciseIndex)-\(visibleIndex)"
                 )
 
+                // Reps, or time for a timed exercise, in the same slot.
+                let isTimed = draft.exercises[exerciseIndex].trackingMethod == .duration
                 WorkoutNumericTextField(
-                    placeholder: "REPS",
-                    text: repsBinding(exerciseIndex: exerciseIndex, setIndex: setIndex),
+                    placeholder: draft.exercises[exerciseIndex].trackingMethod.fieldLabel,
+                    text: isTimed
+                        ? durationBinding(exerciseIndex: exerciseIndex, setIndex: setIndex)
+                        : repsBinding(exerciseIndex: exerciseIndex, setIndex: setIndex),
                     keyboard: .numberPad,
                     focusTarget: .setReps(exerciseIndex, setIndex),
                     focusedField: $focusedField,
-                    accessibilityIdentifier: "HistorySetRepsField-\(exerciseIndex)-\(visibleIndex)"
+                    accessibilityIdentifier: "HistorySet\(isTimed ? "Time" : "Reps")Field-\(exerciseIndex)-\(visibleIndex)",
+                    reformat: timeReformat(isTimed)
                 )
 
                 if showsRPE {
@@ -417,6 +422,33 @@ struct CompletedWorkoutEditView: View {
                 updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in
                     numberInputTexts[focusTarget, default: WorkoutNumberInputText()].updateDraft(value)
                     set.reps = WorkoutNumericInputPolicy.parseReps(value)
+                }
+            }
+        )
+    }
+
+    private func timeReformat(_ isTimed: Bool) -> ((String) -> String)? {
+        isTimed ? { WorkoutFormatters.setDurationDraft($0) } : nil
+    }
+
+    private func durationBinding(exerciseIndex: Int, setIndex: Int) -> Binding<String> {
+        let focusTarget = CompletedWorkoutEditFocusedField.setReps(exerciseIndex, setIndex)
+
+        return Binding(
+            get: {
+                guard draftSetExists(exerciseIndex: exerciseIndex, setIndex: setIndex) else {
+                    return numberInputTexts[focusTarget]?.displayText(for: nil) ?? ""
+                }
+                let duration = WorkoutNumericInputPolicy.validatedDuration(
+                    draft.exercises[exerciseIndex].sets[setIndex].durationSeconds
+                )
+                return numberInputTexts[focusTarget, default: WorkoutNumberInputText()]
+                    .displayText(fallback: duration.map(WorkoutFormatters.setDuration) ?? "")
+            },
+            set: { value in
+                updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in
+                    numberInputTexts[focusTarget, default: WorkoutNumberInputText()].updateDraft(value)
+                    set.durationSeconds = WorkoutNumericInputPolicy.parseDuration(value)
                 }
             }
         )

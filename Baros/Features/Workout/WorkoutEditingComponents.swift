@@ -407,9 +407,16 @@ struct WorkoutNumericTextField<Focus: Hashable>: View {
     let focusTarget: Focus
     var focusedField: FocusState<Focus?>.Binding
     let accessibilityIdentifier: String
+    /// Rewrites typed text, such as adding a time's colons. It runs after the
+    /// edit lands: a field does not redraw text its own binding changed mid-edit.
+    var reformat: ((String) -> String)?
 
     var body: some View {
         TextField(placeholder, text: $text)
+            .onChange(of: text) { _, typed in
+                guard let formatted = reformat?(typed), formatted != typed else { return }
+                text = formatted
+            }
             .keyboardType(keyboard)
             .multilineTextAlignment(.center)
             .font(.body.weight(.semibold))

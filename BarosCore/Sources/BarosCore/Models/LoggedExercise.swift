@@ -9,6 +9,10 @@ public final class LoggedExercise: Identifiable {
     var exerciseSnapshotEquipmentRaw: String = ExerciseEquipment.other.rawValue
     var exerciseSnapshotPrimaryMuscleGroupRaw: String = ExerciseMuscleGroup.other.rawValue
     var hasSnapshotMetadata: Bool = false
+    /// The exercise's tracking method when it was added, so a later library
+    /// edit doesn't reinterpret this workout. Nil reads as reps and is left out
+    /// of uploads: the row predates timed exercises on this device.
+    var trackingMethodRaw: String?
     public var notes: String
     var referenceNotes: String?
     public var sourceLoggedExerciseID: UUID?
@@ -33,6 +37,7 @@ public final class LoggedExercise: Identifiable {
         exerciseSnapshotName: String? = nil,
         exerciseSnapshotEquipmentRaw: String? = nil,
         exerciseSnapshotPrimaryMuscleGroupRaw: String? = nil,
+        trackingMethod: ExerciseTrackingMethod? = nil,
         notes: String = "",
         referenceNotes: String? = nil,
         sourceLoggedExerciseID: UUID? = nil,
@@ -49,6 +54,7 @@ public final class LoggedExercise: Identifiable {
         self.exerciseSnapshotEquipmentRaw = exerciseSnapshotEquipmentRaw ?? exercise?.equipmentRaw ?? ExerciseEquipment.other.rawValue
         self.exerciseSnapshotPrimaryMuscleGroupRaw = exerciseSnapshotPrimaryMuscleGroupRaw ?? exercise?.primaryMuscleGroup.rawValue ?? ExerciseMuscleGroup.other.rawValue
         self.hasSnapshotMetadata = true
+        self.trackingMethodRaw = (trackingMethod ?? exercise?.trackingMethod)?.rawValue
         self.notes = notes
         self.referenceNotes = referenceNotes
         self.sourceLoggedExerciseID = sourceLoggedExerciseID
@@ -71,6 +77,11 @@ public final class LoggedExercise: Identifiable {
 
     var isDeleted: Bool {
         deletedAt != nil
+    }
+
+    /// Whether this exercise's sets record reps or time.
+    public var trackingMethod: ExerciseTrackingMethod {
+        ExerciseTrackingMethod(storedRawValue: trackingMethodRaw)
     }
 
     var resolvedSnapshotEquipmentRaw: String? {

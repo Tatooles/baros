@@ -15,6 +15,10 @@ public final class Exercise: Identifiable {
     public var equipmentRaw: String
     var primaryMuscleRaw: String = ""
     var primaryMuscleGroupRaw: String = ExerciseMuscleGroup.other.rawValue
+    /// Nil until someone chooses a method on a build that has timed exercises.
+    /// Nil reads as reps and is left out of uploads, so an exercise this device
+    /// last saw on an older build can't overwrite a choice made elsewhere.
+    var trackingMethodRaw: String?
     public var notes: String
     public var isArchived: Bool
     var isSeeded: Bool
@@ -30,6 +34,7 @@ public final class Exercise: Identifiable {
         category: ExerciseCategory,
         equipment: ExerciseEquipment,
         primaryMuscleGroup: ExerciseMuscleGroup,
+        trackingMethod: ExerciseTrackingMethod? = nil,
         notes: String = "",
         isArchived: Bool = false,
         isSeeded: Bool = false,
@@ -39,6 +44,7 @@ public final class Exercise: Identifiable {
         deletedAt: Date? = nil
     ) {
         self.id = id
+        self.trackingMethodRaw = trackingMethod?.rawValue
         self.seedIdentifier = seedIdentifier
         self.name = name
         self.categoryRaw = category.rawValue
@@ -61,6 +67,7 @@ public final class Exercise: Identifiable {
         category: ExerciseCategory,
         equipment: ExerciseEquipment,
         primaryMuscle: String,
+        trackingMethod: ExerciseTrackingMethod? = nil,
         notes: String = "",
         isArchived: Bool = false,
         isSeeded: Bool = false,
@@ -76,6 +83,7 @@ public final class Exercise: Identifiable {
             category: category,
             equipment: equipment,
             primaryMuscleGroup: ExerciseMuscleGroup.legacyGroup(for: primaryMuscle),
+            trackingMethod: trackingMethod,
             notes: notes,
             isArchived: isArchived,
             isSeeded: isSeeded,
@@ -146,6 +154,17 @@ public final class Exercise: Identifiable {
         set {
             primaryMuscleGroupRaw = newValue.rawValue
             primaryMuscleRaw = newValue.displayName
+            touch()
+        }
+    }
+
+    /// Whether new sets of this exercise record reps or time.
+    public var trackingMethod: ExerciseTrackingMethod {
+        get { ExerciseTrackingMethod(storedRawValue: trackingMethodRaw) }
+        set {
+            // Keep "never chosen" until the method really changes.
+            guard newValue != trackingMethod else { return }
+            trackingMethodRaw = newValue.rawValue
             touch()
         }
     }

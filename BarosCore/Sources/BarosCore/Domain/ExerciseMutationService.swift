@@ -17,6 +17,7 @@ public struct ExerciseMutationService {
         category: ExerciseCategory,
         equipment: ExerciseEquipment,
         primaryMuscle: String,
+        trackingMethod: ExerciseTrackingMethod = .reps,
         notes: String,
         ownerTokenIdentifier: String? = nil,
         context: ModelContext,
@@ -28,6 +29,7 @@ public struct ExerciseMutationService {
             category: category,
             equipment: equipment,
             primaryMuscle: primaryMuscle,
+            trackingMethod: trackingMethod,
             notes: notes,
             syncOwnerTokenIdentifier: effectiveOwner,
             createdAt: now,
@@ -52,15 +54,19 @@ public struct ExerciseMutationService {
         category: ExerciseCategory,
         equipment: ExerciseEquipment,
         primaryMuscle: String,
+        trackingMethod: ExerciseTrackingMethod? = nil,
         notes: String,
         ownerTokenIdentifier: String? = nil,
         context: ModelContext,
         now: Date = .now
     ) throws {
+        // Nil leaves the method alone, including a stored "never chosen".
+        let trackingMethod = trackingMethod ?? exercise.trackingMethod
         guard exercise.name != name
             || exercise.category != category
             || exercise.equipment != equipment
             || exercise.primaryMuscle != primaryMuscle
+            || exercise.trackingMethod != trackingMethod
             || exercise.notes != notes else {
             return
         }
@@ -77,6 +83,7 @@ public struct ExerciseMutationService {
             primaryMuscle: primaryMuscle,
             notes: notes
         )
+        exercise.trackingMethod = trackingMethod
         exercise.touch(now: now)
         try recorder.recordUpdate(
             entityKind: .exercise,

@@ -10,6 +10,8 @@ struct SetRowView: View, @MainActor Equatable {
     let setID: UUID
     let weight: Double?
     let reps: Int?
+    let durationSeconds: Int?
+    let trackingMethod: ExerciseTrackingMethod
     let isCompleted: Bool
     let rpe: Double?
     let exerciseIndex: Int
@@ -33,6 +35,8 @@ struct SetRowView: View, @MainActor Equatable {
         lhs.setID == rhs.setID
             && lhs.weight == rhs.weight
             && lhs.reps == rhs.reps
+            && lhs.durationSeconds == rhs.durationSeconds
+            && lhs.trackingMethod == rhs.trackingMethod
             && lhs.isCompleted == rhs.isCompleted
             && lhs.rpe == rhs.rpe
             && lhs.index == rhs.index
@@ -145,7 +149,7 @@ struct SetRowView: View, @MainActor Equatable {
                 accessibilityIdentifier: "SetWeightField-\(exerciseIndex)-\(index)"
             )
 
-            repsField
+            measureField
 
             completionButton
         }
@@ -197,10 +201,10 @@ struct SetRowView: View, @MainActor Equatable {
                 }
 
                 labeledColumn(
-                    label: "REPS",
-                    labelIdentifier: "SetRepsLabel-\(exerciseIndex)-\(index)"
+                    label: trackingMethod.fieldLabel,
+                    labelIdentifier: "\(measureIdentifierPrefix)Label-\(exerciseIndex)-\(index)"
                 ) {
-                    repsField
+                    measureField
                 }
             }
             .accessibilityElement(children: .contain)
@@ -297,15 +301,25 @@ struct SetRowView: View, @MainActor Equatable {
         return previous.displayText(weightUnit: weightUnit)
     }
 
-    private var repsField: some View {
+    /// Reps, or time for a timed exercise. Both sit in the same slot and
+    /// share the row's second focus target.
+    private var measureInput: ActiveWorkoutSetInput.Field {
+        trackingMethod == .duration ? .duration : .reps
+    }
+
+    private var measureIdentifierPrefix: String {
+        trackingMethod == .duration ? "SetTime" : "SetReps"
+    }
+
+    private var measureField: some View {
         numericField(
-            placeholder: "REPS",
-            suggestion: suggestionText(for: .reps),
-            text: repsBinding,
+            placeholder: trackingMethod.fieldLabel,
+            suggestion: suggestionText(for: measureInput),
+            text: measureBinding,
             keyboard: .numberPad,
             focusTarget: .setReps(set.id),
             isFocused: isRepsFocused,
-            accessibilityIdentifier: "SetRepsField-\(exerciseIndex)-\(index)"
+            accessibilityIdentifier: "\(measureIdentifierPrefix)Field-\(exerciseIndex)-\(index)"
         )
         .overlay(alignment: .topTrailing) {
             rpeBadge
@@ -421,18 +435,19 @@ struct SetRowView: View, @MainActor Equatable {
         )
     }
 
-    private var repsBinding: Binding<String> {
-        Binding(
-            get: { input.text(for: .reps, values: inputValues, weightUnit: weightUnit) },
+    private var measureBinding: Binding<String> {
+        let field = measureInput
+        return Binding(
+            get: { input.text(for: field, values: inputValues, weightUnit: weightUnit) },
             set: { value in
                 guard value != input.text(
-                    for: .reps,
+                    for: field,
                     values: inputValues,
                     weightUnit: weightUnit
                 ) else { return }
                 input.update(
                     value,
-                    for: .reps,
+                    for: field,
                     isFocused: isRepsFocused
                 )
                 publishPreview()
@@ -503,7 +518,7 @@ struct SetRowView: View, @MainActor Equatable {
     }
 
     private var inputValues: ActiveWorkoutSetInput.Values {
-        ActiveWorkoutSetInput.Values(weight: set.weight, reps: set.reps)
+        ActiveWorkoutSetInput.Values(set)
     }
 
     private var ownFields: [WorkoutField] {

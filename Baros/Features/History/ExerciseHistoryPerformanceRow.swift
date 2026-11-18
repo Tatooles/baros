@@ -179,7 +179,7 @@ struct ExerciseHistoryPerformanceRow: View {
     }
 }
 
-/// A completed set as one line: `weight × reps`, then RPE only when logged.
+/// A completed set as one line: `weight × reps` or its time, then RPE only when logged.
 /// A record set leads with its record's glyph and takes a 1pt outline in the
 /// record's color (neutral when it holds both); the name lives in the
 /// workout's subtitle, so the pill never grows a label or a second line.
@@ -204,7 +204,7 @@ struct HistorySetToken: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(kind.markerColor)
             }
-            Text("\(HistorySetTable.weightText(set, unit: weightUnit))\(Text(" × ").foregroundColor(AppTheme.textSecondary))\(HistorySetTable.repsText(set))")
+            HistorySetTable.valueText(set, unit: weightUnit)
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(AppTheme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
