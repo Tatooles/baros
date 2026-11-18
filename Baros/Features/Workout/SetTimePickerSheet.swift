@@ -72,6 +72,9 @@ struct SetTimePickerSheet: View {
                             }
                             // Nine chips share one row; past this size they truncate.
                             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                            // An RPE completes the set, and zero is not a time to complete it with.
+                            .disabled(chosenSeconds == nil)
+                            .opacity(chosenSeconds == nil ? 0.4 : 1)
                         }
                     }
 

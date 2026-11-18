@@ -440,9 +440,12 @@ struct CompletedWorkoutEditView: View {
         let exercise = draft.exercises[exerciseIndex]
         let seconds = WorkoutNumericInputPolicy.validatedDuration(exercise.sets[setIndex].durationSeconds)
         let placeholder = exercise.trackingMethod.fieldLabel
-        // An empty set starts from the set above, as it would have in the workout.
-        let setAbove = exercise.sets[..<setIndex].last { !$0.isRemoved }
-        let startingSeconds = seconds ?? WorkoutNumericInputPolicy.validatedDuration(setAbove?.durationSeconds) ?? 0
+        // An empty set starts from the nearest time above it, as it would have in the workout.
+        let timeAbove = exercise.sets[..<setIndex].reversed().lazy
+            .filter { !$0.isRemoved }
+            .compactMap { WorkoutNumericInputPolicy.validatedDuration($0.durationSeconds) }
+            .first
+        let startingSeconds = seconds ?? timeAbove ?? 0
         return Button {
             focusedField = nil
             timeEdit = CompletedWorkoutSetTimeEdit(

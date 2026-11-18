@@ -402,11 +402,12 @@ struct SetRowView: View, @MainActor Equatable {
 
     /// The sheet's RPE chips act as the keyboard's do: the set takes the
     /// value, and choosing one completes it. Zeroed wheels leave the time
-    /// alone, so completing still fills it the usual way.
+    /// alone, so completing still fills it the usual way. The time, RPE and
+    /// completion go in one save, so a failed save retries all three.
     private func saveTimeAndRPE(_ seconds: Int?, rpe: Double?) {
-        if let seconds { saveTime(seconds) }
         guard !engine.hasPendingSetSave, canEditSet else { return }
-        let preparedValues = prepareValuesForSetAction(completesSet: rpe != nil)
+        var preparedValues = prepareValuesForSetAction(completesSet: rpe != nil)
+        if let seconds { preparedValues = preparedValues.settingDuration(seconds) }
         withAnimation(.easeInOut(duration: 0.2)) {
             do {
                 try RPEChipSelectionAction.apply(
