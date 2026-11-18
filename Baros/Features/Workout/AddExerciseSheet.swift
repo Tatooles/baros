@@ -48,6 +48,7 @@ struct SwapExerciseSheet: View {
     let loggedExercise: LoggedExercise
     @Bindable var engine: ActiveWorkoutEngine
     @State private var swapErrorMessage: String?
+    @State private var isSwapping = false
 
     private var isErrorPresented: Binding<Bool> {
         Binding(
@@ -82,6 +83,9 @@ struct SwapExerciseSheet: View {
     }
 
     private func swap(with exercise: Exercise) {
+        // A second tap while the sheet closes would swap an exercise that is already gone.
+        guard !isSwapping else { return }
+        isSwapping = true
         do {
             try engine.swapLoggedExercise(
                 loggedExercise,
@@ -91,6 +95,7 @@ struct SwapExerciseSheet: View {
             )
             dismiss()
         } catch {
+            isSwapping = false
             let message = error.localizedDescription
             engine.lastErrorMessage = message
             swapErrorMessage = message

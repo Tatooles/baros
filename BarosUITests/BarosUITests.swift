@@ -2434,7 +2434,13 @@ final class BarosUITests: XCTestCase {
         cancelSearchField.typeText("Overhead Press")
         app.buttons["ExercisePickerRow-Overhead Press-Barbell"].tap()
         XCTAssertEqual(app.buttons["ExercisePickerConfirmSwapButton"].label, "Swap for Overhead Press")
-        app.buttons["ExercisePickerCancelButton"].tap()
+        // The navigation bar's Cancel returns once search closes, as in Add Exercises.
+        let closeSearchButton = app.buttons["Close"].firstMatch
+        XCTAssertTrue(closeSearchButton.waitToExist(timeout: 3))
+        closeSearchButton.tap()
+        let cancelButton = app.buttons["ExercisePickerCancelButton"]
+        XCTAssertTrue(cancelButton.waitToExist(timeout: 3))
+        cancelButton.tap()
         assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
 
         app.buttons["ExerciseMenuButton-0"].tap()
@@ -2467,7 +2473,7 @@ final class BarosUITests: XCTestCase {
         replacementRow.tap()
 
         XCTAssertTrue(replacementRow.isSelected)
-        assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
+        XCTAssertTrue(confirmButton.isEnabled)
         XCTAssertEqual(confirmButton.label, "Swap for Overhead Press")
         confirmButton.tap()
 

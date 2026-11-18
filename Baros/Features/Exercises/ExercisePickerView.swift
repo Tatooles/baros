@@ -205,7 +205,7 @@ private struct ExercisePickerList: View {
                     onCreate: beginCreation
                 )
             } else {
-                if let swapImpact, searchText.isEmpty, !similarRows.isEmpty {
+                if let swapImpact, !similarRows.isEmpty {
                     Section {
                         ForEach(similarRows) { row in
                             pickerRow(row, identifierPrefix: "ExercisePickerSimilarRow")
@@ -218,7 +218,7 @@ private struct ExercisePickerList: View {
                     }
                 }
                 Section {
-                    ForEach(rows) { row in
+                    ForEach(rows.filter { row in !similarRows.contains { $0.id == row.id } }) { row in
                         pickerRow(row)
                     }
 
@@ -369,8 +369,10 @@ private struct ExercisePickerList: View {
         return impact
     }
 
+    /// Shown only while search is empty, and listed once: the full list below leaves them out.
     private var similarRows: [ExercisePickerRowContent] {
-        swapImpact?.similarRows(in: baseRows) ?? []
+        guard searchText.isEmpty else { return [] }
+        return swapImpact?.similarRows(in: baseRows) ?? []
     }
 
     /// Swap picks one replacement, then commits from the bar, which says what the swap removes.
@@ -395,12 +397,14 @@ private struct ExercisePickerList: View {
             } label: {
                 Text(replacement.map(impact.confirmTitle(for:)) ?? "Choose a Replacement")
                     .font(.headline)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    // Wraps rather than truncating, so the equipment of a same-name variant stays readable.
+                    .lineLimit(3)
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
             }
             .buttonStyle(.glassProminent)
+            .accessibilityHint(impact.losesWork ? impact.lossMessage : "")
             .tint(impact.losesWork ? AppTheme.destructiveFill : AppTheme.brandAccentFill)
             .disabled(replacement == nil)
             .accessibilityIdentifier("ExercisePickerConfirmSwapButton")
@@ -418,7 +422,7 @@ private struct ExercisePickerList: View {
                 toggleSelection(row.exercise)
             } else {
                 swapSelectionID = row.exercise.id
-                // Lower the keyboard so the confirm bar shows what the swap removes.
+                // The choice is made; lower the keyboard to show the rest of the list.
                 UIApplication.shared.sendAction(
                     #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
                 )
