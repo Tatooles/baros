@@ -6,8 +6,10 @@ struct CompletedWorkoutEditView: View {
     @AppStorage(RPEPreference.storageKey) private var rpeEnabled = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
+    @ScaledMetric(relativeTo: .headline) private var scaledActionHeight: CGFloat = 50
 
     let session: WorkoutSession
     let weightUnit: MeasurementUnit
@@ -19,6 +21,7 @@ struct CompletedWorkoutEditView: View {
     @State private var hasEditedDuration = false
     @State private var isDurationEditorPresented = false
     @State private var isAddExercisePresented = false
+    @State private var isReorderPresented = false
     @State private var swappingExercise: CompletedWorkoutEditExerciseDraft?
     @State private var exerciseRemovalCandidate: CompletedWorkoutEditExerciseDraft?
     @State private var numberInputTexts: [CompletedWorkoutEditFocusedField: WorkoutNumberInputText] = [:]
@@ -58,11 +61,31 @@ struct CompletedWorkoutEditView: View {
                         accessibilityIdentifier: "CompletedWorkoutNotesField"
                     )
 
-                    ForEach(Array(draft.exercises.enumerated()), id: \.element.id) { exerciseIndex, exercise in
-                        exerciseEditor(exercise, exerciseIndex: exerciseIndex)
+                    let groupIDs = draft.exercises.map(\.supersetGroupID)
+                    let exerciseIndexes = Dictionary(
+                        uniqueKeysWithValues: draft.exercises.enumerated().map { ($1.id, $0) }
+                    )
+                    ForEach(SupersetGrouping.blocks(draft.exercises, groupID: \.supersetGroupID)) { block in
+                        if block.isSuperset {
+                            SupersetRail(count: block.members.count) {
+                                ForEach(block.members) { exercise in
+                                    exerciseEditor(
+                                        exercise,
+                                        exerciseIndex: exerciseIndexes[exercise.id] ?? 0,
+                                        groupIDs: groupIDs
+                                    )
+                                }
+                            }
+                        } else {
+                            exerciseEditor(
+                                block.members[0],
+                                exerciseIndex: exerciseIndexes[block.id] ?? 0,
+                                groupIDs: groupIDs
+                            )
+                        }
                     }
 
-                    addExerciseButton
+                    exerciseActions
                 }
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
@@ -99,18 +122,24 @@ struct CompletedWorkoutEditView: View {
             }
             .sheet(isPresented: $isAddExercisePresented) {
                 NavigationStack {
-                    ExercisePickerView(mode: .add(existingExerciseIDs: draft.exerciseIDs)) { exercises in
-                        withAnimation(.snappy) {
-                            draft.appendExercises(
-                                exercises,
-                                history: exerciseHistory(),
-                                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
-                            )
-                        }
-                        isAddExercisePresented = false
-                    }
+                    ExercisePickerView(
+                        mode: .add(existingExerciseIDs: draft.exerciseIDs),
+                        onSelectAsSuperset: { appendExercises($0, asSuperset: true) },
+                        onSelect: { appendExercises($0, asSuperset: false) }
+                    )
                 }
                 .presentationDetents([.large])
+            }
+            .sheet(isPresented: $isReorderPresented) {
+                CompletedWorkoutReorderSheet(draft: draft) { reordered in
+                    let keptIDs = Set(reordered.exercises.map(\.id))
+                    for exercise in draft.exercises where !keptIDs.contains(exercise.id) {
+                        forgetInputState(for: exercise.id)
+                    }
+                    withAnimation(.snappy) {
+                        draft = reordered
+                    }
+                }
             }
             .sheet(item: $swappingExercise) { exercise in
                 CompletedWorkoutSwapExerciseSheet(exercise: exercise) { replacement in
@@ -263,20 +292,45 @@ struct CompletedWorkoutEditView: View {
         .padding(.horizontal, 4)
     }
 
-    private var addExerciseButton: some View {
-        Button {
-            focusedField = nil
-            isAddExercisePresented = true
-        } label: {
-            Label("Add Exercise", systemImage: "plus")
-                .font(.headline)
-                .foregroundStyle(AppTheme.brandAccentForeground)
-                .frame(maxWidth: .infinity, minHeight: 50)
-                .background(AppTheme.brandAccentMuted, in: Capsule())
-                .contentShape(Capsule())
+    /// Mirrors the Active Workout's Edit and Add Exercise actions.
+    private var exerciseActions: some View {
+        let actionHeight = max(50, scaledActionHeight)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 10))
+        return layout {
+            if draft.exercises.count > 1 {
+                Button {
+                    focusedField = nil
+                    isReorderPresented = true
+                } label: {
+                    Label("Reorder", systemImage: "arrow.up.arrow.down")
+                        .font(.headline)
+                        .foregroundStyle(AppTheme.brandAccentForeground)
+                        .fixedSize()
+                        .padding(.horizontal, 20)
+                        .frame(minWidth: 108, minHeight: actionHeight)
+                        .background(AppTheme.fieldSurface, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("ReorderHistoryExercisesButton")
+            }
+
+            Button {
+                focusedField = nil
+                isAddExercisePresented = true
+            } label: {
+                Label("Add Exercise", systemImage: "plus")
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.brandAccentForeground)
+                    .frame(maxWidth: .infinity, minHeight: actionHeight)
+                    .background(AppTheme.brandAccentMuted, in: Capsule())
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("AddHistoryExerciseButton")
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("AddHistoryExerciseButton")
     }
 
     private var durationDisplayText: String {
@@ -294,7 +348,11 @@ struct CompletedWorkoutEditView: View {
 
     private static let menuButtonSize: CGFloat = 44
 
-    private func exerciseEditor(_ exercise: CompletedWorkoutEditExerciseDraft, exerciseIndex: Int) -> some View {
+    private func exerciseEditor(
+        _ exercise: CompletedWorkoutEditExerciseDraft,
+        exerciseIndex: Int,
+        groupIDs: [UUID?]
+    ) -> some View {
         let exerciseID = exercise.id
 
         return SurfaceCard(padding: 0) {
@@ -307,7 +365,7 @@ struct CompletedWorkoutEditView: View {
                     titleTrailingInset: Self.menuButtonSize
                 )
                 .overlay(alignment: Alignment(horizontal: .trailing, vertical: .firstTextBaseline)) {
-                    exerciseMenu(exercise, exerciseIndex: exerciseIndex)
+                    exerciseMenu(exercise, exerciseIndex: exerciseIndex, groupIDs: groupIDs)
                 }
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)
@@ -371,7 +429,11 @@ struct CompletedWorkoutEditView: View {
         }
     }
 
-    private func exerciseMenu(_ exercise: CompletedWorkoutEditExerciseDraft, exerciseIndex: Int) -> some View {
+    private func exerciseMenu(
+        _ exercise: CompletedWorkoutEditExerciseDraft,
+        exerciseIndex: Int,
+        groupIDs: [UUID?]
+    ) -> some View {
         Menu {
             Button {
                 focusedField = nil
@@ -380,6 +442,36 @@ struct CompletedWorkoutEditView: View {
                 Label("Swap Exercise", systemImage: "arrow.triangle.2.circlepath")
             }
             .accessibilityIdentifier("SwapHistoryExerciseButton-\(exerciseIndex)")
+
+            // Each link action shows unless that neighbor is already in this
+            // exercise's superset. Join Previous comes first: it joins upward.
+            if exerciseIndex > 0, !SupersetGrouping.areGrouped(groupIDs, exerciseIndex, exerciseIndex - 1) {
+                Button {
+                    changeSuperset(.joinPrevious, for: exercise)
+                } label: {
+                    Label("Join Previous Superset", systemImage: "link")
+                }
+                .accessibilityIdentifier("JoinPreviousHistorySupersetButton-\(exerciseIndex)")
+            }
+
+            if exerciseIndex + 1 < groupIDs.count,
+               !SupersetGrouping.areGrouped(groupIDs, exerciseIndex, exerciseIndex + 1) {
+                Button {
+                    changeSuperset(.joinNext, for: exercise)
+                } label: {
+                    Label("Superset with Next", systemImage: "link")
+                }
+                .accessibilityIdentifier("HistorySupersetWithNextButton-\(exerciseIndex)")
+            }
+
+            if SupersetGrouping.isGrouped(groupIDs, at: exerciseIndex) {
+                Button {
+                    changeSuperset(.remove, for: exercise)
+                } label: {
+                    Label("Remove from Superset", systemImage: "minus.circle")
+                }
+                .accessibilityIdentifier("RemoveFromHistorySupersetButton-\(exerciseIndex)")
+            }
 
             Button(role: .destructive) {
                 focusedField = nil
@@ -630,6 +722,28 @@ struct CompletedWorkoutEditView: View {
         reindexDraftSets(for: exerciseIndex)
     }
 
+    private func appendExercises(_ exercises: [Exercise], asSuperset: Bool) {
+        withAnimation(.snappy) {
+            draft.appendExercises(
+                exercises,
+                asSuperset: asSuperset,
+                history: exerciseHistory(),
+                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
+            )
+        }
+        isAddExercisePresented = false
+    }
+
+    private func changeSuperset(
+        _ change: ActiveWorkoutEngine.SupersetChange,
+        for exercise: CompletedWorkoutEditExerciseDraft
+    ) {
+        focusedField = nil
+        withAnimation(.snappy) {
+            draft.changeSuperset(change, forExerciseID: exercise.id)
+        }
+    }
+
     private func removeExercise(_ exercise: CompletedWorkoutEditExerciseDraft) {
         focusedField = nil
         forgetInputState(for: exercise.id)
@@ -703,6 +817,79 @@ struct CompletedWorkoutEditView: View {
             modelContext.rollback()
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+/// The Active Workout's list editor (reorder, remove, add, and link) over a
+/// copy of the draft. Done hands the copy back; Cancel drops it.
+private struct CompletedWorkoutReorderSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
+    @State private var draft: CompletedWorkoutEditDraft
+    @State private var showsPicker = false
+    let onDone: (CompletedWorkoutEditDraft) -> Void
+
+    init(draft: CompletedWorkoutEditDraft, onDone: @escaping (CompletedWorkoutEditDraft) -> Void) {
+        _draft = State(initialValue: draft)
+        self.onDone = onDone
+    }
+
+    var body: some View {
+        NavigationStack {
+            ReorderExercisesList(
+                exercises: draft.exercises,
+                reorder: { draft.reorderExercises($0) },
+                remove: { draft.removeExercises($0) },
+                add: { showsPicker = true },
+                regroup: { draft.regroup($0) }
+            )
+            .background(AppTheme.canvasBackground.ignoresSafeArea())
+            .overlay {
+                if draft.exercises.isEmpty {
+                    Text("No exercises")
+                        .font(.body)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .accessibilityIdentifier("ReorderExercisesEmptyState")
+                }
+            }
+            .navigationDestination(isPresented: $showsPicker) {
+                ExercisePickerView(
+                    mode: .add(existingExerciseIDs: draft.exerciseIDs),
+                    showsCancel: false,
+                    onSelectAsSuperset: { append($0, asSuperset: true) },
+                    onSelect: { append($0, asSuperset: false) }
+                )
+            }
+            .navigationTitle("Exercises")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .accessibilityIdentifier("CancelReorderExercisesButton")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        onDone(draft)
+                        dismiss()
+                    }
+                    .font(.system(size: 16, weight: .semibold))
+                    .accessibilityIdentifier("DoneReorderExercisesButton")
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
+    }
+
+    private func append(_ exercises: [Exercise], asSuperset: Bool) {
+        let history = (try? modelContext.fetch(FetchDescriptor<WorkoutSession>())) ?? []
+        draft.appendExercises(
+            exercises,
+            asSuperset: asSuperset,
+            history: history,
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
+        )
+        showsPicker = false
     }
 }
 

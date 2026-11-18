@@ -3330,11 +3330,28 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(workoutHistorySetValue("135 pounds, 8 reps, RPE 7.5", in: app).exists)
         XCTAssertTrue(workoutHistorySetValue("185 pounds, 5 reps", in: app).exists)
 
-        // Removing it from the exercise menu takes its sets with it.
+        // The Reorder sheet moves it first, and the menu supersets it with the next exercise.
         app.buttons["EditWorkoutButton"].tap()
-        XCTAssertTrue(app.buttons["HistoryExerciseMenuButton-1"].waitToExist(timeout: 3))
-        app.buttons["HistoryExerciseMenuButton-1"].tap()
-        app.buttons["RemoveHistoryExerciseButton-1"].tap()
+        XCTAssertTrue(app.buttons["ReorderHistoryExercisesButton"].waitToExist(timeout: 3))
+        app.buttons["ReorderHistoryExercisesButton"].tap()
+        XCTAssertTrue(waitForReorderExercisesList(in: app, timeout: 3))
+        moveReorderExercise(named: "Back Squat", before: "Bench Press", in: app)
+        app.buttons["DoneReorderExercisesButton"].tap()
+        XCTAssertTrue(app.buttons["HistoryExerciseMenuButton-0"].waitToExist(timeout: 3))
+        XCTAssertEqual(app.buttons["HistoryExerciseMenuButton-0"].label, "Back Squat options")
+        app.buttons["HistoryExerciseMenuButton-0"].tap()
+        app.buttons["HistorySupersetWithNextButton-0"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["SupersetLabel"].waitToExist(timeout: 3))
+        app.buttons["SaveCompletedWorkoutEditButton"].tap()
+        XCTAssertTrue(workoutHistoryHeading("Edited Push", in: app).waitToExist(timeout: 3))
+        XCTAssertEqual(app.buttons["WorkoutHistoryExerciseLink-0"].label, "Back Squat")
+        XCTAssertTrue(app.descendants(matching: .any)["SupersetLabel"].exists)
+
+        // Removing it from the exercise menu takes its sets with it and ends the superset.
+        app.buttons["EditWorkoutButton"].tap()
+        XCTAssertTrue(app.buttons["HistoryExerciseMenuButton-0"].waitToExist(timeout: 3))
+        app.buttons["HistoryExerciseMenuButton-0"].tap()
+        app.buttons["RemoveHistoryExerciseButton-0"].tap()
         // The dialog nests a copy of its action under the same identifier.
         app.buttons["ConfirmRemoveHistoryExerciseButton"].firstMatch.tap()
         XCTAssertTrue(app.buttons["HistoryExerciseMenuButton-1"].waitToDisappear(timeout: 3))
@@ -3342,6 +3359,7 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(workoutHistoryHeading("Edited Push", in: app).waitToExist(timeout: 3))
         XCTAssertFalse(workoutHistorySetValue("185 pounds, 5 reps", in: app).exists)
         XCTAssertTrue(workoutHistorySetValue("205.5 pounds, 6 reps, RPE 8", in: app).exists)
+        XCTAssertFalse(app.descendants(matching: .any)["SupersetLabel"].exists)
 
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
