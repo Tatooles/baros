@@ -18,6 +18,9 @@ struct CompletedWorkoutEditView: View {
     @State private var durationSelection: CompletedWorkoutDurationSelection
     @State private var hasEditedDuration = false
     @State private var isDurationEditorPresented = false
+    @State private var isAddExercisePresented = false
+    @State private var swappingExercise: CompletedWorkoutEditExerciseDraft?
+    @State private var exerciseRemovalCandidate: CompletedWorkoutEditExerciseDraft?
     @State private var numberInputTexts: [CompletedWorkoutEditFocusedField: WorkoutNumberInputText] = [:]
     @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var errorMessage: String?
@@ -55,9 +58,11 @@ struct CompletedWorkoutEditView: View {
                         accessibilityIdentifier: "CompletedWorkoutNotesField"
                     )
 
-                    ForEach(draft.exercises.indices, id: \.self) { exerciseIndex in
-                        exerciseEditor(exerciseIndex: exerciseIndex)
+                    ForEach(Array(draft.exercises.enumerated()), id: \.element.id) { exerciseIndex, exercise in
+                        exerciseEditor(exercise, exerciseIndex: exerciseIndex)
                     }
+
+                    addExerciseButton
                 }
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
@@ -91,6 +96,51 @@ struct CompletedWorkoutEditView: View {
                     selection: $durationSelection,
                     hasEditedDuration: $hasEditedDuration
                 )
+            }
+            .sheet(isPresented: $isAddExercisePresented) {
+                NavigationStack {
+                    ExercisePickerView(mode: .add(existingExerciseIDs: draft.exerciseIDs)) { exercises in
+                        withAnimation(.snappy) {
+                            draft.appendExercises(
+                                exercises,
+                                history: exerciseHistory(),
+                                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
+                            )
+                        }
+                        isAddExercisePresented = false
+                    }
+                }
+                .presentationDetents([.large])
+            }
+            .sheet(item: $swappingExercise) { exercise in
+                CompletedWorkoutSwapExerciseSheet(exercise: exercise) { replacement in
+                    withAnimation(.snappy) {
+                        swap(exercise, with: replacement)
+                    }
+                }
+            }
+            .confirmationDialog(
+                "Remove \(exerciseRemovalCandidate?.name ?? "Exercise")?",
+                isPresented: Binding(
+                    get: { exerciseRemovalCandidate != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            exerciseRemovalCandidate = nil
+                        }
+                    }
+                ),
+                titleVisibility: .visible,
+                presenting: exerciseRemovalCandidate
+            ) { exercise in
+                Button("Remove Exercise", role: .destructive) {
+                    withAnimation(.snappy) {
+                        removeExercise(exercise)
+                    }
+                }
+                .accessibilityIdentifier("ConfirmRemoveHistoryExerciseButton")
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("This removes the exercise and its sets from this workout when you save.")
             }
             .alert(
                 "Remove Set?",
@@ -213,6 +263,22 @@ struct CompletedWorkoutEditView: View {
         .padding(.horizontal, 4)
     }
 
+    private var addExerciseButton: some View {
+        Button {
+            focusedField = nil
+            isAddExercisePresented = true
+        } label: {
+            Label("Add Exercise", systemImage: "plus")
+                .font(.headline)
+                .foregroundStyle(AppTheme.brandAccentForeground)
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .background(AppTheme.brandAccentMuted, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("AddHistoryExerciseButton")
+    }
+
     private var durationDisplayText: String {
         hasDurationChange ? durationSelection.displayText : AppTheme.formatDuration(initialDurationSeconds)
     }
@@ -226,17 +292,23 @@ struct CompletedWorkoutEditView: View {
         hasEditedDuration && durationSelection != initialDurationSelection
     }
 
-    private func exerciseEditor(exerciseIndex: Int) -> some View {
-        let exercise = draft.exercises[exerciseIndex]
+    private static let menuButtonSize: CGFloat = 44
+
+    private func exerciseEditor(_ exercise: CompletedWorkoutEditExerciseDraft, exerciseIndex: Int) -> some View {
+        let exerciseID = exercise.id
 
         return SurfaceCard(padding: 0) {
             VStack(spacing: 0) {
                 WorkoutExerciseHeaderContent(
                     title: exercise.exerciseSnapshotName,
                     metadata: exercise.metadataDisplayText,
-                    progress: exerciseProgress(for: exerciseIndex),
-                    isCollapsed: nil
+                    progress: exerciseProgress(for: exercise),
+                    isCollapsed: nil,
+                    titleTrailingInset: Self.menuButtonSize
                 )
+                .overlay(alignment: Alignment(horizontal: .trailing, vertical: .firstTextBaseline)) {
+                    exerciseMenu(exercise, exerciseIndex: exerciseIndex)
+                }
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)
 
@@ -252,10 +324,15 @@ struct CompletedWorkoutEditView: View {
                     .padding(.horizontal, 16)
 
                     VStack(spacing: 10) {
-                        let setIndices = visibleSetIndices(for: exerciseIndex)
+                        let setIndices = visibleSetIndices(in: exercise)
                         ForEach(Array(setIndices.enumerated()), id: \.element) { visibleIndex, setIndex in
-                            setEditor(exerciseIndex: exerciseIndex, setIndex: setIndex, visibleIndex: visibleIndex)
-                                .padding(.horizontal, 16)
+                            setEditor(
+                                exerciseID: exerciseID,
+                                exerciseIndex: exerciseIndex,
+                                setIndex: setIndex,
+                                visibleIndex: visibleIndex
+                            )
+                            .padding(.horizontal, 16)
                         }
                     }
 
@@ -264,7 +341,7 @@ struct CompletedWorkoutEditView: View {
                         accessibilityIdentifier: "AddHistorySetButton-\(exerciseIndex)"
                     ) {
                         withAnimation(.spring(response: 0.26, dampingFraction: 0.85)) {
-                            addSet(to: exerciseIndex)
+                            addSet(to: exerciseID)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -274,7 +351,7 @@ struct CompletedWorkoutEditView: View {
                         .padding(.horizontal, 16)
 
                     WorkoutProgressiveNoteControl(
-                        notes: exerciseNotesBinding(exerciseIndex: exerciseIndex),
+                        notes: exerciseNotesBinding(exerciseID: exerciseID),
                         addTitle: "Add exercise note",
                         addSystemImage: "note.text.badge.plus",
                         placeholder: "Exercise notes...",
@@ -283,8 +360,8 @@ struct CompletedWorkoutEditView: View {
                         fieldAccessibilityIdentifier: "CompletedWorkoutExerciseNotesField-\(exerciseIndex)",
                         addAccessibilityHint: nil,
                         addButtonHorizontalPadding: 0,
-                        focusTarget: .exerciseNotes(exerciseIndex),
-                        isRevealed: exerciseNoteRevealBinding(exerciseID: exercise.id),
+                        focusTarget: .exerciseNotes(exerciseID),
+                        isRevealed: exerciseNoteRevealBinding(exerciseID: exerciseID),
                         focusedField: $focusedField
                     )
                     .padding(.horizontal, 16)
@@ -294,10 +371,44 @@ struct CompletedWorkoutEditView: View {
         }
     }
 
+    private func exerciseMenu(_ exercise: CompletedWorkoutEditExerciseDraft, exerciseIndex: Int) -> some View {
+        Menu {
+            Button {
+                focusedField = nil
+                swappingExercise = exercise
+            } label: {
+                Label("Swap Exercise", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .accessibilityIdentifier("SwapHistoryExerciseButton-\(exerciseIndex)")
+
+            Button(role: .destructive) {
+                focusedField = nil
+                exerciseRemovalCandidate = exercise
+            } label: {
+                Label("Remove Exercise", systemImage: "trash")
+                    .foregroundStyle(AppTheme.destructiveForeground)
+            }
+            .tint(AppTheme.destructiveForeground)
+            .accessibilityIdentifier("RemoveHistoryExerciseButton-\(exerciseIndex)")
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppTheme.textSecondary)
+                .frame(width: Self.menuButtonSize, height: Self.menuButtonSize)
+                .alignmentGuide(.firstTextBaseline) { dimensions in
+                    dimensions[VerticalAlignment.center] + 6
+                }
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(exercise.name) options")
+        .accessibilityIdentifier("HistoryExerciseMenuButton-\(exerciseIndex)")
+    }
+
     @ViewBuilder
-    private func setEditor(exerciseIndex: Int, setIndex: Int, visibleIndex: Int) -> some View {
-        if draftSetExists(exerciseIndex: exerciseIndex, setIndex: setIndex) {
-            let isCompleted = draft.exercises[exerciseIndex].sets[setIndex].isCompleted
+    private func setEditor(exerciseID: UUID, exerciseIndex: Int, setIndex: Int, visibleIndex: Int) -> some View {
+        if let set = draftSet(exerciseID: exerciseID, setIndex: setIndex) {
+            let isCompleted = set.isCompleted
 
             HStack(spacing: 10) {
                 Text("\(visibleIndex + 1)")
@@ -307,18 +418,18 @@ struct CompletedWorkoutEditView: View {
 
                 WorkoutNumericTextField(
                     placeholder: weightUnit.fieldPlaceholder,
-                    text: weightBinding(exerciseIndex: exerciseIndex, setIndex: setIndex),
+                    text: weightBinding(exerciseID: exerciseID, setIndex: setIndex),
                     keyboard: .decimalPad,
-                    focusTarget: .setWeight(exerciseIndex, setIndex),
+                    focusTarget: .setWeight(exerciseID, setIndex),
                     focusedField: $focusedField,
                     accessibilityIdentifier: "HistorySetWeightField-\(exerciseIndex)-\(visibleIndex)"
                 )
 
                 WorkoutNumericTextField(
                     placeholder: "REPS",
-                    text: repsBinding(exerciseIndex: exerciseIndex, setIndex: setIndex),
+                    text: repsBinding(exerciseID: exerciseID, setIndex: setIndex),
                     keyboard: .numberPad,
-                    focusTarget: .setReps(exerciseIndex, setIndex),
+                    focusTarget: .setReps(exerciseID, setIndex),
                     focusedField: $focusedField,
                     accessibilityIdentifier: "HistorySetRepsField-\(exerciseIndex)-\(visibleIndex)"
                 )
@@ -326,16 +437,16 @@ struct CompletedWorkoutEditView: View {
                 if showsRPE {
                     WorkoutNumericTextField(
                         placeholder: "RPE",
-                        text: rpeBinding(exerciseIndex: exerciseIndex, setIndex: setIndex),
+                        text: rpeBinding(exerciseID: exerciseID, setIndex: setIndex),
                         keyboard: .decimalPad,
-                        focusTarget: .setRPE(exerciseIndex, setIndex),
+                        focusTarget: .setRPE(exerciseID, setIndex),
                         focusedField: $focusedField,
                         accessibilityIdentifier: "HistorySetRPEField-\(exerciseIndex)-\(visibleIndex)"
                     )
                 }
 
                 Button {
-                    updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in
+                    updateDraftSet(exerciseID: exerciseID, setIndex: setIndex) { set in
                         set.isCompleted.toggle()
                     }
                 } label: {
@@ -351,7 +462,7 @@ struct CompletedWorkoutEditView: View {
 
                 Button(role: .destructive) {
                     removalCandidate = CompletedWorkoutSetRemovalCandidate(
-                        exerciseIndex: exerciseIndex,
+                        exerciseID: exerciseID,
                         setIndex: setIndex,
                         displayNumber: visibleIndex + 1
                     )
@@ -369,29 +480,27 @@ struct CompletedWorkoutEditView: View {
         }
     }
 
-    private func exerciseProgress(for exerciseIndex: Int) -> WorkoutExerciseProgress {
-        let visibleSets = visibleSetIndices(for: exerciseIndex)
-            .map { draft.exercises[exerciseIndex].sets[$0] }
+    private func exerciseProgress(for exercise: CompletedWorkoutEditExerciseDraft) -> WorkoutExerciseProgress {
+        let visibleSets = exercise.sets.filter { !$0.isRemoved }
         return WorkoutExerciseProgress(
             completed: visibleSets.filter(\.isCompleted).count,
             total: visibleSets.count
         )
     }
 
-    private func weightBinding(exerciseIndex: Int, setIndex: Int) -> Binding<String> {
-        let focusTarget = CompletedWorkoutEditFocusedField.setWeight(exerciseIndex, setIndex)
+    private func weightBinding(exerciseID: UUID, setIndex: Int) -> Binding<String> {
+        let focusTarget = CompletedWorkoutEditFocusedField.setWeight(exerciseID, setIndex)
 
         return Binding(
             get: {
-                guard draftSetExists(exerciseIndex: exerciseIndex, setIndex: setIndex) else {
+                guard let set = draftSet(exerciseID: exerciseID, setIndex: setIndex) else {
                     return numberInputTexts[focusTarget]?.displayText(for: nil) ?? ""
                 }
-                let canonicalWeight = draft.exercises[exerciseIndex].sets[setIndex].weight
-                let displayWeight = weightUnit.displayWeight(fromCanonicalPounds: canonicalWeight)
+                let displayWeight = weightUnit.displayWeight(fromCanonicalPounds: set.weight)
                 return numberInputTexts[focusTarget, default: WorkoutNumberInputText()].displayText(for: displayWeight)
             },
             set: { value in
-                updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in
+                updateDraftSet(exerciseID: exerciseID, setIndex: setIndex) { set in
                     numberInputTexts[focusTarget, default: WorkoutNumberInputText()].updateDraft(value)
                     set.weight = WorkoutNumericInputPolicy.parseWeight(value, unit: weightUnit)
                 }
@@ -399,22 +508,20 @@ struct CompletedWorkoutEditView: View {
         )
     }
 
-    private func repsBinding(exerciseIndex: Int, setIndex: Int) -> Binding<String> {
-        let focusTarget = CompletedWorkoutEditFocusedField.setReps(exerciseIndex, setIndex)
+    private func repsBinding(exerciseID: UUID, setIndex: Int) -> Binding<String> {
+        let focusTarget = CompletedWorkoutEditFocusedField.setReps(exerciseID, setIndex)
 
         return Binding(
             get: {
-                guard draftSetExists(exerciseIndex: exerciseIndex, setIndex: setIndex) else {
+                guard let set = draftSet(exerciseID: exerciseID, setIndex: setIndex) else {
                     return numberInputTexts[focusTarget]?.displayText(for: nil) ?? ""
                 }
-                let reps = WorkoutNumericInputPolicy.validatedReps(
-                    draft.exercises[exerciseIndex].sets[setIndex].reps
-                )
+                let reps = WorkoutNumericInputPolicy.validatedReps(set.reps)
                 return numberInputTexts[focusTarget, default: WorkoutNumberInputText()]
                     .displayText(fallback: reps.map(String.init) ?? "")
             },
             set: { value in
-                updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in
+                updateDraftSet(exerciseID: exerciseID, setIndex: setIndex) { set in
                     numberInputTexts[focusTarget, default: WorkoutNumberInputText()].updateDraft(value)
                     set.reps = WorkoutNumericInputPolicy.parseReps(value)
                 }
@@ -422,19 +529,18 @@ struct CompletedWorkoutEditView: View {
         )
     }
 
-    private func rpeBinding(exerciseIndex: Int, setIndex: Int) -> Binding<String> {
-        let focusTarget = CompletedWorkoutEditFocusedField.setRPE(exerciseIndex, setIndex)
+    private func rpeBinding(exerciseID: UUID, setIndex: Int) -> Binding<String> {
+        let focusTarget = CompletedWorkoutEditFocusedField.setRPE(exerciseID, setIndex)
 
         return Binding(
             get: {
-                guard draftSetExists(exerciseIndex: exerciseIndex, setIndex: setIndex) else {
+                guard let set = draftSet(exerciseID: exerciseID, setIndex: setIndex) else {
                     return numberInputTexts[focusTarget]?.displayText(for: nil) ?? ""
                 }
-                let rpe = draft.exercises[exerciseIndex].sets[setIndex].rpe
-                return numberInputTexts[focusTarget, default: WorkoutNumberInputText()].displayText(for: rpe)
+                return numberInputTexts[focusTarget, default: WorkoutNumberInputText()].displayText(for: set.rpe)
             },
             set: { value in
-                updateDraftSet(exerciseIndex: exerciseIndex, setIndex: setIndex) { set in
+                updateDraftSet(exerciseID: exerciseID, setIndex: setIndex) { set in
                     numberInputTexts[focusTarget, default: WorkoutNumberInputText()].updateDraft(value)
                     set.rpe = WorkoutNumericInputPolicy.parseRPE(value)
                 }
@@ -442,19 +548,25 @@ struct CompletedWorkoutEditView: View {
         )
     }
 
-    private func draftSetExists(exerciseIndex: Int, setIndex: Int) -> Bool {
-        draft.exercises.indices.contains(exerciseIndex)
-            && draft.exercises[exerciseIndex].sets.indices.contains(setIndex)
+    private func exerciseIndex(for exerciseID: UUID) -> Int? {
+        draft.exercises.firstIndex { $0.id == exerciseID }
     }
 
-    private func exerciseNotesBinding(exerciseIndex: Int) -> Binding<String> {
+    private func draftSet(exerciseID: UUID, setIndex: Int) -> CompletedWorkoutEditSetDraft? {
+        guard let exerciseIndex = exerciseIndex(for: exerciseID),
+              draft.exercises[exerciseIndex].sets.indices.contains(setIndex)
+        else { return nil }
+        return draft.exercises[exerciseIndex].sets[setIndex]
+    }
+
+    private func exerciseNotesBinding(exerciseID: UUID) -> Binding<String> {
         Binding(
             get: {
-                guard draft.exercises.indices.contains(exerciseIndex) else { return "" }
+                guard let exerciseIndex = exerciseIndex(for: exerciseID) else { return "" }
                 return draft.exercises[exerciseIndex].notes
             },
             set: { notes in
-                guard draft.exercises.indices.contains(exerciseIndex) else { return }
+                guard let exerciseIndex = exerciseIndex(for: exerciseID) else { return }
                 draft.exercises[exerciseIndex].notes = notes
             }
         )
@@ -474,57 +586,91 @@ struct CompletedWorkoutEditView: View {
     }
 
     private func updateDraftSet(
-        exerciseIndex: Int,
+        exerciseID: UUID,
         setIndex: Int,
         update: (inout CompletedWorkoutEditSetDraft) -> Void
     ) {
-        guard draftSetExists(exerciseIndex: exerciseIndex, setIndex: setIndex) else { return }
+        guard let exerciseIndex = exerciseIndex(for: exerciseID),
+              draft.exercises[exerciseIndex].sets.indices.contains(setIndex)
+        else { return }
         update(&draft.exercises[exerciseIndex].sets[setIndex])
     }
 
-    private func visibleSetIndices(for exerciseIndex: Int) -> [Int] {
-        draft.exercises[exerciseIndex].sets.indices.filter { !draft.exercises[exerciseIndex].sets[$0].isRemoved }
+    private func visibleSetIndices(in exercise: CompletedWorkoutEditExerciseDraft) -> [Int] {
+        exercise.sets.indices.filter { !exercise.sets[$0].isRemoved }
     }
 
-    private func addSet(to exerciseIndex: Int) {
-        let visibleCount = visibleSetIndices(for: exerciseIndex).count
-        let setIndex = draft.exercises[exerciseIndex].sets.count
+    private func addSet(to exerciseID: UUID) {
+        guard let exerciseIndex = exerciseIndex(for: exerciseID) else { return }
+        let exercise = draft.exercises[exerciseIndex]
+        let visibleIndices = visibleSetIndices(in: exercise)
+        let setIndex = exercise.sets.count
+        // A new row continues the kind of the row above it, as in an active workout.
+        let kind = visibleIndices.last.map { exercise.sets[$0].kind } ?? .working
         draft.exercises[exerciseIndex].sets.append(
-            CompletedWorkoutEditSetDraft(orderIndex: visibleCount)
+            CompletedWorkoutEditSetDraft(orderIndex: visibleIndices.count, kind: kind)
         )
-        focusedField = .setWeight(exerciseIndex, setIndex)
+        focusedField = .setWeight(exerciseID, setIndex)
     }
 
     private func removeSet(_ candidate: CompletedWorkoutSetRemovalCandidate) {
-        guard draft.exercises.indices.contains(candidate.exerciseIndex),
-              draft.exercises[candidate.exerciseIndex].sets.indices.contains(candidate.setIndex)
+        guard let exerciseIndex = exerciseIndex(for: candidate.exerciseID),
+              draft.exercises[exerciseIndex].sets.indices.contains(candidate.setIndex)
         else { return }
 
-        if draft.exercises[candidate.exerciseIndex].sets[candidate.setIndex].id == nil {
+        if draft.exercises[exerciseIndex].sets[candidate.setIndex].id == nil {
             rebaseNumberInputTextsAfterRemovingSet(
-                exerciseIndex: candidate.exerciseIndex,
+                exerciseID: candidate.exerciseID,
                 removedSetIndex: candidate.setIndex
             )
-            draft.exercises[candidate.exerciseIndex].sets.remove(at: candidate.setIndex)
+            draft.exercises[exerciseIndex].sets.remove(at: candidate.setIndex)
         } else {
-            draft.exercises[candidate.exerciseIndex].sets[candidate.setIndex].isRemoved = true
+            draft.exercises[exerciseIndex].sets[candidate.setIndex].isRemoved = true
         }
-        reindexDraftSets(for: candidate.exerciseIndex)
+        reindexDraftSets(for: exerciseIndex)
     }
 
-    private func rebaseNumberInputTextsAfterRemovingSet(exerciseIndex: Int, removedSetIndex: Int) {
+    private func removeExercise(_ exercise: CompletedWorkoutEditExerciseDraft) {
+        focusedField = nil
+        forgetInputState(for: exercise.id)
+        draft.removeExercises([exercise.id])
+    }
+
+    private func swap(_ exercise: CompletedWorkoutEditExerciseDraft, with replacement: Exercise) {
+        focusedField = nil
+        forgetInputState(for: exercise.id)
+        draft.swapExercise(
+            id: exercise.id,
+            with: replacement,
+            history: exerciseHistory(),
+            ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
+        )
+    }
+
+    private func forgetInputState(for exerciseID: UUID) {
+        numberInputTexts = numberInputTexts.filter { $0.key.exerciseID != exerciseID }
+        revealedExerciseNoteIDs.remove(exerciseID)
+    }
+
+    /// Completed workouts for an added exercise's starting set kinds.
+    private func exerciseHistory() -> [WorkoutSession] {
+        (try? modelContext.fetch(FetchDescriptor<WorkoutSession>())) ?? []
+    }
+
+    private func rebaseNumberInputTextsAfterRemovingSet(exerciseID: UUID, removedSetIndex: Int) {
         var rebasedInputTexts: [CompletedWorkoutEditFocusedField: WorkoutNumberInputText] = [:]
         for (field, inputText) in numberInputTexts {
-            if let rebasedField = field.rebasedAfterRemovingSet(exerciseIndex: exerciseIndex, removedSetIndex: removedSetIndex) {
+            if let rebasedField = field.rebasedAfterRemovingSet(exerciseID: exerciseID, removedSetIndex: removedSetIndex) {
                 rebasedInputTexts[rebasedField] = inputText
             }
         }
         numberInputTexts = rebasedInputTexts
-        focusedField = focusedField?.rebasedAfterRemovingSet(exerciseIndex: exerciseIndex, removedSetIndex: removedSetIndex)
+        focusedField = focusedField?.rebasedAfterRemovingSet(exerciseID: exerciseID, removedSetIndex: removedSetIndex)
     }
 
     private func reindexDraftSets(for exerciseIndex: Int) {
-        for (visibleIndex, setIndex) in visibleSetIndices(for: exerciseIndex).enumerated() {
+        let exercise = draft.exercises[exerciseIndex]
+        for (visibleIndex, setIndex) in visibleSetIndices(in: exercise).enumerated() {
             draft.exercises[exerciseIndex].sets[setIndex].orderIndex = visibleIndex
         }
     }
@@ -557,6 +703,58 @@ struct CompletedWorkoutEditView: View {
             modelContext.rollback()
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+/// Picks a replacement and confirms before the draft drops the original's sets.
+private struct CompletedWorkoutSwapExerciseSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let exercise: CompletedWorkoutEditExerciseDraft
+    let onSwap: (Exercise) -> Void
+    @State private var pendingReplacement: Exercise?
+
+    private var confirmationContent: SwapExerciseConfirmationContent? {
+        pendingReplacement.map {
+            SwapExerciseConfirmationContent(
+                originalName: exercise.name,
+                originalEquipmentName: exercise.equipmentDisplayName,
+                replacement: $0
+            )
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ExercisePickerView(mode: .swap(currentExerciseID: exercise.exerciseID)) { exercises in
+                pendingReplacement = exercises.first
+            }
+        }
+        .alert(
+            confirmationContent?.title ?? "Swap Exercise?",
+            isPresented: Binding(
+                get: { pendingReplacement != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingReplacement = nil
+                    }
+                }
+            )
+        ) {
+            if let pendingReplacement {
+                Button("Swap Exercise", role: .destructive) {
+                    onSwap(pendingReplacement)
+                    dismiss()
+                }
+                .accessibilityIdentifier("ConfirmSwapExerciseButton")
+            }
+            Button("Cancel", role: .cancel) {
+                pendingReplacement = nil
+            }
+            .accessibilityIdentifier("CancelSwapExerciseButton")
+        } message: {
+            Text(confirmationContent?.message ?? "The original exercise will be removed.")
+        }
+        .presentationDetents([.large])
     }
 }
 
@@ -741,33 +939,48 @@ private struct CompletedWorkoutDurationSelection: Equatable {
 
 private struct CompletedWorkoutSetRemovalCandidate: Identifiable {
     let id = UUID()
-    let exerciseIndex: Int
+    let exerciseID: UUID
     let setIndex: Int
     let displayNumber: Int
 }
 
+/// Exercise fields key by id, so adding, removing, or swapping an exercise
+/// leaves the others' focus and in-progress text in place. A set keys by its
+/// index in the exercise's draft sets.
 private enum CompletedWorkoutEditFocusedField: Hashable {
     case title
     case notes
-    case exerciseNotes(Int)
-    case setWeight(Int, Int)
-    case setReps(Int, Int)
-    case setRPE(Int, Int)
+    case exerciseNotes(UUID)
+    case setWeight(UUID, Int)
+    case setReps(UUID, Int)
+    case setRPE(UUID, Int)
 
-    func rebasedAfterRemovingSet(exerciseIndex: Int, removedSetIndex: Int) -> CompletedWorkoutEditFocusedField? {
+    var exerciseID: UUID? {
         switch self {
-        case let .setWeight(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex == removedSetIndex:
+        case .title, .notes:
             return nil
-        case let .setReps(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex == removedSetIndex:
+        case let .exerciseNotes(exerciseID),
+             let .setWeight(exerciseID, _),
+             let .setReps(exerciseID, _),
+             let .setRPE(exerciseID, _):
+            return exerciseID
+        }
+    }
+
+    func rebasedAfterRemovingSet(exerciseID: UUID, removedSetIndex: Int) -> CompletedWorkoutEditFocusedField? {
+        switch self {
+        case let .setWeight(fieldExerciseID, setIndex) where fieldExerciseID == exerciseID && setIndex == removedSetIndex:
             return nil
-        case let .setRPE(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex == removedSetIndex:
+        case let .setReps(fieldExerciseID, setIndex) where fieldExerciseID == exerciseID && setIndex == removedSetIndex:
             return nil
-        case let .setWeight(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex > removedSetIndex:
-            return .setWeight(fieldExerciseIndex, setIndex - 1)
-        case let .setReps(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex > removedSetIndex:
-            return .setReps(fieldExerciseIndex, setIndex - 1)
-        case let .setRPE(fieldExerciseIndex, setIndex) where fieldExerciseIndex == exerciseIndex && setIndex > removedSetIndex:
-            return .setRPE(fieldExerciseIndex, setIndex - 1)
+        case let .setRPE(fieldExerciseID, setIndex) where fieldExerciseID == exerciseID && setIndex == removedSetIndex:
+            return nil
+        case let .setWeight(fieldExerciseID, setIndex) where fieldExerciseID == exerciseID && setIndex > removedSetIndex:
+            return .setWeight(fieldExerciseID, setIndex - 1)
+        case let .setReps(fieldExerciseID, setIndex) where fieldExerciseID == exerciseID && setIndex > removedSetIndex:
+            return .setReps(fieldExerciseID, setIndex - 1)
+        case let .setRPE(fieldExerciseID, setIndex) where fieldExerciseID == exerciseID && setIndex > removedSetIndex:
+            return .setRPE(fieldExerciseID, setIndex - 1)
         default:
             return self
         }

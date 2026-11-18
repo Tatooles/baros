@@ -9,6 +9,7 @@ enum WorkoutHistoryMutationError: LocalizedError, Equatable {
     case invalidWorkoutDate
     case missingLoggedExercise
     case missingLoggedSet
+    case unavailableExercise
     case editConflict
 
     var errorDescription: String? {
@@ -27,6 +28,8 @@ enum WorkoutHistoryMutationError: LocalizedError, Equatable {
             return "One of the edited exercises no longer exists."
         case .missingLoggedSet:
             return "One of the edited sets no longer exists."
+        case .unavailableExercise:
+            return "One of the added exercises is no longer in your exercise library."
         case .editConflict:
             return "This workout changed while you were editing it. Cancel and reopen Edit to review the latest values, then make your correction again."
         }
@@ -45,8 +48,11 @@ public struct CompletedWorkoutEditDraft {
         }
     }
     private(set) var didEditDate = false
+    /// In display order. Removing an exercise drops it from this list.
     public var exercises: [CompletedWorkoutEditExerciseDraft]
     public let calendar: Calendar
+    private let sessionID: UUID
+    private let originalStructure: [[UUID]]
     private let originalStartedAt: Date
     private let originalTitle: String
     private let originalNotes: String
@@ -60,9 +66,11 @@ public struct CompletedWorkoutEditDraft {
         originalNotes = notes
         originalDurationSeconds = durationSeconds
         self.calendar = calendar
+        sessionID = session.id
         originalStartedAt = session.startedAt
         date = calendar.startOfDay(for: session.startedAt)
         exercises = session.sortedLoggedExercises.map(CompletedWorkoutEditExerciseDraft.init(loggedExercise:))
+        originalStructure = Self.structure(of: session.sortedLoggedExercises, groupID: \.supersetGroupID)
     }
 
     public mutating func prepareTitleForSave() {
@@ -80,12 +88,137 @@ public struct CompletedWorkoutEditDraft {
         )
         let savedExercises = Dictionary(uniqueKeysWithValues: session.sortedLoggedExercises.map { ($0.id, $0) })
         merged.exercises = try exercises.map { exercise in
+            guard !exercise.isNew else { return exercise }
             guard let saved = savedExercises[exercise.id] else {
                 throw WorkoutHistoryMutationError.missingLoggedExercise
             }
             return try exercise.mergingSavedChanges(from: saved)
         }
+        // A changed list replaces the saved order and grouping, so it needs the
+        // list it was edited from. An unchanged list follows the saved one.
+        if hasStructureChange,
+           Self.structure(of: session.sortedLoggedExercises, groupID: \.supersetGroupID) != originalStructure {
+            throw WorkoutHistoryMutationError.editConflict
+        }
         return merged
+    }
+
+    // MARK: - Exercise list
+
+    /// Whether exercises were added, removed, reordered, or regrouped.
+    public var hasStructureChange: Bool {
+        Self.structure(of: exercises, groupID: \.supersetGroupID) != originalStructure
+    }
+
+    /// Library exercises already in the workout, which the picker leaves out.
+    public var exerciseIDs: Set<UUID> {
+        Set(exercises.compactMap(\.exerciseID))
+    }
+
+    /// Appends a picker selection in tap order, skipping exercises already in
+    /// the workout. Each one gets a blank row per set of its last performance
+    /// before this workout, as an active workout does.
+    public mutating func appendExercises(
+        _ selection: [Exercise],
+        asSuperset: Bool = false,
+        history: [WorkoutSession] = [],
+        ownerTokenIdentifier: String? = nil
+    ) {
+        var seen = exerciseIDs
+        let additions = selection.filter { seen.insert($0.id).inserted }
+        guard !additions.isEmpty else { return }
+        let group = asSuperset && additions.count > 1 ? UUID() : nil
+        exercises += additions.map { exercise in
+            CompletedWorkoutEditExerciseDraft(
+                adding: exercise,
+                setKinds: initialSetKinds(for: exercise, history: history, ownerTokenIdentifier: ownerTokenIdentifier),
+                supersetGroupID: group
+            )
+        }
+    }
+
+    public mutating func removeExercises(_ ids: Set<UUID>) {
+        exercises.removeAll { ids.contains($0.id) }
+        normalizeSupersets()
+    }
+
+    /// Takes every exercise's id in its new order.
+    public mutating func reorderExercises(_ orderedIDs: [UUID]) {
+        let byID = Dictionary(uniqueKeysWithValues: exercises.map { ($0.id, $0) })
+        guard orderedIDs.count == byID.count, Set(orderedIDs) == Set(byID.keys) else { return }
+        exercises = orderedIDs.compactMap { byID[$0] }
+        normalizeSupersets()
+    }
+
+    /// Replaces the superset ids, given in the order of `exercises`.
+    public mutating func regroup(_ groupIDs: [UUID?]) {
+        guard groupIDs.count == exercises.count else { return }
+        for index in exercises.indices { exercises[index].supersetGroupID = groupIDs[index] }
+        normalizeSupersets()
+    }
+
+    /// Applies one exercise-menu superset action.
+    public mutating func changeSuperset(_ change: ActiveWorkoutEngine.SupersetChange, forExerciseID id: UUID) {
+        guard let index = exercises.firstIndex(where: { $0.id == id }) else { return }
+        let groupIDs = exercises.map(\.supersetGroupID)
+        switch change {
+        case .joinPrevious:
+            regroup(SupersetGrouping.linking(groupIDs, index, with: index - 1))
+        case .joinNext:
+            regroup(SupersetGrouping.linking(groupIDs, index, with: index + 1))
+        case .remove:
+            regroup(SupersetGrouping.removing(groupIDs, at: index))
+        }
+    }
+
+    /// Replaces an exercise, its sets, and its note, keeping its place and
+    /// superset. As in an active workout, the replacement may already appear
+    /// elsewhere in the workout.
+    public mutating func swapExercise(
+        id: UUID,
+        with exercise: Exercise,
+        history: [WorkoutSession] = [],
+        ownerTokenIdentifier: String? = nil
+    ) {
+        guard let index = exercises.firstIndex(where: { $0.id == id }),
+              exercises[index].exerciseID != exercise.id
+        else { return }
+        exercises[index] = CompletedWorkoutEditExerciseDraft(
+            adding: exercise,
+            setKinds: initialSetKinds(for: exercise, history: history, ownerTokenIdentifier: ownerTokenIdentifier),
+            supersetGroupID: exercises[index].supersetGroupID
+        )
+    }
+
+    /// The set kinds of the exercise's last performance before this workout,
+    /// or a single working set when there is none.
+    func initialSetKinds(
+        for exercise: Exercise,
+        history: [WorkoutSession],
+        ownerTokenIdentifier: String?
+    ) -> [SetKind] {
+        let earlier = history.filter { $0.id != sessionID && $0.startedAt < originalStartedAt }
+        let kinds = PreviousSetPerformance.lastCompletedSetKinds(
+            for: ExerciseHistoryRoute(exerciseID: exercise.id, name: exercise.name, equipmentRaw: exercise.equipmentRaw),
+            in: earlier,
+            ownerTokenIdentifier: ownerTokenIdentifier
+        )
+        return kinds.isEmpty ? [.working] : kinds
+    }
+
+    private mutating func normalizeSupersets() {
+        let normalized = SupersetGrouping.normalized(exercises.map(\.supersetGroupID))
+        for index in exercises.indices { exercises[index].supersetGroupID = normalized[index] }
+    }
+
+    /// The exercise ids in order, split into supersets and single exercises.
+    /// Comparing runs rather than raw ids ignores a superset that was split and
+    /// rejoined under a new id.
+    private static func structure<Member: Identifiable>(
+        of members: [Member],
+        groupID: (Member) -> UUID?
+    ) -> [[UUID]] where Member.ID == UUID {
+        SupersetGrouping.blocks(members, groupID: groupID).map { $0.members.map(\.id) }
     }
 
     var hasDateChange: Bool {
@@ -153,18 +286,46 @@ public struct CompletedWorkoutEditExerciseDraft: Identifiable {
     public let id: UUID
     public let exerciseSnapshotName: String
     public let metadataDisplayText: String?
+    public let equipmentDisplayName: String?
+    /// The library exercise, when the logged exercise still links to one.
+    public let exerciseID: UUID?
     public var notes: String
     public var sets: [CompletedWorkoutEditSetDraft]
+    public internal(set) var supersetGroupID: UUID?
+    /// The library exercise this edit adds; nil for an exercise already saved.
+    let addedExercise: Exercise?
     private let originalNotes: String
 
     init(loggedExercise: LoggedExercise) {
         id = loggedExercise.id
         exerciseSnapshotName = loggedExercise.exerciseSnapshotName
         metadataDisplayText = loggedExercise.metadataDisplayText
+        equipmentDisplayName = loggedExercise.snapshotEquipment?.displayName
+        exerciseID = loggedExercise.exercise?.id
         notes = loggedExercise.notes
         originalNotes = notes
         sets = loggedExercise.sortedSets.map(CompletedWorkoutEditSetDraft.init(set:))
+        supersetGroupID = loggedExercise.supersetGroupID
+        addedExercise = nil
     }
+
+    init(adding exercise: Exercise, setKinds: [SetKind], supersetGroupID: UUID?) {
+        id = UUID()
+        exerciseSnapshotName = exercise.name
+        metadataDisplayText = exercise.metadataDisplayText
+        equipmentDisplayName = exercise.equipment.displayName
+        exerciseID = exercise.id
+        notes = ""
+        originalNotes = ""
+        sets = setKinds.enumerated().map { CompletedWorkoutEditSetDraft(orderIndex: $0.offset, kind: $0.element) }
+        self.supersetGroupID = supersetGroupID
+        addedExercise = exercise
+    }
+
+    /// Added in this edit and not yet saved.
+    public var isNew: Bool { addedExercise != nil }
+
+    var visibleSets: [CompletedWorkoutEditSetDraft] { sets.filter { !$0.isRemoved } }
 
     fileprivate func mergingSavedChanges(from exercise: LoggedExercise) throws -> Self {
         var merged = self
@@ -179,13 +340,26 @@ public struct CompletedWorkoutEditExerciseDraft: Identifiable {
     }
 }
 
+extension CompletedWorkoutEditExerciseDraft: ReorderListExercise {
+    public var name: String { exerciseSnapshotName }
+    public var metadata: String? { metadataDisplayText }
+    public var trailingDetail: String? { progressText }
+    public var accessibilityValue: String {
+        [metadata, isNew ? "New" : nil, progressText].compactMap { $0 }.joined(separator: ", ")
+    }
+
+    private var progressText: String {
+        "\(visibleSets.filter(\.isCompleted).count)/\(visibleSets.count) sets"
+    }
+}
+
 public struct CompletedWorkoutEditSetDraft: Identifiable {
     public let id: UUID?
     public var orderIndex: Int
     public var weight: Double?
     public var reps: Int?
     public var rpe: Double?
-    var kind: SetKind
+    public internal(set) var kind: SetKind
     public var isCompleted: Bool
     var completedAt: Date?
     var notes: String
@@ -316,7 +490,7 @@ public struct WorkoutHistoryMutationService {
         now: Date = .now
     ) throws {
         try validateEditable(session, ownerTokenIdentifier: ownerTokenIdentifier)
-        try validateDraftReferences(draft, for: session)
+        try validateDraftReferences(draft, for: session, ownerTokenIdentifier: ownerTokenIdentifier)
         // Reconcile the complete draft before changing any saved values or outbox entries.
         let draft = try draft.mergingSavedChanges(from: session)
 
@@ -376,6 +550,19 @@ public struct WorkoutHistoryMutationService {
                 now: now
             )
             didChange = true
+        }
+
+        if draft.hasStructureChange {
+            try applyStructure(
+                of: draft,
+                to: session,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
+                context: context,
+                now: now
+            )
+            didChange = true
+            didChangeChildRecords = true
         }
 
         let visibleLoggedExercises = session.sortedLoggedExercises
@@ -588,10 +775,17 @@ public struct WorkoutHistoryMutationService {
 
     private func validateDraftReferences(
         _ draft: CompletedWorkoutEditDraft,
-        for session: WorkoutSession
+        for session: WorkoutSession,
+        ownerTokenIdentifier: String?
     ) throws {
         let exercisesByID = Dictionary(uniqueKeysWithValues: session.sortedLoggedExercises.map { ($0.id, $0) })
         for exerciseDraft in draft.exercises {
+            if let added = exerciseDraft.addedExercise {
+                guard !added.isArchived, !added.isDeleted, added.isVisible(to: ownerTokenIdentifier) else {
+                    throw WorkoutHistoryMutationError.unavailableExercise
+                }
+                continue
+            }
             guard let loggedExercise = exercisesByID[exerciseDraft.id] else {
                 throw WorkoutHistoryMutationError.missingLoggedExercise
             }
@@ -601,6 +795,104 @@ public struct WorkoutHistoryMutationService {
                     throw WorkoutHistoryMutationError.missingLoggedSet
                 }
             }
+        }
+    }
+
+    /// Removes, inserts, orders, and groups exercises to match the draft. Added
+    /// exercises arrive without sets; the set pass that follows inserts them.
+    private func applyStructure(
+        of draft: CompletedWorkoutEditDraft,
+        to session: WorkoutSession,
+        ownerTokenIdentifier: String?,
+        shouldRecordOwnerlessOutbox: Bool,
+        context: ModelContext,
+        now: Date
+    ) throws {
+        // Claim before inserting, so the claim's graph doesn't include additions.
+        try claimOwnerlessWorkoutGraphIfNeeded(
+            session,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context,
+            now: now
+        )
+
+        let keptIDs = Set(draft.exercises.map(\.id))
+        for removed in session.sortedLoggedExercises where !keptIDs.contains(removed.id) {
+            let sets = removed.sortedSets
+            removed.markDeleted(now: now)
+            try recordDeleteIfNeeded(
+                entityKind: .loggedExercise,
+                entityID: removed.id,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
+                context: context,
+                now: now
+            )
+            for set in sets {
+                set.markDeleted(now: now)
+                try recordDeleteIfNeeded(
+                    entityKind: .loggedSet,
+                    entityID: set.id,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
+                    context: context,
+                    now: now
+                )
+            }
+        }
+
+        var loggedExercisesByID = Dictionary(uniqueKeysWithValues: session.sortedLoggedExercises.map { ($0.id, $0) })
+        var insertedIDs: Set<UUID> = []
+        for exerciseDraft in draft.exercises {
+            guard let added = exerciseDraft.addedExercise else { continue }
+            let loggedExercise = LoggedExercise(
+                id: exerciseDraft.id,
+                orderIndex: 0,
+                exercise: added,
+                notes: exerciseDraft.notes,
+                createdAt: now,
+                updatedAt: now
+            )
+            loggedExercise.session = session
+            context.insert(loggedExercise)
+            session.loggedExercises.append(loggedExercise)
+            loggedExercisesByID[loggedExercise.id] = loggedExercise
+            insertedIDs.insert(loggedExercise.id)
+            try recordCreateIfNeeded(
+                entityKind: .loggedExercise,
+                entityID: loggedExercise.id,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
+                context: context,
+                now: now
+            )
+        }
+
+        let groupIDs = SupersetGrouping.normalized(draft.exercises.map(\.supersetGroupID))
+        for (index, exerciseDraft) in draft.exercises.enumerated() {
+            guard let loggedExercise = loggedExercisesByID[exerciseDraft.id] else {
+                throw WorkoutHistoryMutationError.missingLoggedExercise
+            }
+            var didChange = false
+            if loggedExercise.orderIndex != index {
+                loggedExercise.orderIndex = index
+                didChange = true
+            }
+            if loggedExercise.supersetGroupID != groupIDs[index] {
+                loggedExercise.supersetGroupID = groupIDs[index]
+                loggedExercise.hasLocalSupersetChange = true
+                didChange = true
+            }
+            guard didChange, !insertedIDs.contains(loggedExercise.id) else { continue }
+            loggedExercise.updatedAt = now
+            try recordUpdateIfNeeded(
+                entityKind: .loggedExercise,
+                entityID: loggedExercise.id,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                shouldRecordOwnerlessOutbox: shouldRecordOwnerlessOutbox,
+                context: context,
+                now: now
+            )
         }
     }
 
@@ -813,11 +1105,12 @@ public struct WorkoutHistoryMutationService {
         )
     }
 
+    /// A blank row isn't saved, whatever its kind. An added exercise's rows
+    /// carry the kinds of its last performance before anything is entered.
     private func isEmptyNewSet(_ draft: CompletedWorkoutEditSetDraft) -> Bool {
         draft.weight == nil &&
             draft.reps == nil &&
             draft.rpe == nil &&
-            draft.kind == .working &&
             !draft.isCompleted &&
             draft.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
