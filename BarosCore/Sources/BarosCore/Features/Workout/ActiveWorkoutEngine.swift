@@ -1003,6 +1003,7 @@ public final class ActiveWorkoutEngine {
     /// Only the fields changed by a set edit, never the whole model context.
     private struct SetSaveSnapshot {
         let values: ActiveWorkoutSetInput.Values
+        let knowsDuration: Bool?
         let rpe: Double?
         let isCompleted: Bool
         let completedAt: Date?
@@ -1012,6 +1013,7 @@ public final class ActiveWorkoutEngine {
 
         init(_ set: LoggedSet) {
             values = .init(set)
+            knowsDuration = set.knowsDuration
             rpe = set.rpe
             isCompleted = set.isCompleted
             completedAt = set.completedAt
@@ -1022,6 +1024,7 @@ public final class ActiveWorkoutEngine {
 
         func restore(_ set: LoggedSet) {
             values.write(to: set)
+            set.knowsDuration = knowsDuration
             set.rpe = rpe
             set.isCompleted = isCompleted
             set.completedAt = completedAt

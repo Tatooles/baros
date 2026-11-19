@@ -192,6 +192,18 @@ final class TimedExerciseTests: XCTestCase {
         XCTAssertFalse(set.isCompleted)
     }
 
+    func testAFailedSaveDoesNotLeaveAnUnseenTimeMarkedAsKnown() throws {
+        let (context, engine, logged) = try makeTimedWorkout()
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        set.knowsDuration = nil
+        XCTAssertThrowsError(try engine.commitActiveSetDraft(
+            set, values: .init(durationSeconds: 60), context: context,
+            save: { _ in throw CocoaError(.fileWriteUnknown) }
+        ))
+        XCTAssertNil(set.durationSeconds)
+        XCTAssertNil(set.knowsDuration)
+    }
+
     func testPreviousValuesCarryOnlyTheMeasureTheExerciseIsLoggedBy() throws {
         let context = try makeContext()
         let plank = try insertExercise("Plank", .duration, into: context)
