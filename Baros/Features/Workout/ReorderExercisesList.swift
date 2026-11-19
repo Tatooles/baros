@@ -156,13 +156,17 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
             }
             .padding(.top, 8)
             .background(alignment: .topLeading) {
-                surfaces(blocks)
-                // While a row is swiped open, a tap anywhere between rows closes it too.
-                if openSwipe != nil {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .onTapGesture { withAnimation(.snappy(duration: 0.25)) { openSwipe = nil } }
-                        .accessibilityHidden(true)
+                // An explicit top-leading stack: the surfaces are offset from the list's
+                // origin, and the full-size tap catcher would otherwise center them.
+                ZStack(alignment: .topLeading) {
+                    surfaces(blocks)
+                    // While a row is swiped open, a tap anywhere between rows closes it too.
+                    if openSwipe != nil {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { withAnimation(.snappy(duration: 0.25)) { openSwipe = nil } }
+                            .accessibilityHidden(true)
+                    }
                 }
             }
             .overlay(alignment: .topLeading) {
