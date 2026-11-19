@@ -250,6 +250,7 @@ struct RestExpandedControls: View {
                 .accessibilityLabel("Rest timer")
                 .accessibilityValue(restSpokenValue(period, at: timeline.date))
                 .accessibilityHint("Hides rest controls.")
+                .accessibilityIdentifier("RestControlsTimeButton")
             }
             adjustButton("+15", label: "Add 15 seconds", seconds: 15)
             Button("Skip") { timer.skip() }

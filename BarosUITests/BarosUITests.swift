@@ -73,7 +73,9 @@ final class BarosUITests: XCTestCase {
         app.buttons["AccountSignOutButton"].tap()
         XCTAssertTrue(finish.waitToExist(timeout: 3))
         finish.tap()
-        XCTAssertTrue(app.buttons["AccountSignOutButton"].waitToDisappear(timeout: 3))
+        let gateError = app.staticTexts["AccountTransitionErrorMessage"]
+        XCTAssertTrue(app.buttons["AccountSignOutButton"].waitToDisappear(timeout: 3),
+                      gateError.exists ? "Finish reported: \(gateError.label)" : "Finish showed no error")
         XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitToDisappear(timeout: 3))
         tapTab(.history, in: app)
         XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitToExist(timeout: 3))
@@ -81,10 +83,7 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testAccountWorkoutGateSaveFailureKeepsWorkoutAndAccount() throws {
-        // Under load the app sometimes never presents "Couldn’t Continue" after Discard;
-        // the root cause is unconfirmed. Findings: https://github.com/Tatooles/baros/issues/403
-        try XCTSkipIf(true, "Flaky: the save-failure alert is sometimes not presented under load (#403).")
+    func testAccountWorkoutGateSaveFailureKeepsWorkoutAndAccount() {
         let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth", "--uitest-sync-owner", "issuer|ui_owner",
             "--uitest-seed-large-active-workout", "--uitest-fail-account-workout-save"])
         app.launch()
@@ -93,9 +92,11 @@ final class BarosUITests: XCTestCase {
         app.buttons["SettingsManageAccountButton"].tap()
         app.buttons["AccountSignOutButton"].tap()
         app.buttons["Discard Workout and Sign Out"].tap()
-        XCTAssertTrue(app.alerts["Couldn’t Continue"].waitToExist(timeout: 3))
+        // The error shows under the button, not in a second alert that could be dropped (#403).
+        let error = app.staticTexts["AccountTransitionErrorMessage"]
+        XCTAssertTrue(error.waitToExist(timeout: 3))
+        XCTAssertTrue(error.label.hasPrefix("The workout could not be saved."), error.label)
         attachAccountEvidence("Save failure blocks sign out", app: app)
-        app.alerts.buttons["OK"].tap()
         XCTAssertTrue(app.buttons["AccountSignOutButton"].exists)
         app.buttons["Done"].tap()
         XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitToExist(timeout: 3))
@@ -309,7 +310,9 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testEditWorkoutAddAndReorderWalkthrough() {
         let app = XCUIApplication()
-        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout"]
+        // UIKit animations stay off, as in makeApp: XCUITest waits for them after every step.
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth",
+                               "--uitest-seed-edit-workout", "--uitest-disable-animations"]
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 8))
         app.swipeUp()
@@ -319,10 +322,10 @@ final class BarosUITests: XCTestCase {
         app.swipeUp()
         XCTAssertTrue(app.buttons["AddExerciseButton"].isHittable)
         captureEditWorkout("02-workout-bottom")
-        app.swipeDown()
-        app.swipeDown()
-        app.swipeDown()
+        // A swipe's scroll distance varies, so swipe until the first set is back instead of a
+        // fixed count. Stopping once it's hittable keeps a spare swipe from moving the sheet.
         let field = app.textFields["SetWeightField-0-0"]
+        for _ in 0..<6 where !(field.exists && field.isHittable) { app.swipeDown() }
         XCTAssertTrue(field.waitToExist(timeout: 3))
         field.tap()
         XCTAssertTrue(app.buttons["DismissKeyboardButton"].waitToExist(timeout: 3))
@@ -457,7 +460,9 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testRestBadgeControlsAndCollapsedHeaderFallback() {
-        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        // Opened controls normally close after 6 s, which is less than one tap takes on the
+        // nightly runner, so they stay open here until the test closes them.
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout", "--uitest-keep-rest-controls-open"])
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 8))
         app.buttons["SetCompletionButton-0-0"].tap()
@@ -470,6 +475,7 @@ final class BarosUITests: XCTestCase {
         badge.tap()
         app.buttons["Add 15 seconds"].tap()
         app.buttons["Subtract 15 seconds"].tap()
+        app.buttons["RestControlsTimeButton"].tap()
         XCTAssertTrue(badge.waitToExist(timeout: 8))
         app.buttons["ExerciseHeader-0"].tap()
         let headerBadge = app.buttons["RestTimerHeaderBadge"]
@@ -3760,6 +3766,9 @@ final class BarosUITests: XCTestCase {
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
             "--uitest-seed-completed-bench-workout", "Past Push",
+            // With UIKit animations on, the app never reported idle on the nightly runner after
+            // the RPE chip, so every later step waited 60 s.
+            "--uitest-disable-animations",
         ]
         app.launch()
         openFirstPastWorkout(in: app)
@@ -5226,8 +5235,12 @@ final class BarosUITests: XCTestCase {
     }
 
     /// Waits until keyboard avoidance and any follow-up scroll have finished moving `element`.
+    ///
+    /// Stability is counted in consecutive matching readings, not elapsed time. In the large
+    /// seeded workout one reading took about 2 s on the nightly runner, so a short time limit
+    /// ended the wait before three readings could be taken.
     @MainActor
-    private func waitForStableFrame(of element: XCUIElement, timeout: TimeInterval = 3) {
+    private func waitForStableFrame(of element: XCUIElement, timeout: TimeInterval = 20) {
         let deadline = Date().addingTimeInterval(timeout)
         var previous = element.frame
         var stableSamples = 0

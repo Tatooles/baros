@@ -157,6 +157,22 @@ final class RestTimerTests: XCTestCase {
         XCTAssertEqual(timer.current?.controlsExpanded, false)
     }
 
+    func testOpenedControlsCloseThemselvesUnlessKeptOpen() {
+        for keepsOpened in [false, true] {
+            let timer = RestTimerCoordinator(keepsOpenedControls: keepsOpened)
+            timer.start(sessionID: UUID(), setID: UUID(), duration: 90)
+            // Controls that open on their own at the start of rest always close themselves.
+            XCTAssertTrue(timer.isCollapseScheduled)
+            timer.collapseControls()
+            timer.toggleControls()
+            XCTAssertEqual(timer.current?.controlsExpanded, true)
+            XCTAssertEqual(timer.isCollapseScheduled, !keepsOpened)
+            timer.adjust(by: 15)
+            XCTAssertEqual(timer.isCollapseScheduled, !keepsOpened)
+            timer.cancel()
+        }
+    }
+
     func testRestoreUnexpiredAndRejectExpiredSkippedOrInvisibleWorkout() throws {
         let h = Harness()
         let (context, engine, session, exercise) = try fixture(timer: h.timer)
