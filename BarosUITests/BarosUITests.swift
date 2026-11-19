@@ -2438,7 +2438,7 @@ final class BarosUITests: XCTestCase {
         app.buttons["ExercisePickerRow-Overhead Press-Barbell"].tap()
         XCTAssertEqual(app.buttons["ExercisePickerConfirmSwapButton"].label, "Swap for Overhead Press")
         // The navigation bar's Cancel returns once search closes, as in Add Exercises.
-        let closeSearchButton = app.buttons["Close"].firstMatch
+        let closeSearchButton = app.buttons["close"].firstMatch
         XCTAssertTrue(closeSearchButton.waitToExist(timeout: 3))
         closeSearchButton.tap()
         let cancelButton = app.buttons["ExercisePickerCancelButton"]
@@ -2458,11 +2458,12 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(currentExercise.isEnabled)
         XCTAssertTrue(currentExercise.label.contains("Current exercise"))
 
-        // Search sits at the top, as in Add Exercises, and nothing commits until the bar is tapped.
+        // Search sits at the bottom, under the commit bar, and nothing commits until the bar is tapped.
         let searchField = app.searchFields.firstMatch
         XCTAssertTrue(searchField.waitToExist(timeout: 3))
-        XCTAssertLessThan(searchField.frame.midY, app.frame.midY)
+        XCTAssertGreaterThan(searchField.frame.midY, app.frame.midY)
         let confirmButton = app.buttons["ExercisePickerConfirmSwapButton"]
+        XCTAssertLessThanOrEqual(confirmButton.frame.maxY, searchField.frame.minY)
         XCTAssertFalse(confirmButton.isEnabled)
         XCTAssertEqual(confirmButton.label, "Choose a Replacement")
         XCTAssertEqual(
@@ -5041,10 +5042,10 @@ final class BarosUITests: XCTestCase {
                     for _ in 0..<8 {
                         let exerciseButton = app.buttons[exerciseRowIdentifier]
                         let navigationBar = app.navigationBars["Add Exercises"]
-                        let searchField = app.searchFields.firstMatch
                         let addSelectedButton = app.buttons["ExercisePickerAddSelectedButton"]
-                        // Rows scroll between the search field and the pinned Add button.
-                        let visibleTop = max(navigationBar.frame.maxY, searchField.frame.maxY)
+                        // Rows scroll between the navigation bar and the pinned Add button,
+                        // which sits above the bottom search field.
+                        let visibleTop = navigationBar.frame.maxY
                         let visibleBottom = addSelectedButton.frame.minY
                         let isFullyVisible = exerciseButton.exists
                             && exerciseButton.frame.minY >= visibleTop
@@ -5056,8 +5057,8 @@ final class BarosUITests: XCTestCase {
                         }
 
                         // At accessibility sizes a row is nearly a third of that band, and a
-                        // swipe's momentum carries it from under the Add button past the search
-                        // field. Drag without momentum to center the row in the band instead.
+                        // swipe's momentum carries it from under the Add button past the navigation
+                        // bar. Drag without momentum to center the row in the band instead.
                         let span = visibleBottom - visibleTop
                         let offset = exerciseButton.exists
                             ? exerciseButton.frame.midY - (visibleTop + visibleBottom) / 2
