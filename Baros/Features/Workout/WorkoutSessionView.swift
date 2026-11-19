@@ -33,7 +33,7 @@ struct WorkoutSessionView: View {
     @State private var cachedSortedLoggedExercises: [LoggedExercise]?
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
-    /// The set whose time wheels are docked where the keyboard would be.
+    /// The set whose keyboard is the time wheels.
     @State private var timeEntry: SetTimeEntry?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var setInputRegistry = ActiveSetInputRegistry()
@@ -198,18 +198,8 @@ struct WorkoutSessionView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if isChildPresentationActive {
                     EmptyView()
-                } else if focusedField != nil {
+                } else if focusedField != nil || timeEntrySet != nil {
                     keyboardAccessory
-                } else if let timeEntry, timeEntrySet != nil {
-                    SetTimeEntryPanel(startingSeconds: timeEntry.seconds) { seconds in
-                        self.timeEntry?.seconds = seconds
-                        saveTime(seconds, forSetID: timeEntry.setID)
-                    } bar: {
-                        keyboardAccessory
-                    }
-                    // Each set starts the wheels on its own time.
-                    .id(timeEntry.setID)
-                    .transition(.move(edge: .bottom))
                 }
             }
             // While the actions show, the bars run to the screen edge, so the
@@ -523,17 +513,27 @@ struct WorkoutSessionView: View {
         return nil
     }
 
-    /// Opens the time wheels on a set, in place of any keyboard.
-    private func editTime(_ set: LoggedSet, startingSeconds: Int?) {
-        guard let startingSeconds else {
-            if timeEntry?.setID == set.id { resignFocus() }
-            return
-        }
-        guard timeEntry?.setID != set.id else { return }
-        resignFocus()
-        guard !engine.hasPendingSetSave else { return }
-        withAnimation(.workoutFocusDismissal) {
+    /// Opens, follows or closes the time wheels on a set.
+    private func editTime(_ set: LoggedSet, _ edit: SetTimeEdit) {
+        switch edit {
+        case .open(let startingSeconds):
+            guard timeEntry?.setID != set.id else { return }
+            // Save what is being typed. The wheels then take the keyboard
+            // straight from that field, with no dismissal in between.
+            setInputRegistry.commit(focusedField)
+            guard !engine.hasPendingSetSave else { return }
+            keepShownTime()
+            rpeEditingSetID = nil
             timeEntry = SetTimeEntry(setID: set.id, startingSeconds: startingSeconds)
+        case .change(let seconds):
+            guard timeEntry?.setID == set.id else { return }
+            timeEntry?.seconds = seconds
+            saveTime(seconds, forSetID: set.id)
+        case .close:
+            guard timeEntry?.setID == set.id else { return }
+            keepShownTime()
+            timeEntry = nil
+            rpeEditingSetID = nil
         }
     }
 

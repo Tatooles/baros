@@ -1,6 +1,6 @@
 import XCTest
 
-/// Choosing a set's time from the docked wheels, which only the UI can show.
+/// Choosing a set's time from the wheels that are a time cell's keyboard, which only the UI can show.
 @MainActor
 final class TimedExerciseUITests: XCTestCase {
     override func setUpWithError() throws {
@@ -26,7 +26,7 @@ final class TimedExerciseUITests: XCTestCase {
         XCTAssertEqual(app.buttons["SetPreviousValue-1-0"].label, "Previous: 70 × 1:30")
         attachScreenshot("Timed exercises before logging", app: app)
 
-        // The wheels dock where the keyboard would, open on last time's value,
+        // The wheels are the cell's keyboard. They open on last time's value
         // and mark the set they belong to. The time follows them as they settle.
         time.tap()
         XCTAssertTrue(wheel("SetTimeMinutesWheel", in: app).waitToExist(timeout: 3))
@@ -118,7 +118,7 @@ final class TimedExerciseUITests: XCTestCase {
     }
 
     private func wheel(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
-        app.pickers[identifier].pickerWheels.firstMatch
+        app.pickers["SetTimeWheels"].pickerWheels.element(boundBy: identifier == "SetTimeMinutesWheel" ? 0 : 1)
     }
 
     private func waitForValue(_ element: XCUIElement, _ value: String) -> Bool {

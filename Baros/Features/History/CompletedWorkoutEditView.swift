@@ -65,31 +65,20 @@ struct CompletedWorkoutEditView: View {
                 .padding(.bottom, 28)
             }
             .revealsSetTimeCell(editing: timeEdit?.id)
-            // The time wheels dock where the keyboard would, so the set being
-            // edited stays in view above them.
+            // The keyboard toolbar belongs to text fields, so the time wheels
+            // get their own Done above them.
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if let timeEdit, focusedField == nil {
-                    SetTimeEntryPanel(startingSeconds: timeEdit.seconds) { seconds in
-                        self.timeEdit?.seconds = seconds
-                        setTime(seconds, for: timeEdit)
-                    } bar: {
-                        HStack {
-                            Spacer()
-                            Button("Done") {
-                                // Keeps the time shown even if the wheels were never moved.
-                                if timeEdit.seconds > 0 { setTime(timeEdit.seconds, for: timeEdit) }
-                                withAnimation(.smooth(duration: 0.25)) { self.timeEdit = nil }
-                            }
+                if timeEdit != nil, focusedField == nil {
+                    HStack {
+                        Spacer()
+                        Button("Done") { endTimeEdit() }
                             .font(.system(size: 16, weight: .semibold))
                             .buttonStyle(.glass)
                             .accessibilityIdentifier("DoneSetTimeButton")
-                        }
-                        .padding(.horizontal, AppTheme.shellPadding)
-                        .padding(.top, 20)
-                        .padding(.bottom, 8)
                     }
-                    .id(timeEdit.id)
-                    .transition(.move(edge: .bottom))
+                    .padding(.horizontal, AppTheme.shellPadding)
+                    .padding(.top, 20)
+                    .padding(.bottom, 8)
                 }
             }
             .background(AppTheme.canvasBackground.ignoresSafeArea())
@@ -158,7 +147,7 @@ struct CompletedWorkoutEditView: View {
             }
             .onChange(of: focusedField) { previousField, newField in
                 // A keyboard takes the place of the time wheels.
-                if newField != nil { timeEdit = nil }
+                if newField != nil { endTimeEdit() }
                 guard let previousField, previousField != newField else { return }
 
                 switch previousField {
@@ -472,14 +461,12 @@ struct CompletedWorkoutEditView: View {
         let isEditing = timeEdit?.exerciseIndex == exerciseIndex && timeEdit?.setIndex == setIndex
         return Button {
             guard !isEditing else { return }
-            focusedField = nil
-            withAnimation(.smooth(duration: 0.25)) {
-                timeEdit = CompletedWorkoutSetTimeEdit(
-                    exerciseIndex: exerciseIndex,
-                    setIndex: setIndex,
-                    seconds: SetTimeWheels.clamped(startingSeconds)
-                )
-            }
+            endTimeEdit()
+            timeEdit = CompletedWorkoutSetTimeEdit(
+                exerciseIndex: exerciseIndex,
+                setIndex: setIndex,
+                seconds: SetTimeEntry.clamped(startingSeconds)
+            )
         } label: {
             Text(seconds.map(WorkoutFormatters.setDuration) ?? placeholder)
                 .font(.body.weight(.semibold).monospacedDigit())
@@ -500,12 +487,29 @@ struct CompletedWorkoutEditView: View {
                 .animation(.easeOut(duration: 0.15), value: isEditing)
         }
         .buttonStyle(.plain)
-        .setTimeCell(isEditing: isEditing)
+        .setTimeInput(
+            isEditing: isEditing,
+            startingSeconds: timeEdit?.seconds ?? 0,
+            onChange: { seconds in
+                guard let timeEdit, isEditing else { return }
+                self.timeEdit?.seconds = seconds
+                setTime(seconds, for: timeEdit)
+            },
+            onEnd: { if isEditing { endTimeEdit() } }
+        )
         .accessibilityLabel(placeholder)
         .accessibilityValue(seconds.map(WorkoutFormatters.setDurationAccessibilityDescription) ?? "No time")
         .accessibilityHint("Opens the time wheels.")
         .accessibilityAddTraits(isEditing ? .isSelected : [])
         .accessibilityIdentifier("HistorySetTimeField-\(exerciseIndex)-\(visibleIndex)")
+    }
+
+    /// Closes the time wheels. The set keeps the time they show even if
+    /// they were never moved.
+    private func endTimeEdit() {
+        guard let timeEdit else { return }
+        if timeEdit.seconds > 0 { setTime(timeEdit.seconds, for: timeEdit) }
+        self.timeEdit = nil
     }
 
     /// Writes the wheels' time to the draft; zero removes it.
@@ -656,7 +660,7 @@ struct CompletedWorkoutEditView: View {
 }
 
 /// The set whose time the picker sheet is editing.
-/// The set whose time wheels are docked at the bottom of the editor.
+/// The set whose keyboard is the time wheels.
 private struct CompletedWorkoutSetTimeEdit {
     let exerciseIndex: Int
     let setIndex: Int

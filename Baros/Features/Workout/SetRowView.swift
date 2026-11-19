@@ -21,15 +21,14 @@ struct SetRowView: View, @MainActor Equatable {
     var focusedField: FocusState<WorkoutField?>.Binding
     let isWeightFocused: Bool
     let isRepsFocused: Bool
-    /// What the docked time wheels read while they are open on this set.
+    /// What the time wheels read while they are this set's keyboard.
     let timeEditingSeconds: Int?
     let weightUnit: MeasurementUnit
     let previous: PreviousSetPerformance?
     let suggestions: ActiveWorkoutSetInput.Values
     let onPreviewChange: (ActiveWorkoutSetInput.Values?) -> Void
     let onEditRPE: (LoggedSet) -> Void
-    /// Opens the time wheels on this set at the given time, or closes them with nil.
-    let onEditTime: (LoggedSet, Int?) -> Void
+    let onEditTime: (LoggedSet, SetTimeEdit) -> Void
     @State private var showsRemoveError = false
     @State private var hasFailedRemoval = false
     @State private var input = ActiveWorkoutSetInput()
@@ -374,7 +373,12 @@ struct SetRowView: View, @MainActor Equatable {
                 .animation(.easeOut(duration: 0.15), value: isTimeEditing)
         }
         .buttonStyle(.plain)
-        .setTimeCell(isEditing: isTimeEditing)
+        .setTimeInput(
+            isEditing: isTimeEditing,
+            startingSeconds: timeEditingSeconds ?? 0,
+            onChange: { onEditTime(set, .change($0)) },
+            onEnd: { onEditTime(set, .close) }
+        )
         .accessibilityLabel(placeholder)
         .accessibilityValue(spokenSuggestion.map { "Suggested \($0)" } ?? spokenTime ?? "No time")
         .accessibilityHint(suggestion == nil ? "Opens the time wheels."
@@ -401,15 +405,15 @@ struct SetRowView: View, @MainActor Equatable {
 
     private func editTime() {
         guard !engine.hasPendingSetSave, canEditSet else { return }
-        onEditTime(set, inputValues.timePickerStart(suggestions: suggestions, previous: previous))
+        onEditTime(set, .open(inputValues.timePickerStart(suggestions: suggestions, previous: previous)))
     }
 
     @ViewBuilder
     private var rpeBadge: some View {
         if let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe) {
             Button {
-                // A timed set has no reps field to hold the keyboard, so its
-                // RPE chips sit on the bar above the time wheels.
+                // A timed set's keyboard is its time wheels, and the RPE
+                // chips sit on the bar above them.
                 if trackingMethod == .duration { editTime() }
                 onEditRPE(set)
             } label: {
@@ -542,7 +546,7 @@ struct SetRowView: View, @MainActor Equatable {
             setInputRegistry.commit(field)
         }
         // Closing the wheels first keeps the time they show.
-        if isTimeEditing { onEditTime(set, nil) }
+        if isTimeEditing { onEditTime(set, .close) }
         guard !engine.hasPendingSetSave, canEditSet else { return }
         let preparedValues = prepareValuesForSetAction(completesSet: !set.isCompleted)
         withAnimation(.easeInOut(duration: 0.2)) {

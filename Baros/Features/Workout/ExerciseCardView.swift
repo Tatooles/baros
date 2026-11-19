@@ -26,7 +26,7 @@ struct ExerciseCardView: View {
     let onSwapExercise: () -> Void
     let onEditRPE: (LoggedSet) -> Void
     let timeEntry: SetTimeEntry?
-    let onEditTime: (LoggedSet, Int?) -> Void
+    let onEditTime: (LoggedSet, SetTimeEdit) -> Void
     @State private var showsRemoveConfirmation = false
     @State private var failedStructuralAction: StructuralAction?
     @State private var showsStructuralError = false
@@ -50,7 +50,7 @@ struct ExerciseCardView: View {
         onSwapExercise: @escaping () -> Void,
         onEditRPE: @escaping (LoggedSet) -> Void,
         timeEntry: SetTimeEntry?,
-        onEditTime: @escaping (LoggedSet, Int?) -> Void
+        onEditTime: @escaping (LoggedSet, SetTimeEdit) -> Void
     ) {
         self.loggedExercise = loggedExercise
         self.exerciseIndex = exerciseIndex
