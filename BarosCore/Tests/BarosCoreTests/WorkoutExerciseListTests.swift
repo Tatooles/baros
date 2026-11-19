@@ -15,14 +15,16 @@ final class WorkoutExerciseListTests: XCTestCase {
         // Suggestions are display-only, never assigned to the fourth blank row.
         var draft = WorkoutExerciseListDraft(session: session)
         draft.orderedIDs.removeFirst()
-        XCTAssertTrue(draft.needsRemovalConfirmation)
         XCTAssertEqual(draft.removedExercises[0].loggedSetCount, 3)
+        XCTAssertTrue(draft.pendingSetLoss == (3, 1))
+        XCTAssertEqual(draft.lossyRemovedExerciseNames, [draft.removedExercises[0].name])
         XCTAssertEqual(draft.removedExercises[0].loggedSetsText, "3 logged sets")
         XCTAssertEqual(session.sortedLoggedExercises.count, 3, "A draft cannot mutate the live workout")
 
         draft = WorkoutExerciseListDraft(session: session)
         draft.orderedIDs.removeLast()
-        XCTAssertFalse(draft.needsRemovalConfirmation)
+        XCTAssertEqual(draft.removedExercises[0].loggedSetCount, 0)
+        XCTAssertTrue(draft.pendingSetLoss == (0, 0), "Removing an empty exercise loses nothing")
     }
 
     func testCombinedSaveSoftDeletesAndReordersOnceWithoutDeletingLibraryOrOldTombstones() throws {

@@ -305,6 +305,62 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertEqual(splitFirst[1], splitFirst[2])
     }
 
+    func testMovingAnExerciseJoinsStaysInOrLeavesASuperset() {
+        let (a, b) = (UUID(), UUID())
+        func moved(_ ids: [UUID?], _ source: Int, _ destination: Int) -> SupersetGrouping.Arrangement {
+            SupersetGrouping.movingExercise(ids, from: source, to: destination)
+        }
+
+        // A single dropped between two members joins their superset.
+        XCTAssertEqual(moved([nil, a, a], 0, 1), .init(order: [1, 0, 2], groupIDs: [a, a, a]))
+        // Beside a superset but not inside it, a single stays single.
+        XCTAssertEqual(moved([a, a, nil], 2, 0).groupIDs, [nil, a, a])
+        // A member reorders within its superset, ends included.
+        XCTAssertEqual(moved([a, a, a, nil], 0, 2), .init(order: [1, 2, 0, 3], groupIDs: [a, a, a, nil]))
+        // Dragged clear of it, a member leaves, and a superset left with one is ungrouped.
+        XCTAssertEqual(moved([a, a, nil, nil], 0, 3).groupIDs, [nil, nil, nil, nil])
+        // Between two members of another superset, it joins that one instead.
+        XCTAssertEqual(moved([a, a, a, b, b], 0, 3).groupIDs, [a, a, b, b, b])
+        XCTAssertEqual(moved([nil], 0, 0), .init(order: [0], groupIDs: [nil]))
+        // At the list's end there's no row to pass, so going past the superset's edge leaves it.
+        let pastEnd = SupersetGrouping.movingExercise([nil, a, a, a], from: 3, to: 3, leavesSuperset: true)
+        XCTAssertEqual(pastEnd.groupIDs, [nil, a, a, nil])
+        let pastStart = SupersetGrouping.movingExercise([a, a, nil], from: 1, to: 0, leavesSuperset: true)
+        XCTAssertEqual(pastStart.groupIDs, [nil, nil, nil])
+    }
+
+    func testMovingABlockKeepsSupersetsWholeAndApart() {
+        let (a, b) = (UUID(), UUID())
+        let result = SupersetGrouping.movingBlock([nil, a, a, b, b], from: 1, to: 0)
+        XCTAssertEqual(result, .init(order: [1, 2, 0, 3, 4], groupIDs: [a, a, nil, b, b]))
+        // Two supersets swapped stay two supersets.
+        let swapped = SupersetGrouping.movingBlock([a, a, b, b], from: 1, to: 0)
+        XCTAssertEqual(swapped.order, [2, 3, 0, 1])
+        XCTAssertEqual(swapped.groupIDs, [b, b, a, a])
+    }
+
+    func testSameSupersetsIgnoresTheIDsThemselves() {
+        let (a, b) = (UUID(), UUID())
+        XCTAssertTrue(SupersetGrouping.sameSupersets([a, a, nil], [b, b, nil]))
+        XCTAssertTrue(SupersetGrouping.sameSupersets([a, nil, nil], [nil, nil, b]), "Lone ids are singles")
+        XCTAssertFalse(SupersetGrouping.sameSupersets([a, a, nil], [nil, b, b]))
+        XCTAssertFalse(SupersetGrouping.sameSupersets([a, a, a], [a, a, b]))
+    }
+
+    func testDraftHasChangesOnlyWhenSavingWouldChangeTheWorkout() throws {
+        let (_, session) = try makeWorkout(names: ["A", "B", "C"], groups: [0, 0, nil])
+        var draft = WorkoutExerciseListDraft(session: session)
+        XCTAssertFalse(draft.hasChanges)
+        let groups = draft.exercises.map(\.supersetGroupID)
+        // Splitting and rejoining gives the superset a new id but the same shape.
+        draft.regroup(SupersetGrouping.togglingLink(groups, below: 0))
+        XCTAssertTrue(draft.hasChanges)
+        draft.regroup(SupersetGrouping.togglingLink(draft.exercises.map(\.supersetGroupID), below: 0))
+        XCTAssertFalse(draft.hasChanges)
+        draft.orderedIDs.removeLast()
+        XCTAssertTrue(draft.hasChanges)
+    }
+
     func testSheetSavesLinksWithAdditionsOrderAndRemovalsInOneChange() throws {
         let (context, session) = try makeWorkout(names: ["A", "B", "C", "D"], groups: [0, 0, nil, nil])
         let engine = ActiveWorkoutEngine()

@@ -100,7 +100,7 @@
 		920C6FE31D76F085CA3A6293 /* BarosBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC0941499EC84B7040CE8EDF /* BarosBrand.swift */; };
 		938D96AFF51E6A9ADC7C8F39 /* AppUpdateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53ACF4138F734FA696F1E985 /* AppUpdateServiceTests.swift */; };
 		9648E59EF3C2727A04EAC646 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD824F36A386212D32C34A33 /* OnboardingFlow.swift */; };
-		9AE0DB1B5CB6CF7B13C4B4DF /* ReorderLinkList.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7ED5945A57B9CDA55AF4687 /* ReorderLinkList.swift */; };
+		9AE0DB1B5CB6CF7B13C4B4DF /* ReorderSwipeToRemove.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7ED5945A57B9CDA55AF4687 /* ReorderSwipeToRemove.swift */; };
 		9C48CDEEAE041FC54E2134A4 /* WorkoutRecoveryNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9A8AE470D90811B40DEA33F /* WorkoutRecoveryNotice.swift */; };
 		9CD891183EBE88A375C504F1 /* SyncRecoveryAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCDF19AED28F861C331A3BF6 /* SyncRecoveryAction.swift */; };
 		9D1670EE8A2239CD5D0C1A45 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4E2709B6422528E5D6A0209A /* AppIcon.icon */; };
@@ -132,7 +132,7 @@
 		E155987743F9A0C9BAC30955 /* UIHangContextObservabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34695689416D39481A075595 /* UIHangContextObservabilityTests.swift */; };
 		E205D01C1A36D0E25CC12EF0 /* AppUpdatePrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F2ABEC64F2B017CBD065DD /* AppUpdatePrompt.swift */; };
 		E6A0DE6C2B0F1E62B68519EF /* WorkoutHistoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF3E952AAABF0D77BF003D2 /* WorkoutHistoryDetailView.swift */; };
-		EBCB094A6E93167C6841FEED /* NativeGroupedReorderList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72A675DA33EED3402F188F59 /* NativeGroupedReorderList.swift */; };
+		EBCB094A6E93167C6841FEED /* ReorderExercisesList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72A675DA33EED3402F188F59 /* ReorderExercisesList.swift */; };
 		ECF35A9788853245B16A7EBD /* HomeStartWorkoutSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27C5D2BF7D584890C7340F92 /* HomeStartWorkoutSheet.swift */; };
 		ED7ADB644D66709FDAD9DB3D /* DeleteDataConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB8BEE03F664DDD4F87D5FAE /* DeleteDataConfirmationView.swift */; };
 		EFD04EA303D6A70CEAAF979E /* WorkoutHistoryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A818C833AC1D3BA4E797C7CD /* WorkoutHistoryRow.swift */; };
@@ -237,7 +237,7 @@
 		63D053CC597AD0865A0C84D5 /* WhatsNewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewSheet.swift; sourceTree = "<group>"; };
 		681B3BF8E6FAF5257948AB56 /* SignedOutReminderBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignedOutReminderBanner.swift; sourceTree = "<group>"; };
 		6BD656B1F611BE5925B97EB6 /* HomePastWorkoutReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePastWorkoutReviewView.swift; sourceTree = "<group>"; };
-		72A675DA33EED3402F188F59 /* NativeGroupedReorderList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeGroupedReorderList.swift; sourceTree = "<group>"; };
+		72A675DA33EED3402F188F59 /* ReorderExercisesList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorderExercisesList.swift; sourceTree = "<group>"; };
 		7393C373A9C49F7A8182E8DF /* AccountDisplayStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDisplayStateTests.swift; sourceTree = "<group>"; };
 		74123B04D836BA0F872DA70D /* ExerciseHistoryPerformanceRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryPerformanceRow.swift; sourceTree = "<group>"; };
 		776F226A3F2002E996B67500 /* RestTimerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestTimerViews.swift; sourceTree = "<group>"; };
@@ -296,7 +296,7 @@
 		D531081F595D8867EA34D882 /* WorkoutLiveActivityCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutLiveActivityCoordinator.swift; sourceTree = "<group>"; };
 		D6076A894B94E6680C16125F /* HomeYearRingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeYearRingView.swift; sourceTree = "<group>"; };
 		D6BD2ACCC1481D31808F5C38 /* DeveloperDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperDiagnosticsView.swift; sourceTree = "<group>"; };
-		D7ED5945A57B9CDA55AF4687 /* ReorderLinkList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorderLinkList.swift; sourceTree = "<group>"; };
+		D7ED5945A57B9CDA55AF4687 /* ReorderSwipeToRemove.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorderSwipeToRemove.swift; sourceTree = "<group>"; };
 		D80A5E794B9F11690E9AE977 /* ActiveWorkoutAccessoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveWorkoutAccessoryView.swift; sourceTree = "<group>"; };
 		D98BD4C40E1C5B8977BF9AC5 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D9A12F32B32E1C9F1C6A850D /* LaunchExperiencePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchExperiencePage.swift; sourceTree = "<group>"; };
@@ -533,10 +533,10 @@
 				01EF284AA0E3A57AA5A5386C /* ExerciseCardView.swift */,
 				B2587D5EEC35D1F502DC01B4 /* ExerciseQuickHistorySheet.swift */,
 				0EC5F25DFB5B9816D415FAC0 /* FinishWorkoutSheet.swift */,
-				72A675DA33EED3402F188F59 /* NativeGroupedReorderList.swift */,
+				72A675DA33EED3402F188F59 /* ReorderExercisesList.swift */,
 				BFC3EE9597A8BD9057976931 /* ReorderExerciseRow.swift */,
 				26E301A1ADE94900178B7D4F /* ReorderExercisesSheet.swift */,
-				D7ED5945A57B9CDA55AF4687 /* ReorderLinkList.swift */,
+				D7ED5945A57B9CDA55AF4687 /* ReorderSwipeToRemove.swift */,
 				A8BA79E3D56FF2BBB6C088A1 /* RestTimerAlerts.swift */,
 				3D220CEF989F81CCD7F27B31 /* RestTimerScenePhase+ScenePhase.swift */,
 				776F226A3F2002E996B67500 /* RestTimerViews.swift */,
@@ -967,14 +967,14 @@
 				529855CD1812A2289742C375 /* LaunchExperiencePage.swift in Sources */,
 				F31BDE54D77FC6710C931FE9 /* LaunchExperienceSheet.swift in Sources */,
 				454D3190B8833A27C7AD904C /* MuscleFigureView.swift in Sources */,
-				EBCB094A6E93167C6841FEED /* NativeGroupedReorderList.swift in Sources */,
+				EBCB094A6E93167C6841FEED /* ReorderExercisesList.swift in Sources */,
 				9648E59EF3C2727A04EAC646 /* OnboardingFlow.swift in Sources */,
 				7FAB3891D8987EEB4AEC52B9 /* OnboardingPreferencesPage.swift in Sources */,
 				497584817F65396C77144554 /* PrivacyDataSection.swift in Sources */,
 				2ECD33907C8A5FABCC5EF1C3 /* RPEChipRow.swift in Sources */,
 				4EAA8B77042AC0DAB4A6FDE9 /* ReorderExerciseRow.swift in Sources */,
 				745C0A0414A80A63A13A218A /* ReorderExercisesSheet.swift in Sources */,
-				9AE0DB1B5CB6CF7B13C4B4DF /* ReorderLinkList.swift in Sources */,
+				9AE0DB1B5CB6CF7B13C4B4DF /* ReorderSwipeToRemove.swift in Sources */,
 				90549B1D069028EFCE819C36 /* RestTimerAlerts.swift in Sources */,
 				7DDB052199EC6CCC4212A1D7 /* RestTimerScenePhase+ScenePhase.swift in Sources */,
 				C6DC63CA4B0DFB832C7E5CE5 /* RestTimerViews.swift in Sources */,

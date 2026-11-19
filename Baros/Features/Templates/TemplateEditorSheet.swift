@@ -15,6 +15,10 @@ struct TemplateEditorSheet: View {
     @State private var draft: WorkoutTemplateDraft
     @State private var showsPicker = false
     @State private var showsSaveError = false
+    /// The exercises before each edit, latest last. Undo leaves the name as typed.
+    @State private var history: [[WorkoutTemplateEntry]] = []
+    @State private var notice: ReorderNotice?
+    @State private var confirmsDiscard = false
     @FocusState private var isNameFocused: Bool
 
     init(template: WorkoutTemplate?) {
@@ -38,15 +42,26 @@ struct TemplateEditorSheet: View {
 
     var body: some View {
         NavigationStack {
+            let items = TemplateExerciseItem.items(for: draft.entries, exercisesByID: exercisesByID)
             ReorderExercisesList(
-                exercises: TemplateExerciseItem.items(for: draft.entries, exercisesByID: exercisesByID),
-                reorder: { draft.reorder($0) },
-                remove: { draft.remove($0) },
+                exercises: items,
+                rearrange: { order, groups in
+                    edit {
+                        draft.reorder(order)
+                        draft.regroup(groups)
+                    }
+                },
+                remove: { id in
+                    guard let removed = items.first(where: { $0.id == id }) else { return }
+                    edit { draft.remove([id]) }
+                    notice = ReorderNotice(title: "Removed \(removed.name)")
+                },
                 add: {
                     isNameFocused = false
                     showsPicker = true
                 },
-                regroup: { draft.regroup($0) }
+                undo: history.isEmpty ? nil : { undo() },
+                notice: $notice
             ) {
                 nameField
             }
@@ -56,11 +71,11 @@ struct TemplateEditorSheet: View {
                     mode: .add(existingExerciseIDs: draft.exerciseIDs),
                     showsCancel: false,
                     onSelectAsSuperset: { exercises in
-                        draft.append(exercises, asSuperset: true)
+                        edit { draft.append(exercises, asSuperset: true) }
                         showsPicker = false
                     },
                     onSelect: { exercises in
-                        draft.append(exercises)
+                        edit { draft.append(exercises) }
                         showsPicker = false
                     }
                 )
@@ -69,12 +84,19 @@ struct TemplateEditorSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel", action: cancel)
                         .accessibilityIdentifier("CancelTemplateEditorButton")
+                        .confirmationDialog("Discard your changes?", isPresented: $confirmsDiscard, titleVisibility: .visible) {
+                            Button("Discard Changes", role: .destructive) { dismiss() }
+                            Button("Keep Editing", role: .cancel) {}
+                        }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save)
-                        .font(.system(size: 16, weight: .semibold))
+                    Button(action: save) {
+                        Text("Save").foregroundStyle(AppTheme.onBrandAccent)
+                    }
+                        .buttonStyle(.glassProminent)
+                        .tint(AppTheme.brandAccentFill)
                         .disabled(!draft.canSave)
                         .accessibilityIdentifier("SaveTemplateButton")
                 }
@@ -109,8 +131,22 @@ struct TemplateEditorSheet: View {
                 RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous)
                     .stroke(AppTheme.subtleBorder)
             )
-            .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 14, trailing: 20))
             .accessibilityIdentifier("TemplateNameField")
+    }
+
+    private func edit(_ change: () -> Void) {
+        history.append(draft.entries)
+        change()
+    }
+
+    private func undo() {
+        guard let previous = history.popLast() else { return }
+        notice = nil
+        withAnimation(.snappy(duration: 0.3)) { draft.entries = previous }
+    }
+
+    private func cancel() {
+        if draft != original { confirmsDiscard = true } else { dismiss() }
     }
 
     private func save() {
