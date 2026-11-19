@@ -364,6 +364,12 @@ final class TimedExerciseTests: XCTestCase {
         let cleared = SyncPayloadMapper.loggedSetPayload(from: set)
         XCTAssertNil(cleared.durationSeconds)
         XCTAssertTrue(cleared.sendsDurationSeconds)
+
+        // The same holds for a time entered in a workout.
+        set.knowsDuration = nil
+        ActiveWorkoutSetInput.Values(set).settingDuration(45).write(to: set)
+        ActiveWorkoutSetInput.Values(set).settingDuration(nil).write(to: set)
+        XCTAssertTrue(SyncPayloadMapper.loggedSetPayload(from: set).sendsDurationSeconds)
     }
 
     func testRowsFromBeforeTimedExercisesUploadWithoutTheNewFields() throws {

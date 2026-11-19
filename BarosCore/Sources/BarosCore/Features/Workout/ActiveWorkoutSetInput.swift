@@ -67,6 +67,8 @@ public struct ActiveWorkoutSetInput {
         func write(to set: LoggedSet) {
             set.weight = weight
             set.reps = reps
+            // A time entered here is this device's own, so a later clear uploads.
+            if durationSeconds != nil, set.durationSeconds != durationSeconds { set.knowsDuration = true }
             set.durationSeconds = durationSeconds
         }
     }
