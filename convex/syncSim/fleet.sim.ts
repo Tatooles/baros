@@ -489,13 +489,15 @@ export class SimDevice {
   }
 
   // Legacy builds stamp edits with the device clock. Current builds stamp a
-  // hybrid-logical time, so an edit always outranks the version it replaced.
+  // hybrid-logical time, so an edit always outranks the version it replaced,
+  // both locally and on the server (the server reads an upload stamped at or
+  // below its base as a re-send with no edit).
   private editStamp(previous: LocalRecord | undefined): number {
     const now = this.now();
     if (this.rule === "legacy" || previous === undefined) {
       return now;
     }
-    return Math.max(now, previous.updatedAt + millisecond);
+    return Math.max(now, previous.updatedAt + millisecond, (previous.syncBase ?? -Infinity) + millisecond);
   }
 
   get(kind: Kind, id: string | null): LocalRecord | undefined {

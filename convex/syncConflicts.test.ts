@@ -586,6 +586,25 @@ describe("#98 client clocks", () => {
     }
   });
 
+  test("a current build's retried re-send of an unchanged record cannot undo a newer edit", async () => {
+    const client = convexTest(schema, modules).withIdentity(owner);
+    // An installed build with a fast clock wrote the stored version.
+    const fast = await client.mutation(api.sync.upsertExercise, { record: exercise(now + 1000, { name: "Fast" }) });
+    // A current build re-sends that version unchanged, as it does for a parent
+    // the server reported missing. It applies as a duplicate; the response is lost.
+    const resend = exercise(now + 1000, { name: "Fast", baseUpdatedAt: fast.updatedAt });
+    expect((await client.mutation(api.sync.upsertExercise, { record: resend })).status).toBe("ignored_stale");
+    // An installed build with a correct clock edits it.
+    vi.setSystemTime((now + 1) * 1000);
+    expect((await client.mutation(api.sync.upsertExercise, { record: exercise(now + 1, { name: "Honest" }) })).status).toBe("updated");
+
+    // The re-send's retry carries no edit, so it cannot replace the newer one.
+    const retry = await client.mutation(api.sync.upsertExercise, { record: resend });
+    const changes = await client.mutation(api.sync.fetchChangesOnce, { cursors: zeroCursors });
+    expect(retry.status).toBe("ignored_stale");
+    expect(changes.exercises[0].name).toBe("Honest");
+  });
+
   test("limitation: an installed build's retry can win again once its clock skew has passed", async () => {
     const client = convexTest(schema, modules).withIdentity(owner);
     await client.mutation(api.sync.upsertExercise, { record: exercise(now - 100, { name: "Original" }) });

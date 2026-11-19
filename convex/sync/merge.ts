@@ -122,11 +122,16 @@ export function incomingFieldsWin(
   if (incoming.baseUpdatedAt !== undefined) {
     // A current build. An edit made after seeing the stored version replaces
     // it, whatever the clocks say.
-    if (
-      incoming.baseUpdatedAt !== null &&
-      incoming.baseUpdatedAt >= stored.updatedAt - sameTimeToleranceSeconds
-    ) {
-      return true;
+    if (incoming.baseUpdatedAt !== null) {
+      if (incoming.baseUpdatedAt >= stored.updatedAt - sameTimeToleranceSeconds) {
+        return true;
+      }
+      // Current builds stamp every edit above the version it started from, so
+      // an upload stamped at or below its base re-sends that version with no
+      // edit of its own. It cannot replace a newer one, however late it arrives.
+      if (incoming.updatedAt <= incoming.baseUpdatedAt + sameTimeToleranceSeconds) {
+        return false;
+      }
     }
     // Otherwise it was concurrent, or it is a retry. Every accepted upload
     // left the ordering time at or above its own stamp, so a retry, however
