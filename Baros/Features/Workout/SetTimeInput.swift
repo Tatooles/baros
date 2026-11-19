@@ -81,7 +81,7 @@ private struct SetTimeInput: UIViewRepresentable {
         DispatchQueue.main.async {
             guard view.wantsKeyboard != view.isFirstResponder else { return }
             if view.wantsKeyboard {
-                if !view.becomeFirstResponder() { view.onEnd?() }
+                view.takeKeyboard()
             } else {
                 _ = view.resignFirstResponder()
             }
@@ -97,7 +97,25 @@ private final class SetTimeResponder: UIView {
     var onEnd: (() -> Void)?
     private var wheels: SetTimeWheelsInputView?
 
+    /// The time cell whose wheels are up, if any.
+    private static weak var holder: SetTimeResponder?
+
     override var canBecomeFirstResponder: Bool { window != nil }
+
+    /// Brings up the wheels. A text field's keyboard is dismissed first:
+    /// swapped in place for the shorter wheels, it would leave the screen
+    /// laid out for the keyboard's height.
+    func takeKeyboard() {
+        guard Self.holder?.isFirstResponder != true else {
+            if !becomeFirstResponder() { onEnd?() }
+            return
+        }
+        window?.endEditing(true)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.wantsKeyboard, !self.isFirstResponder else { return }
+            if !self.becomeFirstResponder() { self.onEnd?() }
+        }
+    }
 
     override var inputView: UIView? { wheels }
 
@@ -109,7 +127,7 @@ private final class SetTimeResponder: UIView {
             self?.onChange?(seconds)
         }
         let became = super.becomeFirstResponder()
-        if !became { wheels = nil }
+        if became { Self.holder = self } else { wheels = nil }
         return became
     }
 
@@ -256,8 +274,14 @@ private struct SetTimeCellReveal: ViewModifier {
             }
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: {
                 geometry.visibleBottom = $0
-                // The keyboard arrives after the cell is chosen.
-                if editing != nil { reveal() }
+                // The keyboard arrives after the cell is chosen, and the list
+                // may still be settling from a keyboard that just left.
+                guard editing != nil else { return }
+                reveal()
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(350))
+                    reveal()
+                }
             }
             .onPreferenceChange(SetTimeCellBottomKey.self) { [geometry] bottom in
                 geometry.cellBottom = bottom.map { $0 + geometry.offset }

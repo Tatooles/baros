@@ -70,6 +70,23 @@ final class TimedExerciseUITests: XCTestCase {
             waitUntil(timeout: 3) { carry.frame.maxY <= app.buttons["DismissKeyboardButton"].frame.minY },
             "The set stays in view above the wheels and their bar"
         )
+        // The wheels are shorter than the number pad they replaced, and the
+        // bar comes down with them.
+        let dismiss = app.buttons["DismissKeyboardButton"]
+        XCTAssertTrue(
+            waitUntil(timeout: 3) { app.pickers["SetTimeWheels"].frame.minY - dismiss.frame.maxY < 24 },
+            "The bar rests on the wheels"
+        )
+        // Going back to the weight and returning keeps the time and the bar's place.
+        app.textFields["SetWeightField-1-0"].tap()
+        XCTAssertTrue(app.pickers["SetTimeWheels"].waitToDisappear(timeout: 3))
+        XCTAssertEqual(carry.value as? String, "1 minute, 30 seconds")
+        carry.tap()
+        XCTAssertTrue(waitUntil(timeout: 3) { carry.isSelected })
+        XCTAssertTrue(
+            waitUntil(timeout: 3) { app.pickers["SetTimeWheels"].frame.minY - dismiss.frame.maxY < 24 },
+            "The bar rests on the wheels after a weight field"
+        )
         app.buttons["RPEToolbarButton"].tap()
         XCTAssertTrue(app.buttons["RPEChip-8"].waitToExist(timeout: 3))
         attachScreenshot("Time picker with RPE", app: app)
