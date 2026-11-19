@@ -33,6 +33,8 @@ struct WorkoutSessionView: View {
     @State private var cachedSortedLoggedExercises: [LoggedExercise]?
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
+    /// The set whose time wheels are docked where the keyboard would be.
+    @State private var timeEntry: SetTimeEntry?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var setInputRegistry = ActiveSetInputRegistry()
     @State private var focusTransitionCoordinator = WorkoutFocusTransitionCoordinator()
@@ -151,7 +153,13 @@ struct WorkoutSessionView: View {
             }
             .onChange(of: focusedField) { previousField, newField in
                 UIHangContextObservability.shared.focusChanged(to: newField)
-                if newField != nil { engine.restTimer.collapseControls() }
+                if newField != nil {
+                    engine.restTimer.collapseControls()
+                    // A keyboard takes the place of the time wheels, and the
+                    // set keeps the time they showed.
+                    keepShownTime()
+                    timeEntry = nil
+                }
                 focusTransitionCoordinator.observeFocusChange(
                     from: previousField,
                     to: newField,
@@ -163,10 +171,16 @@ struct WorkoutSessionView: View {
                     focusTransitionCoordinator.synchronizeFocus(nil)
                     focusedField = nil
                 }
-                if RPEEditingFocusPolicy.shouldReset(editingSetID: rpeEditingSetID, newFocusedField: newField) {
+                // The time wheels hold no focus, so their set's RPE chips
+                // stay while they are open.
+                if timeEntry?.setID != rpeEditingSetID,
+                   RPEEditingFocusPolicy.shouldReset(editingSetID: rpeEditingSetID, newFocusedField: newField) {
                     rpeEditingSetID = nil
                 }
-
+            }
+            .revealsSetTimeCell(editing: timeEntry?.setID)
+            .onChange(of: timeEntry?.setID) { _, setID in
+                if setID != nil { engine.restTimer.collapseControls() }
             }
             // Reserved bottom chrome: the actions never sit on top of set rows,
             // and the system scroll-edge effect separates them from the list.
@@ -182,8 +196,20 @@ struct WorkoutSessionView: View {
             // between its buttons. As a safe-area inset, the system's keyboard
             // reveal clears the bar, and only the buttons themselves take touches.
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if focusedField != nil, !isChildPresentationActive {
+                if isChildPresentationActive {
+                    EmptyView()
+                } else if focusedField != nil {
                     keyboardAccessory
+                } else if let timeEntry, timeEntrySet != nil {
+                    SetTimeEntryPanel(startingSeconds: timeEntry.seconds) { seconds in
+                        self.timeEntry?.seconds = seconds
+                        saveTime(seconds, forSetID: timeEntry.setID)
+                    } bar: {
+                        keyboardAccessory
+                    }
+                    // Each set starts the wheels on its own time.
+                    .id(timeEntry.setID)
+                    .transition(.move(edge: .bottom))
                 }
             }
             // While the actions show, the bars run to the screen edge, so the
@@ -288,7 +314,7 @@ struct WorkoutSessionView: View {
     }
 
     private var showsBottomActionBar: Bool {
-        focusedField == nil && !isChildPresentationActive
+        focusedField == nil && timeEntrySet == nil && !isChildPresentationActive
     }
 
     /// On phones with a home indicator, the actions sit inside its inset at
@@ -349,7 +375,13 @@ struct WorkoutSessionView: View {
     }
 
     private var showsRPEButton: Bool {
-        rpeEnabled && focusedSetID != nil
+        rpeEnabled && accessorySetID != nil
+    }
+
+    /// The set the bar's buttons act on: the one being typed in, or the one
+    /// the time wheels are open on.
+    private var accessorySetID: UUID? {
+        focusedSetID ?? timeEntry?.setID
     }
 
     private var keyboardAccessory: some View {
@@ -362,9 +394,9 @@ struct WorkoutSessionView: View {
                     .clipShape(Capsule())
                     .glassEffect(.regular, in: Capsule())
             } else {
-                if let focusedSetID, showsRPEButton {
+                if let accessorySetID, showsRPEButton {
                     Button("RPE") {
-                        rpeEditingSetID = focusedSetID
+                        rpeEditingSetID = accessorySetID
                     }
                     .accessibilityIdentifier("RPEToolbarButton")
                 }
@@ -402,6 +434,12 @@ struct WorkoutSessionView: View {
 
     private func selectRPE(_ value: Double?) {
         guard !engine.hasPendingSetSave else { return }
+        if let timeEntry, timeEntry.setID == rpeEditingSetID, value != nil {
+            // An RPE completes the set, and zero is not a time to complete it with.
+            guard timeEntry.seconds > 0 else { return }
+            keepShownTime()
+            guard !engine.hasPendingSetSave else { return }
+        }
         if let set = editingSet {
             // Both of a set's fields share one input registration.
             let preparedValues = setInputRegistry.prepareSetValues(
@@ -465,15 +503,61 @@ struct WorkoutSessionView: View {
     }
 
     private var editingSet: LoggedSet? {
-        guard let rpeEditingSetID else { return nil }
+        activeSet(rpeEditingSetID)
+    }
+
+    /// The set the time wheels are open on, while it is still in the workout.
+    private var timeEntrySet: LoggedSet? {
+        activeSet(timeEntry?.setID)
+    }
+
+    private func activeSet(_ id: UUID?) -> LoggedSet? {
+        guard let id else { return nil }
         for loggedExercise in cachedSortedLoggedExercises ?? session.sortedLoggedExercises {
             if let match = loggedExercise.sets.first(where: {
-                $0.id == rpeEditingSetID && $0.deletedAt == nil
+                $0.id == id && $0.deletedAt == nil
             }) {
                 return match
             }
         }
         return nil
+    }
+
+    /// Opens the time wheels on a set, in place of any keyboard.
+    private func editTime(_ set: LoggedSet, startingSeconds: Int?) {
+        guard let startingSeconds else {
+            if timeEntry?.setID == set.id { resignFocus() }
+            return
+        }
+        guard timeEntry?.setID != set.id else { return }
+        resignFocus()
+        guard !engine.hasPendingSetSave else { return }
+        withAnimation(.workoutFocusDismissal) {
+            timeEntry = SetTimeEntry(setID: set.id, startingSeconds: startingSeconds)
+        }
+    }
+
+    /// The set keeps the time on the wheels however they close, even when
+    /// they were never moved, as when they opened on last time's value.
+    private func keepShownTime() {
+        guard let timeEntry, timeEntry.seconds > 0 else { return }
+        saveTime(timeEntry.seconds, forSetID: timeEntry.setID)
+    }
+
+    /// Saves the wheels' time as they settle; zero removes it.
+    private func saveTime(_ seconds: Int, forSetID setID: UUID) {
+        guard !engine.hasPendingSetSave, let set = activeSet(setID) else { return }
+        let duration = seconds > 0 ? seconds : nil
+        guard WorkoutNumericInputPolicy.validatedDuration(set.durationSeconds) != duration else { return }
+        do {
+            try engine.commitActiveSetDraft(
+                set,
+                values: ActiveWorkoutSetInput.Values(set).settingDuration(duration),
+                context: modelContext
+            )
+        } catch {
+            // The engine restored the model and owns the attempted values for Retry.
+        }
     }
 
     private var loggedExerciseStructureKey: Set<LoggedExerciseStructureValue> {
@@ -548,9 +632,12 @@ struct WorkoutSessionView: View {
                 swappingLoggedExercise = loggedExercise
             },
             onEditRPE: { set in
-                focusedField = .setReps(set.id)
+                // A timed set's chips sit above its wheels, which need no keyboard.
+                if timeEntry?.setID != set.id { focusedField = .setReps(set.id) }
                 rpeEditingSetID = set.id
-            }
+            },
+            timeEntry: timeEntry,
+            onEditTime: editTime
         )
         .id(loggedExercise.id)
     }
@@ -590,6 +677,11 @@ struct WorkoutSessionView: View {
     }
 
     private func resignFocus() {
+        if timeEntry != nil {
+            keepShownTime()
+            withAnimation(.workoutFocusDismissal) { timeEntry = nil }
+            rpeEditingSetID = nil
+        }
         focusTransitionCoordinator.transition(
             to: nil,
             commit: setInputRegistry.commit,

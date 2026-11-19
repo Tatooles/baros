@@ -25,6 +25,8 @@ struct ExerciseCardView: View {
     let viewHistory: () -> Void
     let onSwapExercise: () -> Void
     let onEditRPE: (LoggedSet) -> Void
+    let timeEntry: SetTimeEntry?
+    let onEditTime: (LoggedSet, Int?) -> Void
     @State private var showsRemoveConfirmation = false
     @State private var failedStructuralAction: StructuralAction?
     @State private var showsStructuralError = false
@@ -46,7 +48,9 @@ struct ExerciseCardView: View {
         supersetActions: SupersetActions,
         viewHistory: @escaping () -> Void,
         onSwapExercise: @escaping () -> Void,
-        onEditRPE: @escaping (LoggedSet) -> Void
+        onEditRPE: @escaping (LoggedSet) -> Void,
+        timeEntry: SetTimeEntry?,
+        onEditTime: @escaping (LoggedSet, Int?) -> Void
     ) {
         self.loggedExercise = loggedExercise
         self.exerciseIndex = exerciseIndex
@@ -61,6 +65,8 @@ struct ExerciseCardView: View {
         self.viewHistory = viewHistory
         self.onSwapExercise = onSwapExercise
         self.onEditRPE = onEditRPE
+        self.timeEntry = timeEntry
+        self.onEditTime = onEditTime
     }
 
     private static let menuButtonSize: CGFloat = 44
@@ -209,6 +215,7 @@ struct ExerciseCardView: View {
                                         focusedField: focusedField,
                                         isWeightFocused: focusedFieldValue == .setWeight(set.id),
                                         isRepsFocused: focusedFieldValue == .setReps(set.id),
+                                        timeEditingSeconds: timeEntry?.setID == set.id ? timeEntry?.seconds : nil,
                                         weightUnit: weightUnit,
                                         previous: index < previousSetsForRows.count ? previousSetsForRows[index] : nil,
                                         suggestions: suggestions[index],
@@ -216,7 +223,8 @@ struct ExerciseCardView: View {
                                             guard setPreviews[set.id] != values else { return }
                                             setPreviews[set.id] = values
                                         },
-                                        onEditRPE: onEditRPE
+                                        onEditRPE: onEditRPE,
+                                        onEditTime: onEditTime
                                     )
                                         .equatable()
                                         .padding(.horizontal, 16)

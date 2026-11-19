@@ -64,6 +64,34 @@ struct CompletedWorkoutEditView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 28)
             }
+            .revealsSetTimeCell(editing: timeEdit?.id)
+            // The time wheels dock where the keyboard would, so the set being
+            // edited stays in view above them.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let timeEdit, focusedField == nil {
+                    SetTimeEntryPanel(startingSeconds: timeEdit.seconds) { seconds in
+                        self.timeEdit?.seconds = seconds
+                        setTime(seconds, for: timeEdit)
+                    } bar: {
+                        HStack {
+                            Spacer()
+                            Button("Done") {
+                                // Keeps the time shown even if the wheels were never moved.
+                                if timeEdit.seconds > 0 { setTime(timeEdit.seconds, for: timeEdit) }
+                                withAnimation(.smooth(duration: 0.25)) { self.timeEdit = nil }
+                            }
+                            .font(.system(size: 16, weight: .semibold))
+                            .buttonStyle(.glass)
+                            .accessibilityIdentifier("DoneSetTimeButton")
+                        }
+                        .padding(.horizontal, AppTheme.shellPadding)
+                        .padding(.top, 20)
+                        .padding(.bottom, 8)
+                    }
+                    .id(timeEdit.id)
+                    .transition(.move(edge: .bottom))
+                }
+            }
             .background(AppTheme.canvasBackground.ignoresSafeArea())
             .navigationTitle("Edit Workout")
             .navigationBarTitleDisplayMode(.inline)
@@ -92,13 +120,6 @@ struct CompletedWorkoutEditView: View {
                     selection: $durationSelection,
                     hasEditedDuration: $hasEditedDuration
                 )
-            }
-            .sheet(item: $timeEdit) { edit in
-                SetTimePickerSheet(request: edit.request) { seconds in
-                    updateDraftSet(exerciseIndex: edit.exerciseIndex, setIndex: edit.setIndex) { set in
-                        set.durationSeconds = seconds
-                    }
-                }
             }
             .alert(
                 "Remove Set?",
@@ -136,6 +157,8 @@ struct CompletedWorkoutEditView: View {
                 Text(errorMessage ?? "Try saving again.")
             }
             .onChange(of: focusedField) { previousField, newField in
+                // A keyboard takes the place of the time wheels.
+                if newField != nil { timeEdit = nil }
                 guard let previousField, previousField != newField else { return }
 
                 switch previousField {
@@ -446,17 +469,17 @@ struct CompletedWorkoutEditView: View {
             .compactMap { WorkoutNumericInputPolicy.validatedDuration($0.durationSeconds) }
             .first
         let startingSeconds = seconds ?? timeAbove ?? 0
+        let isEditing = timeEdit?.exerciseIndex == exerciseIndex && timeEdit?.setIndex == setIndex
         return Button {
+            guard !isEditing else { return }
             focusedField = nil
-            timeEdit = CompletedWorkoutSetTimeEdit(
-                request: SetTimePickerRequest(
-                    title: "\(exercise.exerciseSnapshotName), Set \(visibleIndex + 1)",
-                    startingSeconds: startingSeconds,
-                    hasTime: seconds != nil
-                ),
-                exerciseIndex: exerciseIndex,
-                setIndex: setIndex
-            )
+            withAnimation(.smooth(duration: 0.25)) {
+                timeEdit = CompletedWorkoutSetTimeEdit(
+                    exerciseIndex: exerciseIndex,
+                    setIndex: setIndex,
+                    seconds: SetTimeWheels.clamped(startingSeconds)
+                )
+            }
         } label: {
             Text(seconds.map(WorkoutFormatters.setDuration) ?? placeholder)
                 .font(.body.weight(.semibold).monospacedDigit())
@@ -470,12 +493,26 @@ struct CompletedWorkoutEditView: View {
                     AppTheme.fieldSurface,
                     in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
                 )
+                .overlay {
+                    RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                        .strokeBorder(isEditing ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
+                }
+                .animation(.easeOut(duration: 0.15), value: isEditing)
         }
         .buttonStyle(.plain)
+        .setTimeCell(isEditing: isEditing)
         .accessibilityLabel(placeholder)
         .accessibilityValue(seconds.map(WorkoutFormatters.setDurationAccessibilityDescription) ?? "No time")
-        .accessibilityHint("Opens the time picker.")
+        .accessibilityHint("Opens the time wheels.")
+        .accessibilityAddTraits(isEditing ? .isSelected : [])
         .accessibilityIdentifier("HistorySetTimeField-\(exerciseIndex)-\(visibleIndex)")
+    }
+
+    /// Writes the wheels' time to the draft; zero removes it.
+    private func setTime(_ seconds: Int, for edit: CompletedWorkoutSetTimeEdit) {
+        updateDraftSet(exerciseIndex: edit.exerciseIndex, setIndex: edit.setIndex) { set in
+            set.durationSeconds = seconds > 0 ? seconds : nil
+        }
     }
 
     private func rpeBinding(exerciseIndex: Int, setIndex: Int) -> Binding<String> {
@@ -552,6 +589,8 @@ struct CompletedWorkoutEditView: View {
     }
 
     private func removeSet(_ candidate: CompletedWorkoutSetRemovalCandidate) {
+        // Removing a set can shift the indexes the wheels are writing to.
+        timeEdit = nil
         guard draft.exercises.indices.contains(candidate.exerciseIndex),
               draft.exercises[candidate.exerciseIndex].sets.indices.contains(candidate.setIndex)
         else { return }
@@ -617,12 +656,14 @@ struct CompletedWorkoutEditView: View {
 }
 
 /// The set whose time the picker sheet is editing.
-private struct CompletedWorkoutSetTimeEdit: Identifiable {
-    let request: SetTimePickerRequest
+/// The set whose time wheels are docked at the bottom of the editor.
+private struct CompletedWorkoutSetTimeEdit {
     let exerciseIndex: Int
     let setIndex: Int
+    /// What the wheels read; zero is no time.
+    var seconds: Int
 
-    var id: UUID { request.id }
+    var id: String { "\(exerciseIndex)-\(setIndex)" }
 }
 
 private struct CompletedWorkoutDurationEditor: View {

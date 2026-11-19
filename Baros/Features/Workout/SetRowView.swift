@@ -6,7 +6,6 @@ struct SetRowView: View, @MainActor Equatable {
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @AppStorage(RPEPreference.storageKey) private var rpeEnabled = false
     let set: LoggedSet
     let setID: UUID
     let weight: Double?
@@ -22,16 +21,19 @@ struct SetRowView: View, @MainActor Equatable {
     var focusedField: FocusState<WorkoutField?>.Binding
     let isWeightFocused: Bool
     let isRepsFocused: Bool
+    /// What the docked time wheels read while they are open on this set.
+    let timeEditingSeconds: Int?
     let weightUnit: MeasurementUnit
     let previous: PreviousSetPerformance?
     let suggestions: ActiveWorkoutSetInput.Values
     let onPreviewChange: (ActiveWorkoutSetInput.Values?) -> Void
     let onEditRPE: (LoggedSet) -> Void
+    /// Opens the time wheels on this set at the given time, or closes them with nil.
+    let onEditTime: (LoggedSet, Int?) -> Void
     @State private var showsRemoveError = false
     @State private var hasFailedRemoval = false
     @State private var input = ActiveWorkoutSetInput()
     @State private var commitRegistrationID: UUID?
-    @State private var timePickerRequest: SetTimePickerRequest?
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.setID == rhs.setID
@@ -48,6 +50,7 @@ struct SetRowView: View, @MainActor Equatable {
             && lhs.suggestions == rhs.suggestions
             && lhs.isWeightFocused == rhs.isWeightFocused
             && lhs.isRepsFocused == rhs.isRepsFocused
+            && lhs.timeEditingSeconds == rhs.timeEditingSeconds
     }
 
     var body: some View {
@@ -332,9 +335,12 @@ struct SetRowView: View, @MainActor Equatable {
     }
 
     private var timeButton: some View {
-        let seconds = WorkoutNumericInputPolicy.validatedDuration(durationSeconds)
+        // While the wheels are open the cell shows what they read, which is
+        // the time the set keeps when they close.
+        let seconds = WorkoutNumericInputPolicy.validatedDuration(timeEditingSeconds)
+            ?? WorkoutNumericInputPolicy.validatedDuration(durationSeconds)
         let time = seconds.map(WorkoutFormatters.setDuration)
-        let suggestion = suggestionText(for: .duration)
+        let suggestion = seconds == nil ? suggestionText(for: .duration) : nil
         let placeholder = trackingMethod.fieldLabel
         // Spoken as a length of time, not as the punctuation on screen.
         let spokenSuggestion = suggestion == nil ? nil : WorkoutFormatters.setDurationAccessibilityDescription(
@@ -342,7 +348,7 @@ struct SetRowView: View, @MainActor Equatable {
         )
         let spokenTime = seconds.map(WorkoutFormatters.setDurationAccessibilityDescription)
         return Button {
-            presentTimePicker()
+            editTime()
         } label: {
             timeText(time: time, suggestion: suggestion, placeholder: placeholder)
                 .lineLimit(1)
@@ -354,21 +360,27 @@ struct SetRowView: View, @MainActor Equatable {
                     RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
                 )
                 .background {
-                    // The same quiet well the typed fields rest in.
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(set.isCompleted ? Color.clear : AppTheme.setFieldWell)
+                    // The well and focus ring the typed fields use, so the set
+                    // the wheels are open on reads as the one being edited.
+                    let well = RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    well
+                        .fill(isTimeEditing ? AppTheme.brandAccentMuted
+                            : (set.isCompleted ? Color.clear : AppTheme.setFieldWell))
+                        .overlay {
+                            well.strokeBorder(isTimeEditing ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
+                        }
                         .padding(.vertical, 4)
                 }
+                .animation(.easeOut(duration: 0.15), value: isTimeEditing)
         }
         .buttonStyle(.plain)
+        .setTimeCell(isEditing: isTimeEditing)
         .accessibilityLabel(placeholder)
         .accessibilityValue(spokenSuggestion.map { "Suggested \($0)" } ?? spokenTime ?? "No time")
-        .accessibilityHint(suggestion == nil ? "Opens the time picker."
-            : "Complete the set to use this value, or open the time picker.")
+        .accessibilityHint(suggestion == nil ? "Opens the time wheels."
+            : "Complete the set to use this value, or open the time wheels.")
+        .accessibilityAddTraits(isTimeEditing ? .isSelected : [])
         .accessibilityIdentifier("\(measureIdentifierPrefix)Field-\(exerciseIndex)-\(index)")
-        .sheet(item: $timePickerRequest) { request in
-            SetTimePickerSheet(request: request, onSave: saveTime, onSelectRPE: saveTimeAndRPE)
-        }
     }
 
     /// Matches the typed fields: an entered value, a quieter suggestion, or
@@ -385,64 +397,21 @@ struct SetRowView: View, @MainActor Equatable {
             .foregroundStyle(AppTheme.textSecondary)
     }
 
-    private func presentTimePicker() {
-        // Save whatever is still being typed, then give the sheet the screen.
-        setInputRegistry.commit(focusedField.wrappedValue)
-        guard !engine.hasPendingSetSave, canEditSet else { return }
-        focusedField.wrappedValue = nil
-        let name = set.loggedExercise?.exerciseSnapshotName ?? ""
-        timePickerRequest = SetTimePickerRequest(
-            title: name.isEmpty ? "Set \(index + 1)" : "\(name), Set \(index + 1)",
-            startingSeconds: inputValues.timePickerStart(suggestions: suggestions, previous: previous),
-            hasTime: WorkoutNumericInputPolicy.validatedDuration(durationSeconds) != nil,
-            rpe: rpeEnabled || set.rpe != nil
-                ? .init(selected: WorkoutNumericInputPolicy.validatedRPE(set.rpe)) : nil
-        )
-    }
+    private var isTimeEditing: Bool { timeEditingSeconds != nil }
 
-    /// The sheet's RPE chips act as the keyboard's do: the set takes the
-    /// value, and choosing one completes it. Zeroed wheels leave the time
-    /// alone, so completing still fills it the usual way. The time, RPE and
-    /// completion go in one save, so a failed save retries all three.
-    private func saveTimeAndRPE(_ seconds: Int?, rpe: Double?) {
+    private func editTime() {
         guard !engine.hasPendingSetSave, canEditSet else { return }
-        var preparedValues = prepareValuesForSetAction(completesSet: rpe != nil)
-        if let seconds { preparedValues = preparedValues.settingDuration(seconds) }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            do {
-                try RPEChipSelectionAction.apply(
-                    value: rpe,
-                    preparedValues: preparedValues,
-                    to: set,
-                    engine: engine,
-                    context: modelContext
-                )
-            } catch {
-                // The engine retains the action and the session's alert offers recovery.
-            }
-        }
-    }
-
-    private func saveTime(_ seconds: Int?) {
-        guard !engine.hasPendingSetSave, canEditSet else { return }
-        do {
-            try engine.commitActiveSetDraft(set, values: inputValues.settingDuration(seconds), context: modelContext)
-        } catch {
-            // The engine restored the model and owns the attempted values for Retry.
-        }
+        onEditTime(set, inputValues.timePickerStart(suggestions: suggestions, previous: previous))
     }
 
     @ViewBuilder
     private var rpeBadge: some View {
         if let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe) {
             Button {
-                // A timed set has no reps field to hold the keyboard and its
-                // RPE chips, so its picker sheet offers RPE instead.
-                if trackingMethod == .duration {
-                    presentTimePicker()
-                } else {
-                    onEditRPE(set)
-                }
+                // A timed set has no reps field to hold the keyboard, so its
+                // RPE chips sit on the bar above the time wheels.
+                if trackingMethod == .duration { editTime() }
+                onEditRPE(set)
             } label: {
                 Text("@\(WorkoutFormatters.number(rpe))")
                     .font(.caption2.weight(.bold))
@@ -572,6 +541,8 @@ struct SetRowView: View, @MainActor Equatable {
         if let field = focusedField.wrappedValue, !ownFields.contains(field) {
             setInputRegistry.commit(field)
         }
+        // Closing the wheels first keeps the time they show.
+        if isTimeEditing { onEditTime(set, nil) }
         guard !engine.hasPendingSetSave, canEditSet else { return }
         let preparedValues = prepareValuesForSetAction(completesSet: !set.isCompleted)
         withAnimation(.easeInOut(duration: 0.2)) {
