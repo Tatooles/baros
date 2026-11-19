@@ -593,16 +593,25 @@ struct SetRowView: View, @MainActor Equatable {
 
     private func fillFromPrevious(_ previous: PreviousSetPerformance) {
         defer { onPreviewChange(nil) }
-        // Open wheels would write their own time back over the filled one.
-        if isTimeEditing { onEditTime(set, .close) }
         guard !engine.hasPendingSetSave else { return }
-        let values = input.commit(current: inputValues, weightUnit: weightUnit).values
+        var values = input.commit(current: inputValues, weightUnit: weightUnit).values
+        // The time on the wheels saves with the fill, wherever Previous has
+        // none of its own, so one Retry recovers the whole fill.
+        if let shown = WorkoutNumericInputPolicy.validatedDuration(timeEditingSeconds) {
+            values = values.settingDuration(shown)
+        }
         try? engine.fillSetFromPrevious(
             set,
             previous: previous,
             preparedValues: values,
             context: modelContext
         )
+        // The wheels close on the set's time, so they cannot write their
+        // older reading back over the fill.
+        if isTimeEditing {
+            onEditTime(set, .change(WorkoutNumericInputPolicy.validatedDuration(set.durationSeconds) ?? 0))
+            onEditTime(set, .close)
+        }
         input.clearRejectionsSatisfiedByPreviousFill(inputValues)
     }
 
