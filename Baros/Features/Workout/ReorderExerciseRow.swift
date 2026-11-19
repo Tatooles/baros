@@ -1,16 +1,6 @@
+import BarosCore
 import SwiftUI
 import UIKit
-
-/// What one exercise row in `ReorderExercisesList` shows.
-protocol ReorderListExercise: Identifiable where ID == UUID {
-    var name: String { get }
-    var metadata: String? { get }
-    var supersetGroupID: UUID? { get }
-    /// Shown at the end of the detail line, such as set progress.
-    var trailingDetail: String? { get }
-    var isNew: Bool { get }
-    var accessibilityValue: String { get }
-}
 
 /// System edit-mode lists own the minus, Delete, and reorder
 /// grip along with their motion and accessibility. A superset is one row, so
@@ -251,10 +241,6 @@ struct ReorderListActions: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier(identifier)
     }
-}
-
-extension WorkoutExerciseListSnapshot.ExerciseState: ReorderListExercise {
-    var trailingDetail: String? { progressText }
 }
 
 struct ReorderExerciseRow: View {

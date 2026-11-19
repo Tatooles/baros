@@ -1,6 +1,7 @@
 import Sentry
 import XCTest
 @testable import Baros
+@testable import BarosCore
 
 @MainActor
 final class SyncObservabilityTests: XCTestCase {
@@ -76,179 +77,6 @@ final class SyncObservabilityTests: XCTestCase {
         XCTAssertNotEqual(scrubbed.logger, "baros.local_persistence")
     }
 
-    func testRepeatedDurableFailuresAreAllRecordedWithTheSameFingerprint() {
-        let sink = RecordingSyncObservationSink()
-        let observability = SyncObservability(sink: sink)
-        observability.setCurrentOwner("issuer|owner_a")
-        let failure = DurableSyncFailure(
-            phase: .push,
-            entityKind: .exercise,
-            operation: .update,
-            category: .outbox,
-            errorCode: .failedOutboxPush,
-            counts: SyncObservationCounts(attempt: 3, pending: 2, failed: 1)
-        )
-
-        observability.record(.durableFailure(failure))
-        observability.record(.durableFailure(failure))
-
-        let failures = sink.observations.filter { $0.kind == .durableFailure }
-        XCTAssertEqual(failures.count, 2)
-        XCTAssertEqual(failures[0].fingerprint, failures[1].fingerprint)
-        XCTAssertEqual(failures[0].fingerprint, [
-            "baros-sync-v1", "push", "exercises", "update",
-            "outbox", "failed_outbox_push", "failure",
-        ])
-    }
-
-    func testDifferentFailureCategoriesProduceDifferentFingerprints() {
-        let sink = RecordingSyncObservationSink()
-        let observability = SyncObservability(sink: sink)
-
-        observability.record(.durableFailure(DurableSyncFailure(
-            phase: .push,
-            entityKind: .exercise,
-            operation: .update,
-            category: .outbox,
-            errorCode: .failedOutboxPush
-        )))
-        observability.record(.durableFailure(DurableSyncFailure(
-            phase: .pull,
-            category: .remotePull,
-            errorCode: .incompleteRemotePull
-        )))
-
-        let failures = sink.observations.filter { $0.kind == .durableFailure }
-        XCTAssertNotEqual(failures[0].fingerprint, failures[1].fingerprint)
-    }
-
-    func testOwnerPseudonymIsStableAcrossInstancesAndRawOwnerIsAbsent() throws {
-        let firstSink = RecordingSyncObservationSink()
-        let secondSink = RecordingSyncObservationSink()
-        let first = SyncObservability(sink: firstSink)
-        let second = SyncObservability(sink: secondSink)
-        let rawOwner = "https://clerk.baros.fit|user_private_123"
-
-        first.setCurrentOwner(rawOwner)
-        second.setCurrentOwner(rawOwner)
-        let failure = DurableSyncFailure(
-            phase: .pull,
-            category: .remotePull,
-            errorCode: .incompleteRemotePull
-        )
-        first.record(.durableFailure(failure))
-        second.record(.durableFailure(failure))
-
-        let firstPseudonym = try XCTUnwrap(
-            firstSink.observations.last?.pseudonymousCurrentOwnerID
-        ).sentryValue
-        let secondPseudonym = try XCTUnwrap(
-            secondSink.observations.last?.pseudonymousCurrentOwnerID
-        ).sentryValue
-        XCTAssertEqual(firstPseudonym, secondPseudonym)
-        XCTAssertTrue(firstPseudonym.hasPrefix("owner_v1_"))
-        XCTAssertFalse(firstPseudonym.contains(rawOwner))
-    }
-
-    func testOwnerChangeAndSignOutReplaceThenClearSyncEventAttribution() {
-        let sink = RecordingSyncObservationSink()
-        let observability = SyncObservability(sink: sink)
-        let failure = DurableSyncFailure(
-            phase: .pull,
-            category: .remotePull,
-            errorCode: .incompleteRemotePull
-        )
-
-        observability.setCurrentOwner("issuer|owner_a")
-        observability.record(.durableFailure(failure))
-        observability.setCurrentOwner("issuer|owner_b")
-        observability.record(.durableFailure(failure))
-        observability.setCurrentOwner(nil)
-        observability.record(.durableFailure(failure))
-
-        let events = sink.observations.filter { $0.kind == .durableFailure }
-        XCTAssertEqual(events.count, 3)
-        XCTAssertNotEqual(
-            events[0].pseudonymousCurrentOwnerID,
-            events[1].pseudonymousCurrentOwnerID
-        )
-        XCTAssertNil(events[2].pseudonymousCurrentOwnerID)
-    }
-
-    func testCountsAreBoundedBeforeTheyReachTheSink() {
-        let sink = RecordingSyncObservationSink()
-        let observability = SyncObservability(sink: sink)
-
-        observability.record(.durableFailure(DurableSyncFailure(
-            phase: .push,
-            category: .outbox,
-            errorCode: .failedOutboxPush,
-            counts: SyncObservationCounts(
-                attempt: -1,
-                pending: 50_000,
-                failed: 50_000
-            )
-        )))
-
-        let failure = sink.observations.first { $0.kind == .durableFailure }
-        XCTAssertEqual(failure?.counts.attempt, 0)
-        XCTAssertEqual(failure?.counts.pending, 1_000)
-        XCTAssertEqual(failure?.counts.failed, 1_000)
-    }
-
-    func testProductionConfigurationRequiresExplicitFlagAndNonEmptyDSN() throws {
-        let enabled = SentryRuntimeConfiguration(info: [
-            "SentryEnabled": "YES",
-            "SentryDSN": "https://public@example.invalid/1",
-            "BarosEnvironment": "Production",
-            "CFBundleIdentifier": "com.example.Baros",
-            "CFBundleShortVersionString": "1.1",
-            "CFBundleVersion": "42",
-        ])
-        let missingDSN = SentryRuntimeConfiguration(info: [
-            "SentryEnabled": "YES",
-            "SentryDSN": "",
-            "BarosEnvironment": "Production",
-        ])
-        let debug = SentryRuntimeConfiguration(info: [
-            "SentryEnabled": "NO",
-            "SentryDSN": "https://public@example.invalid/1",
-            "BarosEnvironment": "Development",
-        ])
-
-        XCTAssertTrue(enabled.isEnabled)
-        XCTAssertEqual(enabled.releaseName, "com.example.Baros@1.1+42")
-        XCTAssertEqual(enabled.dist, "42")
-        XCTAssertEqual(enabled.environment, "production")
-        XCTAssertFalse(missingDSN.isEnabled)
-        XCTAssertFalse(debug.isEnabled)
-    }
-
-    func testDevelopmentDiagnosticsRequireDebugBuildExplicitFlagAndDSN() {
-        let info: [String: Any] = [
-            "SentryEnabled": "YES",
-            "SentryDSN": "https://public@example.invalid/1",
-            "BarosEnvironment": "Development",
-        ]
-        let optedIn = SentryRuntimeConfiguration(info: info)
-        #if DEBUG
-        XCTAssertTrue(optedIn.isEnabled)
-        #else
-        XCTAssertFalse(optedIn.isEnabled)
-        #endif
-        XCTAssertEqual(optedIn.environment, "development")
-
-        var disabled = info
-        disabled["SentryEnabled"] = "NO"
-        XCTAssertFalse(SentryRuntimeConfiguration(info: disabled).isEnabled)
-        disabled = info
-        disabled["SentryDSN"] = "  "
-        XCTAssertFalse(SentryRuntimeConfiguration(info: disabled).isEnabled)
-        disabled = info
-        disabled["BarosEnvironment"] = "Unknown"
-        XCTAssertFalse(SentryRuntimeConfiguration(info: disabled).isEnabled)
-    }
-
     func testSentryMappingAndScrubberRemoveNonAllowlistedData() throws {
         let ownerID = "owner_v1_0123456789abcdef0123456789abcdef"
         let observation = SanitizedSyncObservation(
@@ -306,49 +134,6 @@ final class SyncObservabilityTests: XCTestCase {
         ]
 
         XCTAssertNil(SentrySyncEventScrubber.scrub(event))
-    }
-
-    func testLifecycleFactsProduceSafePhaseAndFailureBreadcrumbs() {
-        let sink = RecordingSyncObservationSink()
-        let observability = SyncObservability(sink: sink)
-
-        observability.record(.syncPhaseCompleted(.pull))
-        observability.record(.durableFailure(DurableSyncFailure(
-            phase: .push,
-            entityKind: .exercise,
-            operation: .update,
-            category: .outbox,
-            errorCode: .failedOutboxPush
-        )))
-
-        let breadcrumbs = sink.observations.filter { $0.kind == .breadcrumb }
-        XCTAssertEqual(breadcrumbs.map(\.outcome), [.completed, .failure])
-        XCTAssertEqual(breadcrumbs.map(\.phase), [.pull, .push])
-        XCTAssertEqual(
-            sink.observations.filter { $0.kind == .durableFailure }.count,
-            1
-        )
-    }
-
-    func testTransientSyncConditionClassifierMapsConnectivityTimeoutAndCancellation() {
-        XCTAssertEqual(
-            TransientSyncConditionClassifier.errorCode(for: URLError(.notConnectedToInternet)),
-            .networkUnavailable
-        )
-        XCTAssertEqual(
-            TransientSyncConditionClassifier.errorCode(for: URLError(.timedOut)),
-            .requestTimedOut
-        )
-        XCTAssertEqual(
-            TransientSyncConditionClassifier.errorCode(for: URLError(.cancelled)),
-            .cancelled
-        )
-        XCTAssertNil(
-            TransientSyncConditionClassifier.errorCode(for: NSError(
-                domain: "BarosTests",
-                code: 1
-            ))
-        )
     }
 
     func testSentryScrubberRejectsInconsistentValuesAndDropsMalformedBreadcrumbs() throws {
@@ -422,14 +207,5 @@ final class SyncObservabilityTests: XCTestCase {
         XCTAssertNil(scrubbed.tags?["ui_surface"])
         XCTAssertNil(scrubbed.context?["ui"])
         XCTAssertEqual(scrubbed.breadcrumbs?.map(\.category), ["baros.sync"])
-    }
-}
-
-@MainActor
-final class RecordingSyncObservationSink: SyncObservationSink {
-    private(set) var observations: [SanitizedSyncObservation] = []
-
-    func record(_ observation: SanitizedSyncObservation) {
-        observations.append(observation)
     }
 }

@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftUI
 
 /// Front and back body figures that highlight the selected target area. The

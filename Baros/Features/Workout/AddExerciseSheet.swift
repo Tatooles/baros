@@ -1,25 +1,6 @@
+import BarosCore
 import SwiftData
 import SwiftUI
-
-struct SwapExerciseConfirmationContent {
-    let title: String
-    let message: String
-
-    init(original: LoggedExercise, replacement: Exercise) {
-        let originalName = original.exerciseSnapshotName
-        let replacementName = replacement.name
-        let hasMatchingNames = originalName.localizedCaseInsensitiveCompare(replacementName) == .orderedSame
-        let originalDescription = hasMatchingNames
-            ? "\(originalName) (\(original.snapshotEquipment?.displayName ?? "Other"))"
-            : originalName
-        let replacementDescription = hasMatchingNames
-            ? "\(replacementName) (\(replacement.equipment.displayName))"
-            : replacementName
-
-        title = "Swap \(originalDescription) for \(replacementDescription)?"
-        message = "This removes \(originalName), its sets, and its exercise note from this workout."
-    }
-}
 
 struct AddExerciseSheet: View {
     @Environment(\.modelContext) private var modelContext
@@ -66,18 +47,15 @@ struct SwapExerciseSheet: View {
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     let loggedExercise: LoggedExercise
     @Bindable var engine: ActiveWorkoutEngine
-    @State private var pendingReplacement: Exercise?
     @State private var swapErrorMessage: String?
+    @State private var isSwapping = false
+    /// Taken when the sheet opens: a committed swap deletes the sets, and the bar must not change while the sheet closes.
+    @State private var impact: SwapExerciseImpact
 
-    private var isConfirmationPresented: Binding<Bool> {
-        Binding(
-            get: { pendingReplacement != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingReplacement = nil
-                }
-            }
-        )
+    init(loggedExercise: LoggedExercise, engine: ActiveWorkoutEngine) {
+        self.loggedExercise = loggedExercise
+        self.engine = engine
+        _impact = State(initialValue: SwapExerciseImpact(original: loggedExercise))
     }
 
     private var isErrorPresented: Binding<Bool> {
@@ -94,10 +72,11 @@ struct SwapExerciseSheet: View {
 
     var body: some View {
         NavigationStack {
-            ExercisePickerView(
-                mode: .swap(currentExerciseID: loggedExercise.exercise?.id)
-            ) { exercises in
-                pendingReplacement = exercises.first
+            // The picker's confirm bar states what the swap removes, so it commits without another prompt.
+            ExercisePickerView(mode: .swap(impact)) { exercises in
+                if let replacement = exercises.first {
+                    swap(with: replacement)
+                }
             }
             .alert("Unable to Swap Exercise", isPresented: isErrorPresented) {
                 Button("OK", role: .cancel) {
@@ -108,34 +87,13 @@ struct SwapExerciseSheet: View {
                 Text(swapErrorMessage ?? "The exercise could not be swapped.")
             }
         }
-        .alert(confirmationTitle, isPresented: isConfirmationPresented) {
-            if let pendingReplacement {
-                Button("Swap Exercise", role: .destructive) {
-                    confirmSwap(with: pendingReplacement)
-                }
-                .accessibilityIdentifier("ConfirmSwapExerciseButton")
-            }
-            Button("Cancel", role: .cancel) {
-                pendingReplacement = nil
-            }
-            .accessibilityIdentifier("CancelSwapExerciseButton")
-        } message: {
-            Text(confirmationContent?.message ?? "The original exercise will be removed.")
-        }
         .presentationDetents([.large])
     }
 
-    private var confirmationContent: SwapExerciseConfirmationContent? {
-        pendingReplacement.map {
-            SwapExerciseConfirmationContent(original: loggedExercise, replacement: $0)
-        }
-    }
-
-    private var confirmationTitle: String {
-        confirmationContent?.title ?? "Swap Exercise?"
-    }
-
-    private func confirmSwap(with exercise: Exercise) {
+    private func swap(with exercise: Exercise) {
+        // A second tap while the sheet closes would swap an exercise that is already gone.
+        guard !isSwapping else { return }
+        isSwapping = true
         do {
             try engine.swapLoggedExercise(
                 loggedExercise,
@@ -145,7 +103,7 @@ struct SwapExerciseSheet: View {
             )
             dismiss()
         } catch {
-            pendingReplacement = nil
+            isSwapping = false
             let message = error.localizedDescription
             engine.lastErrorMessage = message
             swapErrorMessage = message

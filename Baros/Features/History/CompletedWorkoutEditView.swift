@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftData
 import SwiftUI
 
@@ -21,6 +22,7 @@ struct CompletedWorkoutEditView: View {
     @State private var revealedExerciseNoteIDs: Set<UUID> = []
     @State private var errorMessage: String?
     @State private var removalCandidate: CompletedWorkoutSetRemovalCandidate?
+    @State private var timeEdit: CompletedWorkoutSetTimeEdit?
     @FocusState private var focusedField: CompletedWorkoutEditFocusedField?
 
     init(session: WorkoutSession, draft: CompletedWorkoutEditDraft, weightUnit: MeasurementUnit) {
@@ -61,6 +63,23 @@ struct CompletedWorkoutEditView: View {
                 .padding(.horizontal, AppTheme.shellPadding)
                 .padding(.top, 8)
                 .padding(.bottom, 28)
+            }
+            .revealsSetTimeCell(editing: timeEdit?.id)
+            // The keyboard toolbar belongs to text fields, so the time wheels
+            // get their own Done above them.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if timeEdit != nil, focusedField == nil {
+                    HStack {
+                        Spacer()
+                        Button("Done") { endTimeEdit() }
+                            .font(.system(size: 16, weight: .semibold))
+                            .buttonStyle(.glass)
+                            .accessibilityIdentifier("DoneSetTimeButton")
+                    }
+                    .padding(.horizontal, AppTheme.shellPadding)
+                    .padding(.top, 20)
+                    .padding(.bottom, 8)
+                }
             }
             .background(AppTheme.canvasBackground.ignoresSafeArea())
             .navigationTitle("Edit Workout")
@@ -127,6 +146,8 @@ struct CompletedWorkoutEditView: View {
                 Text(errorMessage ?? "Try saving again.")
             }
             .onChange(of: focusedField) { previousField, newField in
+                // A keyboard takes the place of the time wheels.
+                if newField != nil { endTimeEdit() }
                 guard let previousField, previousField != newField else { return }
 
                 switch previousField {
@@ -243,7 +264,7 @@ struct CompletedWorkoutEditView: View {
                     HStack(spacing: 10) {
                         Color.clear.frame(width: 18)
                         WorkoutSetColumnHeader(title: weightUnit.fieldLabel)
-                        WorkoutSetColumnHeader(title: "REPS")
+                        WorkoutSetColumnHeader(title: exercise.trackingMethod.fieldLabel)
                         if showsRPE { WorkoutSetColumnHeader(title: "RPE") }
                         Color.clear.frame(width: 44)
                         Color.clear.frame(width: 34)
@@ -313,14 +334,20 @@ struct CompletedWorkoutEditView: View {
                     accessibilityIdentifier: "HistorySetWeightField-\(exerciseIndex)-\(visibleIndex)"
                 )
 
-                WorkoutNumericTextField(
-                    placeholder: "REPS",
-                    text: repsBinding(exerciseIndex: exerciseIndex, setIndex: setIndex),
-                    keyboard: .numberPad,
-                    focusTarget: .setReps(exerciseIndex, setIndex),
-                    focusedField: $focusedField,
-                    accessibilityIdentifier: "HistorySetRepsField-\(exerciseIndex)-\(visibleIndex)"
-                )
+                // Reps are typed; a timed exercise's time is chosen from
+                // wheels. Both sit in the same slot.
+                if draft.exercises[exerciseIndex].trackingMethod == .duration {
+                    timeButton(exerciseIndex: exerciseIndex, setIndex: setIndex, visibleIndex: visibleIndex)
+                } else {
+                    WorkoutNumericTextField(
+                        placeholder: draft.exercises[exerciseIndex].trackingMethod.fieldLabel,
+                        text: repsBinding(exerciseIndex: exerciseIndex, setIndex: setIndex),
+                        keyboard: .numberPad,
+                        focusTarget: .setReps(exerciseIndex, setIndex),
+                        focusedField: $focusedField,
+                        accessibilityIdentifier: "HistorySetRepsField-\(exerciseIndex)-\(visibleIndex)"
+                    )
+                }
 
                 if showsRPE {
                     WorkoutNumericTextField(
@@ -421,6 +448,79 @@ struct CompletedWorkoutEditView: View {
         )
     }
 
+    private func timeButton(exerciseIndex: Int, setIndex: Int, visibleIndex: Int) -> some View {
+        let exercise = draft.exercises[exerciseIndex]
+        let isEditing = timeEdit?.exerciseIndex == exerciseIndex && timeEdit?.setIndex == setIndex
+        let stored = WorkoutNumericInputPolicy.validatedDuration(exercise.sets[setIndex].durationSeconds)
+        // While the wheels are open the cell shows what they read.
+        let seconds = isEditing ? WorkoutNumericInputPolicy.validatedDuration(timeEdit?.seconds) ?? stored : stored
+        let placeholder = exercise.trackingMethod.fieldLabel
+        // An empty set starts from the nearest time above it, as it would have in the workout.
+        let timeAbove = exercise.sets[..<setIndex].reversed().lazy
+            .filter { !$0.isRemoved }
+            .compactMap { WorkoutNumericInputPolicy.validatedDuration($0.durationSeconds) }
+            .first
+        let startingSeconds = stored ?? timeAbove ?? 0
+        return Button {
+            guard !isEditing else { return }
+            endTimeEdit()
+            timeEdit = CompletedWorkoutSetTimeEdit(
+                exerciseIndex: exerciseIndex,
+                setIndex: setIndex,
+                seconds: SetTimeEntry.clamped(startingSeconds)
+            )
+        } label: {
+            Text(seconds.map(WorkoutFormatters.setDuration) ?? placeholder)
+                .font(.body.weight(.semibold).monospacedDigit())
+                .fontDesign(.rounded)
+                .foregroundStyle(seconds == nil ? AppTheme.textTertiary : AppTheme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(
+                    AppTheme.fieldSurface,
+                    in: RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                        .strokeBorder(isEditing ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
+                }
+                .animation(.easeOut(duration: 0.15), value: isEditing)
+        }
+        .buttonStyle(.plain)
+        .setTimeInput(
+            isEditing: isEditing,
+            startingSeconds: timeEdit?.seconds ?? 0,
+            onChange: { seconds in
+                guard let timeEdit, isEditing else { return }
+                self.timeEdit?.seconds = seconds
+                setTime(seconds, for: timeEdit)
+            },
+            onEnd: { if isEditing { endTimeEdit() } }
+        )
+        .accessibilityLabel(placeholder)
+        .accessibilityValue(seconds.map(WorkoutFormatters.setDurationAccessibilityDescription) ?? "No time")
+        .accessibilityHint("Opens the time wheels.")
+        .accessibilityAddTraits(isEditing ? .isSelected : [])
+        .accessibilityIdentifier("HistorySetTimeField-\(exerciseIndex)-\(visibleIndex)")
+    }
+
+    /// Closes the time wheels. The set keeps the time they show even if
+    /// they were never moved.
+    private func endTimeEdit() {
+        guard let timeEdit else { return }
+        if timeEdit.seconds > 0 { setTime(timeEdit.seconds, for: timeEdit) }
+        self.timeEdit = nil
+    }
+
+    /// Writes the wheels' time to the draft; zero removes it.
+    private func setTime(_ seconds: Int, for edit: CompletedWorkoutSetTimeEdit) {
+        updateDraftSet(exerciseIndex: edit.exerciseIndex, setIndex: edit.setIndex) { set in
+            set.durationSeconds = seconds > 0 ? seconds : nil
+        }
+    }
+
     private func rpeBinding(exerciseIndex: Int, setIndex: Int) -> Binding<String> {
         let focusTarget = CompletedWorkoutEditFocusedField.setRPE(exerciseIndex, setIndex)
 
@@ -495,6 +595,9 @@ struct CompletedWorkoutEditView: View {
     }
 
     private func removeSet(_ candidate: CompletedWorkoutSetRemovalCandidate) {
+        // Removing a set can shift the indexes the wheels are writing to,
+        // so they close first and their set keeps its time.
+        endTimeEdit()
         guard draft.exercises.indices.contains(candidate.exerciseIndex),
               draft.exercises[candidate.exerciseIndex].sets.indices.contains(candidate.setIndex)
         else { return }
@@ -530,6 +633,7 @@ struct CompletedWorkoutEditView: View {
 
     private func save() {
         focusedField = nil
+        endTimeEdit()
 
         draft.prepareTitleForSave()
 
@@ -557,6 +661,17 @@ struct CompletedWorkoutEditView: View {
             errorMessage = error.localizedDescription
         }
     }
+}
+
+/// The set whose time the picker sheet is editing.
+/// The set whose keyboard is the time wheels.
+private struct CompletedWorkoutSetTimeEdit {
+    let exerciseIndex: Int
+    let setIndex: Int
+    /// What the wheels read; zero is no time.
+    var seconds: Int
+
+    var id: String { "\(exerciseIndex)-\(setIndex)" }
 }
 
 private struct CompletedWorkoutDurationEditor: View {

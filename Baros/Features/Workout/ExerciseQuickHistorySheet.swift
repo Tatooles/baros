@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftData
 import SwiftUI
 
@@ -66,7 +67,9 @@ struct ExerciseQuickHistorySheet: View {
                     } else {
                         // The set boxes show bare numbers; name the unit as
                         // the Exercise History log does.
-                        Text("\(weightUnit.shortUnitLabel) × reps")
+                        Text(HistorySetTable.valueCaption(
+                            for: recentGroups.flatMap { $0.setEntries.map(\.set) }, unit: weightUnit
+                        ))
                             .font(.footnote.weight(.medium))
                             .foregroundStyle(AppTheme.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .trailing)

@@ -87,6 +87,8 @@ export default defineSchema({
     notes: v.string(),
     isArchived: v.boolean(),
     isSeeded: v.boolean(),
+    // "reps" or "duration". Missing means reps.
+    trackingMethodRaw: v.optional(v.string()),
   })
     .index("by_ownerTokenIdentifier_and_clientId", [
       "ownerTokenIdentifier",
@@ -138,6 +140,8 @@ export default defineSchema({
     referenceNotes: nullableString,
     sourceLoggedExerciseID: v.optional(nullableString),
     supersetGroupID: v.optional(nullableString),
+    // The exercise's tracking method when it was logged. Missing means reps.
+    trackingMethodRaw: v.optional(v.string()),
   })
     .index("by_ownerTokenIdentifier_and_clientId", [
       "ownerTokenIdentifier",
@@ -193,6 +197,7 @@ export default defineSchema({
     notes: v.string(),
     healthLinkID: nullableString,
     sourceLoggedSetID: v.optional(nullableString),
+    durationSeconds: v.optional(nullableNumber),
   })
     .index("by_ownerTokenIdentifier_and_clientId", [
       "ownerTokenIdentifier",

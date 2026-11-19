@@ -1,3 +1,4 @@
+import BarosCore
 import Foundation
 
 struct WorkoutLiveActivitySnapshot: Equatable, Sendable {

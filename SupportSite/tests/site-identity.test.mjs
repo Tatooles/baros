@@ -57,14 +57,10 @@ test("every public route advertises automatic light and dark appearance", async 
 });
 
 test("public imagery matches the approved production assets", async () => {
-  const approvedAssets = new Map([
-    ["assets/baros-app-icon.png", "f6af1bd16254cef7f060a92c2fd12a0132bd97b6716d66ae0a9fd1aad238ce38"],
-    ["assets/baros-social-preview.png", "e72cbeb9045c2ffca1342affc7122acb01490bbebfd3e3cdbf2b0d7279fe2069"],
-    ["assets/baros-active-workout.jpg", "881c3d7ab501929db48873ff0f49fd75d79cdd8c04c1c7367390e77b5b2d0e40"],
-    ["assets/baros-workout-history.jpg", "57fe79091d5f4196e461fc4b583a026c27521fa2e80708680387be4de91f112d"],
-  ]);
+  // SHA-256 per public asset. `pnpm listing-assets` updates the app screens' entries.
+  const approvedAssets = JSON.parse(await readFile(new URL("approved-assets.json", import.meta.url), "utf8"));
 
-  for (const [asset, approvedHash] of approvedAssets) {
+  for (const [asset, approvedHash] of Object.entries(approvedAssets)) {
     assert.equal(await sha256(asset), approvedHash, `${asset} does not match the approved public asset`);
   }
 });
