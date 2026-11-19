@@ -11,7 +11,8 @@ final class TimedExerciseUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = [
             "--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth",
-            "--uitest-reset-app-appearance",
+            "--uitest-reset-app-appearance", "--uitest-reset-exercise-picker-sort",
+            "--uitest-reset-home-ring-period", "--uitest-reset-signed-out-reminder",
             "--uitest-skip-first-run-experience", "--uitest-disable-animations",
             "--uitest-seed-timed-exercises", "--uitest-seed-timed-active-workout",
         ]

@@ -630,6 +630,7 @@ struct CompletedWorkoutEditView: View {
 
     private func save() {
         focusedField = nil
+        endTimeEdit()
 
         draft.prepareTitleForSave()
 

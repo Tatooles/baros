@@ -424,18 +424,21 @@ struct WorkoutSessionView: View {
 
     private func selectRPE(_ value: Double?) {
         guard !engine.hasPendingSetSave else { return }
+        var shownTime: Int?
         if let timeEntry, timeEntry.setID == rpeEditingSetID, value != nil {
             // An RPE completes the set, and zero is not a time to complete it with.
             guard timeEntry.seconds > 0 else { return }
-            keepShownTime()
-            guard !engine.hasPendingSetSave else { return }
+            shownTime = timeEntry.seconds
         }
         if let set = editingSet {
             // Both of a set's fields share one input registration.
-            let preparedValues = setInputRegistry.prepareSetValues(
+            var preparedValues = setInputRegistry.prepareSetValues(
                 for: .setReps(set.id),
                 completesSet: value != nil
             ) ?? .init(set)
+            // The time on the wheels saves with the RPE, so one Retry
+            // recovers both.
+            if let shownTime { preparedValues = preparedValues.settingDuration(shownTime) }
             withAnimation(.easeInOut(duration: 0.2)) {
                 do {
                     try RPEChipSelectionAction.apply(
