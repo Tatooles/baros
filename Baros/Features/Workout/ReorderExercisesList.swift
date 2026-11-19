@@ -155,7 +155,16 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                 }
             }
             .padding(.top, 8)
-            .background(alignment: .topLeading) { surfaces(blocks) }
+            .background(alignment: .topLeading) {
+                surfaces(blocks)
+                // While a row is swiped open, a tap anywhere between rows closes it too.
+                if openSwipe != nil {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { withAnimation(.snappy(duration: 0.25)) { openSwipe = nil } }
+                        .accessibilityHidden(true)
+                }
+            }
             .overlay(alignment: .topLeading) {
                 joints(rows, elements: elements)
                 floating(blocks)
@@ -250,8 +259,10 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
             .accessibilityAction(named: "Remove") { removeRow(row) }
             .modifier(SwipeToRemove(
                 id: row.id, openID: $openSwipe, isEnabled: drag == nil, name: row.item.name,
-                cornerRadius: isMember ? 14 : ReorderExerciseRow.cornerRadius,
-                inset: isMember ? 6 : 0,
+                // A member slides within its superset's outline, on the container's own fill.
+                cornerRadius: isMember ? ReorderExerciseRow.cornerRadius - 1.5 : ReorderExerciseRow.cornerRadius,
+                inset: isMember ? 1.5 : 0,
+                slidesOnContainer: isMember,
                 remove: { removeRow(row) }
             ))
             .opacity(isLifted ? 0 : 1)
@@ -691,21 +702,17 @@ private struct ReorderScrollFinder: UIViewRepresentable {
     }
 }
 
-/// A card's text and grip. While Remove is swiped open, the text narrows to the space
-/// beside it, wrapping as it needs to, and the grip fades as Remove reaches it.
+/// A card's text and grip.
 private struct ReorderCardContent<Grip: View>: View {
-    @Environment(\.swipeRemoveReveal) private var reveal
     let exercise: any ReorderListExercise
     @ViewBuilder let grip: Grip
 
     var body: some View {
         HStack(spacing: 0) {
             ReorderExerciseRow(exercise: exercise)
-            grip.opacity(1 - min(1, reveal / 40))
+            grip
         }
         .padding(.trailing, 2)
-        // Room for Remove with a gap, less the grip's space it takes over.
-        .padding(.trailing, max(0, reveal - 40))
     }
 }
 

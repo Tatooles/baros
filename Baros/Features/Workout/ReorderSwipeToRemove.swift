@@ -1,84 +1,132 @@
 import SwiftUI
 import UIKit
 
-/// Swipe left to slide Remove in at the card's trailing edge, or all the way to
-/// remove in one gesture. The card makes room for it rather than sliding away, so
-/// the name and set count are still there to check at the moment of removing. One
-/// row is open at a time; scrolling, another swipe, or a tap closes it.
+/// Swipe left to slide the row aside and show Remove behind it, as in a system
+/// list, or all the way to remove in one gesture. One row is open at a time;
+/// scrolling, another swipe, or a tap closes it.
 struct SwipeToRemove: ViewModifier {
-    /// Grows with text size, so its label fits; past the cap, the label gives way to the icon alone.
-    @ScaledMetric(relativeTo: .caption) private var scaledActionWidth: CGFloat = 88
-    private var actionWidth: CGFloat { min(scaledActionWidth, 124) }
+    /// The space the open row leaves for Remove. It grows with text size, up to a cap.
+    @ScaledMetric(relativeTo: .footnote) private var scaledActionWidth: CGFloat = 76
+    private var actionWidth: CGFloat { min(scaledActionWidth, 100) }
+    @ScaledMetric(relativeTo: .body) private var scaledCapsuleHeight: CGFloat = 40
+    /// Stops growing with text, as the system's swipe actions do; the action's text stops at accessibility1.
+    private var capsuleHeight: CGFloat { min(scaledCapsuleHeight, 50) }
 
     let id: UUID
     @Binding var openID: UUID?
     var isEnabled = true
     let name: String
+    /// The shape the row slides within.
     let cornerRadius: CGFloat
-    /// How far Remove sits inside the row's edge, such as inside a superset's outline.
+    /// How far that shape sits inside the row's edge, such as inside a superset's outline.
     var inset: CGFloat = 0
+    /// For a superset member, which has no surface of its own: it slides on the
+    /// container's fill and uncovers the page behind, as a system list row does.
+    var slidesOnContainer = false
     let remove: () -> Void
     @State private var translation: CGFloat = 0
     @State private var width: CGFloat = 0
+    @State private var isRemoving = false
+    /// Once the row is off, Remove fades so the gap closes cleanly.
+    @State private var hasCleared = false
 
     private var isOpen: Bool { openID == id }
-    /// How much of the row Remove covers.
-    private var reveal: CGFloat { max(0, (isOpen ? actionWidth : 0) - translation) }
+    /// How far the row has slid aside.
+    private var reveal: CGFloat {
+        isRemoving ? width : max(0, (isOpen ? actionWidth : 0) - translation)
+    }
     /// Past this, letting go removes the exercise rather than leaving Remove showing.
-    private var isFullSwipe: Bool { reveal > max(actionWidth * 2, width * 0.6) }
+    private var isFullSwipe: Bool { isRemoving || reveal > max(actionWidth * 2, width * 0.6) }
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: cornerRadius, style: .continuous) }
 
     func body(content: Content) -> some View {
         content
-            // The row makes room for Remove's own width; a longer swipe grows Remove over it.
-            .environment(\.swipeRemoveReveal, min(reveal, actionWidth))
             .overlay {
-                // Any tap on an open row closes it instead of reaching the row.
-                if isOpen {
+                // While any row is open, a tap on a row closes it instead of reaching the
+                // row, as in a system list.
+                if openID != nil {
                     Color.clear
                         .contentShape(Rectangle())
-                        .onTapGesture { close() }
+                        .onTapGesture { closeAny() }
                         .accessibilityHidden(true)
                 }
             }
-            .overlay(alignment: .trailing) {
-                if reveal > 0 { action.padding(inset) }
+            .background {
+                if reveal > 0, slidesOnContainer {
+                    shape.fill(AppTheme.groupedSurface)
+                        .overlay(shape.fill(SupersetContainerSurface.wash))
+                        .padding(inset)
+                }
             }
+            .offset(x: -reveal)
+            .background(alignment: .trailing) {
+                if reveal > 0 {
+                    ZStack(alignment: .trailing) {
+                        if slidesOnContainer { shape.fill(AppTheme.canvasBackground) }
+                        action
+                    }
+                    .padding(inset)
+                    .opacity(hasCleared ? 0 : 1)
+                }
+            }
+            // Clipped only while it slides, so the card's own edge stays crisp at rest.
+            .clipShape(reveal > 0 ? AnyShape(shape.inset(by: inset)) : AnyShape(Rectangle().inset(by: -100)))
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-            .gesture(HorizontalSwipeGesture(isEnabled: isEnabled, allowsRight: isOpen) { change in
+            .gesture(HorizontalSwipeGesture(isEnabled: isEnabled && !isRemoving, allowsRight: isOpen) { change in
                 switch change {
-                case let .changed(x): translation = x
+                case let .changed(x):
+                    // Swiping another row closes the open one.
+                    if let openID, openID != id { withAnimation(.snappy(duration: 0.25)) { self.openID = nil } }
+                    translation = x
                 case let .ended(velocity): end(velocity: velocity)
                 case .cancelled: close()
                 }
             })
             .sensoryFeedback(.impact(weight: .medium), trigger: isFullSwipe) { _, reached in reached }
+            .animation(.snappy(duration: 0.22), value: isFullSwipe)
             .onChange(of: isEnabled) { if !isEnabled { close() } }
     }
 
+    /// The system list's look: a red capsule with the trash icon, titled beneath. A full
+    /// swipe stretches the capsule across the row, its icon following the row's edge.
     private var action: some View {
         Button(action: removeNow) {
-            // Laid out at Remove's full width, so the label doesn't pop in as the swipe opens it.
             ViewThatFits(in: .horizontal) {
-                VStack(spacing: 3) {
-                    trash
+                VStack(spacing: 5) {
+                    capsule
                     Text("Remove")
-                        .font(.caption.weight(.semibold))
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(AppTheme.textSecondary)
                         .lineLimit(1)
                         .fixedSize()
                 }
-                trash
+                capsule
             }
-            .foregroundStyle(AppTheme.onDestructive)
-            .frame(width: max(0, actionWidth - inset * 2))
-            .frame(width: max(0, min(reveal, width) - inset * 2))
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .frame(width: isFullSwipe ? max(actionWidth, reveal) - 12 : actionWidth - 12)
             .frame(maxHeight: .infinity)
-            .background(AppTheme.destructiveFill, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .clipped()
+            .padding(.trailing, 6)
             .contentShape(Rectangle())
+            // Grows in as the row uncovers it.
+            .scaleEffect(0.6 + 0.4 * progress)
+            .opacity(Double(progress))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Remove \(name)")
         .accessibilityIdentifier("ReorderSwipeRemoveButton")
+    }
+
+    private var progress: CGFloat { min(1, reveal / actionWidth) }
+
+    private var capsule: some View {
+        Image(systemName: "trash.fill")
+            .font(.body.weight(.semibold))
+            .foregroundStyle(AppTheme.onDestructive)
+            .padding(.horizontal, isFullSwipe ? 18 : 0)
+            .frame(maxWidth: .infinity, alignment: isFullSwipe ? .leading : .center)
+            .frame(height: capsuleHeight)
+            .background(AppTheme.destructive, in: Capsule())
+            .frame(maxWidth: isFullSwipe ? .infinity : min(60, actionWidth - 12))
     }
 
     private func end(velocity: CGFloat) {
@@ -94,8 +142,8 @@ struct SwipeToRemove: ViewModifier {
         }
     }
 
-    private var trash: some View {
-        Image(systemName: "trash.fill").font(.callout.weight(.semibold))
+    private func closeAny() {
+        withAnimation(.snappy(duration: 0.25)) { openID = nil }
     }
 
     private func close() {
@@ -105,10 +153,20 @@ struct SwipeToRemove: ViewModifier {
         }
     }
 
+    /// Slides the row the rest of the way off, then removes it.
     private func removeNow() {
-        translation = 0
-        if isOpen { openID = nil }
-        remove()
+        guard !isRemoving else { return }
+        withAnimation(.easeOut(duration: 0.18)) {
+            isRemoving = true
+            translation = 0
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(180))
+            withAnimation(.easeOut(duration: 0.1)) { hasCleared = true }
+            try? await Task.sleep(for: .milliseconds(100))
+            if isOpen { openID = nil }
+            remove()
+        }
     }
 }
 
@@ -171,9 +229,4 @@ private struct HorizontalSwipeGesture: UIGestureRecognizerRepresentable {
             otherGestureRecognizer.view is UIScrollView
         }
     }
-}
-
-extension EnvironmentValues {
-    /// How much of a row its swiped Remove takes, so the row can make room for it.
-    @Entry var swipeRemoveReveal: CGFloat = 0
 }

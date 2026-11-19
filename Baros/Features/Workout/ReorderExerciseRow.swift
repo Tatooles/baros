@@ -5,8 +5,6 @@ import SwiftUI
 struct ReorderExerciseRow: View {
     static let cornerRadius: CGFloat = 20
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// While Remove is swiped open, the name wraps as far as it needs to in the narrower space.
-    @Environment(\.swipeRemoveReveal) private var swipeReveal
     @ScaledMetric(relativeTo: .body) private var titleSize = 16
     @ScaledMetric(relativeTo: .subheadline) private var detailSize = 13
     let exercise: any ReorderListExercise
@@ -16,7 +14,7 @@ struct ReorderExerciseRow: View {
             Text(exercise.name)
                 .font(.system(size: titleSize, weight: .semibold))
                 .foregroundStyle(AppTheme.textPrimary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize || swipeReveal > 0 ? nil : 2)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
             // The progress shares the detail line so names keep the card's full width.
             if dynamicTypeSize.isAccessibilitySize {
                 if let metadata = exercise.metadata { detail(metadata) }
@@ -88,7 +86,7 @@ struct SupersetContainerSurface: View {
     private static let border = BarosAdaptiveColor.dynamic(
         light: 0x1C66C7, lightAlpha: 0.58, dark: 0x4D94FF, darkAlpha: 0.7
     )
-    private static let wash = BarosAdaptiveColor.dynamic(
+    static let wash = BarosAdaptiveColor.dynamic(
         light: 0x1C66C7, lightAlpha: 0.05, dark: 0x4D94FF, darkAlpha: 0.07
     )
 
