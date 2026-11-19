@@ -75,7 +75,8 @@ final class BarosUITests: XCTestCase {
         finish.tap()
         let gateError = app.staticTexts["AccountTransitionErrorMessage"]
         XCTAssertTrue(app.buttons["AccountSignOutButton"].waitToDisappear(timeout: 3),
-                      gateError.exists ? "Finish reported: \(gateError.label)" : "Finish showed no error")
+                      (gateError.exists ? "Finish reported: \(gateError.label)" : "Finish showed no error")
+                      + (app.buttons["ActiveWorkoutAccessory"].exists ? "; the workout is still active" : "; the workout is no longer active"))
         XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitToDisappear(timeout: 3))
         tapTab(.history, in: app)
         XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitToExist(timeout: 3))
@@ -325,8 +326,11 @@ final class BarosUITests: XCTestCase {
         // A swipe's scroll distance varies, so swipe until the first set is back instead of a
         // fixed count. Stopping once it's hittable keeps a spare swipe from moving the sheet.
         let field = app.textFields["SetWeightField-0-0"]
-        for _ in 0..<6 where !(field.exists && field.isHittable) { app.swipeDown() }
-        XCTAssertTrue(field.waitToExist(timeout: 3))
+        for _ in 0..<6 {
+            if field.exists && field.isHittable { break }
+            app.swipeDown()
+        }
+        XCTAssertTrue(waitForHittable(field, timeout: 3))
         field.tap()
         XCTAssertTrue(app.buttons["DismissKeyboardButton"].waitToExist(timeout: 3))
         XCTAssertFalse(app.buttons["ActiveWorkoutEditButton"].isHittable)

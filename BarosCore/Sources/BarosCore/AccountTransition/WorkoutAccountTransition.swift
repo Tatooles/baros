@@ -80,6 +80,7 @@ public final class WorkoutAccountTransition {
             errorMessage = TransitionError.choiceExpired.localizedDescription
             return
         }
+        errorMessage = nil
         isRunning = true
         defer { isRunning = false }
         do {
