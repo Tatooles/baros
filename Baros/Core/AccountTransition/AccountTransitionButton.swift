@@ -72,7 +72,11 @@ struct AccountTransitionButton<Label: View>: View {
                 Text("Finish or discard the current account’s unfinished workouts before continuing. Cancel keeps your workout and account unchanged.")
             }
             .onChange(of: errorMessage) { _, message in
-                if let message { AccessibilityNotification.Announcement(message).post() }
+                guard let message else { return }
+                // High priority, so focus returning from the closing alert doesn't cut it off.
+                var announcement = AttributedString(message)
+                announcement.accessibilitySpeechAnnouncementPriority = .high
+                AccessibilityNotification.Announcement(announcement).post()
             }
             .onDisappear { transition?.cancel() }
 
