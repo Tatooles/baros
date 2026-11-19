@@ -684,6 +684,8 @@ public struct WorkoutHistoryMutationService {
 
         if set.durationSeconds != draft.durationSeconds {
             set.durationSeconds = draft.durationSeconds
+            // An edit made here is this device's own, so a later clear uploads.
+            set.knowsDuration = true
             didChange = true
         }
 

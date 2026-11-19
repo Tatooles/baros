@@ -352,8 +352,18 @@ final class TimedExerciseTests: XCTestCase {
         set.weight = 25
 
         XCTAssertFalse(SyncPayloadMapper.loggedSetPayload(from: set).sendsDurationSeconds)
-        set.durationSeconds = 60
-        XCTAssertTrue(SyncPayloadMapper.loggedSetPayload(from: set).sendsDurationSeconds)
+
+        // Once the time is edited here, clearing it is this device's own change.
+        var draft = CompletedWorkoutEditDraft(session: session)
+        draft.exercises[0].sets[0].durationSeconds = 60
+        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(draft, for: session, context: context)
+        XCTAssertEqual(SyncPayloadMapper.loggedSetPayload(from: set).durationSeconds, 60)
+        draft = CompletedWorkoutEditDraft(session: session)
+        draft.exercises[0].sets[0].durationSeconds = nil
+        try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(draft, for: session, context: context)
+        let cleared = SyncPayloadMapper.loggedSetPayload(from: set)
+        XCTAssertNil(cleared.durationSeconds)
+        XCTAssertTrue(cleared.sendsDurationSeconds)
     }
 
     func testRowsFromBeforeTimedExercisesUploadWithoutTheNewFields() throws {
