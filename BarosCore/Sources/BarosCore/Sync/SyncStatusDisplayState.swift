@@ -8,6 +8,7 @@ public struct SyncStatusDisplayState {
         case waiting
         case upToDate
         case needsAttention
+        case blocked
     }
 
     public enum Tint: Equatable {
@@ -41,6 +42,7 @@ public struct SyncStatusDisplayState {
         lastFailureReason: SyncScheduler.FailureReason? = nil,
         pendingCount: Int,
         failedCount: Int,
+        blockedEntityKinds: [SyncEntityKind] = [],
         now: Date = .now
     ) -> SyncStatusDisplayState {
         guard ownerTokenIdentifier != nil else {
@@ -64,7 +66,8 @@ public struct SyncStatusDisplayState {
         // app cannot know whether the cloud has newer changes.
         if networkAvailability == .unavailable || networkAvailability == .requiresConnection,
            lastFailureMessage == nil,
-           failedCount == 0 {
+           failedCount == 0,
+           blockedEntityKinds.isEmpty {
             let canRetry = networkAvailability == .requiresConnection
             return SyncStatusDisplayState(
                 kind: .waitingForConnection,
@@ -103,6 +106,34 @@ public struct SyncStatusDisplayState {
                 failureNoticeTitle: nil,
                 failureNoticeMessage: nil,
                 userVisibleFailureMessage: nil
+            )
+        }
+
+        // Dead-lettered changes wait for the person: say what they are, and
+        // that Retry sends them again.
+        if !blockedEntityKinds.isEmpty {
+            let what = blockedChangesDescription(blockedEntityKinds)
+            let title = "Some changes can't sync"
+            let subtitle = "The cloud turned down \(what). \(blockedEntityKinds.count == 1 ? "It's" : "They're") still saved on this iPhone."
+            return SyncStatusDisplayState(
+                kind: .blocked,
+                title: title,
+                subtitle: subtitle,
+                detailText: countsText(
+                    pendingCount: pendingCount,
+                    failedCount: failedCount,
+                    blockedCount: blockedEntityKinds.count,
+                    lastSyncedAt: lastSyncedAt,
+                    now: now
+                ),
+                trailingText: "Retry",
+                systemImage: "exclamationmark.icloud",
+                tint: .destructive,
+                canRetry: true,
+                showsGlobalFailureNotice: true,
+                failureNoticeTitle: title,
+                failureNoticeMessage: "The cloud turned down \(what). Retry to send \(blockedEntityKinds.count == 1 ? "it" : "them") again.",
+                userVisibleFailureMessage: subtitle
             )
         }
 
@@ -257,13 +288,42 @@ public struct SyncStatusDisplayState {
         return "Cloud sync could not finish. Your data is saved on this iPhone."
     }
 
+    /// Names blocked changes by what a person calls them, such as "1 set" or
+    /// "1 workout and 2 sets".
+    static func blockedChangesDescription(_ kinds: [SyncEntityKind]) -> String {
+        let order: [SyncEntityKind] = [.workoutSession, .loggedExercise, .loggedSet, .exercise, .workoutTemplate, .userSettings]
+        let counts = Dictionary(kinds.map { ($0, 1) }, uniquingKeysWith: +)
+        let parts = order.compactMap { kind -> String? in
+            guard let count = counts[kind] else { return nil }
+            let (singular, plural) = switch kind {
+            case .workoutSession: ("workout", "workouts")
+            case .loggedExercise: ("exercise in a workout", "exercises in workouts")
+            case .loggedSet: ("set", "sets")
+            case .exercise: ("exercise", "exercises")
+            case .workoutTemplate: ("template", "templates")
+            case .userSettings: ("settings change", "settings changes")
+            case .healthDataLink, .seedMetadata: ("change", "changes")
+            }
+            return "\(count) \(count == 1 ? singular : plural)"
+        }
+        switch parts.count {
+        case 0: return "\(kinds.count) \(kinds.count == 1 ? "change" : "changes")"
+        case 1: return parts[0]
+        default: return parts.dropLast().joined(separator: ", ") + " and " + parts[parts.count - 1]
+        }
+    }
+
     private static func countsText(
         pendingCount: Int,
         failedCount: Int,
+        blockedCount: Int = 0,
         lastSyncedAt: Date?,
         now: Date
     ) -> String? {
         var workParts: [String] = []
+        if blockedCount > 0 {
+            workParts.append("\(blockedCount) blocked")
+        }
         if failedCount > 0 {
             workParts.append("\(failedCount) failed")
         }
@@ -356,6 +416,7 @@ public struct SyncDiagnosticsSnapshot {
         let failedCount = entries.filter { $0.status == SyncOutboxStatus.failed.rawValue }.count
         let pendingCount = entries.filter { $0.status == SyncOutboxStatus.pending.rawValue }.count
         let inFlightCount = entries.filter { $0.status == SyncOutboxStatus.inFlight.rawValue }.count
+        let blockedCount = entries.filter { $0.status == SyncOutboxStatus.blocked.rawValue }.count
 
         var lines = [
             "owner: \(ownerTokenIdentifier ?? "nil")",
@@ -364,6 +425,7 @@ public struct SyncDiagnosticsSnapshot {
             "pending: \(pendingCount)",
             "inFlight: \(inFlightCount)",
             "failed: \(failedCount)",
+            "blocked: \(blockedCount)",
         ]
 
         guard !entries.isEmpty else {

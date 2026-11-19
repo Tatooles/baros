@@ -410,3 +410,54 @@ final class SyncStatusDisplayStateTests: XCTestCase {
         XCTAssertEqual(state.userVisibleFailureMessage, "Some cloud workout data is incomplete. Your local data is still available.")
     }
 }
+
+final class SyncBlockedChangesDisplayTests: XCTestCase {
+    func testBlockedChangesNameWhatWasTurnedDownAndOfferRetry() {
+        let state = SyncStatusDisplayState.make(
+            ownerTokenIdentifier: "issuer|owner_a",
+            isSyncing: false,
+            networkAvailability: .unavailable,
+            lastSyncedAt: Date(timeIntervalSince1970: 940),
+            lastFailureMessage: nil,
+            pendingCount: 2,
+            failedCount: 0,
+            blockedEntityKinds: [.loggedSet],
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+
+        XCTAssertEqual(state.kind, .blocked, "Blocked changes need the person, even offline.")
+        XCTAssertEqual(state.title, "Some changes can't sync")
+        XCTAssertEqual(state.subtitle, "The cloud turned down 1 set. It's still saved on this iPhone.")
+        XCTAssertEqual(state.detailText, "1 blocked, 2 waiting. Last synced 1 min ago.")
+        XCTAssertEqual(state.trailingText, "Retry")
+        XCTAssertTrue(state.canRetry)
+        XCTAssertTrue(state.showsGlobalFailureNotice)
+        XCTAssertEqual(state.failureNoticeTitle, "Some changes can't sync")
+        XCTAssertEqual(state.failureNoticeMessage, "The cloud turned down 1 set. Retry to send it again.")
+    }
+
+    func testBlockedChangesDescriptionGroupsKinds() {
+        XCTAssertEqual(
+            SyncStatusDisplayState.blockedChangesDescription([.loggedSet, .workoutSession, .loggedSet]),
+            "1 workout and 2 sets"
+        )
+        XCTAssertEqual(
+            SyncStatusDisplayState.blockedChangesDescription([.exercise, .workoutTemplate, .loggedExercise]),
+            "1 exercise in a workout, 1 exercise and 1 template"
+        )
+    }
+
+    func testSyncingStillWinsOverBlockedChanges() {
+        let state = SyncStatusDisplayState.make(
+            ownerTokenIdentifier: "issuer|owner_a",
+            isSyncing: true,
+            lastSyncedAt: nil,
+            lastFailureMessage: nil,
+            pendingCount: 0,
+            failedCount: 0,
+            blockedEntityKinds: [.exercise]
+        )
+
+        XCTAssertEqual(state.kind, .syncing)
+    }
+}
