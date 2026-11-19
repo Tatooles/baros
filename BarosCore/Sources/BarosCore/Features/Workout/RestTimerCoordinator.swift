@@ -306,6 +306,7 @@ public final class RestTimerCoordinator {
         }
     }
 
+    /// For tests: true from scheduling a collapse until it's cancelled, including after it ran.
     var isCollapseScheduled: Bool { collapseTask.map { !$0.isCancelled } ?? false }
 
     private func scheduleOpenedControlsCollapse() {
