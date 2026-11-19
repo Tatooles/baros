@@ -210,6 +210,10 @@ public enum UITestFixtureSeeder {
             try MarketingScreenshotSeeder.seed(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
         }
 
+        if arguments.contains("--uitest-seed-timed-exercises") {
+            try seedTimedExercises(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+
         if arguments.contains("--uitest-seed-strength-records") {
             try seedStrengthRecords(
                 scenario: values(after: "--uitest-strength-records-scenario", in: arguments).first,
@@ -217,6 +221,48 @@ public enum UITestFixtureSeeder {
                 context: context
             )
         }
+    }
+
+    /// Two library exercises logged by time, one unweighted and one weighted,
+    /// with a completed workout of each from yesterday.
+    static func seedTimedExercises(ownerTokenIdentifier: String?, context: ModelContext, now: Date = .now) throws {
+        let startedAt = now.addingTimeInterval(-86_400)
+        let endedAt = startedAt.addingTimeInterval(1_200)
+        let workouts: [(String, ExerciseEquipment, ExerciseMuscleGroup, [(Double?, Int)])] = [
+            ("Dead Hang", .bodyweight, .lats,[(nil, 60), (nil, 45), (nil, 40)]),
+            ("Farmer Carry", .dumbbell, .forearms, [(70, 90), (70, 75)]),
+        ]
+        let loggedExercises = workouts.enumerated().map { index, workout in
+            let exercise = Exercise(
+                name: workout.0, category: .strength, equipment: workout.1, primaryMuscleGroup: workout.2,
+                trackingMethod: .duration, syncOwnerTokenIdentifier: ownerTokenIdentifier
+            )
+            context.insert(exercise)
+            return LoggedExercise(
+                orderIndex: index, exercise: exercise,
+                sets: workout.3.enumerated().map { setIndex, values in
+                    LoggedSet(orderIndex: setIndex, weight: values.0, durationSeconds: values.1,
+                              isCompleted: true, completedAt: endedAt)
+                }
+            )
+        }
+        context.insert(WorkoutSession(
+            title: "Grip & Carries", startedAt: startedAt, endedAt: endedAt, durationSeconds: 1_200,
+            status: .completed, source: .blank, syncOwnerTokenIdentifier: ownerTokenIdentifier,
+            loggedExercises: loggedExercises
+        ))
+        if ProcessInfo.processInfo.arguments.contains("--uitest-seed-timed-active-workout") {
+            // The same two exercises again, with empty sets to fill in.
+            context.insert(WorkoutSession(
+                title: "Grip & Carries", startedAt: now, status: .active, source: .blank,
+                syncOwnerTokenIdentifier: ownerTokenIdentifier,
+                loggedExercises: zip(loggedExercises, workouts).map { past, workout in
+                    LoggedExercise(orderIndex: past.orderIndex, exercise: past.exercise,
+                                   sets: workout.3.indices.map { LoggedSet(orderIndex: $0) })
+                }
+            ))
+        }
+        try context.save()
     }
 
     /// Separate from value-only ring fixtures: real, idempotent SwiftData history for live-query QA.

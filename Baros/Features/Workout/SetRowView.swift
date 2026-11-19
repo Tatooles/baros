@@ -10,6 +10,8 @@ struct SetRowView: View, @MainActor Equatable {
     let setID: UUID
     let weight: Double?
     let reps: Int?
+    let durationSeconds: Int?
+    let trackingMethod: ExerciseTrackingMethod
     let isCompleted: Bool
     let rpe: Double?
     let exerciseIndex: Int
@@ -19,11 +21,14 @@ struct SetRowView: View, @MainActor Equatable {
     var focusedField: FocusState<WorkoutField?>.Binding
     let isWeightFocused: Bool
     let isRepsFocused: Bool
+    /// What the time wheels read while they are this set's keyboard.
+    let timeEditingSeconds: Int?
     let weightUnit: MeasurementUnit
     let previous: PreviousSetPerformance?
     let suggestions: ActiveWorkoutSetInput.Values
     let onPreviewChange: (ActiveWorkoutSetInput.Values?) -> Void
     let onEditRPE: (LoggedSet) -> Void
+    let onEditTime: (LoggedSet, SetTimeEdit) -> Void
     @State private var showsRemoveError = false
     @State private var hasFailedRemoval = false
     @State private var input = ActiveWorkoutSetInput()
@@ -33,6 +38,8 @@ struct SetRowView: View, @MainActor Equatable {
         lhs.setID == rhs.setID
             && lhs.weight == rhs.weight
             && lhs.reps == rhs.reps
+            && lhs.durationSeconds == rhs.durationSeconds
+            && lhs.trackingMethod == rhs.trackingMethod
             && lhs.isCompleted == rhs.isCompleted
             && lhs.rpe == rhs.rpe
             && lhs.index == rhs.index
@@ -42,6 +49,7 @@ struct SetRowView: View, @MainActor Equatable {
             && lhs.suggestions == rhs.suggestions
             && lhs.isWeightFocused == rhs.isWeightFocused
             && lhs.isRepsFocused == rhs.isRepsFocused
+            && lhs.timeEditingSeconds == rhs.timeEditingSeconds
     }
 
     var body: some View {
@@ -145,7 +153,7 @@ struct SetRowView: View, @MainActor Equatable {
                 accessibilityIdentifier: "SetWeightField-\(exerciseIndex)-\(index)"
             )
 
-            repsField
+            measureField
 
             completionButton
         }
@@ -197,10 +205,10 @@ struct SetRowView: View, @MainActor Equatable {
                 }
 
                 labeledColumn(
-                    label: "REPS",
-                    labelIdentifier: "SetRepsLabel-\(exerciseIndex)-\(index)"
+                    label: trackingMethod.fieldLabel,
+                    labelIdentifier: "\(measureIdentifierPrefix)Label-\(exerciseIndex)-\(index)"
                 ) {
-                    repsField
+                    measureField
                 }
             }
             .accessibilityElement(children: .contain)
@@ -297,25 +305,116 @@ struct SetRowView: View, @MainActor Equatable {
         return previous.displayText(weightUnit: weightUnit)
     }
 
-    private var repsField: some View {
-        numericField(
-            placeholder: "REPS",
-            suggestion: suggestionText(for: .reps),
-            text: repsBinding,
-            keyboard: .numberPad,
-            focusTarget: .setReps(set.id),
-            isFocused: isRepsFocused,
-            accessibilityIdentifier: "SetRepsField-\(exerciseIndex)-\(index)"
-        )
+    private var measureIdentifierPrefix: String {
+        trackingMethod == .duration ? "SetTime" : "SetReps"
+    }
+
+    /// Reps are typed; a timed exercise's time is chosen from wheels. Both
+    /// sit in the same slot.
+    @ViewBuilder
+    private var measureField: some View {
+        Group {
+            if trackingMethod == .duration {
+                timeButton
+            } else {
+                numericField(
+                    placeholder: trackingMethod.fieldLabel,
+                    suggestion: suggestionText(for: .reps),
+                    text: repsBinding,
+                    keyboard: .numberPad,
+                    focusTarget: .setReps(set.id),
+                    isFocused: isRepsFocused,
+                    accessibilityIdentifier: "\(measureIdentifierPrefix)Field-\(exerciseIndex)-\(index)"
+                )
+            }
+        }
         .overlay(alignment: .topTrailing) {
             rpeBadge
         }
+    }
+
+    private var timeButton: some View {
+        // While the wheels are open the cell shows what they read, which is
+        // the time the set keeps when they close.
+        let seconds = WorkoutNumericInputPolicy.validatedDuration(timeEditingSeconds)
+            ?? WorkoutNumericInputPolicy.validatedDuration(durationSeconds)
+        let time = seconds.map(WorkoutFormatters.setDuration)
+        let suggestion = seconds == nil ? suggestionText(for: .duration) : nil
+        let placeholder = trackingMethod.fieldLabel
+        // Spoken as a length of time, not as the punctuation on screen.
+        let spokenSuggestion = suggestion == nil ? nil : WorkoutFormatters.setDurationAccessibilityDescription(
+            inputValues.timePickerStart(suggestions: suggestions, previous: nil)
+        )
+        let spokenTime = seconds.map(WorkoutFormatters.setDurationAccessibilityDescription)
+        return Button {
+            editTime()
+        } label: {
+            timeText(time: time, suggestion: suggestion, placeholder: placeholder)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(
+                    RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
+                )
+                .background {
+                    // The well and focus ring the typed fields use, so the set
+                    // the wheels are open on reads as the one being edited.
+                    let well = RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    well
+                        .fill(isTimeEditing ? AppTheme.brandAccentMuted
+                            : (set.isCompleted ? Color.clear : AppTheme.setFieldWell))
+                        .overlay {
+                            well.strokeBorder(isTimeEditing ? AppTheme.brandFocus : .clear, lineWidth: 1.5)
+                        }
+                        .padding(.vertical, 4)
+                }
+                .animation(.easeOut(duration: 0.15), value: isTimeEditing)
+        }
+        .buttonStyle(.plain)
+        .setTimeInput(
+            isEditing: isTimeEditing,
+            startingSeconds: timeEditingSeconds ?? 0,
+            onChange: { onEditTime(set, .change($0)) },
+            onEnd: { onEditTime(set, .close) }
+        )
+        .accessibilityLabel(placeholder)
+        .accessibilityValue(spokenSuggestion.map { "Suggested \($0)" } ?? spokenTime ?? "No time")
+        .accessibilityHint(suggestion == nil ? "Opens the time wheels."
+            : "Complete the set to use this value, or open the time wheels.")
+        .accessibilityAddTraits(isTimeEditing ? .isSelected : [])
+        .accessibilityIdentifier("\(measureIdentifierPrefix)Field-\(exerciseIndex)-\(index)")
+    }
+
+    /// Matches the typed fields: an entered value, a quieter suggestion, or
+    /// the small column label when there is neither.
+    private func timeText(time: String?, suggestion: String?, placeholder: String) -> Text {
+        if let value = time ?? suggestion {
+            return Text(value)
+                .font(.body.weight(.semibold).monospacedDigit())
+                .fontDesign(.rounded)
+                .foregroundStyle(time == nil ? AppTheme.textSecondary : AppTheme.textPrimary)
+        }
+        return Text(placeholder)
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(AppTheme.textSecondary)
+    }
+
+    private var isTimeEditing: Bool { timeEditingSeconds != nil }
+
+    private func editTime() {
+        guard !engine.hasPendingSetSave, canEditSet else { return }
+        onEditTime(set, .open(inputValues.timePickerStart(suggestions: suggestions, previous: previous)))
     }
 
     @ViewBuilder
     private var rpeBadge: some View {
         if let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe) {
             Button {
+                // A timed set's keyboard is its time wheels, and the RPE
+                // chips sit on the bar above them.
+                if trackingMethod == .duration { editTime() }
                 onEditRPE(set)
             } label: {
                 Text("@\(WorkoutFormatters.number(rpe))")
@@ -447,7 +546,12 @@ struct SetRowView: View, @MainActor Equatable {
             setInputRegistry.commit(field)
         }
         guard !engine.hasPendingSetSave, canEditSet else { return }
-        let preparedValues = prepareValuesForSetAction(completesSet: !set.isCompleted)
+        var preparedValues = prepareValuesForSetAction(completesSet: !set.isCompleted)
+        // The time on the wheels saves with the completion, so one Retry
+        // recovers both.
+        if let shown = WorkoutNumericInputPolicy.validatedDuration(timeEditingSeconds) {
+            preparedValues = preparedValues.settingDuration(shown)
+        }
         withAnimation(.easeInOut(duration: 0.2)) {
             do {
                 try engine.toggleSetCompletion(
@@ -459,6 +563,7 @@ struct SetRowView: View, @MainActor Equatable {
                 // The pending action is presented by WorkoutSessionView.
             }
         }
+        if isTimeEditing { onEditTime(set, .close) }
         clearFocusedFieldForThisSet()
     }
 
@@ -488,13 +593,25 @@ struct SetRowView: View, @MainActor Equatable {
 
     private func fillFromPrevious(_ previous: PreviousSetPerformance) {
         defer { onPreviewChange(nil) }
-        let values = input.commit(current: inputValues, weightUnit: weightUnit).values
+        guard !engine.hasPendingSetSave else { return }
+        var values = input.commit(current: inputValues, weightUnit: weightUnit).values
+        // The time on the wheels saves with the fill, wherever Previous has
+        // none of its own, so one Retry recovers the whole fill.
+        if let shown = WorkoutNumericInputPolicy.validatedDuration(timeEditingSeconds) {
+            values = values.settingDuration(shown)
+        }
         try? engine.fillSetFromPrevious(
             set,
             previous: previous,
             preparedValues: values,
             context: modelContext
         )
+        // The wheels close on the set's time, so they cannot write their
+        // older reading back over the fill.
+        if isTimeEditing {
+            onEditTime(set, .change(WorkoutNumericInputPolicy.validatedDuration(set.durationSeconds) ?? 0))
+            onEditTime(set, .close)
+        }
         input.clearRejectionsSatisfiedByPreviousFill(inputValues)
     }
 
@@ -503,7 +620,7 @@ struct SetRowView: View, @MainActor Equatable {
     }
 
     private var inputValues: ActiveWorkoutSetInput.Values {
-        ActiveWorkoutSetInput.Values(weight: set.weight, reps: set.reps)
+        ActiveWorkoutSetInput.Values(set)
     }
 
     private var ownFields: [WorkoutField] {

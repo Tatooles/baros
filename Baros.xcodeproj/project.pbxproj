@@ -75,6 +75,7 @@
 		6768EF5946CDCF8DACD6D4DB /* ExerciseHistoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21357AFDA9728CF076BE8EDC /* ExerciseHistoryDetailView.swift */; };
 		68939D439339709706384389 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F17977696D09948006DA8512 /* PrivacyInfo.xcprivacy */; };
 		69F7C010FED2B1C515BA4D03 /* FormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C1252CF52FD67F5BAB1868E /* FormattingTests.swift */; };
+		6B170DC4FEC79A65F147BE37 /* SetTimeInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ABD1448895D92B834A27BF8 /* SetTimeInput.swift */; };
 		6C2B733CE4B8EFD323E1E440 /* HomeRingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBE5665A291D732FD47B1CFE /* HomeRingModelTests.swift */; };
 		6C4A4A87211FA295C973E273 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EEACCF1698F0507BC0D57B8 /* AppTheme.swift */; };
 		6E4F9E5A2318B1829A0797C4 /* CurrentOwnerAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D4BE32A721872BB07BE426D /* CurrentOwnerAdapters.swift */; };
@@ -123,6 +124,7 @@
 		C6DC63CA4B0DFB832C7E5CE5 /* RestTimerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 776F226A3F2002E996B67500 /* RestTimerViews.swift */; };
 		CF89B18ADB82484845F4BD6A /* SwiftDataTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1D50ACD78458E239985830 /* SwiftDataTestSupport.swift */; };
 		D0ADE9D5A7C759EC582ADC14 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = BA5076EFED2D8140E77C87FB /* Sentry */; };
+		D138C3521227342BFEFBB84D /* TimedExerciseUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A81CCBA2B96D9D02F9A9F97D /* TimedExerciseUITests.swift */; };
 		D7FCF44D5C2139A31A579C85 /* LaunchExperienceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34E7B8F0E30270E03AA269C0 /* LaunchExperienceCoordinatorTests.swift */; };
 		D9C47034EDA661798F961FF6 /* ExerciseHistoryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62D75149FBAE878C25D0D614 /* ExerciseHistoryRow.swift */; };
 		DBA20AA928E1E72970AA5548 /* ExerciseHistorySessionGroupCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4846247A29E8830EC391BD0 /* ExerciseHistorySessionGroupCard.swift */; };
@@ -259,11 +261,13 @@
 		8D430BBF983AB4BC6FEB5BC9 /* BarosUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarosUITests.swift; sourceTree = "<group>"; };
 		90D907611E27DB8DDD799149 /* MuscleFigureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuscleFigureView.swift; sourceTree = "<group>"; };
 		95813DD67E0E433F16D1D571 /* WorkoutLiveActivityIntegrationModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutLiveActivityIntegrationModifier.swift; sourceTree = "<group>"; };
+		9ABD1448895D92B834A27BF8 /* SetTimeInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetTimeInput.swift; sourceTree = "<group>"; };
 		9C1252CF52FD67F5BAB1868E /* FormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormattingTests.swift; sourceTree = "<group>"; };
 		A0B7EEE0CEBDB12A42E92F89 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1F2ABEC64F2B017CBD065DD /* AppUpdatePrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdatePrompt.swift; sourceTree = "<group>"; };
 		A422AEA968D8813BD7F386AE /* AppNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationState.swift; sourceTree = "<group>"; };
 		A818C833AC1D3BA4E797C7CD /* WorkoutHistoryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutHistoryRow.swift; sourceTree = "<group>"; };
+		A81CCBA2B96D9D02F9A9F97D /* TimedExerciseUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedExerciseUITests.swift; sourceTree = "<group>"; };
 		A82450D0B1348AED3BE0B547 /* WorkoutLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutLiveActivityWidget.swift; sourceTree = "<group>"; };
 		A8BA79E3D56FF2BBB6C088A1 /* RestTimerAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestTimerAlerts.swift; sourceTree = "<group>"; };
 		A8D3DF0D84D449AEEBB18FD5 /* PreviousSetPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviousSetPerformanceTests.swift; sourceTree = "<group>"; };
@@ -406,6 +410,7 @@
 				7BA5DB2C885EBBD3A16C1654 /* ExerciseHistoryRecordsUITests.swift */,
 				FFA671BC732A13735092CF11 /* MarketingScreenshotTests.swift */,
 				C9DD0A9894E4C48EECC8ECA3 /* SupersetUITests.swift */,
+				A81CCBA2B96D9D02F9A9F97D /* TimedExerciseUITests.swift */,
 			);
 			path = BarosUITests;
 			sourceTree = "<group>";
@@ -542,6 +547,7 @@
 				776F226A3F2002E996B67500 /* RestTimerViews.swift */,
 				DCA03F6A97DC5E4B559FD09E /* RPEChipRow.swift */,
 				4D63A6EF8824690577A135B9 /* SetRowView.swift */,
+				9ABD1448895D92B834A27BF8 /* SetTimeInput.swift */,
 				3BB7A0935E7697C18BBDCFFA /* SupersetRail.swift */,
 				899D04423C1918B8B8546277 /* WorkoutEditingComponents.swift */,
 				BF2386D026311F4720EF90CE /* WorkoutHeaderView.swift */,
@@ -980,6 +986,7 @@
 				C6DC63CA4B0DFB832C7E5CE5 /* RestTimerViews.swift in Sources */,
 				9E271B0ADCB359B0939A0EC3 /* SentrySyncObservability.swift in Sources */,
 				BA2F5DE8D041AF193D8E851B /* SetRowView.swift in Sources */,
+				6B170DC4FEC79A65F147BE37 /* SetTimeInput.swift in Sources */,
 				27B82FC47264137547EBA840 /* SettingsAccountRow.swift in Sources */,
 				55F7352C891E2AD6A8827E8F /* SettingsAccountSection.swift in Sources */,
 				4BE78D1A671A3B3BF23AAC6D /* SettingsTabView.swift in Sources */,
@@ -1059,6 +1066,7 @@
 				A810C90DDCE356BA444A57FC /* ExerciseHistoryRecordsUITests.swift in Sources */,
 				82D214DEBC73D2AB2126A1EB /* MarketingScreenshotTests.swift in Sources */,
 				3AB83FB9DC0B8320E7EF7A7E /* SupersetUITests.swift in Sources */,
+				D138C3521227342BFEFBB84D /* TimedExerciseUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

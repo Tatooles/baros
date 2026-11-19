@@ -1105,6 +1105,7 @@ public final class SyncCoordinator {
                 exercise.equipmentRaw = record.equipmentRaw
                 exercise.primaryMuscleRaw = record.primaryMuscleRaw
                 exercise.primaryMuscleGroupRaw = record.primaryMuscleGroupRaw
+                exercise.trackingMethodRaw = record.trackingMethodRaw
                 context.insert(exercise)
             }
         }
@@ -1122,6 +1123,7 @@ public final class SyncCoordinator {
         exercise.equipmentRaw = record.equipmentRaw
         exercise.primaryMuscleRaw = record.primaryMuscleRaw
         exercise.primaryMuscleGroupRaw = record.primaryMuscleGroupRaw
+        exercise.trackingMethodRaw = record.trackingMethodRaw
         exercise.notes = record.notes
         exercise.isArchived = record.isArchived
         exercise.isSeeded = record.isSeeded
@@ -1404,6 +1406,7 @@ public final class SyncCoordinator {
                     deletedAt: incomingDeletedAt
                 )
                 loggedExercise.hasSnapshotMetadata = record.hasSnapshotMetadata
+                loggedExercise.trackingMethodRaw = record.trackingMethodRaw
                 loggedExercise.session = session
                 session.loggedExercises.append(loggedExercise)
                 context.insert(loggedExercise)
@@ -1430,6 +1433,7 @@ public final class SyncCoordinator {
         loggedExercise.exerciseSnapshotEquipmentRaw = record.exerciseSnapshotEquipmentRaw
         loggedExercise.exerciseSnapshotPrimaryMuscleGroupRaw = record.exerciseSnapshotPrimaryMuscleGroupRaw
         loggedExercise.hasSnapshotMetadata = record.hasSnapshotMetadata
+        loggedExercise.trackingMethodRaw = record.trackingMethodRaw
         loggedExercise.notes = record.notes
         loggedExercise.referenceNotes = record.referenceNotes
         loggedExercise.sourceLoggedExerciseID = record.sourceLoggedExerciseID.flatMap(UUID.init(uuidString:))
@@ -1509,6 +1513,7 @@ public final class SyncCoordinator {
                     orderIndex: record.orderIndex,
                     weight: WorkoutNumericInputPolicy.validatedWeight(record.weight),
                     reps: WorkoutNumericInputPolicy.validatedReps(record.reps),
+                    durationSeconds: WorkoutNumericInputPolicy.validatedDuration(record.durationSeconds),
                     rpe: WorkoutNumericInputPolicy.validatedRPE(record.rpe),
                     kind: SetKind(rawValue: record.kindRaw) ?? .working,
                     isCompleted: record.isCompleted,
@@ -1538,6 +1543,8 @@ public final class SyncCoordinator {
         set.orderIndex = record.orderIndex
         set.weight = WorkoutNumericInputPolicy.validatedWeight(record.weight)
         set.reps = WorkoutNumericInputPolicy.validatedReps(record.reps)
+        set.durationSeconds = WorkoutNumericInputPolicy.validatedDuration(record.durationSeconds)
+        set.knowsDuration = true
         set.rpe = WorkoutNumericInputPolicy.validatedRPE(record.rpe)
         set.kindRaw = record.kindRaw
         set.isCompleted = record.isCompleted
@@ -1645,6 +1652,7 @@ public final class SyncCoordinator {
             canonical.equipmentRaw = duplicate.equipmentRaw
             canonical.primaryMuscleRaw = duplicate.primaryMuscleRaw
             canonical.primaryMuscleGroupRaw = duplicate.primaryMuscleGroupRaw
+            canonical.trackingMethodRaw = duplicate.trackingMethodRaw ?? canonical.trackingMethodRaw
             canonical.notes = duplicate.notes
             canonical.isArchived = duplicate.isArchived
             canonical.updatedAt = duplicate.updatedAt

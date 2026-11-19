@@ -14,6 +14,23 @@ public enum WorkoutFormatters {
         return "\(String(format: "%02d", minutes)):\(String(format: "%02d", remainder))"
     }
 
+    /// A timed set's length: "0:45", "1:30", "1:05:00".
+    public static func setDuration(_ seconds: Int) -> String {
+        let seconds = max(0, seconds)
+        let remainder = String(format: "%02d", seconds % 60)
+        guard seconds >= 3_600 else { return "\(seconds / 60):\(remainder)" }
+        return "\(seconds / 3_600):\(String(format: "%02d", seconds % 3_600 / 60)):\(remainder)"
+    }
+
+    /// A timed set's length for VoiceOver: "1 minute, 30 seconds".
+    public static func setDurationAccessibilityDescription(_ seconds: Int) -> String {
+        let seconds = max(0, seconds)
+        let parts = [
+            (seconds / 3_600, "hour"), (seconds % 3_600 / 60, "minute"), (seconds % 60, "second")
+        ].filter { $0.0 > 0 }.map { "\($0.0) \($0.1)\($0.0 == 1 ? "" : "s")" }
+        return parts.isEmpty ? "0 seconds" : parts.joined(separator: ", ")
+    }
+
     public static func elapsedDescription(_ seconds: Int) -> String {
         elapsedCompactDescription(seconds) + " elapsed"
     }

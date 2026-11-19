@@ -153,12 +153,14 @@ public struct CompletedWorkoutEditExerciseDraft: Identifiable {
     public let id: UUID
     public let exerciseSnapshotName: String
     public let metadataDisplayText: String?
+    public let trackingMethod: ExerciseTrackingMethod
     public var notes: String
     public var sets: [CompletedWorkoutEditSetDraft]
     private let originalNotes: String
 
     init(loggedExercise: LoggedExercise) {
         id = loggedExercise.id
+        trackingMethod = loggedExercise.trackingMethod
         exerciseSnapshotName = loggedExercise.exerciseSnapshotName
         metadataDisplayText = loggedExercise.metadataDisplayText
         notes = loggedExercise.notes
@@ -184,6 +186,7 @@ public struct CompletedWorkoutEditSetDraft: Identifiable {
     public var orderIndex: Int
     public var weight: Double?
     public var reps: Int?
+    public var durationSeconds: Int?
     public var rpe: Double?
     var kind: SetKind
     public var isCompleted: Bool
@@ -197,6 +200,7 @@ public struct CompletedWorkoutEditSetDraft: Identifiable {
         orderIndex = set.orderIndex
         weight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
         reps = WorkoutNumericInputPolicy.validatedReps(set.reps)
+        durationSeconds = WorkoutNumericInputPolicy.validatedDuration(set.durationSeconds)
         rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe)
         kind = set.kind
         isCompleted = set.isCompleted
@@ -210,6 +214,7 @@ public struct CompletedWorkoutEditSetDraft: Identifiable {
         orderIndex: Int,
         weight: Double? = nil,
         reps: Int? = nil,
+        durationSeconds: Int? = nil,
         rpe: Double? = nil,
         kind: SetKind = .working,
         isCompleted: Bool = false,
@@ -221,6 +226,7 @@ public struct CompletedWorkoutEditSetDraft: Identifiable {
         self.orderIndex = orderIndex
         self.weight = weight
         self.reps = reps
+        self.durationSeconds = durationSeconds
         self.rpe = rpe
         self.kind = kind
         self.isCompleted = isCompleted
@@ -242,6 +248,9 @@ public struct CompletedWorkoutEditSetDraft: Identifiable {
             original: original.weight, edited: weight, saved: saved.weight, areEqual: historyNumbersAreEqual
         )
         merged.reps = try mergedHistoryValue(original: original.reps, edited: reps, saved: saved.reps)
+        merged.durationSeconds = try mergedHistoryValue(
+            original: original.durationSeconds, edited: durationSeconds, saved: saved.durationSeconds
+        )
         merged.rpe = try mergedHistoryValue(
             original: original.rpe, edited: rpe, saved: saved.rpe, areEqual: historyNumbersAreEqual
         )
@@ -260,6 +269,7 @@ public struct CompletedWorkoutEditSetDraft: Identifiable {
 private struct CompletedWorkoutEditSetValues: Equatable {
     let weight: Double?
     let reps: Int?
+    let durationSeconds: Int?
     let rpe: Double?
     let kind: SetKind
     let isCompleted: Bool
@@ -269,6 +279,7 @@ private struct CompletedWorkoutEditSetValues: Equatable {
     init(set: LoggedSet) {
         weight = WorkoutNumericInputPolicy.validatedWeight(set.weight)
         reps = WorkoutNumericInputPolicy.validatedReps(set.reps)
+        durationSeconds = WorkoutNumericInputPolicy.validatedDuration(set.durationSeconds)
         rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe)
         kind = set.kind
         isCompleted = set.isCompleted
@@ -278,6 +289,7 @@ private struct CompletedWorkoutEditSetValues: Equatable {
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         historyNumbersAreEqual(lhs.weight, rhs.weight) && lhs.reps == rhs.reps &&
+            lhs.durationSeconds == rhs.durationSeconds &&
             historyNumbersAreEqual(lhs.rpe, rhs.rpe) && lhs.kind == rhs.kind &&
             lhs.isCompleted == rhs.isCompleted && lhs.completedAt == rhs.completedAt && lhs.notes == rhs.notes
     }
@@ -495,6 +507,7 @@ public struct WorkoutHistoryMutationService {
                     orderIndex: nextOrderIndex,
                     weight: setDraft.weight,
                     reps: setDraft.reps,
+                    durationSeconds: setDraft.durationSeconds,
                     rpe: setDraft.rpe,
                     kind: setDraft.kind,
                     isCompleted: setDraft.isCompleted,
@@ -649,6 +662,7 @@ public struct WorkoutHistoryMutationService {
     private func hasChanges(_ draft: CompletedWorkoutEditSetDraft, for set: LoggedSet) -> Bool {
         !Self.weightsAreEqual(set.weight, draft.weight) ||
             set.reps != draft.reps ||
+            set.durationSeconds != draft.durationSeconds ||
             !Self.weightsAreEqual(set.rpe, draft.rpe) ||
             set.kind != draft.kind ||
             set.isCompleted != draft.isCompleted ||
@@ -665,6 +679,13 @@ public struct WorkoutHistoryMutationService {
 
         if set.reps != draft.reps {
             set.reps = draft.reps
+            didChange = true
+        }
+
+        if set.durationSeconds != draft.durationSeconds {
+            set.durationSeconds = draft.durationSeconds
+            // An edit made here is this device's own, so a later clear uploads.
+            set.knowsDuration = true
             didChange = true
         }
 
@@ -816,6 +837,7 @@ public struct WorkoutHistoryMutationService {
     private func isEmptyNewSet(_ draft: CompletedWorkoutEditSetDraft) -> Bool {
         draft.weight == nil &&
             draft.reps == nil &&
+            draft.durationSeconds == nil &&
             draft.rpe == nil &&
             draft.kind == .working &&
             !draft.isCompleted &&
@@ -828,6 +850,7 @@ public struct WorkoutHistoryMutationService {
         var normalized = draft
         normalized.weight = WorkoutNumericInputPolicy.validatedWeight(draft.weight)
         normalized.reps = WorkoutNumericInputPolicy.validatedReps(draft.reps)
+        normalized.durationSeconds = WorkoutNumericInputPolicy.validatedDuration(draft.durationSeconds)
         normalized.rpe = WorkoutNumericInputPolicy.validatedRPE(draft.rpe)
         return normalized
     }

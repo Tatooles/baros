@@ -63,7 +63,7 @@ enum RPEChipSelectionAction {
         try engine.applyActiveSetRPESelection(
             set,
             rpe: value,
-            preparedValues: preparedValues ?? .init(weight: set.weight, reps: set.reps),
+            preparedValues: preparedValues ?? .init(set),
             context: context,
             now: now
         )

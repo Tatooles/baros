@@ -88,6 +88,8 @@ public struct ExerciseHistoryRecords {
     ) -> ExerciseHistoryRecords? {
         guard let equipmentRaw, let equipment = ExerciseEquipment(rawValue: equipmentRaw),
               equipment != .bodyweight, equipment != .resistanceBand else { return nil }
+        // Both records are measured in reps, so an exercise now logged by time has none.
+        guard groups.first?.setEntries.first?.set.trackingMethod != .duration else { return nil }
 
         var heaviest: ExerciseHistoryRecord?
         var estimated: ExerciseHistoryRecord?

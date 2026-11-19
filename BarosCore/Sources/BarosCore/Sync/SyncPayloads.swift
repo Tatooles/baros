@@ -24,6 +24,8 @@ public struct ExerciseSyncPayload: Codable, Equatable, Sendable {
     public let notes: String
     public let isArchived: Bool
     public let isSeeded: Bool
+    /// Left out of the upload when nil, so the server keeps its value.
+    public var trackingMethodRaw: String? = nil
 }
 
 public struct WorkoutSessionSyncPayload: Codable, Equatable, Sendable {
@@ -63,6 +65,8 @@ public struct LoggedExerciseSyncPayload: Codable, Equatable, Sendable {
     /// Omitted uploads keep the server's grouping, as for older builds. Null is
     /// sent only for a removal made on this device.
     public var sendsSupersetGroupID = false
+    /// Left out of the upload when nil, so the server keeps its value.
+    public var trackingMethodRaw: String? = nil
 }
 
 public struct LoggedSetSyncPayload: Codable, Equatable, Sendable {
@@ -81,6 +85,10 @@ public struct LoggedSetSyncPayload: Codable, Equatable, Sendable {
     public let notes: String
     public let healthLinkID: String?
     public let sourceLoggedSetID: String?
+    public var durationSeconds: Int? = nil
+    /// Omitted uploads keep the server's time, as for older builds. Null is
+    /// sent only when this device knows the exercise's tracking method.
+    public var sendsDurationSeconds = false
 }
 
 public struct WorkoutTemplateEntrySyncPayload: Codable, Equatable, Sendable {
@@ -128,7 +136,8 @@ enum SyncPayloadMapper {
             primaryMuscleGroupRaw: exercise.primaryMuscleGroupRaw,
             notes: exercise.notes,
             isArchived: exercise.isArchived,
-            isSeeded: exercise.isSeeded
+            isSeeded: exercise.isSeeded,
+            trackingMethodRaw: exercise.trackingMethodRaw
         )
     }
 
@@ -169,7 +178,8 @@ enum SyncPayloadMapper {
             referenceNotes: loggedExercise.referenceNotes,
             sourceLoggedExerciseID: loggedExercise.sourceLoggedExerciseID?.uuidString.lowercased(),
             supersetGroupID: loggedExercise.supersetGroupID?.uuidString.lowercased(),
-            sendsSupersetGroupID: loggedExercise.supersetGroupID != nil || loggedExercise.hasLocalSupersetChange
+            sendsSupersetGroupID: loggedExercise.supersetGroupID != nil || loggedExercise.hasLocalSupersetChange,
+            trackingMethodRaw: loggedExercise.trackingMethodRaw
         )
     }
 
@@ -194,7 +204,8 @@ enum SyncPayloadMapper {
     }
 
     static func loggedSetPayload(from set: LoggedSet) -> LoggedSetSyncPayload {
-        LoggedSetSyncPayload(
+        let duration = WorkoutNumericInputPolicy.validatedDuration(set.durationSeconds)
+        return LoggedSetSyncPayload(
             clientId: set.id.uuidString.lowercased(),
             createdAt: set.createdAt.timeIntervalSince1970,
             updatedAt: set.updatedAt.timeIntervalSince1970,
@@ -209,7 +220,10 @@ enum SyncPayloadMapper {
             completedAt: set.completedAt?.timeIntervalSince1970,
             notes: set.notes,
             healthLinkID: set.healthLinkID?.uuidString.lowercased(),
-            sourceLoggedSetID: set.sourceLoggedSetID?.uuidString.lowercased()
+            sourceLoggedSetID: set.sourceLoggedSetID?.uuidString.lowercased(),
+            durationSeconds: duration,
+            sendsDurationSeconds: duration != nil
+                || (set.knowsDuration == true && set.loggedExercise?.trackingMethodRaw != nil)
         )
     }
 }
@@ -259,6 +273,7 @@ struct ExerciseSyncRecord: Codable, Equatable {
     let notes: String
     let isArchived: Bool
     let isSeeded: Bool
+    var trackingMethodRaw: String? = nil
 }
 
 struct WorkoutSessionSyncRecord: Codable, Equatable {
@@ -297,6 +312,7 @@ struct LoggedExerciseSyncRecord: Codable, Equatable {
     let referenceNotes: String?
     let sourceLoggedExerciseID: String?
     var supersetGroupID: String? = nil
+    var trackingMethodRaw: String? = nil
 }
 
 struct LoggedSetSyncRecord: Codable, Equatable {
@@ -316,6 +332,7 @@ struct LoggedSetSyncRecord: Codable, Equatable {
     let notes: String
     let healthLinkID: String?
     let sourceLoggedSetID: String?
+    var durationSeconds: Int? = nil
 }
 
 struct WorkoutTemplateSyncRecord: Codable, Equatable {

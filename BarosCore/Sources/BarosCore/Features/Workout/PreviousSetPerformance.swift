@@ -3,12 +3,27 @@ import Foundation
 public struct PreviousSetPerformance: Equatable {
     let weight: Double?
     let reps: Int?
+    /// Only the measure the exercise is tracked by is carried, so filling a
+    /// row from it never writes reps to a timed set or time to a rep set.
+    var durationSeconds: Int? = nil
+    var trackingMethod: ExerciseTrackingMethod = .reps
 
     public func displayText(weightUnit: MeasurementUnit) -> String {
         let displayWeight = weightUnit.displayWeight(
             fromCanonicalPounds: WorkoutNumericInputPolicy.validatedWeight(weight)
         )
         let weightText = displayWeight.map(WorkoutFormatters.number)
+        if trackingMethod == .duration {
+            let durationText = WorkoutNumericInputPolicy.validatedDuration(durationSeconds)
+                .map(WorkoutFormatters.setDuration)
+            // Timed work is often unweighted, so a time alone reads without a dash.
+            switch (weightText, durationText) {
+            case let (.some(weightText), .some(durationText)): return "\(weightText) × \(durationText)"
+            case let (.none, .some(durationText)): return durationText
+            case let (.some(weightText), .none): return "\(weightText) × -"
+            case (.none, .none): return "—"
+            }
+        }
         let repsText = WorkoutNumericInputPolicy.validatedReps(reps).map { WorkoutFormatters.number(Double($0)) }
 
         switch (weightText, repsText) {
@@ -74,7 +89,9 @@ public struct PreviousSetPerformance: Equatable {
                 let routeID = ExerciseHistoryRoute(loggedExercise: loggedExercise).id
                 return (
                     loggedExercise.id,
-                    latestEntriesByRouteID[routeID]?.sets.map { makePerformance(from: $0) } ?? []
+                    latestEntriesByRouteID[routeID]?.sets.map {
+                        makePerformance(from: $0, trackingMethod: loggedExercise.trackingMethod)
+                    } ?? []
                 )
             }
         )
@@ -157,7 +174,9 @@ public struct PreviousSetPerformance: Equatable {
                 guard let sourceRank,
                       let sourceLoggedExerciseID = loggedExercise.sourceLoggedExerciseID,
                       let sourceLoggedExercise = sourceEntriesByID[sourceLoggedExerciseID] else {
-                    return (loggedExercise.id, latestEntry?.sets.map { makePerformance(from: $0) } ?? [])
+                    return (loggedExercise.id, latestEntry?.sets.map {
+                        makePerformance(from: $0, trackingMethod: loggedExercise.trackingMethod)
+                    } ?? [])
                 }
 
                 let previousSets: [LoggedSet]
@@ -270,15 +289,23 @@ public struct PreviousSetPerformance: Equatable {
             if let sourceSetID = activeSet.sourceLoggedSetID,
                let position = sourcePositionsByID[sourceSetID],
                previousSets.indices.contains(position) {
-                return makePerformance(from: previousSets[position])
+                return makePerformance(from: previousSets[position], trackingMethod: activeLoggedExercise.trackingMethod)
             }
 
-            return PreviousSetPerformance(weight: nil, reps: nil)
+            return PreviousSetPerformance(weight: nil, reps: nil, trackingMethod: activeLoggedExercise.trackingMethod)
         }
     }
 
-    private static func makePerformance(from set: LoggedSet) -> PreviousSetPerformance {
-        PreviousSetPerformance(weight: set.weight, reps: set.reps)
+    private static func makePerformance(
+        from set: LoggedSet,
+        trackingMethod: ExerciseTrackingMethod
+    ) -> PreviousSetPerformance {
+        PreviousSetPerformance(
+            weight: set.weight,
+            reps: trackingMethod == .reps ? set.reps : nil,
+            durationSeconds: trackingMethod == .duration ? set.durationSeconds : nil,
+            trackingMethod: trackingMethod
+        )
     }
 
     /// Captures everything the previous-set lookup depends on, so callers can

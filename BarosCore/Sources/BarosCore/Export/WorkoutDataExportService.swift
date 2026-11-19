@@ -56,7 +56,8 @@ public struct WorkoutDataExportService {
         "workout_id",
         "logged_exercise_id",
         "set_id",
-        "superset"
+        "superset",
+        "duration_seconds"
     ]
 
     /// Numbers each workout's supersets 1, 2, … in order; single exercises have none.
@@ -141,7 +142,8 @@ public struct WorkoutDataExportService {
             session.id.uuidString,
             loggedExercise.id.uuidString,
             set.id.uuidString,
-            superset.map(String.init) ?? ""
+            superset.map(String.init) ?? "",
+            WorkoutNumericInputPolicy.validatedDuration(set.durationSeconds).map(String.init) ?? ""
         ]
     }
 

@@ -128,7 +128,7 @@ enum ConvexSyncArgumentMapper {
     }
 
     static func exerciseRecord(_ record: ExerciseSyncPayload) -> [String: ConvexEncodable?] {
-        [
+        var args: [String: ConvexEncodable?] = [
             "clientId": record.clientId,
             "createdAt": record.createdAt,
             "updatedAt": record.updatedAt,
@@ -143,6 +143,10 @@ enum ConvexSyncArgumentMapper {
             "isArchived": record.isArchived,
             "isSeeded": record.isSeeded,
         ]
+        if let trackingMethodRaw = record.trackingMethodRaw {
+            args["trackingMethodRaw"] = trackingMethodRaw
+        }
+        return args
     }
 
     static func workoutSessionRecord(_ record: WorkoutSessionSyncPayload) -> [String: ConvexEncodable?] {
@@ -186,6 +190,9 @@ enum ConvexSyncArgumentMapper {
             // updateValue keeps a nil, which encodes as null.
             args.updateValue(record.supersetGroupID, forKey: "supersetGroupID")
         }
+        if let trackingMethodRaw = record.trackingMethodRaw {
+            args["trackingMethodRaw"] = trackingMethodRaw
+        }
         return args
     }
 
@@ -211,7 +218,7 @@ enum ConvexSyncArgumentMapper {
     }
 
     static func loggedSetRecord(_ record: LoggedSetSyncPayload) -> [String: ConvexEncodable?] {
-        [
+        var args: [String: ConvexEncodable?] = [
             "clientId": record.clientId,
             "createdAt": record.createdAt,
             "updatedAt": record.updatedAt,
@@ -228,6 +235,11 @@ enum ConvexSyncArgumentMapper {
             "healthLinkID": record.healthLinkID,
             "sourceLoggedSetID": record.sourceLoggedSetID,
         ]
+        if record.sendsDurationSeconds {
+            // updateValue keeps a nil, which encodes as null.
+            args.updateValue(record.durationSeconds.map(Double.init), forKey: "durationSeconds")
+        }
+        return args
     }
 
     static func cursorRecord(_ cursors: SyncChangeCursors) -> [String: ConvexEncodable?] {

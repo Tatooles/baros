@@ -22,7 +22,8 @@ final class WorkoutDataExportServiceTests: XCTestCase {
         "workout_id",
         "logged_exercise_id",
         "set_id",
-        "superset"
+        "superset",
+        "duration_seconds"
     ]
 
     func testCSVIncludesHeaderCompletedWorkoutSetRowsSortingAndStableIDs() throws {
@@ -159,6 +160,7 @@ final class WorkoutDataExportServiceTests: XCTestCase {
             olderSessionID.uuidString,
             benchExerciseID.uuidString,
             incompleteSetID.uuidString,
+            "",
             ""
         ])
         XCTAssertEqual(rows[2], [
@@ -180,6 +182,7 @@ final class WorkoutDataExportServiceTests: XCTestCase {
             olderSessionID.uuidString,
             benchExerciseID.uuidString,
             completedSetID.uuidString,
+            "",
             ""
         ])
         XCTAssertEqual(rows[3], [
@@ -201,6 +204,7 @@ final class WorkoutDataExportServiceTests: XCTestCase {
             olderSessionID.uuidString,
             curlExerciseID.uuidString,
             curlSetID.uuidString,
+            "",
             ""
         ])
         XCTAssertEqual(rows[4][15...17], [
@@ -532,7 +536,7 @@ final class WorkoutDataExportServiceTests: XCTestCase {
         }
         try container.mainContext.save()
         let rows = try parseCSV(WorkoutDataExportService().csv(for: [session], unit: .pounds))
-        XCTAssertEqual(rows.dropFirst().map(\.last), ["1", "1", "", "2", "2", ""])
+        XCTAssertEqual(rows.dropFirst().map { $0[18] }, ["1", "1", "", "2", "2", ""])
     }
 
     private func completedSession(

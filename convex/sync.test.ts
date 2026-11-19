@@ -2226,6 +2226,140 @@ describe("superset grouping", () => {
   });
 });
 
+describe("timed exercises", () => {
+  async function seedGraph() {
+    const t = testDb();
+    const client = t.withIdentity(userA);
+    await client.mutation(api.sync.upsertExercise, {
+      record: { ...exerciseRecord({ name: "Plank" }), trackingMethodRaw: "duration" },
+    });
+    await client.mutation(api.sync.upsertWorkoutSession, { record: workoutSessionRecord() });
+    await client.mutation(api.sync.upsertLoggedExercise, {
+      record: { ...loggedExerciseRecord(), trackingMethodRaw: "duration" },
+    });
+    await client.mutation(api.sync.upsertLoggedSet, {
+      record: { ...loggedSetRecord({ weight: null, reps: null }), durationSeconds: 90 },
+    });
+    const fetch = () => client.query(api.sync.fetchChanges, { cursors: zeroCursors });
+    return { t, client, fetch };
+  }
+
+  test("tracking method and set time round-trip through fetchChanges", async () => {
+    const { fetch } = await seedGraph();
+    const changes = await fetch();
+    expect(changes.exercises).toMatchObject([{ trackingMethodRaw: "duration" }]);
+    expect(changes.loggedExercises).toMatchObject([{ trackingMethodRaw: "duration" }]);
+    expect(changes.loggedSets).toMatchObject([
+      { weight: null, reps: null, durationSeconds: 90 },
+    ]);
+  });
+
+  test("older builds that omit the fields keep the stored values", async () => {
+    const { client, fetch } = await seedGraph();
+    await client.mutation(api.sync.upsertExercise, {
+      record: exerciseRecord({ name: "Plank", notes: "edited by an older build", updatedAt: 3 }),
+    });
+    await client.mutation(api.sync.upsertLoggedExercise, {
+      record: loggedExerciseRecord({ notes: "edited by an older build", updatedAt: 3 }),
+    });
+    await client.mutation(api.sync.upsertLoggedSet, {
+      record: loggedSetRecord({ weight: 25, reps: null, updatedAt: 3 }),
+    });
+
+    const changes = await fetch();
+    expect(changes.exercises).toMatchObject([
+      { notes: "edited by an older build", trackingMethodRaw: "duration" },
+    ]);
+    expect(changes.loggedExercises).toMatchObject([
+      { notes: "edited by an older build", trackingMethodRaw: "duration" },
+    ]);
+    expect(changes.loggedSets).toMatchObject([{ weight: 25, durationSeconds: 90 }]);
+  });
+
+  test("an explicit null clears the set time", async () => {
+    const { client, fetch } = await seedGraph();
+    await client.mutation(api.sync.upsertLoggedSet, {
+      record: {
+        ...loggedSetRecord({ weight: null, reps: null, updatedAt: 3 }),
+        durationSeconds: null,
+      },
+    });
+    expect((await fetch()).loggedSets).toMatchObject([{ durationSeconds: null }]);
+  });
+
+  test("an exercise can switch back to reps", async () => {
+    const { client, fetch } = await seedGraph();
+    await client.mutation(api.sync.upsertExercise, {
+      record: {
+        ...exerciseRecord({ name: "Plank", updatedAt: 3 }),
+        trackingMethodRaw: "reps",
+      },
+    });
+    expect((await fetch()).exercises).toMatchObject([{ trackingMethodRaw: "reps" }]);
+  });
+
+  test("stale uploads cannot change the set time", async () => {
+    const { client, fetch } = await seedGraph();
+    const result = await client.mutation(api.sync.upsertLoggedSet, {
+      record: {
+        ...loggedSetRecord({ weight: null, reps: null, updatedAt: 1 }),
+        durationSeconds: 30,
+      },
+    });
+    expect(result.status).toBe("ignored_stale");
+    expect((await fetch()).loggedSets).toMatchObject([{ durationSeconds: 90 }]);
+  });
+
+  test("payloads from before timed exercises are accepted and read back as reps", async () => {
+    const t = testDb();
+    const client = t.withIdentity(userA);
+    await client.mutation(api.sync.upsertExercise, { record: exerciseRecord() });
+    await client.mutation(api.sync.upsertWorkoutSession, { record: workoutSessionRecord() });
+    await client.mutation(api.sync.upsertLoggedExercise, { record: loggedExerciseRecord() });
+    await client.mutation(api.sync.upsertLoggedSet, { record: loggedSetRecord() });
+
+    const changes = await client.query(api.sync.fetchChanges, { cursors: zeroCursors });
+    expect(changes.exercises[0].trackingMethodRaw).toBeUndefined();
+    expect(changes.loggedExercises[0].trackingMethodRaw).toBeUndefined();
+    expect(changes.loggedSets[0].durationSeconds).toBeUndefined();
+    expect(changes.loggedSets).toMatchObject([{ weight: 135, reps: 10 }]);
+  });
+
+  test("documents stored before timed exercises still read and update", async () => {
+    const t = testDb();
+    const client = t.withIdentity(userA);
+    const server = { ownerTokenIdentifier: userA.tokenIdentifier, serverUpdatedAt: 1 };
+    await t.run(async (ctx) => {
+      await ctx.db.insert("exercises", { ...exerciseRecord(), ...server });
+      await ctx.db.insert("workoutSessions", { ...workoutSessionRecord(), ...server });
+      await ctx.db.insert("loggedExercises", { ...loggedExerciseRecord(), ...server });
+      await ctx.db.insert("loggedSets", { ...loggedSetRecord(), ...server });
+    });
+
+    await client.mutation(api.sync.upsertLoggedSet, {
+      record: {
+        ...loggedSetRecord({ weight: null, reps: null, updatedAt: 3 }),
+        durationSeconds: 45,
+      },
+    });
+    const changes = await client.query(api.sync.fetchChanges, { cursors: zeroCursors });
+    expect(changes.exercises).toMatchObject([{ name: "Bench Press" }]);
+    expect(changes.loggedSets).toMatchObject([{ reps: null, durationSeconds: 45 }]);
+  });
+
+  test("a non-finite set time is rejected", async () => {
+    const { client } = await seedGraph();
+    await expect(
+      client.mutation(api.sync.upsertLoggedSet, {
+        record: {
+          ...loggedSetRecord({ updatedAt: 3 }),
+          durationSeconds: Number.POSITIVE_INFINITY,
+        },
+      }),
+    ).rejects.toThrow();
+  });
+});
+
 describe("workout templates", () => {
   const templateCursors = { ...zeroCursors, workoutTemplates: 0 };
 
