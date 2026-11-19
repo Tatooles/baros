@@ -38,6 +38,20 @@ final class WorkoutAccountTransitionTests: XCTestCase {
         }
     }
 
+    func testChoiceDuringAnotherAccountTransitionReportsThatNothingChanged() async throws {
+        for resolution in [WorkoutAccountTransition.Resolution.finish, .discard] {
+            let h = try Harness()
+            let session = try h.start()
+            await h.request()
+            h.engine.isAccountTransitionInProgress = true
+            await h.gate.resolve(resolution)
+            XCTAssertEqual(h.calls, 0)
+            XCTAssertEqual(session.status, .active)
+            XCTAssertEqual(h.gate.errorMessage,
+                "Another account change is still in progress. Your workout and account are unchanged. Try again when it finishes.")
+        }
+    }
+
     func testFinishAndDiscardPersistBeforeAccountAction() async throws {
         for resolution in [WorkoutAccountTransition.Resolution.finish, .discard] {
             let h = try Harness()
