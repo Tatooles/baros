@@ -341,6 +341,21 @@ final class TimedExerciseTests: XCTestCase {
         XCTAssertTrue(cleared.sendsDurationSeconds, "A known timed set uploads an explicit null")
     }
 
+    func testASetWhoseTimeThisDeviceNeverSawDoesNotClearItOnUpload() throws {
+        let context = try makeContext()
+        let plank = try insertExercise("Plank", .duration, into: context)
+        let session = try insertCompletedWorkout(of: plank, sets: [(nil, nil)], into: context)
+        let set = session.sortedLoggedExercises[0].sortedSets[0]
+        // The row was saved by a build without durations; only its exercise
+        // has since been pulled with the method.
+        set.knowsDuration = nil
+        set.weight = 25
+
+        XCTAssertFalse(SyncPayloadMapper.loggedSetPayload(from: set).sendsDurationSeconds)
+        set.durationSeconds = 60
+        XCTAssertTrue(SyncPayloadMapper.loggedSetPayload(from: set).sendsDurationSeconds)
+    }
+
     func testRowsFromBeforeTimedExercisesUploadWithoutTheNewFields() throws {
         let context = try makeContext()
         let bench = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)

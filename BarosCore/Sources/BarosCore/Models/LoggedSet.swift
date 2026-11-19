@@ -9,6 +9,9 @@ public final class LoggedSet: Identifiable {
     public var reps: Int?
     /// A timed set's length. Rep-based sets leave it nil; time is never stored as reps.
     public var durationSeconds: Int?
+    /// Whether this device has seen the set's duration. Nil on rows saved
+    /// before sets had one, so their missing time is never uploaded as a clear.
+    var knowsDuration: Bool?
     public var rpe: Double?
     var kindRaw: String
     public var isCompleted: Bool
@@ -43,6 +46,7 @@ public final class LoggedSet: Identifiable {
         self.weight = weight
         self.reps = reps
         self.durationSeconds = durationSeconds
+        self.knowsDuration = true
         self.rpe = rpe
         self.kindRaw = kind.rawValue
         self.isCompleted = isCompleted

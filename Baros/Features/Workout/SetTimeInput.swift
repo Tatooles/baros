@@ -100,7 +100,9 @@ private final class SetTimeResponder: UIView {
     /// The time cell whose wheels are up, if any.
     private static weak var holder: SetTimeResponder?
 
-    override var canBecomeFirstResponder: Bool { window != nil }
+    /// Only the owning screen brings up the wheels; UIKit restoring a first
+    /// responder after a sheet would show them with no set to write to.
+    override var canBecomeFirstResponder: Bool { window != nil && wantsKeyboard }
 
     /// Brings up the wheels. A text field's keyboard is dismissed first:
     /// swapped in place for the shorter wheels, it would leave the screen

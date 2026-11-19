@@ -450,15 +450,17 @@ struct CompletedWorkoutEditView: View {
 
     private func timeButton(exerciseIndex: Int, setIndex: Int, visibleIndex: Int) -> some View {
         let exercise = draft.exercises[exerciseIndex]
-        let seconds = WorkoutNumericInputPolicy.validatedDuration(exercise.sets[setIndex].durationSeconds)
+        let isEditing = timeEdit?.exerciseIndex == exerciseIndex && timeEdit?.setIndex == setIndex
+        let stored = WorkoutNumericInputPolicy.validatedDuration(exercise.sets[setIndex].durationSeconds)
+        // While the wheels are open the cell shows what they read.
+        let seconds = isEditing ? WorkoutNumericInputPolicy.validatedDuration(timeEdit?.seconds) ?? stored : stored
         let placeholder = exercise.trackingMethod.fieldLabel
         // An empty set starts from the nearest time above it, as it would have in the workout.
         let timeAbove = exercise.sets[..<setIndex].reversed().lazy
             .filter { !$0.isRemoved }
             .compactMap { WorkoutNumericInputPolicy.validatedDuration($0.durationSeconds) }
             .first
-        let startingSeconds = seconds ?? timeAbove ?? 0
-        let isEditing = timeEdit?.exerciseIndex == exerciseIndex && timeEdit?.setIndex == setIndex
+        let startingSeconds = stored ?? timeAbove ?? 0
         return Button {
             guard !isEditing else { return }
             endTimeEdit()
@@ -593,8 +595,9 @@ struct CompletedWorkoutEditView: View {
     }
 
     private func removeSet(_ candidate: CompletedWorkoutSetRemovalCandidate) {
-        // Removing a set can shift the indexes the wheels are writing to.
-        timeEdit = nil
+        // Removing a set can shift the indexes the wheels are writing to,
+        // so they close first and their set keeps its time.
+        endTimeEdit()
         guard draft.exercises.indices.contains(candidate.exerciseIndex),
               draft.exercises[candidate.exerciseIndex].sets.indices.contains(candidate.setIndex)
         else { return }

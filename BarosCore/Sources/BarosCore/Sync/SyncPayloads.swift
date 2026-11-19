@@ -222,7 +222,8 @@ enum SyncPayloadMapper {
             healthLinkID: set.healthLinkID?.uuidString.lowercased(),
             sourceLoggedSetID: set.sourceLoggedSetID?.uuidString.lowercased(),
             durationSeconds: duration,
-            sendsDurationSeconds: duration != nil || set.loggedExercise?.trackingMethodRaw != nil
+            sendsDurationSeconds: duration != nil
+                || (set.knowsDuration == true && set.loggedExercise?.trackingMethodRaw != nil)
         )
     }
 }

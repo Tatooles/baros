@@ -1544,6 +1544,7 @@ public final class SyncCoordinator {
         set.weight = WorkoutNumericInputPolicy.validatedWeight(record.weight)
         set.reps = WorkoutNumericInputPolicy.validatedReps(record.reps)
         set.durationSeconds = WorkoutNumericInputPolicy.validatedDuration(record.durationSeconds)
+        set.knowsDuration = true
         set.rpe = WorkoutNumericInputPolicy.validatedRPE(record.rpe)
         set.kindRaw = record.kindRaw
         set.isCompleted = record.isCompleted

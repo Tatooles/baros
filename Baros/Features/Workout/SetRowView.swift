@@ -545,10 +545,13 @@ struct SetRowView: View, @MainActor Equatable {
         if let field = focusedField.wrappedValue, !ownFields.contains(field) {
             setInputRegistry.commit(field)
         }
-        // Closing the wheels first keeps the time they show.
-        if isTimeEditing { onEditTime(set, .close) }
         guard !engine.hasPendingSetSave, canEditSet else { return }
-        let preparedValues = prepareValuesForSetAction(completesSet: !set.isCompleted)
+        var preparedValues = prepareValuesForSetAction(completesSet: !set.isCompleted)
+        // The time on the wheels saves with the completion, so one Retry
+        // recovers both.
+        if let shown = WorkoutNumericInputPolicy.validatedDuration(timeEditingSeconds) {
+            preparedValues = preparedValues.settingDuration(shown)
+        }
         withAnimation(.easeInOut(duration: 0.2)) {
             do {
                 try engine.toggleSetCompletion(
@@ -560,6 +563,7 @@ struct SetRowView: View, @MainActor Equatable {
                 // The pending action is presented by WorkoutSessionView.
             }
         }
+        if isTimeEditing { onEditTime(set, .close) }
         clearFocusedFieldForThisSet()
     }
 
@@ -589,6 +593,9 @@ struct SetRowView: View, @MainActor Equatable {
 
     private func fillFromPrevious(_ previous: PreviousSetPerformance) {
         defer { onPreviewChange(nil) }
+        // Open wheels would write their own time back over the filled one.
+        if isTimeEditing { onEditTime(set, .close) }
+        guard !engine.hasPendingSetSave else { return }
         let values = input.commit(current: inputValues, weightUnit: weightUnit).values
         try? engine.fillSetFromPrevious(
             set,

@@ -138,7 +138,7 @@ struct WorkoutSessionView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 // Resigning focus routes pending drafts through the normal
                 // commit path before the app is backgrounded or suspended.
-                if newPhase != .active, focusedField != nil {
+                if newPhase != .active, focusedField != nil || timeEntry != nil {
                     resignFocus()
                 }
                 showsSetSaveFailure = newPhase == .active && engine.hasPendingSetSave
