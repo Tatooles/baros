@@ -57,9 +57,12 @@ final class SimDevice {
     var dropResponseRate = 0.0
     private(set) var runTask: Task<Void, Never>?
     private var counter = 0
+    private let index: Int
+    private var idCounter = 0
 
-    init(name: String, server: SimServer, log: SimOperationLog, seed: UInt32, simTime: @escaping () -> Double) throws {
-        self.name = name
+    init(index: Int, server: SimServer, log: SimOperationLog, seed: UInt32, simTime: @escaping () -> Double) throws {
+        self.index = index
+        self.name = "d\(index)"
         self.server = server
         self.log = log
         self.simTime = simTime
@@ -228,6 +231,13 @@ final class SimDevice {
 
     // MARK: User operations
 
+    /// Record ids are deterministic, so a seed replays exactly: the
+    /// scheduler picks from lists sorted by id.
+    private func nextID() -> UUID {
+        idCounter += 1
+        return UUID(uuidString: String(format: "%08X-0000-4000-8000-%012X", index + 1, idCounter))!
+    }
+
     private func nextContent() -> String {
         counter += 1
         let value = "\(name)-v\(counter)"
@@ -250,7 +260,7 @@ final class SimDevice {
     func createExercise() {
         let content = nextContent()
         let exercise = Exercise(
-            name: content, category: .strength, equipment: .barbell, primaryMuscle: "Chest",
+            id: nextID(), name: content, category: .strength, equipment: .barbell, primaryMuscle: "Chest",
             syncOwnerTokenIdentifier: simOwner, createdAt: nowDate, updatedAt: nowDate
         )
         context.insert(exercise)
@@ -264,7 +274,7 @@ final class SimDevice {
     func createWorkout() {
         let content = nextContent()
         let session = WorkoutSession(
-            title: content, startedAt: nowDate, endedAt: nowDate.addingTimeInterval(60), durationSeconds: 60,
+            id: nextID(), title: content, startedAt: nowDate, endedAt: nowDate.addingTimeInterval(60), durationSeconds: 60,
             status: .completed, source: .blank, createdAt: nowDate, updatedAt: nowDate, syncOwnerTokenIdentifier: simOwner
         )
         context.insert(session)
@@ -277,7 +287,7 @@ final class SimDevice {
             // A workout may reference an exercise another device deleted (#94).
             let exercise = !liveExercises.isEmpty && rng.chance(0.7) ? rng.pick(liveExercises) : nil
             let loggedExercise = LoggedExercise(
-                orderIndex: index, exercise: exercise, exerciseSnapshotName: "Bench Press", notes: nextContent(),
+                id: nextID(), orderIndex: index, exercise: exercise, exerciseSnapshotName: "Bench Press", notes: nextContent(),
                 createdAt: nowDate, updatedAt: nowDate
             )
             loggedExercise.session = session
@@ -289,7 +299,7 @@ final class SimDevice {
             }
             for setIndex in 0 ..< 1 + rng.int(2) {
                 let set = LoggedSet(
-                    orderIndex: setIndex, weight: 100, reps: 5, isCompleted: true, completedAt: nowDate,
+                    id: nextID(), orderIndex: setIndex, weight: 100, reps: 5, isCompleted: true, completedAt: nowDate,
                     notes: nextContent(), createdAt: nowDate, updatedAt: nowDate
                 )
                 set.loggedExercise = loggedExercise
@@ -402,7 +412,7 @@ final class SimDevice {
 
     func addSet(to loggedExercise: LoggedExercise) {
         let set = LoggedSet(
-            orderIndex: loggedExercise.sets.count, weight: 100, reps: 5, isCompleted: true, completedAt: nowDate,
+            id: nextID(), orderIndex: loggedExercise.sets.count, weight: 100, reps: 5, isCompleted: true, completedAt: nowDate,
             notes: nextContent(), createdAt: nowDate, updatedAt: nowDate
         )
         set.loggedExercise = loggedExercise

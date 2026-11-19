@@ -663,7 +663,8 @@ public final class SyncCoordinator {
             context: context
         )
         .filter { SyncRejectionPolicy.isDue(nextAttemptAt: $0.nextAttemptAt, now: runStartedAt) }
-        let hasMorePendingEntries = fetchedEntries.count > maxPendingPushEntriesPerRun
+        // Entries that wait for a rejected parent are passed over without using
+        // up the batch, so a large rejected workout cannot starve the queue.
         let entries = fetchedEntries
             .sorted { lhs, rhs in
                 let lhsRank = syncPushRank(for: lhs)
@@ -676,12 +677,17 @@ public final class SyncCoordinator {
                 if lhsIsDurableRetry != rhsIsDurableRetry {
                     return !lhsIsDurableRetry
                 }
-                if lhs.updatedAt == rhs.updatedAt {
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt < rhs.updatedAt
+                }
+                if lhs.createdAt != rhs.createdAt {
                     return lhs.createdAt < rhs.createdAt
                 }
-                return lhs.updatedAt < rhs.updatedAt
+                // Records changed together share their times; keep their order stable.
+                return lhs.entityID.uuidString < rhs.entityID.uuidString
             }
-            .prefix(maxPendingPushEntriesPerRun)
+        var attemptedCount = 0
+        var hasMorePendingEntries = false
 
         var activeEntriesByKey: [SyncOutboxKey: [SyncOutboxEntry]] = [:]
         for entry in try activeOutboxEntries(context: context) {
@@ -713,6 +719,11 @@ public final class SyncCoordinator {
             if try dependsOnRejectedParent(entry, rejectedThisRun: rejectedThisRun, activeEntriesByKey: activeEntriesByKey, context: context) {
                 continue
             }
+            guard attemptedCount < maxPendingPushEntriesPerRun else {
+                hasMorePendingEntries = true
+                break
+            }
+            attemptedCount += 1
             let logicalUpdatedAt = logicalFallbackTimestamp(for: entry)
             let previousDurableFailureMessage = entry.status == .failed ? entry.lastErrorMessage : nil
             let wasDurableFailure = entry.status == .failed
@@ -836,7 +847,7 @@ public final class SyncCoordinator {
         }
         return SyncPushResult(
             didComplete: true,
-            didPush: !entries.isEmpty,
+            didPush: attemptedCount > 0,
             hasMorePendingEntries: hasMorePendingEntries
         )
     }

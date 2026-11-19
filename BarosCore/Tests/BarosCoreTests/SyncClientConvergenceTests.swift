@@ -362,6 +362,36 @@ final class SyncClientConvergenceTests: XCTestCase {
         XCTAssertEqual(client.upsertedLoggedSets.map(\.clientId), [graph.set.id.uuidString.lowercased()])
     }
 
+    func testEntriesWaitingOnARejectedWorkoutDoNotUseUpTheBatch() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let rejected = completedWorkout(context: context)
+        let failingCreate = SyncOutboxEntry(
+            entityKind: .workoutSession, entityID: rejected.session.id, operation: .create, status: .failed,
+            ownerTokenIdentifier: owner, createdAt: start, updatedAt: start, attemptCount: 3
+        )
+        failingCreate.nextAttemptAt = start.addingTimeInterval(600)
+        context.insert(failingCreate)
+        let recorder = SyncOutboxRecorder()
+        for index in 0 ..< 9 {
+            let loggedExercise = LoggedExercise(orderIndex: index + 1, exerciseSnapshotName: "Row \(index)")
+            loggedExercise.session = rejected.session
+            rejected.session.loggedExercises.append(loggedExercise)
+            context.insert(loggedExercise)
+            try recorder.recordCreate(entityKind: .loggedExercise, entityID: loggedExercise.id, ownerTokenIdentifier: owner, context: context, now: start)
+        }
+        let healthy = completedWorkout(context: context)
+        try recorder.recordUpdate(entityKind: .loggedSet, entityID: healthy.set.id, ownerTokenIdentifier: owner, context: context, now: start)
+        try markBootstrapped(context, upgraded: true)
+
+        let client = FakeSyncClient()
+        try await SyncCoordinator(client: client, maxPendingPushEntriesPerRun: 8, clock: { self.start })
+            .run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertTrue(client.upsertedLoggedExercises.isEmpty)
+        XCTAssertEqual(client.upsertedLoggedSets.map(\.clientId), [healthy.set.id.uuidString.lowercased()])
+    }
+
     func testAccountWideRejectionsStopTheRunWithoutCounting() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

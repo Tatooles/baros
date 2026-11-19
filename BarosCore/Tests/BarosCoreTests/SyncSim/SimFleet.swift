@@ -53,7 +53,7 @@ final class SimFleet {
         server = SimServer(clock: { [unowned self] in time })
         for (index, profile) in config.clocks.enumerated() {
             let device = try SimDevice(
-                name: "d\(index)",
+                index: index,
                 server: server,
                 log: log,
                 seed: config.seed &* 31 &+ UInt32(index) &+ 1,
@@ -209,9 +209,9 @@ final class SimFleet {
             session.deletedAt = deleted ? Date(timeIntervalSince1970: created + 1) : nil
             return session
         }
-        let shared = UUID()
-        let private0 = UUID()
-        let exerciseID = UUID()
+        let shared = UUID(uuidString: "00000000-5EED-4000-8000-000000000001")!
+        let private0 = UUID(uuidString: "00000000-5EED-4000-8000-000000000002")!
+        let exerciseID = UUID(uuidString: "00000000-5EED-4000-8000-000000000003")!
         _ = try seedSession(shared, content: "seed-v0|seed-w0")
         _ = try seedSession(private0, content: "seed-v1|seed-w1")
         let exercisePayload = ExerciseSyncPayload(

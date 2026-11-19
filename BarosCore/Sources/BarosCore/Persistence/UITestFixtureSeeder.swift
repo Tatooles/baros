@@ -23,6 +23,9 @@ public enum UITestFixtureSeeder {
     /// Twelve weeks of progressive push/pull/leg training with linked library exercises,
     /// for reviewing History and Records against believable data.
     static let historyShowcaseArgument = "--uitest-seed-history-showcase"
+    /// A completed workout with one set the cloud turned down repeatedly, so its
+    /// change is dead-lettered and waits for Retry.
+    static let blockedSyncChangeArgument = "--uitest-seed-blocked-sync-change"
     /// Seeds fixtures for an owner who is no longer signed in, as after an expired session.
     static let signedOutOwnerArgument = "--uitest-seed-signed-out-owner"
 
@@ -82,6 +85,27 @@ public enum UITestFixtureSeeder {
             context.insert(source)
             context.insert(history)
             context.insert(active)
+            try context.save()
+        }
+
+        if arguments.contains(blockedSyncChangeArgument),
+           arguments.contains("--uitest-in-memory-store"),
+           let ownerTokenIdentifier {
+            let set = LoggedSet(orderIndex: 0, weight: 185, reps: 5, isCompleted: true, completedAt: .now)
+            let loggedExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press",
+                exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue, sets: [set])
+            context.insert(WorkoutSession(title: "Push Day", startedAt: .now.addingTimeInterval(-3600),
+                endedAt: .now.addingTimeInterval(-600), durationSeconds: 3000, status: .completed, source: .blank,
+                syncOwnerTokenIdentifier: ownerTokenIdentifier, loggedExercises: [loggedExercise]))
+            let entry = SyncOutboxEntry(
+                entityKind: .loggedSet, entityID: set.id, operation: .update, status: .blocked,
+                ownerTokenIdentifier: ownerTokenIdentifier, createdAt: .now.addingTimeInterval(-2 * 86400),
+                updatedAt: .now, attemptCount: 8, lastErrorMessage: "Simulated validation rejection"
+            )
+            entry.rejectionCount = 8
+            entry.firstRejectedAt = .now.addingTimeInterval(-2 * 86400)
+            entry.lastRejectionCode = "invalidPayload"
+            context.insert(entry)
             try context.save()
         }
 

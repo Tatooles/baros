@@ -4196,6 +4196,26 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    func testBlockedSyncChangeNamesWhatWasTurnedDownAndOffersRetry() {
+        let app = makeApp(extraArguments: [
+            "--uitest-sync-owner", "issuer|ui_owner",
+            "--uitest-seed-blocked-sync-change",
+        ])
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Some changes can't sync"].waitToExist(timeout: 3))
+        XCTAssertTrue(app.staticTexts["The cloud turned down 1 set. Retry to send it again."].exists)
+
+        app.buttons["GlobalSyncRetryButton"].tap()
+        XCTAssertTrue(app.staticTexts["UITestSyncRequestCount-1"].waitToExist(timeout: 3))
+
+        app.buttons["GlobalSyncDetailsButton"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitToExist(timeout: 3))
+        XCTAssertTrue(app.staticTexts["The cloud turned down 1 set. It's still saved on this iPhone."].waitToExist(timeout: 3))
+        XCTAssertTrue(app.buttons["SettingsSyncRetryButton"].exists)
+    }
+
+    @MainActor
     func testFailedSyncBannerCanBeDismissed() {
         let app = makeApp(extraArguments: [
             "--uitest-sync-owner", "issuer|ui_owner",
