@@ -460,6 +460,8 @@ public enum UITestFixtureSeeder {
                 LoggedSet(orderIndex: index, weight: value.0, reps: value.1, isCompleted: true)
             }
             if scenario == "review-layout" { sets[0].isCompleted = false }
+            // Any working set now produces an estimate, so only warmups leave it empty.
+            if scenario == "no-estimate" { sets.forEach { $0.kind = .warmup } }
             if scenario == "rpe-layout" {
                 sets[0].rpe = 10
                 sets[1].rpe = 9.5

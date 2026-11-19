@@ -23,9 +23,16 @@ Both records use the current owner's visible, finished, nondeleted workouts and 
 | Record | Eligible set kinds | Reps | Value |
 | --- | --- | --- | --- |
 | Heaviest Rep | Working, warmup, drop, failure | Any valid positive count | Recorded weight |
-| Estimated 1RM | Working, failure | 1–10 | Recorded weight for one rep; Epley `weight × (1 + reps / 30)` for 2–10 reps |
+| Estimated 1RM | Working, failure | Any valid positive count, counted as at most 10 | Recorded weight for one rep; Epley `weight × (1 + reps / 30)` for 2–10 reps; a set of more than 10 reps counts as 10 |
 
-RPE is neither required nor used to adjust the estimate. Select the largest eligible result independently for each record. An estimate can be lower than Heaviest Rep when the heavier set is ineligible for estimation; do not increase or fabricate the estimate to conceal this distinction.
+RPE is neither required nor used to adjust the estimate. Select the largest eligible result independently for each record. An estimate can be lower than Heaviest Rep when the heavier set is a warmup or drop set; do not increase or fabricate the estimate to conceal this distinction.
+
+> **2026-11 rep-cap change.** The first version skipped sets of more than 10
+> reps. A lifter whose heavy sets were 160 lb × 15 then saw ≈ 153 lb from a
+> lighter 115 lb × 10 set: an estimate below a weight they had lifted fifteen
+> times. A set of more than 10 reps now counts as the 10 reps it proves
+> (160 × 15 → ≈ 213), so formula input stays inside the ten-rep range while a
+> heavier high-rep set can still win.
 
 Calculations and comparisons use canonical stored weight before display conversion or rounding. Display the current weight preference using existing formatting. Changing units must not change the winning source set. Do not infer body mass, assistance, per-hand multipliers, machine ratios, or total load from a name or equipment tag.
 
@@ -74,9 +81,9 @@ Existing workout-header navigation is outside this change; no new record-specifi
 Present a small native sheet titled “About strength records” with a Done action and these short explanations:
 
 - **Heaviest Rep:** “Your heaviest recorded weight for at least one completed rep in a finished workout. Includes warmup, working, drop, and failure sets.”
-- **Estimated 1RM:** “An estimate from completed working and failure sets of 1–10 reps. For 2–10 reps, we use the Epley formula: weight × (1 + reps ÷ 30). A single rep uses its recorded weight. The estimate does not account for effort.”
+- **Estimated 1RM:** “An estimate from completed working and failure sets, using the Epley formula: weight × (1 + reps ÷ 30). A single rep uses its recorded weight. The formula is less reliable past 10 reps, so a longer set counts as 10. The estimate does not account for effort.”
 - **Comparison:** “Records use matching equipment. Bodyweight and resistance-band exercises are not included. Weight means the load you recorded.”
-- **Source badges and updates:** “Badges mark the sets behind your current records. One set can hold both. For equal records, the most recent workout is shown. Records and badges update when your saved workouts change.”
+- **Source badges and updates:** “Badges mark the sets behind your current records. One set can hold both. For equal records, the set with more reps is shown, then the most recent workout. Records and badges update when your saved workouts change.”
 
 Do not present the value as a recommended training load or a measurement of current ability.
 
@@ -85,12 +92,12 @@ Do not present the value as a recommended training load or a measurement of curr
 | Situation | Presentation or behavior |
 | --- | --- |
 | One eligible set | Show whichever records it qualifies for; no minimum workout count. |
-| Heaviest Rep exists, but no estimation candidate | Keep the second row, without navigation or a numeric zero: “No estimate yet” and “Requires a completed working or failure set of 1–10 reps with weight.” |
+| Heaviest Rep exists, but no estimation candidate | Keep the second row, without navigation or a numeric zero: “No estimate yet” and “Requires a completed working or failure set with weight.” |
 | Neither record has a candidate, but matching equipment is supported | Show one compact message: “No records yet” and “Requires a completed set with weight and reps in a finished workout.” |
 | Bodyweight or resistance-band heading | Omit the Records card; keep existing history available. |
 | Missing or unrecognized heading equipment | Omit the Records card until the comparison scope can be resolved; do not guess an equipment class. |
 | Missing or unrecognized occurrence equipment | Exclude that occurrence from the records. |
-| Exact tie before display rounding | Use the most recent source workout by its displayed `startedAt` date. Within a tied workout, prefer lower exercise order, then lower set order; use stable IDs as a final deterministic fallback. |
+| Exact tie before display rounding | Prefer the set with more logged reps. Then use the most recent source workout by its displayed `startedAt` date. Within a tied workout, prefer lower exercise order, then lower set order; use stable IDs as a final deterministic fallback. |
 | Different underlying values round to the same display | Preserve the actual larger result as the winner. |
 | A record source is edited, deleted, or uncompleted | Recalculate from eligible saved history and select the next winner, or show the appropriate empty state. |
 | One set holds both records | Show both record badges on that exact set; keep both summary rows. |
@@ -128,8 +135,8 @@ The revision keeps the calculation and changes how the screen tells the story.
   record point is larger and a "Record" legend names it. Dragging selects a
   workout and shows `date · ≈ value from weight × reps`. VoiceOver reads a
   summary and exposes an audio graph.
-- **No estimate / no records.** "No estimate yet — Needs a completed set of 1–10
-  reps with weight." and "No records yet — Log a weight and reps on a completed
+- **No estimate / no records.** "No estimate yet — Needs a completed working or
+  failure set with weight." and "No records yet — Log a weight and reps on a completed
   set to see records here." No zeros, no extra explanation in the card; the
   information sheet holds the full rules.
 - **Exercise History log.** Each Exercise Performance is one row in a single
@@ -172,7 +179,7 @@ The revision keeps the calculation and changes how the screen tells the story.
 
 ## Implementation verification targets
 
-When implementation is authorized, verify calculation boundaries (one, ten, and eleven reps), each set kind, invalid/missing/zero values, and the independent winners. Cover equipment changes under one exercise ID, ambiguous snapshot identities, owner isolation, exact ties, unit changes, and record-source edits/deletions. Confirm presentation with sparse history, long workout names, larger accessibility text, two badges on one set, and exact agreement between summary sources and badge placement. Verify record rows are informational and existing workout-header navigation still works. Keep simulator and physical-device evidence separate.
+When implementation is authorized, verify calculation boundaries (one, ten, and more than ten reps), each set kind, invalid/missing/zero values, and the independent winners. Cover equipment changes under one exercise ID, ambiguous snapshot identities, owner isolation, exact ties, unit changes, and record-source edits/deletions. Confirm presentation with sparse history, long workout names, larger accessibility text, two badges on one set, and exact agreement between summary sources and badge placement. Verify record rows are informational and existing workout-header navigation still works. Keep simulator and physical-device evidence separate.
 
 ## Evidence and implementation entry points
 
@@ -182,6 +189,6 @@ When implementation is authorized, verify calculation boundaries (one, ten, and 
 - `Baros/Features/History/ExerciseHistoryPerformanceRow.swift`: log rows, set boxes, and source markers, shared with Quick History.
 - `BarosCore/Sources/BarosCore/Models/LoggedSet.swift`, `BarosCore/Sources/BarosCore/Domain/WorkoutNumericInputPolicy.swift`, and `BarosCore/Sources/BarosCore/Domain/MeasurementUnit.swift`: stored values, numeric validation, and unit conversion.
 
-The selected ten-rep cap is a product boundary, not a guarantee of accuracy across exercises. [Reynolds, Gordon, and Robergs (2006)](https://www.unm.edu/~rrobergs/478RMStrengthPrediction.pdf) studied chest press and leg press, found better prediction from lower-repetition tests, and recommended no more than ten repetitions for linear prediction in those exercises. Their tests used repetition maximum effort; ordinary logged sets need the effort limitation stated above.
+The ten-rep limit on counted reps is a product boundary, not a guarantee of accuracy across exercises. [Reynolds, Gordon, and Robergs (2006)](https://www.unm.edu/~rrobergs/478RMStrengthPrediction.pdf) studied chest press and leg press, found better prediction from lower-repetition tests, and recommended no more than ten repetitions for linear prediction in those exercises. Their tests used repetition maximum effort; ordinary logged sets need the effort limitation stated above.
 
 No ADR is needed: these derived calculations and presentation choices remain inexpensive to revise and do not introduce a new durable data contract.

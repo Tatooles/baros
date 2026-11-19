@@ -16,18 +16,59 @@ final class ExerciseHistoryRecordsTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(records.estimated1RM?.value), 245, accuracy: 0.000001)
     }
 
-    func testEstimateUsesOnlyWorkingAndFailureSetsOfAtMostTenReps() throws {
+    func testEstimateUsesOnlyWorkingAndFailureSetsAndCountsAtMostTenReps() throws {
         for kind in SetKind.allCases {
-            for reps in [1, 10, 11] {
+            for reps in [1, 10, 11, 30] {
                 let set = LoggedSet(orderIndex: 0, weight: 100, reps: reps, kind: kind, isCompleted: true)
                 let result = try records(from: [makeSession(sets: [set])])
                 XCTAssertEqual(result.heaviestRep?.value, 100)
-                if (kind == .working || kind == .failure) && reps <= 10 {
+                if kind == .working || kind == .failure {
                     XCTAssertEqual(try XCTUnwrap(result.estimated1RM?.value), reps == 1 ? 100 : 133.333333, accuracy: 0.000001)
                 } else {
                     XCTAssertNil(result.estimated1RM, "\(kind) with \(reps) reps must not produce an estimate")
                 }
             }
+        }
+    }
+
+    /// A heavy high-rep set proves at least ten reps at that load, so it can't
+    /// lose to a lighter ten-rep set and leave the estimate below a weight
+    /// actually lifted for many reps.
+    func testHeavyHighRepSetOutranksLighterTenRepSet() throws {
+        let lighter = makeSession(sets: [LoggedSet(orderIndex: 0, weight: 115, reps: 10, isCompleted: true)])
+        lighter.startedAt = Date(timeIntervalSince1970: 1_000)
+        let heavier = LoggedSet(orderIndex: 0, weight: 160, reps: 15, isCompleted: true)
+        let newer = makeSession(sets: [heavier])
+        newer.startedAt = Date(timeIntervalSince1970: 2_000)
+
+        let result = try records(from: [newer, lighter])
+
+        let estimate = try XCTUnwrap(result.estimated1RM)
+        XCTAssertEqual(estimate.setID, heavier.id)
+        XCTAssertEqual(estimate.reps, 15)
+        XCTAssertEqual(estimate.value, 213.333333, accuracy: 0.000001)
+        XCTAssertGreaterThan(estimate.value, try XCTUnwrap(result.heaviestRep?.value))
+        XCTAssertTrue(result.recordsShareSource)
+    }
+
+    /// Sets past the counted-rep cap tie on the estimate, so the set with more
+    /// reps holds both records even when a shorter set at the load is newer.
+    func testTiedRecordsPreferMoreRepsOverNewerWorkout() throws {
+        let fifteen = LoggedSet(orderIndex: 0, weight: 160, reps: 15, isCompleted: true)
+        let older = makeSession(sets: [fifteen])
+        older.startedAt = Date(timeIntervalSince1970: 1_000)
+        let newer = makeSession(sets: [LoggedSet(orderIndex: 0, weight: 160, reps: 12, isCompleted: true)])
+        newer.startedAt = Date(timeIntervalSince1970: 2_000)
+
+        let result = try records(from: [newer, older])
+
+        XCTAssertEqual(result.heaviestRep?.setID, fifteen.id)
+        XCTAssertEqual(result.estimated1RM?.setID, fifteen.id)
+        XCTAssertTrue(result.recordsShareSource)
+        // Each workout still gets its own chart point at the capped value.
+        XCTAssertEqual(result.estimateHistory.map(\.id), [older.id, newer.id])
+        for point in result.estimateHistory {
+            XCTAssertEqual(point.value, 213.333333, accuracy: 0.000001)
         }
     }
 
@@ -202,7 +243,7 @@ final class ExerciseHistoryRecordsTests: XCTestCase {
             LoggedSet(orderIndex: 1, weight: 205, reps: 3, isCompleted: true),
         ])
         older.startedAt = Date(timeIntervalSince1970: 1_000)
-        let ineligible = makeSession(sets: [LoggedSet(orderIndex: 0, weight: 150, reps: 12, isCompleted: true)])
+        let ineligible = makeSession(sets: [LoggedSet(orderIndex: 0, weight: 225, reps: 12, kind: .warmup, isCompleted: true)])
         ineligible.startedAt = Date(timeIntervalSince1970: 2_000)
         let newer = makeSession(sets: [
             LoggedSet(orderIndex: 0, weight: 225, reps: 1, kind: .warmup, isCompleted: true),
