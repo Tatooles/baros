@@ -1,3 +1,4 @@
+@testable import BarosCore
 import Foundation
 import SwiftData
 @testable import Baros

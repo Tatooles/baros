@@ -7,7 +7,7 @@ The [Baros authentication domain migration record](baros-auth-domain-migration-r
 ## App Metadata
 
 - App name: Baros: Workout Tracker
-- Subtitle: Simple workout logging
+- Subtitle: Fast, private lifting log
 - Primary category: Health & Fitness
 - Pricing: Free
 - Support URL: https://baros.fit/support
@@ -15,19 +15,36 @@ The [Baros authentication domain migration record](baros-auth-domain-migration-r
 - Support contact: support@tatooles.dev
 - Copyright: 2026 Kevin Tatooles
 
-## Description Draft
+## Store Listing
 
-Baros is a private workout tracker for iPhone. Record exercises, sets, weights, reps, notes, and completed workouts without needing an account. Sign in when you want account-backed sync across devices.
-
-The app focuses on fast workout entry, offline-first local logging, workout history, exercise management, data export, and clear privacy controls.
-
-## Keywords Draft
-
-workout, lifting, gym, strength, log, tracker, fitness, exercise, sets, reps
+The description, promotional text, keywords, and screenshot set live in [`listing.json`](listing.json), which the release skill keeps in sync with App Store Connect and baros.fit. See `.agents/skills/release/LISTING.md`.
 
 ## Release Notes
 
 App Store Connect "What's New in This Version" text. The highlights must match that release's in-app What's New sheet (`Baros/App/WhatsNewVersion<version>View.swift`), so update both together.
+
+### 1.5.1
+
+```text
+This update refreshes Baros's App Store page. The app is the same as 1.5.
+```
+
+### 1.5
+
+```text
+Baros 1.5 adds workout templates, supersets, and a clearer Records view.
+
+• Workout templates: Save a workout as a template and start from it next time.
+• Supersets: Group exercises so each round is checked and rested together.
+• Records that tell the story: See your heaviest rep, your estimated 1RM over time, and the set behind each record.
+
+Also in this update:
+• Add, remove, and arrange several exercises at once in Edit Workout
+• Drag around the Home ring to preview and open past workouts
+• Start from pills say what each workout was and when you last did it
+• Calmer, easier-to-read screens throughout
+• Bug fixes and performance improvements
+```
 
 ### 1.4
 
@@ -119,16 +136,6 @@ Production services:
 - Clerk production associated domain: webcredentials:clerk.baros.fit
 - Clerk production publishable key: pk_live_Y2xlcmsuYmFyb3MuZml0JA
 - Convex production deployment URL: https://sensible-reindeer-16.convex.cloud
-
-## Screenshot Plan
-
-Capture final screenshots after UI stabilizes:
-
-- Start workout screen.
-- Active workout with exercises and sets.
-- Workout history.
-- Exercise library.
-- Profile or Settings showing sync/export/privacy controls.
 
 ## Release Checklist
 

@@ -1,0 +1,151 @@
+import Foundation
+import SwiftData
+
+@Model
+public final class LoggedExercise: Identifiable {
+    @Attribute(.unique) public var id: UUID
+    public var orderIndex: Int
+    public var exerciseSnapshotName: String
+    var exerciseSnapshotEquipmentRaw: String = ExerciseEquipment.other.rawValue
+    var exerciseSnapshotPrimaryMuscleGroupRaw: String = ExerciseMuscleGroup.other.rawValue
+    var hasSnapshotMetadata: Bool = false
+    /// The exercise's tracking method when it was added, so a later library
+    /// edit doesn't reinterpret this workout. Nil reads as reps and is left out
+    /// of uploads: the row predates timed exercises on this device.
+    var trackingMethodRaw: String?
+    public var notes: String
+    var referenceNotes: String?
+    public var sourceLoggedExerciseID: UUID?
+    /// Shared by neighboring exercises in a superset. See `SupersetGrouping`.
+    public var supersetGroupID: UUID?
+    /// Whether this device has changed the grouping, so nil means "ungrouped"
+    /// rather than unknown. A row from before supersets, or pulled by an older
+    /// build, may have a server group this device never saw; uploads omit nil
+    /// for those so the server keeps it.
+    var hasLocalSupersetChange: Bool = false
+    var createdAt: Date
+    var updatedAt: Date
+    public var deletedAt: Date?
+    public var exercise: Exercise?
+    public var session: WorkoutSession?
+    @Relationship(deleteRule: .cascade, inverse: \LoggedSet.loggedExercise) public var sets: [LoggedSet]
+
+    init(
+        id: UUID = UUID(),
+        orderIndex: Int,
+        exercise: Exercise? = nil,
+        exerciseSnapshotName: String? = nil,
+        exerciseSnapshotEquipmentRaw: String? = nil,
+        exerciseSnapshotPrimaryMuscleGroupRaw: String? = nil,
+        trackingMethod: ExerciseTrackingMethod? = nil,
+        notes: String = "",
+        referenceNotes: String? = nil,
+        sourceLoggedExerciseID: UUID? = nil,
+        supersetGroupID: UUID? = nil,
+        createdAt: Date = .now,
+        updatedAt: Date = .now,
+        deletedAt: Date? = nil,
+        sets: [LoggedSet] = []
+    ) {
+        self.id = id
+        self.orderIndex = orderIndex
+        self.exercise = exercise
+        self.exerciseSnapshotName = exerciseSnapshotName ?? exercise?.name ?? "Exercise"
+        self.exerciseSnapshotEquipmentRaw = exerciseSnapshotEquipmentRaw ?? exercise?.equipmentRaw ?? ExerciseEquipment.other.rawValue
+        self.exerciseSnapshotPrimaryMuscleGroupRaw = exerciseSnapshotPrimaryMuscleGroupRaw ?? exercise?.primaryMuscleGroup.rawValue ?? ExerciseMuscleGroup.other.rawValue
+        self.hasSnapshotMetadata = true
+        self.trackingMethodRaw = (trackingMethod ?? exercise?.trackingMethod)?.rawValue
+        self.notes = notes
+        self.referenceNotes = referenceNotes
+        self.sourceLoggedExerciseID = sourceLoggedExerciseID
+        self.supersetGroupID = supersetGroupID
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+        self.sets = sets
+
+        for set in sets {
+            set.loggedExercise = self
+        }
+    }
+
+    public var sortedSets: [LoggedSet] {
+        sets
+            .filter { !$0.isDeleted }
+            .sorted { $0.orderIndex < $1.orderIndex }
+    }
+
+    var isDeleted: Bool {
+        deletedAt != nil
+    }
+
+    /// Whether this exercise's sets record reps or time.
+    public var trackingMethod: ExerciseTrackingMethod {
+        ExerciseTrackingMethod(storedRawValue: trackingMethodRaw)
+    }
+
+    var resolvedSnapshotEquipmentRaw: String? {
+        guard !hasSnapshotMetadata else {
+            return exerciseSnapshotEquipmentRaw
+        }
+
+        guard exerciseSnapshotEquipmentRaw == ExerciseEquipment.other.rawValue else {
+            return exerciseSnapshotEquipmentRaw
+        }
+
+        return exercise?.equipmentRaw
+    }
+
+    var resolvedSnapshotPrimaryMuscleGroupRaw: String? {
+        guard !hasSnapshotMetadata else {
+            return exerciseSnapshotPrimaryMuscleGroupRaw
+        }
+
+        guard exerciseSnapshotPrimaryMuscleGroupRaw == ExerciseMuscleGroup.other.rawValue else {
+            return exerciseSnapshotPrimaryMuscleGroupRaw
+        }
+
+        return exercise?.primaryMuscleGroup.rawValue
+    }
+
+    public var snapshotEquipment: ExerciseEquipment? {
+        guard let resolvedSnapshotEquipmentRaw else { return nil }
+        return ExerciseEquipment(rawValue: resolvedSnapshotEquipmentRaw) ?? .other
+    }
+
+    var snapshotPrimaryMuscleGroup: ExerciseMuscleGroup? {
+        guard let resolvedSnapshotPrimaryMuscleGroupRaw else { return nil }
+        return ExerciseMuscleGroup(rawValue: resolvedSnapshotPrimaryMuscleGroupRaw) ?? .other
+    }
+
+    public var metadataDisplayText: String? {
+        guard let snapshotEquipment, let snapshotPrimaryMuscleGroup else {
+            return nil
+        }
+
+        return "\(snapshotEquipment.displayName) • \(snapshotPrimaryMuscleGroup.displayName)"
+    }
+
+    var effectiveSnapshotEquipmentRaw: String {
+        resolvedSnapshotEquipmentRaw ?? ExerciseEquipment.other.rawValue
+    }
+
+    var effectiveSnapshotPrimaryMuscleGroupRaw: String {
+        resolvedSnapshotPrimaryMuscleGroupRaw ?? ExerciseMuscleGroup.other.rawValue
+    }
+
+    func touch(now: Date = .now) {
+        updatedAt = now
+        session?.touch(now: now)
+    }
+
+    func markDeleted(now: Date = .now) {
+        deletedAt = now
+        updatedAt = now
+    }
+
+    func restoreFromDeletion(now: Date = .now) {
+        deletedAt = nil
+        updatedAt = now
+    }
+}

@@ -1,0 +1,2388 @@
+import SwiftData
+import XCTest
+@testable import BarosCore
+
+@MainActor
+final class ActiveWorkoutEngineTests: XCTestCase {
+    func testStructuralFailuresRestoreOnlyTouchedStateAndRetryPersistsOnDisk() throws {
+        enum Failure: Error { case injected }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("workout.store")
+        var sessionID: UUID!
+        var remainingExerciseID: UUID!
+        do {
+            let container = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: url)
+            let context = container.mainContext
+            context.autosaveEnabled = false
+            let engine = ActiveWorkoutEngine()
+            let session = try engine.startBlankWorkout(context: context)
+            sessionID = session.id
+            let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+            context.insert(exercise)
+            let first = try engine.addExercise(exercise, to: session, context: context)
+            let second = try engine.addExercise(exercise, to: session, context: context)
+            remainingExerciseID = second.id
+            try engine.changeSuperset(.joinNext, for: first, context: context)
+            first.hasLocalSupersetChange = false
+            second.hasLocalSupersetChange = false
+            try context.save()
+            let group = first.supersetGroupID
+            let originalSets = first.sortedSets
+            let originalDate = session.updatedAt
+            let exerciseDate = first.updatedAt
+            let fail: (ModelContext) throws -> Void = { _ in throw Failure.injected }
+            // A pending edit outside the action must survive every restoration.
+            second.notes = "Unrelated pending note"
+            XCTAssertThrowsError(try engine.addSet(to: first, context: context, save: fail))
+            XCTAssertEqual(first.sortedSets.map(\.id), originalSets.map(\.id))
+            XCTAssertEqual(first.updatedAt, exerciseDate)
+            XCTAssertEqual(session.updatedAt, originalDate)
+            XCTAssertEqual(second.notes, "Unrelated pending note")
+            var saves = 0
+            let save: (ModelContext) throws -> Void = { saves += 1; try $0.save() }
+            let added = try engine.addSet(to: first, context: context, save: save)
+            XCTAssertEqual(saves, 1)
+            let states = first.sortedSets.map { ($0.id, $0.orderIndex, $0.updatedAt) }
+            let beforeRemove = session.updatedAt
+            XCTAssertThrowsError(try engine.removeSet(originalSets[0], context: context, save: fail))
+            XCTAssertNil(originalSets[0].deletedAt)
+            XCTAssertEqual(first.sortedSets.map(\.id), states.map { $0.0 })
+            XCTAssertEqual(first.sortedSets.map(\.orderIndex), states.map { $0.1 })
+            XCTAssertEqual(first.sortedSets.map(\.updatedAt), states.map { $0.2 })
+            XCTAssertEqual(session.updatedAt, beforeRemove)
+            try engine.removeSet(added, context: context, save: save)
+            XCTAssertEqual(saves, 2)
+            second.notes = "Still pending"
+            let dates = session.sortedLoggedExercises.map(\.updatedAt)
+            let flags = session.sortedLoggedExercises.map(\.hasLocalSupersetChange)
+            XCTAssertThrowsError(try engine.removeLoggedExercise(first, context: context, save: fail))
+            XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [first.id, second.id])
+            XCTAssertEqual(session.sortedLoggedExercises.map(\.updatedAt), dates)
+            XCTAssertEqual(session.sortedLoggedExercises.map(\.hasLocalSupersetChange), flags)
+            XCTAssertEqual(first.supersetGroupID, group)
+            XCTAssertEqual(second.supersetGroupID, group)
+            XCTAssertEqual(second.notes, "Still pending")
+            XCTAssertTrue(originalSets.allSatisfy { !$0.isDeleted })
+            XCTAssertTrue(added.isDeleted)
+            try engine.removeLoggedExercise(first, context: context, save: save)
+            XCTAssertEqual(saves, 3)
+            XCTAssertNil(second.supersetGroupID)
+        }
+        let reopened = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: url)
+        let session = try XCTUnwrap(reopened.mainContext.fetch(FetchDescriptor<WorkoutSession>()).first { $0.id == sessionID })
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [remainingExerciseID!])
+        XCTAssertEqual(session.sortedLoggedExercises.first?.notes, "Still pending")
+        XCTAssertNil(session.sortedLoggedExercises.first?.supersetGroupID)
+    }
+
+    func testStructuralRemovalCancelsRestOnlyAfterSaveAndPendingEditBlocksChanges() throws {
+        enum Failure: Error { case injected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let timer = RestTimerCoordinator(notifications: SilentRestNotifications())
+        let engine = ActiveWorkoutEngine(restTimer: timer)
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let fail: (ModelContext) throws -> Void = { _ in throw Failure.injected }
+        timer.start(sessionID: session.id, setID: set.id, duration: 60)
+        let rest = timer.current?.rest
+        XCTAssertThrowsError(try engine.removeSet(set, context: context, save: fail))
+        XCTAssertEqual(timer.current?.rest, rest)
+        XCTAssertThrowsError(try engine.removeLoggedExercise(logged, context: context, save: fail))
+        XCTAssertEqual(timer.current?.rest, rest)
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        var saveCount = 0
+        let unexpectedSave: (ModelContext) throws -> Void = { _ in saveCount += 1 }
+        XCTAssertThrowsError(try engine.addSet(to: logged, context: context, save: unexpectedSave))
+        XCTAssertThrowsError(try engine.removeSet(set, context: context, save: unexpectedSave))
+        XCTAssertThrowsError(try engine.removeLoggedExercise(logged, context: context, save: unexpectedSave))
+        XCTAssertEqual(saveCount, 0)
+        XCTAssertFalse(set.isDeleted)
+        engine.discardSetSave()
+        try engine.removeSet(set, context: context)
+        XCTAssertNil(timer.current)
+    }
+
+    func testAddedAndRemovedSetRetrySurvivesReopeningStore() throws {
+        enum Failure: Error { case injected }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("sets.store")
+        var addedID: UUID!
+        var removedID: UUID!
+        do {
+            let container = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: url)
+            let context = container.mainContext
+            context.autosaveEnabled = false
+            let engine = ActiveWorkoutEngine()
+            let session = try engine.startBlankWorkout(context: context)
+            let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+            context.insert(exercise)
+            let logged = try engine.addExercise(exercise, to: session, context: context)
+            let fail: (ModelContext) throws -> Void = { _ in throw Failure.injected }
+            XCTAssertThrowsError(try engine.addSet(to: logged, context: context, save: fail))
+            addedID = try engine.addSet(to: logged, context: context).id
+            let first = try XCTUnwrap(logged.sortedSets.first)
+            removedID = first.id
+            XCTAssertThrowsError(try engine.removeSet(first, context: context, save: fail))
+            try engine.removeSet(first, context: context)
+        }
+        let reopened = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: url)
+        let sets = try reopened.mainContext.fetch(FetchDescriptor<LoggedSet>())
+        XCTAssertFalse(try XCTUnwrap(sets.first { $0.id == addedID }).isDeleted)
+        XCTAssertTrue(try XCTUnwrap(sets.first { $0.id == removedID }).isDeleted)
+        XCTAssertEqual(sets.filter { !$0.isDeleted }.map(\.orderIndex).sorted(), Array(0..<sets.filter { !$0.isDeleted }.count))
+    }
+
+    func testStartingWorkoutRejectsHiddenActiveWorkoutAcrossOwnersAndRelaunch() throws {
+        for destinationOwner: String? in [nil, "issuer|owner_b"] {
+            for fromHistory in [false, true] {
+                let container = try SwiftDataTestSupport.makeInMemoryContainer()
+                let context = container.mainContext
+                let outgoing = try ActiveWorkoutEngine().startBlankWorkout(
+                    ownerTokenIdentifier: "issuer|owner_a", context: context)
+                outgoing.title = "Private outgoing workout"
+                let past = WorkoutSession(title: "Past", startedAt: .now,
+                    status: .completed, source: .blank,
+                    syncOwnerTokenIdentifier: destinationOwner)
+                context.insert(past)
+                try context.save()
+
+                // A fresh engine cannot rely on the previous engine's activeSessionID.
+                let engine = ActiveWorkoutEngine()
+                XCTAssertThrowsError(try {
+                    if fromHistory {
+                        return try engine.startWorkout(fromPast: past,
+                            ownerTokenIdentifier: destinationOwner, context: context)
+                    }
+                    return try engine.startBlankWorkout(
+                        ownerTokenIdentifier: destinationOwner, context: context)
+                }()) { error in
+                    XCTAssertEqual(error as? ActiveWorkoutEngineError, .anotherOwnerHasActiveWorkout)
+                    XCTAssertFalse(error.localizedDescription.contains(outgoing.title))
+                }
+                XCTAssertNil(engine.activeSessionID)
+                XCTAssertEqual(outgoing.status, .active)
+                XCTAssertEqual(outgoing.syncOwnerTokenIdentifier, "issuer|owner_a")
+                XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutSession>()).filter {
+                    $0.status == .active && !$0.isDeleted
+                }.map(\.id), [outgoing.id])
+                XCTAssertFalse(context.hasChanges)
+            }
+        }
+    }
+
+    func testStartingWorkoutIgnoresHiddenTombstonesAndTerminalWorkouts() throws {
+        for status in [WorkoutSessionStatus.completed, .discarded, .active] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let outgoing = WorkoutSession(title: "Other account", startedAt: .now,
+                status: status, source: .blank, syncOwnerTokenIdentifier: "issuer|owner_a")
+            if status == .active { outgoing.markDeleted() }
+            context.insert(outgoing)
+            try context.save()
+
+            let started = try ActiveWorkoutEngine().startBlankWorkout(context: context)
+            XCTAssertNotEqual(started.id, outgoing.id)
+            XCTAssertNil(started.syncOwnerTokenIdentifier)
+            XCTAssertEqual(outgoing.status, status)
+        }
+    }
+
+    func testSetSaveReportsOncePerFailedEditAndResetsAfterRecovery() throws {
+        var failures: [ActiveWorkoutSetSaveFailure] = []
+        let engine = ActiveWorkoutEngine(reportSetSaveFailure: { failures.append($0) })
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Private exercise", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let fail: (ModelContext) throws -> Void = { _ in
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError,
+                          userInfo: [NSLocalizedDescriptionKey: "Private workout content"])
+        }
+        try engine.toggleSetCompletion(set, preparedValues: .init(weight: 100, reps: 5), context: context)
+        XCTAssertTrue(failures.isEmpty)
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, preparedValues: .init(weight: 120, reps: 5), context: context, save: fail))
+        XCTAssertEqual(failures.map(\.operation), [.completion])
+        XCTAssertEqual(failures.first?.domain, NSCocoaErrorDomain)
+        XCTAssertEqual(failures.first?.code, "640")
+        for _ in 0..<2 {
+            XCTAssertThrowsError(try engine.retrySetSave(in: session, context: context, save: fail))
+        }
+        XCTAssertEqual(failures.count, 1)
+        engine.discardSetSave()
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertEqual(failures.count, 1)
+
+        XCTAssertThrowsError(try engine.applyActiveSetRPESelection(set, rpe: 8,
+            preparedValues: .init(weight: 120, reps: 5), context: context, save: fail))
+        XCTAssertEqual(failures.map(\.operation), [.completion, .rpe])
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertEqual(failures.count, 2)
+        XCTAssertThrowsError(try engine.commitActiveSetDraft(set, values: .init(weight: 130, reps: 6), context: context, save: fail))
+        XCTAssertEqual(failures.map(\.operation), [.completion, .rpe, .fieldEdit])
+    }
+
+    func testFailedCompletionRestoresOnlyAttemptedFieldsAndTimestamps() throws {
+        enum SaveFailure: Error { case expected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let baseline = Date(timeIntervalSince1970: 100)
+        set.weight = 100
+        set.reps = 5
+        set.rpe = 7
+        set.updatedAt = baseline
+        logged.updatedAt = baseline
+        session.updatedAt = baseline
+        try context.save()
+        session.notes = "Unrelated unsaved note"
+        let outbox = SyncOutboxEntry(entityKind: .workoutSession, entityID: session.id,
+                                    operation: .update, ownerTokenIdentifier: "owner-a")
+        context.insert(outbox)
+        outbox.attemptCount = 3
+
+        XCTAssertThrowsError(try engine.toggleSetCompletion(
+            set, preparedValues: .init(weight: 120, reps: 8), context: context,
+            now: Date(timeIntervalSince1970: 200), save: { _ in throw SaveFailure.expected }
+        ))
+
+        XCTAssertEqual(set.weight, 100)
+        XCTAssertEqual(set.reps, 5)
+        XCTAssertEqual(set.rpe, 7)
+        XCTAssertFalse(set.isCompleted)
+        XCTAssertNil(set.completedAt)
+        XCTAssertEqual(set.updatedAt, baseline)
+        XCTAssertEqual(logged.updatedAt, baseline)
+        XCTAssertEqual(session.updatedAt, baseline)
+        XCTAssertEqual(session.notes, "Unrelated unsaved note")
+        XCTAssertEqual(outbox.attemptCount, 3)
+        XCTAssertEqual(outbox.ownerTokenIdentifier, "owner-a")
+        XCTAssertNotNil(outbox.modelContext)
+        XCTAssertTrue(context.hasChanges)
+    }
+
+    func testRetryKeepsOriginalCompletionAndDiscardNeverSaves() throws {
+        enum SaveFailure: Error { case expected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let intendedDate = Date(timeIntervalSince1970: 200)
+        let fail: (ModelContext) throws -> Void = { _ in throw SaveFailure.expected }
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, preparedValues: .init(weight: 120, reps: 8),
+            context: context, now: intendedDate, save: fail))
+        XCTAssertTrue(engine.hasPendingSetSave)
+        XCTAssertTrue(engine.canRetrySetSave(in: session))
+        XCTAssertThrowsError(try engine.retrySetSave(in: session, context: context, save: fail))
+        XCTAssertFalse(set.isCompleted)
+        XCTAssertTrue(engine.hasPendingSetSave)
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertTrue(set.isCompleted)
+        XCTAssertEqual(set.completedAt, intendedDate)
+        XCTAssertEqual(set.weight, 120)
+        XCTAssertEqual(set.reps, 8)
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertFalse(context.hasChanges)
+
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        XCTAssertTrue(set.isCompleted)
+        engine.discardSetSave()
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertTrue(set.isCompleted)
+        XCTAssertEqual(set.completedAt, intendedDate)
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        XCTAssertThrowsError(try engine.retrySetSave(in: session, context: context, save: fail))
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertFalse(set.isCompleted)
+        XCTAssertNil(set.completedAt)
+        XCTAssertEqual(set.weight, 120)
+        XCTAssertEqual(set.reps, 8)
+    }
+
+    func testFailedRPEAndClearRestoreValuesAndRetryOriginalIntent() throws {
+        enum SaveFailure: Error { case expected }
+        for selection: Double? in [8, nil] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let engine = ActiveWorkoutEngine()
+            let session = try engine.startBlankWorkout(context: context)
+            let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+            context.insert(exercise)
+            let logged = try engine.addExercise(exercise, to: session, context: context)
+            let set = try XCTUnwrap(logged.sortedSets.first)
+            set.rpe = 6
+            try context.save()
+            let date = Date(timeIntervalSince1970: 200)
+            XCTAssertThrowsError(try engine.applyActiveSetRPESelection(set, rpe: selection,
+                preparedValues: .init(weight: 120, reps: 8), context: context, now: date,
+                save: { _ in throw SaveFailure.expected }))
+            XCTAssertNil(set.weight)
+            XCTAssertNil(set.reps)
+            XCTAssertEqual(set.rpe, 6)
+            XCTAssertFalse(set.isCompleted)
+            XCTAssertTrue(engine.hasPendingSetSave)
+            try engine.retrySetSave(in: session, context: context)
+            XCTAssertEqual(set.weight, 120)
+            XCTAssertEqual(set.reps, 8)
+            XCTAssertEqual(set.rpe, selection)
+            XCTAssertEqual(set.isCompleted, selection != nil)
+            XCTAssertEqual(set.completedAt, selection == nil ? nil : date)
+            XCTAssertFalse(engine.hasPendingSetSave)
+        }
+    }
+
+    func testFailedDraftRetainsInputAndBlocksReplacementUntilRetry() throws {
+        enum SaveFailure: Error { case expected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let baseline = set.updatedAt
+        let parentDate = session.updatedAt
+        XCTAssertThrowsError(try engine.commitActiveSetDraft(set, values: .init(weight: 95, reps: 6),
+            context: context, save: { _ in throw SaveFailure.expected }))
+        XCTAssertNil(set.weight)
+        XCTAssertEqual(set.updatedAt, baseline)
+        XCTAssertEqual(session.updatedAt, parentDate)
+        XCTAssertTrue(engine.hasPendingSetSave)
+        try engine.toggleSetCompletion(set, preparedValues: .init(weight: 999, reps: 1), context: context,
+            save: { _ in XCTFail("Another callback must not save while recovery is unresolved") })
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertEqual(set.weight, 95)
+        XCTAssertEqual(set.reps, 6)
+        XCTAssertFalse(set.isCompleted)
+        XCTAssertEqual(session.updatedAt, parentDate)
+        XCTAssertFalse(engine.hasPendingSetSave)
+    }
+
+    func testPendingSaveCannotReplayIntoChangedOwnerOrMissingSet() throws {
+        enum SaveFailure: Error { case expected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(ownerTokenIdentifier: "owner-a", context: context)
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let set = try XCTUnwrap(logged.sortedSets.first)
+        let fail: (ModelContext) throws -> Void = { _ in throw SaveFailure.expected }
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        set.markDeleted()
+        XCTAssertFalse(engine.canRetrySetSave(in: session))
+        try engine.retrySetSave(in: session, context: context, save: { _ in XCTFail("Deleted set cannot save") })
+        XCTAssertTrue(engine.hasPendingSetSave)
+        engine.discardSetSave()
+        XCTAssertFalse(engine.hasPendingSetSave)
+        set.restoreFromDeletion()
+
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        session.syncOwnerTokenIdentifier = "owner-b"
+        try engine.retrySetSave(in: session, context: context, save: { _ in XCTFail("Owner change cannot save") })
+        XCTAssertFalse(engine.hasPendingSetSave)
+        XCTAssertFalse(set.isCompleted)
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
+        engine.clearSetSaveIfInaccessible(in: nil)
+        XCTAssertFalse(engine.hasPendingSetSave)
+    }
+
+    func testSuggestionsFollowActualSetEditsAndStructureWithoutPersistingIntoEmptySets() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let first = try XCTUnwrap(loggedExercise.sortedSets.first)
+        let second = try engine.addSet(to: loggedExercise, context: context)
+        let third = try engine.addSet(to: loggedExercise, context: context)
+        try engine.commitActiveSetDraft(first, values: .init(weight: 90, reps: 12), context: context)
+        try engine.commitActiveSetDraft(second, values: .init(weight: nil, reps: 10), context: context)
+
+        func suggestions(_ exercise: LoggedExercise) -> [ActiveWorkoutSetInput.Values] {
+            ActiveWorkoutSetSuggestions.resolve(for: exercise.sortedSets.map {
+                .init(weight: $0.weight, reps: $0.reps)
+            })
+        }
+        XCTAssertEqual(suggestions(loggedExercise).last, .init(weight: 90, reps: 10))
+        XCTAssertNil(third.weight)
+        XCTAssertNil(third.reps)
+        XCTAssertFalse(context.hasChanges)
+
+        let reopenedContext = ModelContext(container)
+        let reopened = try XCTUnwrap(reopenedContext.fetch(FetchDescriptor<LoggedExercise>()).first)
+        XCTAssertEqual(suggestions(reopened).last, .init(weight: 90, reps: 10))
+        XCTAssertNil(reopened.sortedSets.last?.weight)
+        XCTAssertNil(reopened.sortedSets.last?.reps)
+
+        try engine.removeSet(second, context: context)
+        XCTAssertEqual(suggestions(loggedExercise).last, .init(weight: 90, reps: 12))
+        try engine.commitActiveSetDraft(first, values: .init(weight: 100, reps: 8), context: context)
+        let fourth = try engine.addSet(to: loggedExercise, context: context)
+        XCTAssertEqual(suggestions(loggedExercise).last, .init(weight: 100, reps: 8))
+        XCTAssertNil(fourth.weight)
+        XCTAssertNil(fourth.reps)
+    }
+
+    func testCheckmarkAndRPEAcceptSuggestionsAtTheirExistingSingleSaveBoundary() throws {
+        for usesRPE in [false, true] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let engine = ActiveWorkoutEngine()
+            let set = LoggedSet(orderIndex: 1)
+            context.insert(set)
+            try context.save()
+            var input = ActiveWorkoutSetInput()
+            let values = input.preparedValuesForSetAction(
+                current: .init(weight: set.weight, reps: set.reps),
+                weightUnit: .pounds,
+                completesSet: true,
+                isCompleted: false,
+                previous: .init(weight: 185, reps: 5),
+                suggestions: .init(weight: 90, reps: 12)
+            )
+            var saves = 0
+            let save: (ModelContext) throws -> Void = { context in
+                saves += 1
+                try context.save()
+            }
+            if usesRPE {
+                try engine.applyActiveSetRPESelection(set, rpe: 8, preparedValues: values,
+                                                      context: context, save: save)
+            } else {
+                try engine.toggleSetCompletion(set, preparedValues: values, context: context, save: save)
+            }
+            XCTAssertEqual(set.weight, 90)
+            XCTAssertEqual(set.reps, 12)
+            XCTAssertTrue(set.isCompleted)
+            XCTAssertNotNil(set.completedAt)
+            XCTAssertEqual(saves, 1)
+            XCTAssertFalse(context.hasChanges)
+        }
+    }
+
+    func testStartingBlankCreatesOneActiveSessionWithBlankSource() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+
+        XCTAssertEqual(session.status, .active)
+        XCTAssertEqual(session.source, .blank)
+        XCTAssertEqual(engine.activeSessionID, session.id)
+        XCTAssertEqual(try activeSessions(in: context).count, 1)
+    }
+
+    func testStartingBlankTwiceReturnsExistingActiveSession() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+
+        let first = try engine.startBlankWorkout(context: context)
+        let second = try engine.startBlankWorkout(context: context)
+
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(try activeSessions(in: context).count, 1)
+    }
+
+    func testStartingBlankIgnoresTombstonedActiveSession() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let deletedActive = WorkoutSession(
+            title: "Deleted Active",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .active,
+            source: .blank
+        )
+        deletedActive.markDeleted(now: Date(timeIntervalSince1970: 200))
+        context.insert(deletedActive)
+        try context.save()
+
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 300))
+
+        XCTAssertNotEqual(session.id, deletedActive.id)
+        XCTAssertEqual(engine.activeSessionID, session.id)
+        XCTAssertEqual(try activeSessions(in: context).map(\.id), [session.id])
+    }
+
+    func testStartingFromPastCopiesStructureWithBlankActualSetValues() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let past = WorkoutSession(title: "Leg Day", startedAt: .now, notes: "Knees felt rough", status: .completed, source: .blank)
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exercise: exercise,
+            exerciseSnapshotName: exercise.name,
+            exerciseSnapshotEquipmentRaw: ExerciseEquipment.smithMachine.rawValue,
+            exerciseSnapshotPrimaryMuscleGroupRaw: ExerciseMuscleGroup.glutes.rawValue,
+            notes: "Use belt"
+        )
+        loggedExercise.sets = [
+            LoggedSet(orderIndex: 0, weight: 315, reps: 5, rpe: 8, kind: .warmup, isCompleted: true),
+            LoggedSet(orderIndex: 1, weight: 335, reps: 3, rpe: 9, kind: .working, isCompleted: true)
+        ]
+        past.loggedExercises = [loggedExercise]
+        context.insert(exercise)
+        context.insert(past)
+        try context.save()
+
+        let engine = ActiveWorkoutEngine()
+        let newSession = try engine.startWorkout(fromPast: past, context: context)
+
+        XCTAssertEqual(newSession.source, .pastWorkout)
+        XCTAssertEqual(newSession.sourceSessionID, past.id)
+        XCTAssertEqual(newSession.title, "Leg Day")
+        XCTAssertEqual(newSession.notes, "")
+        XCTAssertNil(newSession.referenceNotes)
+        XCTAssertEqual(newSession.loggedExercises.first?.sets.count, 2)
+        let copiedExercise = try XCTUnwrap(newSession.loggedExercises.first)
+        XCTAssertEqual(copiedExercise.orderIndex, 0)
+        XCTAssertEqual(copiedExercise.exerciseSnapshotName, "Back Squat")
+        XCTAssertEqual(copiedExercise.exerciseSnapshotEquipmentRaw, "smithMachine")
+        XCTAssertEqual(copiedExercise.exerciseSnapshotPrimaryMuscleGroupRaw, "glutes")
+        XCTAssertEqual(copiedExercise.notes, "")
+        XCTAssertNil(copiedExercise.referenceNotes)
+        XCTAssertEqual(copiedExercise.sourceLoggedExerciseID, loggedExercise.id)
+
+        let copiedSets = copiedExercise.sortedSets
+        XCTAssertEqual(copiedSets.map(\.isCompleted), [false, false])
+        XCTAssertEqual(copiedSets.map(\.kind), [.warmup, .working])
+        XCTAssertEqual(copiedSets.map(\.weight), [nil, nil])
+        XCTAssertEqual(copiedSets.map(\.reps), [nil, nil])
+        XCTAssertEqual(copiedSets.map(\.rpe), [nil, nil])
+    }
+
+    func testStartingFromPastReturnsExistingActiveSessionWithoutCloning() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = Exercise(name: "Overhead Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .shoulders)
+        let pastLoggedExercise = LoggedExercise(orderIndex: 0, exercise: exercise, exerciseSnapshotName: exercise.name)
+        pastLoggedExercise.sets = [
+            LoggedSet(orderIndex: 0, weight: 135, reps: 5, rpe: 8, isCompleted: true)
+        ]
+        let past = WorkoutSession(
+            title: "Push Day",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .completed,
+            source: .blank,
+            loggedExercises: [pastLoggedExercise]
+        )
+        let existingActive = WorkoutSession(
+            title: "Already Active",
+            startedAt: Date(timeIntervalSince1970: 200),
+            status: .active,
+            source: .blank
+        )
+        context.insert(exercise)
+        context.insert(past)
+        context.insert(existingActive)
+        try context.save()
+
+        let engine = ActiveWorkoutEngine()
+        let returned = try engine.startWorkout(fromPast: past, context: context)
+
+        XCTAssertEqual(returned.id, existingActive.id)
+        XCTAssertEqual(engine.activeSessionID, existingActive.id)
+        XCTAssertEqual(try activeSessions(in: context).map(\.id), [existingActive.id])
+        XCTAssertTrue(existingActive.loggedExercises.isEmpty)
+    }
+
+    func testStartingFromPastRejectsSessionOutsideCurrentOwnerScope() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let ownerBSession = WorkoutSession(
+            title: "Owner B Push",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: "issuer|owner_b"
+        )
+        context.insert(ownerBSession)
+        try context.save()
+
+        let engine = ActiveWorkoutEngine()
+        XCTAssertThrowsError(
+            try engine.startWorkout(
+                fromPast: ownerBSession,
+                ownerTokenIdentifier: "issuer|owner_a",
+                context: context
+            )
+        ) { error in
+            XCTAssertEqual(error as? ActiveWorkoutEngineError, .pastWorkoutUnavailable)
+        }
+        XCTAssertTrue(try activeSessions(in: context).isEmpty)
+    }
+
+    func testAddingMultipleExercisesKeepsSelectionOrderAndSeedsEachHistoryInOneSave() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let squat = Exercise(name: "Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        context.insert(bench)
+        context.insert(squat)
+        try insertCompletedSession(startedAt: Date(timeIntervalSince1970: 100), exercise: bench,
+                                   sets: [(.warmup, true), (.working, true)], in: context)
+        let session = try engine.startBlankWorkout(context: context)
+        var saveCount = 0
+        let added = try engine.addExercises([squat, bench], to: session, context: context, save: {
+            saveCount += 1
+            try $0.save()
+        })
+
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Squat", "Bench"])
+        XCTAssertEqual(added.map(\.orderIndex), [0, 1])
+        XCTAssertEqual(added[0].sortedSets.map(\.kind), [.working])
+        XCTAssertEqual(added[1].sortedSets.map(\.kind), [.warmup, .working])
+        XCTAssertTrue(added.flatMap(\.sets).allSatisfy { !$0.isCompleted && $0.weight == nil && $0.reps == nil })
+    }
+
+    func testAddingMultipleExercisesSkipsExistingAndRepeatedIDsButAllowsRemovedExercises() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let bench = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let squat = Exercise(name: "Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        context.insert(bench)
+        context.insert(squat)
+        try engine.addExercise(bench, to: session, context: context)
+        let removed = try engine.addExercise(squat, to: session, context: context)
+        try engine.removeLoggedExercise(removed, context: context)
+
+        let added = try engine.addExercises([bench, squat, squat], to: session, context: context)
+        XCTAssertEqual(added.map(\.exerciseSnapshotName), ["Squat"])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Bench", "Squat"])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1])
+        let noAdditions = try engine.addExercises([bench, squat], to: session, context: context, save: { _ in
+            XCTFail("An already-added selection must not save again")
+        })
+        XCTAssertTrue(noAdditions.isEmpty)
+    }
+
+    func testFailedMultiAddRemovesEntireGroupPreservesOtherEditsAndCanRetryOnDisk() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let container = try SwiftDataTestSupport.makeDiskBackedContainer(storeURL: directory.appendingPathComponent("test.store"))
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let bench = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let squat = Exercise(name: "Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        context.insert(bench)
+        context.insert(squat)
+        try context.save()
+        let updatedAt = session.updatedAt
+        session.notes = "Keep this unsaved note"
+
+        XCTAssertThrowsError(try engine.addExercises([squat, bench], to: session, context: context, save: { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        }))
+        XCTAssertTrue(session.sortedLoggedExercises.isEmpty)
+        XCTAssertEqual(session.updatedAt, updatedAt)
+        XCTAssertEqual(session.notes, "Keep this unsaved note")
+        try context.save()
+        let freshContext = ModelContext(container)
+        XCTAssertTrue(try freshContext.fetch(FetchDescriptor<LoggedExercise>()).isEmpty)
+        XCTAssertTrue(try freshContext.fetch(FetchDescriptor<LoggedSet>()).isEmpty)
+
+        try engine.addExercises([squat, bench], to: session, context: context)
+        let savedContext = ModelContext(container)
+        let savedSession = try XCTUnwrap(savedContext.fetch(FetchDescriptor<WorkoutSession>()).first)
+        XCTAssertEqual(savedSession.sortedLoggedExercises.map(\.exerciseSnapshotName), ["Squat", "Bench"])
+        XCTAssertEqual(savedSession.notes, "Keep this unsaved note")
+        XCTAssertEqual(try savedContext.fetchCount(FetchDescriptor<LoggedExercise>()), 2)
+        XCTAssertEqual(try savedContext.fetchCount(FetchDescriptor<LoggedSet>()), 2)
+    }
+
+    func testAddingSetCopiesKindOnlyAndStartsIncompleteWithBlankValues() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        loggedExercise.sets[0].weight = 185
+        loggedExercise.sets[0].reps = 5
+        loggedExercise.sets[0].rpe = 8
+        try context.save()
+        loggedExercise.sets[0].kind = .drop
+
+        let newSet = try engine.addSet(to: loggedExercise, context: context)
+
+        XCTAssertEqual(newSet.orderIndex, 1)
+        XCTAssertNil(newSet.weight)
+        XCTAssertNil(newSet.reps)
+        XCTAssertNil(newSet.rpe)
+        XCTAssertEqual(newSet.kind, .drop)
+        XCTAssertFalse(newSet.isCompleted)
+    }
+
+    func testExplicitPreviousReplacesEnteredValues() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let set = loggedExercise.sets[0]
+        set.reps = 8
+
+        try engine.fillSetFromPrevious(set, previous: PreviousSetPerformance(weight: 185, reps: 5), context: context)
+
+        XCTAssertEqual(set.weight, 185)
+        XCTAssertEqual(set.reps, 5)
+    }
+
+    func testFillSetFromPreviousNoOpsWhenValuesAlreadyMatch() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let set = loggedExercise.sets[0]
+        let originalUpdatedAt = Date(timeIntervalSince1970: 100)
+        set.weight = 185
+        set.reps = 5
+        set.updatedAt = originalUpdatedAt
+        try context.save()
+
+        try engine.fillSetFromPrevious(set, previous: PreviousSetPerformance(weight: 185, reps: 5), context: context)
+
+        XCTAssertEqual(set.weight, 185)
+        XCTAssertEqual(set.reps, 5)
+        XCTAssertEqual(set.updatedAt, originalUpdatedAt)
+    }
+
+    func testExplicitPreviousPreservesDraftFieldsMissingFromHistoryAndAcceptsZeroWeight() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let set = LoggedSet(orderIndex: 0)
+        set.weight = 185
+        set.reps = 5
+        context.insert(set)
+        try context.save()
+
+        try engine.fillSetFromPrevious(
+            set,
+            previous: PreviousSetPerformance(weight: 0, reps: nil),
+            preparedValues: .init(weight: 200, reps: 12),
+            context: context
+        )
+
+        XCTAssertEqual(set.weight, 0)
+        XCTAssertEqual(set.reps, 12)
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertFalse(set.isCompleted)
+
+        try engine.fillSetFromPrevious(
+            set,
+            previous: PreviousSetPerformance(weight: nil, reps: 8),
+            preparedValues: .init(weight: 90, reps: 15),
+            context: context
+        )
+        XCTAssertEqual(set.weight, 90)
+        XCTAssertEqual(set.reps, 8)
+    }
+
+    func testExplicitPreviousLeavesCompletedSetsUntouched() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let set = LoggedSet(orderIndex: 0)
+        set.weight = 185
+        set.reps = 5
+        set.isCompleted = true
+        context.insert(set)
+        try context.save()
+
+        try ActiveWorkoutEngine().fillSetFromPrevious(
+            set,
+            previous: PreviousSetPerformance(weight: 90, reps: 12),
+            preparedValues: .init(weight: 200, reps: 10),
+            context: context
+        )
+
+        XCTAssertEqual(set.weight, 185)
+        XCTAssertEqual(set.reps, 5)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testFillSetFromPreviousUpdatesOnlyTheSetTimestamp() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let baseline = Date(timeIntervalSince1970: 100)
+        let commitDate = Date(timeIntervalSince1970: 200)
+        let session = WorkoutSession(
+            title: "Workout",
+            startedAt: baseline,
+            status: .active,
+            source: .blank,
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press",
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        let set = LoggedSet(orderIndex: 0, createdAt: baseline, updatedAt: baseline)
+        session.loggedExercises = [loggedExercise]
+        loggedExercise.sets = [set]
+        context.insert(session)
+        try context.save()
+
+        try engine.fillSetFromPrevious(
+            set,
+            previous: PreviousSetPerformance(weight: 185, reps: 5),
+            context: context,
+            now: commitDate
+        )
+
+        XCTAssertEqual(set.weight, 185)
+        XCTAssertEqual(set.reps, 5)
+        XCTAssertEqual(set.updatedAt, commitDate)
+        XCTAssertEqual(loggedExercise.updatedAt, baseline)
+        XCTAssertEqual(session.updatedAt, baseline)
+    }
+
+    func testRemovingLoggedExerciseTombstonesExerciseAndSetsWithoutDeletingRecords() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        _ = try engine.addSet(to: loggedExercise, context: context)
+        let deletedAt = Date(timeIntervalSince1970: 200)
+
+        try engine.removeLoggedExercise(loggedExercise, context: context, now: deletedAt)
+
+        let persistedExercises = try allLoggedExercises(in: context)
+        let persistedSets = try allLoggedSets(in: context)
+        XCTAssertEqual(persistedExercises.map(\.id), [loggedExercise.id])
+        XCTAssertEqual(persistedSets.count, 2)
+        XCTAssertEqual(loggedExercise.deletedAt, deletedAt)
+        XCTAssertEqual(loggedExercise.updatedAt, deletedAt)
+        XCTAssertTrue(loggedExercise.sets.allSatisfy { $0.deletedAt == deletedAt })
+        XCTAssertTrue(loggedExercise.sets.allSatisfy { $0.updatedAt == deletedAt })
+        XCTAssertEqual(session.loggedExercises.count, 1)
+    }
+
+    func testRemovingLoggedExerciseReindexesRemainingNonDeletedSiblings() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let firstExercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let secondExercise = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let thirdExercise = Exercise(name: "Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+        context.insert(firstExercise)
+        context.insert(secondExercise)
+        context.insert(thirdExercise)
+        let first = try engine.addExercise(firstExercise, to: session, context: context)
+        let removed = try engine.addExercise(secondExercise, to: session, context: context)
+        let third = try engine.addExercise(thirdExercise, to: session, context: context)
+
+        try engine.removeLoggedExercise(removed, context: context, now: Date(timeIntervalSince1970: 300))
+
+        let activeSiblings = session.loggedExercises
+            .filter { !$0.isDeleted }
+            .sorted { $0.orderIndex < $1.orderIndex }
+        XCTAssertEqual(activeSiblings.map(\.id), [first.id, third.id])
+        XCTAssertEqual(activeSiblings.map(\.orderIndex), [0, 1])
+        XCTAssertEqual(removed.orderIndex, 1)
+        XCTAssertEqual(try allLoggedExercises(in: context).count, 3)
+    }
+
+    func testSwappingLoggedExerciseReplacesItInPlaceWithOneBlankSet() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let row = Exercise(name: "Barbell Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+        let deadlift = Exercise(name: "Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .glutes)
+        context.insert(squat)
+        context.insert(bench)
+        context.insert(row)
+        context.insert(deadlift)
+        let first = try engine.addExercise(squat, to: session, context: context)
+        let original = try engine.addExercise(bench, to: session, context: context)
+        let last = try engine.addExercise(deadlift, to: session, context: context)
+        let originalFirstSet = try XCTUnwrap(original.sortedSets.first)
+        originalFirstSet.weight = 225
+        originalFirstSet.reps = 5
+        originalFirstSet.rpe = 8
+        originalFirstSet.isCompleted = true
+        let originalSecondSet = try engine.addSet(to: original, context: context)
+        original.notes = "Pause on the chest"
+        original.referenceNotes = "Previous cue"
+        try context.save()
+        let swapDate = Date(timeIntervalSince1970: 500)
+
+        let replacement = try engine.swapLoggedExercise(
+            original,
+            with: row,
+            context: context,
+            now: swapDate
+        )
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [first.id, replacement.id, last.id])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2])
+        XCTAssertEqual(replacement.exercise?.id, row.id)
+        XCTAssertEqual(replacement.exerciseSnapshotName, "Barbell Row")
+        XCTAssertEqual(replacement.notes, "")
+        XCTAssertNil(replacement.referenceNotes)
+        XCTAssertEqual(replacement.createdAt, swapDate)
+        XCTAssertEqual(replacement.updatedAt, swapDate)
+
+        XCTAssertEqual(replacement.sortedSets.count, 1)
+        let replacementSet = try XCTUnwrap(replacement.sortedSets.first)
+        XCTAssertEqual(replacementSet.orderIndex, 0)
+        XCTAssertNil(replacementSet.weight)
+        XCTAssertNil(replacementSet.reps)
+        XCTAssertNil(replacementSet.rpe)
+        XCTAssertFalse(replacementSet.isCompleted)
+        XCTAssertEqual(replacementSet.createdAt, swapDate)
+        XCTAssertEqual(replacementSet.updatedAt, swapDate)
+
+        XCTAssertEqual(original.deletedAt, swapDate)
+        XCTAssertEqual(original.updatedAt, swapDate)
+        XCTAssertEqual(originalFirstSet.deletedAt, swapDate)
+        XCTAssertEqual(originalSecondSet.deletedAt, swapDate)
+        XCTAssertEqual(session.updatedAt, swapDate)
+    }
+
+    func testSwappingLoggedExerciseWithItselfFailsWithoutMutation() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(bench)
+        let original = try engine.addExercise(bench, to: session, context: context)
+        let originalSet = try XCTUnwrap(original.sortedSets.first)
+        original.notes = "Keep this note"
+        originalSet.weight = 185
+        originalSet.reps = 5
+        try context.save()
+        let sessionUpdatedAt = session.updatedAt
+
+        XCTAssertThrowsError(
+            try engine.swapLoggedExercise(
+                original,
+                with: bench,
+                context: context,
+                now: Date(timeIntervalSince1970: 500)
+            )
+        ) { error in
+            XCTAssertEqual(error as? ActiveWorkoutEngineError, .invalidExerciseSwap)
+        }
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [original.id])
+        XCTAssertEqual(original.notes, "Keep this note")
+        XCTAssertNil(original.deletedAt)
+        XCTAssertEqual(originalSet.weight, 185)
+        XCTAssertEqual(originalSet.reps, 5)
+        XCTAssertNil(originalSet.deletedAt)
+        XCTAssertEqual(session.updatedAt, sessionUpdatedAt)
+        XCTAssertEqual(try allLoggedExercises(in: context).count, 1)
+        XCTAssertEqual(try allLoggedSets(in: context).count, 1)
+    }
+
+    func testSwappingLoggedExerciseRollsBackWhenSavingFails() throws {
+        enum SaveFailure: Error {
+            case expected
+        }
+
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let row = Exercise(name: "Barbell Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+        context.insert(bench)
+        context.insert(row)
+        // The replacement's history seeds several sets, all of which must roll back.
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 50),
+            exercise: row,
+            sets: [(.working, true), (.working, true), (.working, true)],
+            in: context
+        )
+        let original = try engine.addExercise(bench, to: session, context: context)
+        let originalSet = try XCTUnwrap(original.sortedSets.first)
+        let originalSecondSet = try engine.addSet(to: original, context: context)
+        original.notes = "Keep this note"
+        originalSet.weight = 185
+        originalSet.reps = 5
+        originalSecondSet.weight = 175
+        originalSecondSet.reps = 8
+        try context.save()
+        let sessionUpdatedAt = session.updatedAt
+        let exerciseCountBeforeSwap = try allLoggedExercises(in: context).count
+        let setCountBeforeSwap = try allLoggedSets(in: context).count
+
+        XCTAssertThrowsError(
+            try engine.swapLoggedExercise(
+                original,
+                with: row,
+                context: context,
+                now: Date(timeIntervalSince1970: 500),
+                save: { _ in throw SaveFailure.expected }
+            )
+        ) { error in
+            XCTAssertTrue(error is SaveFailure)
+        }
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [original.id])
+        XCTAssertEqual(original.notes, "Keep this note")
+        XCTAssertNil(original.deletedAt)
+        XCTAssertEqual(originalSet.weight, 185)
+        XCTAssertEqual(originalSet.reps, 5)
+        XCTAssertNil(originalSet.deletedAt)
+        XCTAssertEqual(originalSecondSet.weight, 175)
+        XCTAssertEqual(originalSecondSet.reps, 8)
+        XCTAssertNil(originalSecondSet.deletedAt)
+        XCTAssertEqual(session.updatedAt, sessionUpdatedAt)
+        XCTAssertEqual(try allLoggedExercises(in: context).count, exerciseCountBeforeSwap)
+        XCTAssertEqual(try allLoggedSets(in: context).count, setCountBeforeSwap)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testAddingExerciseSeedsOneBlankSetPerCompletedSetFromLastPerformance() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(bench)
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: bench,
+            sets: [(.working, true), (.working, true)],
+            in: context
+        )
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 200),
+            exercise: bench,
+            sets: [(.warmup, true), (.working, true), (.working, false), (.working, true), (.drop, true)],
+            in: context
+        )
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 300))
+
+        let logged = try engine.addExercise(bench, to: session, context: context)
+
+        let sets = logged.sortedSets
+        XCTAssertEqual(sets.map(\.kind), [.warmup, .working, .working, .drop])
+        XCTAssertEqual(sets.map(\.orderIndex), [0, 1, 2, 3])
+        XCTAssertTrue(sets.allSatisfy { $0.weight == nil && $0.reps == nil && $0.rpe == nil })
+        XCTAssertTrue(sets.allSatisfy { !$0.isCompleted && $0.sourceLoggedSetID == nil })
+    }
+
+    func testAddingExerciseWithoutHistoryStartsWithOneWorkingSet() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let row = Exercise(name: "Barbell Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+        context.insert(bench)
+        context.insert(row)
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: bench,
+            sets: [(.warmup, true), (.working, true), (.working, true)],
+            in: context
+        )
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 300))
+
+        let logged = try engine.addExercise(row, to: session, context: context)
+
+        XCTAssertEqual(logged.sortedSets.map(\.kind), [.working])
+    }
+
+    func testAddingExerciseIgnoresAnotherOwnersNewerPerformance() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(bench)
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: bench,
+            sets: [(.working, true), (.working, true), (.working, true)],
+            ownerTokenIdentifier: "owner-a",
+            in: context
+        )
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 200),
+            exercise: bench,
+            sets: [(.working, true), (.working, true), (.working, true), (.working, true)],
+            ownerTokenIdentifier: "owner-b",
+            in: context
+        )
+        let session = try engine.startBlankWorkout(
+            ownerTokenIdentifier: "owner-a",
+            context: context,
+            now: Date(timeIntervalSince1970: 300)
+        )
+
+        let logged = try engine.addExercise(
+            bench,
+            to: session,
+            ownerTokenIdentifier: "owner-a",
+            context: context
+        )
+
+        XCTAssertEqual(logged.sortedSets.count, 3)
+    }
+
+    func testAddingExerciseWhileSignedOutOnlySeedsSetsFromUnownedHistory() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(bench)
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: bench,
+            sets: [(.working, true), (.working, true)],
+            in: context
+        )
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 200),
+            exercise: bench,
+            sets: [(.working, true), (.working, true), (.working, true)],
+            ownerTokenIdentifier: "owner-a",
+            in: context
+        )
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 300))
+
+        let logged = try engine.addExercise(bench, to: session, context: context)
+
+        XCTAssertEqual(logged.sortedSets.count, 2)
+    }
+
+    func testAddingExerciseSkipsHistoryWithoutVisibleCompletedSets() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(bench)
+        let lastPerformance = try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: bench,
+            sets: [(.working, true), (.working, true)],
+            in: context
+        )
+        let deletedSet = LoggedSet(orderIndex: 2, kind: .working, isCompleted: true, deletedAt: Date(timeIntervalSince1970: 100))
+        let lastPerformanceExercise = try XCTUnwrap(lastPerformance.sortedLoggedExercises.first)
+        deletedSet.loggedExercise = lastPerformanceExercise
+        context.insert(deletedSet)
+        lastPerformanceExercise.sets.append(deletedSet)
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 200),
+            exercise: bench,
+            sets: [(.working, false), (.working, false), (.working, false)],
+            in: context
+        )
+        let deletedSession = try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 300),
+            exercise: bench,
+            sets: [(.working, true), (.working, true), (.working, true), (.working, true)],
+            in: context
+        )
+        deletedSession.markDeleted()
+        let discardedSession = try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 400),
+            exercise: bench,
+            sets: [(.working, true), (.working, true), (.working, true), (.working, true), (.working, true)],
+            in: context
+        )
+        discardedSession.status = .discarded
+        try context.save()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 500))
+
+        let logged = try engine.addExercise(bench, to: session, context: context)
+
+        XCTAssertEqual(logged.sortedSets.count, 2)
+    }
+
+    func testRestoredLibraryExerciseReconnectsPreviousAndHistory() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let past = try insertCompletedSession(startedAt: Date(timeIntervalSince1970: 100),
+            exercise: exercise, sets: [(.working, true), (.working, true)], in: context)
+        let service = ExerciseMutationService()
+        try service.removeExercise(exercise, context: context)
+        try service.restoreExercise(exercise, context: context)
+        let active = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 300))
+        let added = try engine.addExercise(exercise, to: active, context: context)
+        let previous = PreviousSetPerformance.lastCompletedSets(for: added, in: [past, active], ownerTokenIdentifier: nil)
+        XCTAssertEqual(previous.count, 2)
+        let summary = try XCTUnwrap(ExerciseHistorySummary.makeSummaries(from: [past]).first)
+        XCTAssertEqual(ExerciseHistorySessionGroup.makeGroups(from: [past], matching: summary).count, 1)
+        XCTAssertEqual(added.exercise?.id, past.loggedExercises.first?.exercise?.id)
+    }
+
+    func testAddingExerciseToWorkoutStartedFromPastUsesLatestPerformance() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(bench)
+        let older = try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: bench,
+            sets: [(.working, true), (.working, true)],
+            in: context
+        )
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 200),
+            exercise: bench,
+            sets: [(.warmup, true), (.working, true), (.working, true)],
+            in: context
+        )
+        let session = try engine.startWorkout(fromPast: older, context: context, now: Date(timeIntervalSince1970: 300))
+        XCTAssertEqual(session.sortedLoggedExercises.first?.sortedSets.map(\.kind), [.warmup, .working, .working])
+
+        let added = try engine.addExercise(bench, to: session, context: context)
+
+        // A newly added occurrence has no source link, so it follows the latest
+        // performance like the Previous column.
+        XCTAssertNil(added.sourceLoggedExerciseID)
+        XCTAssertEqual(added.sortedSets.map(\.kind), [.warmup, .working, .working])
+        let previous = PreviousSetPerformance.lastCompletedSets(
+            for: added,
+            in: try context.fetch(FetchDescriptor<WorkoutSession>()),
+            ownerTokenIdentifier: nil,
+            sourceSessionID: session.sourceSessionID
+        )
+        XCTAssertEqual(previous.count, added.sortedSets.count)
+    }
+
+    func testRepeatingPastWorkoutStartsEachExerciseFromItsNewerPerformance() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let crunch = Exercise(name: "Ab Crunch", category: .strength, equipment: .machine, primaryMuscleGroup: .core)
+        let squat = Exercise(name: "Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let curl = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        [crunch, squat, curl].forEach(context.insert)
+        let source = try insertCompletedWorkout(startedAt: Date(timeIntervalSince1970: 100), entries: [
+            (crunch, [(.working, true), (.working, true)]),
+            (squat, [(.warmup, true), (.working, true), (.working, true)]),
+            (curl, [(.working, true), (.working, false)]),
+        ], in: context)
+        try insertCompletedWorkout(startedAt: Date(timeIntervalSince1970: 200), entries: [
+            (crunch, [(.working, true), (.working, true), (.failure, true)]),
+            (squat, [(.working, true), (.working, false)]),
+        ], in: context)
+
+        let session = try engine.startWorkout(fromPast: source, context: context, now: Date(timeIntervalSince1970: 300))
+
+        let exercises = session.sortedLoggedExercises
+        XCTAssertEqual(exercises.map(\.exerciseSnapshotName), ["Ab Crunch", "Squat", "Curl"])
+        // A newer session logged Ab Crunch and Squat: their rows match its completed sets.
+        XCTAssertEqual(exercises[0].sortedSets.map(\.kind), [.working, .working, .failure])
+        XCTAssertEqual(exercises[1].sortedSets.map(\.kind), [.working])
+        for exercise in exercises[0...1] {
+            XCTAssertNil(exercise.sourceLoggedExerciseID)
+            XCTAssertTrue(exercise.sortedSets.allSatisfy { $0.sourceLoggedSetID == nil && !$0.isCompleted })
+        }
+        // No newer session logged Curl: it stays a linked copy of the source rows.
+        let sourceCurl = try XCTUnwrap(source.sortedLoggedExercises.last)
+        XCTAssertEqual(exercises[2].sourceLoggedExerciseID, sourceCurl.id)
+        XCTAssertEqual(exercises[2].sortedSets.map(\.sourceLoggedSetID), sourceCurl.sortedSets.map(\.id))
+
+        // Every row has a Previous value, and no Previous value lacks a row.
+        let previous = PreviousSetPerformance.lastCompletedSetsByExerciseID(
+            for: exercises,
+            in: try context.fetch(FetchDescriptor<WorkoutSession>()),
+            ownerTokenIdentifier: nil,
+            sourceSessionID: session.sourceSessionID
+        )
+        XCTAssertEqual(exercises.map { previous[$0.id]?.count }, [3, 1, 2])
+    }
+
+    func testNewerPerformanceRankDoesNotDependOnHistoryOrderForTiedWorkouts() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(bench)
+        // Same start and title, so only the id can order them.
+        let startedAt = Date(timeIntervalSince1970: 100)
+        let first = try insertCompletedWorkout(
+            startedAt: startedAt, entries: [(bench, [(.working, true), (.working, true)])], in: context
+        )
+        let second = try insertCompletedWorkout(
+            startedAt: startedAt, entries: [(bench, [(.working, true), (.working, true), (.working, true)])], in: context
+        )
+
+        for source in [first, second] {
+            let results = [[first, second], [second, first]].map {
+                PreviousSetPerformance.newerCompletedSetKindsByExerciseID(
+                    for: source, in: $0, ownerTokenIdentifier: nil
+                )
+            }
+            XCTAssertEqual(results[0], results[1])
+        }
+        // Exactly one of the tied workouts ranks as newer than the other.
+        let seededSources = [first, second].filter {
+            !PreviousSetPerformance.newerCompletedSetKindsByExerciseID(
+                for: $0, in: [first, second], ownerTokenIdentifier: nil
+            ).isEmpty
+        }
+        XCTAssertEqual(seededSources.count, 1)
+    }
+
+    func testRepeatingPastWorkoutCopiesSourceRowsWhenNewerPerformanceDoesNotApply() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let row = Exercise(name: "Barbell Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+        [bench, row].forEach(context.insert)
+        let owner = "issuer|owner_a"
+        // Bench appears twice in the source, so a newer performance can't be
+        // paired with either occurrence; Row's newer session belongs to another owner.
+        let source = try insertCompletedWorkout(startedAt: Date(timeIntervalSince1970: 100), entries: [
+            (bench, [(.working, true)]),
+            (row, [(.working, true), (.working, true)]),
+            (bench, [(.working, true), (.working, true)]),
+        ], ownerTokenIdentifier: owner, in: context)
+        try insertCompletedWorkout(startedAt: Date(timeIntervalSince1970: 200), entries: [
+            (bench, [(.working, true), (.working, true), (.working, true)]),
+        ], ownerTokenIdentifier: owner, in: context)
+        try insertCompletedWorkout(startedAt: Date(timeIntervalSince1970: 200), entries: [
+            (row, [(.working, true), (.working, true), (.working, true)]),
+        ], ownerTokenIdentifier: "issuer|owner_b", in: context)
+
+        let session = try engine.startWorkout(
+            fromPast: source,
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 300)
+        )
+
+        let sourceExercises = source.sortedLoggedExercises
+        let exercises = session.sortedLoggedExercises
+        XCTAssertEqual(exercises.map(\.sourceLoggedExerciseID), sourceExercises.map(\.id))
+        XCTAssertEqual(
+            exercises.map { $0.sortedSets.map(\.sourceLoggedSetID) },
+            sourceExercises.map { $0.sortedSets.map(\.id) }
+        )
+    }
+
+    func testSwappingLoggedExerciseSeedsSetsFromReplacementsLastPerformance() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let row = Exercise(name: "Barbell Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+        context.insert(bench)
+        context.insert(row)
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 100),
+            exercise: bench,
+            sets: [(.working, true), (.working, true), (.working, true), (.working, true)],
+            in: context
+        )
+        try insertCompletedSession(
+            startedAt: Date(timeIntervalSince1970: 150),
+            exercise: row,
+            sets: [(.warmup, true), (.working, true), (.failure, true)],
+            in: context
+        )
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 200))
+        let original = try engine.addExercise(bench, to: session, context: context)
+        XCTAssertEqual(original.sortedSets.count, 4)
+        let swapDate = Date(timeIntervalSince1970: 500)
+
+        let replacement = try engine.swapLoggedExercise(
+            original,
+            with: row,
+            context: context,
+            now: swapDate
+        )
+
+        let sets = replacement.sortedSets
+        XCTAssertEqual(sets.map(\.kind), [.warmup, .working, .failure])
+        XCTAssertEqual(sets.map(\.orderIndex), [0, 1, 2])
+        XCTAssertTrue(sets.allSatisfy { $0.weight == nil && $0.reps == nil && !$0.isCompleted })
+        XCTAssertTrue(sets.allSatisfy { $0.createdAt == swapDate && $0.updatedAt == swapDate })
+        // Swapping the workout's only exercise leaves exactly the replacement visible.
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [replacement.id])
+        XCTAssertEqual(replacement.orderIndex, 0)
+        XCTAssertTrue(original.isDeleted)
+    }
+
+    func testSwappingFirstAndLastLoggedExercisesRetainsTheirPositions() throws {
+        for originalIndex in [0, 2] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let engine = ActiveWorkoutEngine()
+            let session = try engine.startBlankWorkout(context: context)
+            let exercises = [
+                Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads),
+                Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest),
+                Exercise(name: "Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .glutes),
+            ]
+            let replacementExercise = Exercise(
+                name: "Barbell Row",
+                category: .strength,
+                equipment: .barbell,
+                primaryMuscleGroup: .upperBack
+            )
+            for exercise in exercises {
+                context.insert(exercise)
+            }
+            context.insert(replacementExercise)
+            let originals = try exercises.map { try engine.addExercise($0, to: session, context: context) }
+
+            let replacement = try engine.swapLoggedExercise(
+                originals[originalIndex],
+                with: replacementExercise,
+                context: context
+            )
+
+            XCTAssertEqual(session.sortedLoggedExercises[originalIndex].id, replacement.id)
+            XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2])
+            XCTAssertEqual(
+                session.sortedLoggedExercises.map(\.exerciseSnapshotName),
+                originalIndex == 0
+                    ? ["Barbell Row", "Bench Press", "Deadlift"]
+                    : ["Back Squat", "Bench Press", "Barbell Row"]
+            )
+        }
+    }
+
+    func testAddingExerciseAfterRemovingLastExerciseUsesNextVisibleOrderIndex() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let firstExercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let removedExercise = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let replacementExercise = Exercise(name: "Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
+        context.insert(firstExercise)
+        context.insert(removedExercise)
+        context.insert(replacementExercise)
+        _ = try engine.addExercise(firstExercise, to: session, context: context)
+        let removed = try engine.addExercise(removedExercise, to: session, context: context)
+        try engine.removeLoggedExercise(removed, context: context, now: Date(timeIntervalSince1970: 500))
+
+        let replacement = try engine.addExercise(replacementExercise, to: session, context: context)
+
+        XCTAssertEqual(replacement.orderIndex, 1)
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1])
+        XCTAssertEqual(try allLoggedExercises(in: context).count, 3)
+    }
+
+    func testRemovingSetTombstonesSetAndReindexesRemainingNonDeletedSiblings() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let firstSet = loggedExercise.sets[0]
+        let removedSet = try engine.addSet(to: loggedExercise, context: context)
+        let thirdSet = try engine.addSet(to: loggedExercise, context: context)
+        let deletedAt = Date(timeIntervalSince1970: 400)
+
+        try engine.removeSet(removedSet, context: context, now: deletedAt)
+
+        let persistedSets = try allLoggedSets(in: context)
+        let activeSets = loggedExercise.sets
+            .filter { !$0.isDeleted }
+            .sorted { $0.orderIndex < $1.orderIndex }
+        XCTAssertEqual(persistedSets.count, 3)
+        XCTAssertEqual(removedSet.deletedAt, deletedAt)
+        XCTAssertEqual(removedSet.updatedAt, deletedAt)
+        XCTAssertEqual(activeSets.map(\.id), [firstSet.id, thirdSet.id])
+        XCTAssertEqual(activeSets.map(\.orderIndex), [0, 1])
+        XCTAssertEqual(removedSet.orderIndex, 1)
+        XCTAssertEqual(try engine.addSet(to: loggedExercise, context: context).orderIndex, 2)
+    }
+
+    func testCheckmarkCommitsTypedWeightAndPreviousRepsWithOneSaveAndNoFollowUpDraft() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let set = loggedExercise.sets[0]
+        let baseline = Date(timeIntervalSince1970: 100)
+        let completionDate = Date(timeIntervalSince1970: 200)
+        session.updatedAt = baseline
+        loggedExercise.updatedAt = baseline
+        set.updatedAt = baseline
+        set.rpe = 8
+        try context.save()
+        var input = ActiveWorkoutSetInput()
+        input.update("200", for: .weight, isFocused: true)
+        let preparedValues = input.preparedValuesForSetAction(
+            current: .init(weight: set.weight, reps: set.reps),
+            weightUnit: .pounds,
+            completesSet: !set.isCompleted,
+            isCompleted: set.isCompleted,
+            previous: .init(weight: 185, reps: 5)
+        )
+        var saveCount = 0
+
+        try engine.toggleSetCompletion(
+            set,
+            preparedValues: preparedValues,
+            context: context,
+            now: completionDate,
+            save: { context in
+                saveCount += 1
+                XCTAssertEqual(set.weight, 200)
+                XCTAssertEqual(set.reps, 5)
+                XCTAssertTrue(set.isCompleted)
+                try context.save()
+            }
+        )
+
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertEqual(set.rpe, 8)
+        XCTAssertEqual(set.completedAt, completionDate)
+        XCTAssertEqual(set.updatedAt, completionDate)
+        XCTAssertEqual(loggedExercise.updatedAt, completionDate)
+        XCTAssertEqual(session.updatedAt, completionDate)
+        for _ in 0..<2 {
+            let followUp = input.commit(current: .init(weight: set.weight, reps: set.reps), weightUnit: .pounds)
+            XCTAssertFalse(followUp.shouldPersist, "Unchanged blur and disappearance must not request another save.")
+        }
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
+    }
+
+    func testWorkoutMetricsCacheKeyChangesOnlyForMetricInputs() {
+        let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
+        let loggedExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press")
+        let set = LoggedSet(orderIndex: 0, weight: 185, reps: 5, rpe: 8)
+        loggedExercise.sets = [set]
+        session.loggedExercises = [loggedExercise]
+        let initialKey = WorkoutMetrics.CacheKey(session: session)
+
+        session.title = "Renamed"
+        session.updatedAt = session.updatedAt.addingTimeInterval(1)
+        loggedExercise.notes = "Pause reps"
+        set.rpe = 9
+
+        XCTAssertEqual(WorkoutMetrics.CacheKey(session: session), initialKey)
+
+        set.weight = 195
+        XCTAssertNotEqual(WorkoutMetrics.CacheKey(session: session), initialKey)
+    }
+
+    func testCompletingSetPreservesManualWeightRepsAndRPE() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let set = loggedExercise.sets[0]
+        set.weight = 195
+        set.reps = 4
+        set.rpe = 8.5
+        try context.save()
+
+        try engine.toggleSetCompletion(set, context: context, now: Date(timeIntervalSince1970: 300))
+
+        XCTAssertTrue(set.isCompleted)
+        XCTAssertEqual(set.weight, 195)
+        XCTAssertEqual(set.reps, 4)
+        XCTAssertEqual(set.rpe, 8.5)
+        XCTAssertEqual(set.completedAt, Date(timeIntervalSince1970: 300))
+    }
+
+    func testFillingFromPreviousRejectsOutOfPolicyNumericValues() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let set = LoggedSet(orderIndex: 0)
+        context.insert(set)
+
+        try engine.fillSetFromPrevious(
+            set,
+            previous: PreviousSetPerformance(weight: 10_001, reps: 1_001),
+            context: context
+        )
+
+        XCTAssertNil(set.weight)
+        XCTAssertNil(set.reps)
+    }
+
+    func testFillingFromPreviousReplacesOutOfPolicyCurrentValues() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let set = LoggedSet(orderIndex: 0, weight: 10_001, reps: 1_001)
+        context.insert(set)
+
+        try engine.fillSetFromPrevious(
+            set,
+            previous: PreviousSetPerformance(weight: 185, reps: 5),
+            context: context
+        )
+
+        XCTAssertEqual(set.weight, 185)
+        XCTAssertEqual(set.reps, 5)
+    }
+
+    func testRepeatedRPESelectionDoesNotSaveAndCompletedEditsOnlyTouchSet() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let completionDate = Date(timeIntervalSince1970: 100)
+        let editDate = Date(timeIntervalSince1970: 200)
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let set = loggedExercise.sets[0]
+        set.weight = 185
+        set.reps = 5
+        set.rpe = 8
+        try context.save()
+        try engine.toggleSetCompletion(set, context: context, now: completionDate)
+        var saveCount = 0
+
+        for rpe: Double? in [8, 9, nil, nil] {
+            try engine.applyActiveSetRPESelection(
+                set,
+                rpe: rpe,
+                preparedValues: .init(weight: 185, reps: 5),
+                context: context,
+                now: editDate,
+                save: { context in
+                    saveCount += 1
+                    try context.save()
+                }
+            )
+            XCTAssertEqual(set.rpe, rpe)
+        }
+
+        XCTAssertEqual(saveCount, 2, "Only changing RPE and clearing it need saves.")
+        XCTAssertNil(set.rpe)
+        XCTAssertTrue(set.isCompleted)
+        XCTAssertEqual(set.completedAt, completionDate)
+        XCTAssertEqual(set.updatedAt, editDate)
+        XCTAssertEqual(loggedExercise.updatedAt, completionDate)
+        XCTAssertEqual(session.updatedAt, completionDate)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testUncheckingCommitsPendingEditsPreservesRPEAndClearsCompletedAt() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let set = loggedExercise.sets[0]
+        set.weight = 195
+        set.reps = 4
+        set.rpe = 8
+        try context.save()
+        try engine.toggleSetCompletion(set, context: context, now: Date(timeIntervalSince1970: 300))
+        var input = ActiveWorkoutSetInput()
+        input.update("", for: .weight, isFocused: true)
+        input.update("6", for: .reps, isFocused: true)
+        let preparedValues = input.preparedValuesForSetAction(
+            current: .init(weight: set.weight, reps: set.reps),
+            weightUnit: .pounds,
+            completesSet: !set.isCompleted,
+            isCompleted: set.isCompleted,
+            previous: .init(weight: 185, reps: 5)
+        )
+        let uncheckDate = Date(timeIntervalSince1970: 360)
+        var saveCount = 0
+
+        try engine.toggleSetCompletion(
+            set,
+            preparedValues: preparedValues,
+            context: context,
+            now: uncheckDate,
+            save: { context in
+                saveCount += 1
+                try context.save()
+            }
+        )
+
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertFalse(set.isCompleted)
+        XCTAssertNil(set.weight)
+        XCTAssertEqual(set.reps, 6)
+        XCTAssertEqual(set.rpe, 8)
+        XCTAssertNil(set.completedAt)
+        XCTAssertEqual(set.updatedAt, uncheckDate)
+        XCTAssertEqual(loggedExercise.updatedAt, uncheckDate)
+        XCTAssertEqual(session.updatedAt, uncheckDate)
+        XCTAssertFalse(input.commit(current: preparedValues, weightUnit: .pounds).shouldPersist)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testCheckmarkWithOnlyDraftsOrOnlyPreviousFillSavesOnce() throws {
+        for usesPrevious in [false, true] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let engine = ActiveWorkoutEngine()
+            let set = LoggedSet(orderIndex: 0)
+            context.insert(set)
+            try context.save()
+            var input = ActiveWorkoutSetInput()
+            if !usesPrevious {
+                input.update("185", for: .weight, isFocused: true)
+                input.update("5", for: .reps, isFocused: true)
+            }
+            let preparedValues = input.preparedValuesForSetAction(
+                current: .init(weight: set.weight, reps: set.reps),
+                weightUnit: .pounds,
+                completesSet: true,
+                isCompleted: false,
+                previous: usesPrevious ? .init(weight: 185, reps: 5) : nil
+            )
+            var saveCount = 0
+
+            try engine.toggleSetCompletion(
+                set,
+                preparedValues: preparedValues,
+                context: context,
+                save: { context in
+                    saveCount += 1
+                    try context.save()
+                }
+            )
+
+            XCTAssertEqual(saveCount, 1)
+            XCTAssertEqual(set.weight, 185)
+            XCTAssertEqual(set.reps, 5)
+            XCTAssertTrue(set.isCompleted)
+            XCTAssertFalse(context.hasChanges)
+        }
+    }
+
+    func testCheckmarkPropagatesSaveFailure() throws {
+        enum SaveFailure: Error { case expected }
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let set = LoggedSet(orderIndex: 0)
+        container.mainContext.insert(set)
+
+        XCTAssertThrowsError(try ActiveWorkoutEngine().toggleSetCompletion(
+            set,
+            preparedValues: .init(weight: 185, reps: 5),
+            context: container.mainContext,
+            save: { _ in throw SaveFailure.expected }
+        )) { error in
+            XCTAssertTrue(error is SaveFailure)
+        }
+    }
+
+    func testFinalizingWorkoutTitleAppliesDefaultForBlankDraft() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        session.title = "   "
+
+        try engine.finalizeWorkoutTitle(session, context: context)
+
+        XCTAssertEqual(session.title, "Workout")
+    }
+
+    func testCommittingWorkoutTitleAppliesTrimmedTitleInOneSave() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let updatedAtBeforeCommit = session.updatedAt
+
+        try engine.commitWorkoutTitle("  Push Day  ", session: session, context: context)
+
+        XCTAssertEqual(session.title, "Push Day")
+        XCTAssertGreaterThan(session.updatedAt, updatedAtBeforeCommit)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testCommittingBlankWorkoutTitleFallsBackToDefault() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+
+        try engine.commitWorkoutTitle("   ", session: session, context: context)
+
+        XCTAssertEqual(session.title, "Workout")
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testFinishingMovesSessionOutOfActiveStateAndIntoHistory() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        session.title = ""
+
+        try engine.finishWorkout(session, context: context, now: Date(timeIntervalSince1970: 220))
+
+        XCTAssertNil(engine.activeSessionID)
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.title, "Workout")
+        XCTAssertEqual(session.durationSeconds, 120)
+        XCTAssertEqual(try activeSessions(in: context).count, 0)
+        XCTAssertEqual(try completedSessions(in: context).count, 1)
+    }
+
+    func testFinishingRecordsEntireGraphForCapturedOwnerAndPreservesDeleteIntent() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let owner = "issuer|owner_a"
+        let session = try engine.startBlankWorkout(
+            ownerTokenIdentifier: owner,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(exercise)
+        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let firstSet = try XCTUnwrap(logged.sortedSets.first)
+        let deletedAt = Date(timeIntervalSince1970: 150)
+        let delete = SyncOutboxEntry(
+            entityKind: .loggedSet,
+            entityID: firstSet.id,
+            operation: .delete,
+            status: .failed,
+            ownerTokenIdentifier: owner,
+            createdAt: deletedAt,
+            updatedAt: deletedAt,
+            lastAttemptAt: deletedAt,
+            attemptCount: 2,
+            lastErrorMessage: "retry"
+        )
+        let foreignEntry = SyncOutboxEntry(
+            entityKind: .loggedSet,
+            entityID: firstSet.id,
+            operation: .update,
+            ownerTokenIdentifier: "issuer|owner_b",
+            now: deletedAt
+        )
+        let historyEntry = SyncOutboxEntry(
+            entityKind: .workoutSession,
+            entityID: UUID(),
+            operation: .update,
+            ownerTokenIdentifier: owner,
+            now: deletedAt
+        )
+        context.insert(delete)
+        context.insert(foreignEntry)
+        context.insert(historyEntry)
+        try context.save()
+        let finishedAt = Date(timeIntervalSince1970: 220)
+
+        try engine.finishWorkout(session, ownerTokenIdentifier: "issuer|owner_b", context: context, now: finishedAt)
+
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        let graphIDs = Set([session.id, logged.id] + logged.sets.map(\.id))
+        let graphEntries = entries.filter { graphIDs.contains($0.entityID) && $0.ownerTokenIdentifier == owner }
+        XCTAssertEqual(graphEntries.count, graphIDs.count)
+        XCTAssertEqual(Set(graphEntries.map(\.entityID)), graphIDs)
+        XCTAssertTrue(graphEntries.allSatisfy { $0.status == .pending && $0.updatedAt == finishedAt })
+        XCTAssertTrue(graphEntries.filter { $0.entityID != firstSet.id }.allSatisfy { $0.operation == .create })
+        XCTAssertEqual(delete.operation, .delete)
+        XCTAssertEqual(delete.createdAt, deletedAt)
+        XCTAssertEqual(delete.attemptCount, 2)
+        XCTAssertEqual(delete.lastAttemptAt, deletedAt)
+        XCTAssertNil(delete.lastErrorMessage)
+        XCTAssertEqual(foreignEntry.operation, .update)
+        XCTAssertEqual(foreignEntry.updatedAt, deletedAt)
+        XCTAssertEqual(historyEntry.operation, .update)
+        XCTAssertEqual(historyEntry.updatedAt, deletedAt)
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertNil(engine.activeSessionID)
+    }
+
+    func testFinishingAuthenticatedWorkoutRequestsSync() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let scheduler = SyncScheduler()
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+        let session = try engine.startBlankWorkout(
+            ownerTokenIdentifier: scheduler.currentOwnerTokenIdentifier,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+
+        try engine.finishWorkout(
+            session,
+            syncScheduler: scheduler,
+            context: context,
+            now: Date(timeIntervalSince1970: 220)
+        )
+
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
+        XCTAssertEqual(session.syncOwnerTokenIdentifier, "issuer|owner_a")
+        XCTAssertEqual(entry.ownerTokenIdentifier, "issuer|owner_a")
+        XCTAssertEqual(scheduler.requestCount, 1)
+    }
+
+    func testFinishingWorkoutPreservesOwnerCapturedWhenStarted() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let scheduler = SyncScheduler()
+        let startedOwner = "issuer|owner_a"
+        scheduler.currentOwnerTokenIdentifier = startedOwner
+        let session = try engine.startBlankWorkout(
+            ownerTokenIdentifier: scheduler.currentOwnerTokenIdentifier,
+            context: context,
+            now: Date(timeIntervalSince1970: 100)
+        )
+
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_b"
+        try engine.finishWorkout(
+            session,
+            syncScheduler: scheduler,
+            context: context,
+            now: Date(timeIntervalSince1970: 220)
+        )
+
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertEqual(session.syncOwnerTokenIdentifier, startedOwner)
+        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == startedOwner })
+        XCTAssertEqual(scheduler.requestCount, 0)
+    }
+
+    func testFinishingSignedOutWorkoutAfterSignInKeepsOwnerlessIntent() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let scheduler = SyncScheduler()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        scheduler.currentOwnerTokenIdentifier = "issuer|owner_a"
+
+        try engine.finishWorkout(
+            session,
+            syncScheduler: scheduler,
+            context: context,
+            now: Date(timeIntervalSince1970: 220)
+        )
+
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertNil(session.syncOwnerTokenIdentifier)
+        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == nil })
+        XCTAssertEqual(scheduler.requestCount, 0)
+    }
+
+    func testFinishingSignedOutWorkoutWithCurrentOwnerRecordsOwnedIntent() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let scheduler = SyncScheduler()
+        let owner = "issuer|owner_a"
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        scheduler.currentOwnerTokenIdentifier = owner
+
+        try engine.finishWorkout(
+            session,
+            ownerTokenIdentifier: scheduler.currentOwnerTokenIdentifier,
+            syncScheduler: scheduler,
+            context: context,
+            now: Date(timeIntervalSince1970: 220)
+        )
+
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
+        XCTAssertEqual(session.syncOwnerTokenIdentifier, owner)
+        XCTAssertTrue(entries.allSatisfy { $0.ownerTokenIdentifier == owner })
+        XCTAssertEqual(scheduler.requestCount, 1)
+    }
+
+    func testActiveSessionVisibilityIsScopedToCurrentOwner() throws {
+        let ownerA = WorkoutSession(
+            title: "Owner A",
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: .active,
+            source: .blank,
+            syncOwnerTokenIdentifier: "issuer|owner_a"
+        )
+        let ownerB = WorkoutSession(
+            title: "Owner B",
+            startedAt: Date(timeIntervalSince1970: 200),
+            status: .active,
+            source: .blank,
+            syncOwnerTokenIdentifier: "issuer|owner_b"
+        )
+        let ownerless = WorkoutSession(
+            title: "Ownerless",
+            startedAt: Date(timeIntervalSince1970: 300),
+            status: .active,
+            source: .blank
+        )
+
+        XCTAssertEqual(
+            WorkoutSession.visibleActiveSessions(
+                from: [ownerA, ownerB, ownerless],
+                ownerTokenIdentifier: "issuer|owner_b"
+            ).map(\.title),
+            ["Owner B", "Ownerless"]
+        )
+        XCTAssertEqual(
+            WorkoutSession.visibleActiveSessions(from: [ownerA, ownerB, ownerless]).map(\.title),
+            ["Ownerless"]
+        )
+    }
+
+    func testDiscardedSessionsDoNotAppearInCompletedHistoryFetches() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+
+        try engine.discardWorkout(session, context: context)
+
+        XCTAssertEqual(try activeSessions(in: context).count, 0)
+        XCTAssertEqual(try completedSessions(in: context).count, 0)
+    }
+
+    func testReorderingLoggedExercisesUpdatesVisibleOrderIndexes() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let deadlift = Exercise(name: "Conventional Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .glutes)
+        context.insert(squat)
+        context.insert(bench)
+        context.insert(deadlift)
+        let first = try engine.addExercise(squat, to: session, context: context)
+        let second = try engine.addExercise(bench, to: session, context: context)
+        let third = try engine.addExercise(deadlift, to: session, context: context)
+
+        try engine.reorderLoggedExercises(
+            in: session,
+            orderedIDs: [third.id, first.id, second.id],
+            context: context,
+            now: Date(timeIntervalSince1970: 200)
+        )
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [third.id, first.id, second.id])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2])
+        XCTAssertEqual(third.updatedAt, Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(first.updatedAt, Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(second.updatedAt, Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(session.updatedAt, Date(timeIntervalSince1970: 200))
+    }
+
+    func testReorderingLoggedExercisesPreservesExerciseData() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(squat)
+        context.insert(bench)
+        let first = try engine.addExercise(squat, to: session, context: context)
+        let second = try engine.addExercise(bench, to: session, context: context)
+        first.notes = "Keep torso upright"
+        first.referenceNotes = "Use belt"
+        let firstSet = first.sortedSets[0]
+        firstSet.weight = 315
+        firstSet.reps = 5
+        firstSet.rpe = 8
+        firstSet.isCompleted = true
+
+        try engine.reorderLoggedExercises(in: session, orderedIDs: [second.id, first.id], context: context)
+
+        let movedFirst = try XCTUnwrap(session.sortedLoggedExercises.last)
+        XCTAssertEqual(movedFirst.id, first.id)
+        XCTAssertEqual(movedFirst.notes, "Keep torso upright")
+        XCTAssertEqual(movedFirst.referenceNotes, "Use belt")
+        XCTAssertEqual(movedFirst.sortedSets.map(\.id), [firstSet.id])
+        XCTAssertEqual(movedFirst.sortedSets[0].weight, 315)
+        XCTAssertEqual(movedFirst.sortedSets[0].reps, 5)
+        XCTAssertEqual(movedFirst.sortedSets[0].rpe, 8)
+        XCTAssertTrue(movedFirst.sortedSets[0].isCompleted)
+    }
+
+    func testReorderingLoggedExercisesRejectsInvalidIDsWithoutMutation() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        context.insert(squat)
+        context.insert(bench)
+        let first = try engine.addExercise(squat, to: session, context: context)
+        let second = try engine.addExercise(bench, to: session, context: context)
+        let originalIDs = session.sortedLoggedExercises.map(\.id)
+        let originalIndexes = session.sortedLoggedExercises.map(\.orderIndex)
+
+        XCTAssertThrowsError(
+            try engine.reorderLoggedExercises(
+                in: session,
+                orderedIDs: [second.id, UUID()],
+                context: context,
+                now: Date(timeIntervalSince1970: 300)
+            )
+        ) { error in
+            XCTAssertEqual(error as? ActiveWorkoutEngineError, .invalidExerciseReorder)
+        }
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), originalIDs)
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), originalIndexes)
+        XCTAssertEqual(first.orderIndex, 0)
+        XCTAssertEqual(second.orderIndex, 1)
+    }
+
+    func testReorderingLoggedExercisesExcludesTombstonedExercises() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let session = try engine.startBlankWorkout(context: context)
+        let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        let deadlift = Exercise(name: "Conventional Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .glutes)
+        context.insert(squat)
+        context.insert(bench)
+        context.insert(deadlift)
+        let first = try engine.addExercise(squat, to: session, context: context)
+        let removed = try engine.addExercise(bench, to: session, context: context)
+        let third = try engine.addExercise(deadlift, to: session, context: context)
+        removed.markDeleted(now: Date(timeIntervalSince1970: 150))
+
+        try engine.reorderLoggedExercises(
+            in: session,
+            orderedIDs: [third.id, first.id],
+            context: context,
+            now: Date(timeIntervalSince1970: 400)
+        )
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [third.id, first.id])
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1])
+        XCTAssertEqual(removed.orderIndex, 1)
+        XCTAssertEqual(removed.deletedAt, Date(timeIntervalSince1970: 150))
+        XCTAssertEqual(try allLoggedExercises(in: context).count, 3)
+    }
+
+    func testCommittingActiveSetDraftUpdatesOnlyChangedLeafValuesAndTimestamp() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let baseline = Date(timeIntervalSince1970: 100)
+        let commitDate = Date(timeIntervalSince1970: 200)
+        let session = WorkoutSession(
+            title: "Workout",
+            startedAt: baseline,
+            status: .active,
+            source: .blank,
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        let loggedExercise = LoggedExercise(
+            orderIndex: 0,
+            exerciseSnapshotName: "Bench Press",
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        let set = LoggedSet(
+            orderIndex: 0,
+            weight: 185,
+            reps: 5,
+            rpe: 8,
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        session.loggedExercises = [loggedExercise]
+        loggedExercise.sets = [set]
+        context.insert(session)
+        try context.save()
+
+        let didPersist = try engine.commitActiveSetDraft(
+            set,
+            values: .init(weight: 195, reps: 5),
+            context: context,
+            now: commitDate
+        )
+
+        XCTAssertTrue(didPersist)
+        XCTAssertEqual(set.weight, 195)
+        XCTAssertEqual(set.reps, 5)
+        XCTAssertEqual(set.rpe, 8)
+        XCTAssertEqual(set.updatedAt, commitDate)
+        XCTAssertEqual(loggedExercise.updatedAt, baseline)
+        XCTAssertEqual(session.updatedAt, baseline)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testCommittingUnchangedActiveSetDraftDoesNotDirtyTimestampsOrContext() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let engine = ActiveWorkoutEngine()
+        let baseline = Date(timeIntervalSince1970: 100)
+        let set = LoggedSet(
+            orderIndex: 0,
+            weight: 185,
+            reps: 5,
+            createdAt: baseline,
+            updatedAt: baseline
+        )
+        context.insert(set)
+        try context.save()
+
+        let didPersist = try engine.commitActiveSetDraft(
+            set,
+            values: .init(weight: 185, reps: 5),
+            context: context,
+            now: Date(timeIntervalSince1970: 200)
+        )
+
+        XCTAssertFalse(didPersist)
+        XCTAssertEqual(set.updatedAt, baseline)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    @discardableResult
+    private func insertCompletedSession(
+        startedAt: Date,
+        exercise: Exercise,
+        sets: [(kind: SetKind, isCompleted: Bool)],
+        ownerTokenIdentifier: String? = nil,
+        in context: ModelContext
+    ) throws -> WorkoutSession {
+        let session = WorkoutSession(
+            title: "Past",
+            startedAt: startedAt,
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier
+        )
+        let logged = LoggedExercise(orderIndex: 0, exercise: exercise)
+        session.loggedExercises.append(logged)
+        context.insert(session)
+        context.insert(logged)
+
+        for (index, entry) in sets.enumerated() {
+            let set = LoggedSet(
+                orderIndex: index,
+                weight: 100,
+                reps: 5,
+                kind: entry.kind,
+                isCompleted: entry.isCompleted,
+                completedAt: entry.isCompleted ? startedAt : nil
+            )
+            logged.sets.append(set)
+            context.insert(set)
+        }
+        try context.save()
+        return session
+    }
+
+    @discardableResult
+    private func insertCompletedWorkout(
+        startedAt: Date,
+        entries: [(exercise: Exercise, sets: [(kind: SetKind, isCompleted: Bool)])],
+        ownerTokenIdentifier: String? = nil,
+        in context: ModelContext
+    ) throws -> WorkoutSession {
+        let session = WorkoutSession(
+            title: "Past",
+            startedAt: startedAt,
+            status: .completed,
+            source: .blank,
+            syncOwnerTokenIdentifier: ownerTokenIdentifier
+        )
+        context.insert(session)
+        for (exerciseIndex, entry) in entries.enumerated() {
+            let logged = LoggedExercise(orderIndex: exerciseIndex, exercise: entry.exercise)
+            session.loggedExercises.append(logged)
+            context.insert(logged)
+            for (index, set) in entry.sets.enumerated() {
+                let loggedSet = LoggedSet(
+                    orderIndex: index,
+                    weight: 100,
+                    reps: 5,
+                    kind: set.kind,
+                    isCompleted: set.isCompleted,
+                    completedAt: set.isCompleted ? startedAt : nil
+                )
+                logged.sets.append(loggedSet)
+                context.insert(loggedSet)
+            }
+        }
+        try context.save()
+        return session
+    }
+
+    private func activeSessions(in context: ModelContext) throws -> [WorkoutSession] {
+        WorkoutSession.visibleActiveSessions(from: try context.fetch(FetchDescriptor<WorkoutSession>()))
+    }
+
+    private func completedSessions(in context: ModelContext) throws -> [WorkoutSession] {
+        WorkoutSession.visibleCompletedSessions(from: try context.fetch(FetchDescriptor<WorkoutSession>()))
+    }
+
+    private func allLoggedExercises(in context: ModelContext) throws -> [LoggedExercise] {
+        try context.fetch(FetchDescriptor<LoggedExercise>())
+            .sorted { $0.orderIndex < $1.orderIndex }
+    }
+
+    private func allLoggedSets(in context: ModelContext) throws -> [LoggedSet] {
+        try context.fetch(FetchDescriptor<LoggedSet>())
+            .sorted { $0.orderIndex < $1.orderIndex }
+    }
+}

@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftData
 import SwiftUI
 
@@ -43,7 +44,7 @@ struct ExerciseNoMatchesSection: View {
 
 enum ExercisePickerMode {
     case add(existingExerciseIDs: Set<UUID>)
-    case swap(currentExerciseID: UUID?)
+    case swap(SwapExerciseImpact)
 
     var navigationTitle: String {
         switch self {
@@ -55,8 +56,8 @@ enum ExercisePickerMode {
     }
 
     func isCurrent(_ exercise: Exercise) -> Bool {
-        guard case let .swap(currentExerciseID) = self else { return false }
-        return currentExerciseID == exercise.id
+        guard case let .swap(impact) = self else { return false }
+        return impact.originalExerciseID == exercise.id
     }
 }
 
@@ -121,11 +122,9 @@ private struct SearchableExercisePicker: View {
             onSelectAsSuperset: onSelectAsSuperset,
             onSelect: onSelect
         )
-        .searchable(
-            text: $searchText,
-            placement: mode.isAddExercise ? .navigationBarDrawer(displayMode: .always) : .automatic,
-            prompt: "Search exercises"
-        )
+        // Automatic puts search in the bottom toolbar on iPhone, under the
+        // thumb; the commit bar stacks above it.
+        .searchable(text: $searchText, prompt: "Search exercises")
     }
 }
 
@@ -142,7 +141,7 @@ private struct ExercisePickerList: View {
     @State private var selectedExerciseIDs: [UUID] = []
     @Binding private var searchText: String
     @State private var creationRequest: ExerciseCreationRequest?
-    @State private var createdSwapExercise: Exercise?
+    @State private var swapSelectionID: UUID?
     @State private var sortOrder: ExercisePickerSortOrder
     private let sortPreferenceStore: ExercisePickerSortPreferenceStore
 
@@ -196,6 +195,8 @@ private struct ExercisePickerList: View {
     }
 
     var body: some View {
+        let similarRows = self.similarRows
+        let similarIDs = Set(similarRows.map(\.id))
         List {
             if let noMatchesSuggestion {
                 ExerciseNoMatchesSection(
@@ -204,41 +205,21 @@ private struct ExercisePickerList: View {
                     onCreate: beginCreation
                 )
             } else {
-                Section {
-                    ForEach(rows) { row in
-                        Button {
-                            if mode.isAddExercise {
-                                toggleSelection(row.exercise)
-                            } else {
-                                onSelect([row.exercise])
-                            }
-                        } label: {
-                            HStack(spacing: 12) {
-                                exerciseRow(row)
-
-                                if mode.isAddExercise {
-                                    Image(systemName: selectionSymbol(for: row.exercise))
-                                        .font(.system(size: 24))
-                                        .foregroundStyle(
-                                            isSelected(row.exercise)
-                                                ? AppTheme.brandAccentForeground
-                                                : AppTheme.textTertiary
-                                        )
-                                        .accessibilityHidden(true)
-                                } else if mode.isCurrent(row.exercise) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(AppTheme.brandAccentForeground)
-                                        .accessibilityLabel("Current exercise")
-                                }
-                            }
+                if let swapImpact, !similarRows.isEmpty {
+                    Section {
+                        ForEach(similarRows) { row in
+                            pickerRow(row, identifierPrefix: "ExercisePickerSimilarRow")
                         }
-                        .buttonStyle(.plain)
-                        .disabled(mode.isCurrent(row.exercise) || mode.isAlreadyAdded(row.exercise))
-                        .accessibilityAddTraits(isSelected(row.exercise) ? .isSelected : [])
-                        .accessibilityIdentifier(
-                            "ExercisePickerRow-\(row.exercise.name)-\(row.exercise.equipment.displayName)"
-                        )
-                        .listRowBackground(AppTheme.groupedSurface)
+                    } header: {
+                        Text("Similar to \(swapImpact.originalName)")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .textCase(nil)
+                    }
+                }
+                Section {
+                    ForEach(rows.filter { !similarIDs.contains($0.id) }) { row in
+                        pickerRow(row)
                     }
 
                     if let creationSuggestion {
@@ -301,7 +282,7 @@ private struct ExercisePickerList: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .contentMargins(.top, mode.isAddExercise && noMatchesSuggestion == nil ? 8 : nil, for: .scrollContent)
+        .contentMargins(.top, noMatchesSuggestion == nil ? 8 : nil, for: .scrollContent)
         .contentMargins(.bottom, 24, for: .scrollContent)
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle(mode.navigationTitle)
@@ -318,7 +299,9 @@ private struct ExercisePickerList: View {
             sortPreferenceStore.sortOrder = newValue
         }
         .safeAreaBar(edge: .bottom, spacing: 0) {
-            if mode.isAddExercise {
+            if let swapImpact {
+                swapConfirmBar(swapImpact)
+            } else if mode.isAddExercise {
                 HStack(spacing: 10) {
                     if let onSelectAsSuperset {
                         Button {
@@ -355,27 +338,21 @@ private struct ExercisePickerList: View {
             }
         }
         .toolbar {
-            if mode.isAddExercise && showsCancel {
+            if showsCancel {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel", role: .cancel) {
                         dismiss()
                     }
                     .accessibilityIdentifier("ExercisePickerCancelButton")
                 }
-            } else if !mode.isAddExercise {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
             }
         }
-        .sheet(item: $creationRequest, onDismiss: completeCreatedSwap) { request in
+        .sheet(item: $creationRequest) { request in
             ExerciseCreationSheet(initialName: request.name) { exercise in
                 if mode.isAddExercise {
                     selectedExerciseIDs.append(exercise.id)
                 } else {
-                    createdSwapExercise = exercise
+                    swapSelectionID = exercise.id
                 }
             }
         }
@@ -387,15 +364,103 @@ private struct ExercisePickerList: View {
         creationRequest = request
     }
 
-    private func completeCreatedSwap() {
-        // Present confirmation after the creation sheet has finished dismissing.
-        guard let exercise = createdSwapExercise else { return }
-        createdSwapExercise = nil
-        onSelect([exercise])
+    private var swapImpact: SwapExerciseImpact? {
+        guard case let .swap(impact) = mode else { return nil }
+        return impact
+    }
+
+    /// Shown only while search is empty, and listed once: the full list below leaves them out.
+    private var similarRows: [ExercisePickerRowContent] {
+        guard searchText.isEmpty else { return [] }
+        return swapImpact?.similarRows(in: baseRows) ?? []
+    }
+
+    /// Swap picks one replacement, then commits from the bar, which says what the swap removes.
+    private func swapConfirmBar(_ impact: SwapExerciseImpact) -> some View {
+        let replacement = baseRows.first { $0.id == swapSelectionID }?.exercise
+        return VStack(spacing: 8) {
+            Group {
+                if impact.losesWork {
+                    Label(impact.lossMessage, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(replacement == nil ? AppTheme.textSecondary : AppTheme.destructiveForeground)
+                } else {
+                    Text(impact.lossMessage)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+            }
+            .font(.footnote.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .accessibilityIdentifier("ExercisePickerSwapImpactText")
+
+            Button {
+                if let replacement { onSelect([replacement]) }
+            } label: {
+                Text(replacement.map(impact.confirmTitle(for:)) ?? "Choose a Replacement")
+                    .font(.headline)
+                    // Wraps rather than truncating, so the equipment of a same-name variant stays readable.
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.glassProminent)
+            // A value, not a hint, so VoiceOver reads the loss even with hints turned off.
+            .accessibilityValue(impact.losesWork ? impact.lossMessage : "")
+            .tint(impact.losesWork ? AppTheme.destructiveFill : AppTheme.brandAccentFill)
+            .disabled(replacement == nil)
+            .accessibilityIdentifier("ExercisePickerConfirmSwapButton")
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
+
+    private func pickerRow(
+        _ row: ExercisePickerRowContent,
+        identifierPrefix: String = "ExercisePickerRow"
+    ) -> some View {
+        Button {
+            if mode.isAddExercise {
+                toggleSelection(row.exercise)
+            } else {
+                swapSelectionID = row.exercise.id
+                // The choice is made; lower the keyboard to show the rest of the list.
+                UIApplication.shared.sendAction(
+                    #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+                )
+            }
+        } label: {
+            HStack(spacing: 12) {
+                exerciseRow(row)
+
+                if mode.isCurrent(row.exercise) {
+                    Text("Current")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .accessibilityLabel("Current exercise")
+                } else {
+                    Image(systemName: selectionSymbol(for: row.exercise))
+                        .font(.system(size: 24))
+                        .foregroundStyle(
+                            isSelected(row.exercise)
+                                ? AppTheme.brandAccentForeground
+                                : AppTheme.textTertiary
+                        )
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(mode.isCurrent(row.exercise) || mode.isAlreadyAdded(row.exercise))
+        .accessibilityAddTraits(isSelected(row.exercise) ? .isSelected : [])
+        .accessibilityIdentifier(
+            "\(identifierPrefix)-\(row.exercise.name)-\(row.exercise.equipment.displayName)"
+        )
+        .listRowBackground(AppTheme.groupedSurface)
     }
 
     private func isSelected(_ exercise: Exercise) -> Bool {
-        selectedExerciseIDs.contains(exercise.id) && !mode.isAlreadyAdded(exercise)
+        if !mode.isAddExercise { return swapSelectionID == exercise.id }
+        return selectedExerciseIDs.contains(exercise.id) && !mode.isAlreadyAdded(exercise)
     }
 
     private func toggleSelection(_ exercise: Exercise) {

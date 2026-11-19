@@ -1,4 +1,5 @@
 #if DEBUG
+import BarosCore
 import Combine
 import ConvexMobile
 import SwiftData

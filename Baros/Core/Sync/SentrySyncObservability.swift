@@ -1,3 +1,4 @@
+import BarosCore
 import CoreFoundation
 import Foundation
 import Sentry
@@ -491,27 +492,6 @@ private enum SentryDistributionChannelTagger {
 }
 
 /// Only diagnostic codes cross this boundary; NSError userInfo can contain model data.
-struct ActiveWorkoutSetSaveFailure {
-    enum Operation: String {
-        case fieldEdit = "field_edit"
-        case completion
-        case rpe
-    }
-
-    static let knownDomains: Set<String> = [NSCocoaErrorDomain, NSPOSIXErrorDomain, "NSSQLiteErrorDomain"]
-    let operation: Operation
-    let domain: String
-    let code: String
-
-    init(operation: Operation, error: Error) {
-        let error = error as NSError
-        self.operation = operation
-        let known = Self.knownDomains.contains(error.domain)
-        domain = known ? error.domain : "other"
-        code = known ? String(error.code) : "unknown"
-    }
-}
-
 enum SentrySetSaveFailureReporter {
     static func capture(
         _ failure: ActiveWorkoutSetSaveFailure,

@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftData
 import SwiftUI
 
@@ -74,7 +75,7 @@ struct ExerciseHistoryDetailView: View {
                     .foregroundStyle(AppTheme.textPrimary)
                     .accessibilityAddTraits(.isHeader)
                 if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
-                Text("\(weightUnit.shortUnitLabel) × reps")
+                Text(HistorySetTable.valueCaption(for: groups.flatMap { $0.setEntries.map(\.set) }, unit: weightUnit))
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(AppTheme.textSecondary)
                     .accessibilityHidden(true)

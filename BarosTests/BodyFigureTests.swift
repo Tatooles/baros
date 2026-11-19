@@ -1,15 +1,10 @@
 import SwiftUI
 import XCTest
 @testable import Baros
+@testable import BarosCore
 
 final class BodyFigureTests: XCTestCase {
     private let drawings = [BodyFigureDrawing.frontArtwork, BodyFigureDrawing.backArtwork]
-
-    func testPickerSectionsListEveryMuscleGroupOnce() {
-        let listed = ExerciseMuscleGroup.pickerSections.flatMap(\.groups)
-        XCTAssertEqual(listed.count, ExerciseMuscleGroup.allCases.count)
-        XCTAssertEqual(Set(listed), Set(ExerciseMuscleGroup.allCases))
-    }
 
     func testEveryAnatomicalGroupHighlightsADrawnRegion() {
         let drawnParts = Set(drawings.flatMap { $0.regions.map(\.part) })

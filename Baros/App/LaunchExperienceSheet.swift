@@ -1,18 +1,5 @@
+import BarosCore
 import SwiftUI
-
-enum LaunchExperiencePresentation: Identifiable, Equatable {
-    case onboarding
-    case whatsNew(WhatsNewRelease)
-
-    var id: String {
-        switch self {
-        case .onboarding:
-            "onboarding"
-        case .whatsNew(let release):
-            "whats-new-\(release.version)"
-        }
-    }
-}
 
 struct LaunchExperienceSheet: View {
     let presentation: LaunchExperiencePresentation

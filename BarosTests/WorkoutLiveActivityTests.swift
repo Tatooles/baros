@@ -1,4 +1,5 @@
 @preconcurrency import ActivityKit
+@testable import BarosCore
 import XCTest
 @testable import Baros
 

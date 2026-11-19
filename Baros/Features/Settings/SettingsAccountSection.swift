@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftData
 import SwiftUI
 
@@ -42,20 +43,22 @@ struct SettingsAccountSection: View {
             syncStatusRow
 
             #if DEBUG
-            NavigationLink(value: SettingsRoute.developerDiagnostics) {
-                Label {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Developer Diagnostics")
-                        Text("Environment and Convex auth checks.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+            if !MarketingScreenshotSeeder.isCapturing {
+                NavigationLink(value: SettingsRoute.developerDiagnostics) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Developer Diagnostics")
+                            Text("Environment and Convex auth checks.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "stethoscope")
+                            .foregroundStyle(AppTheme.brandAccentForeground)
                     }
-                } icon: {
-                    Image(systemName: "stethoscope")
-                        .foregroundStyle(AppTheme.brandAccentForeground)
                 }
+                .accessibilityIdentifier("SettingsDeveloperDiagnosticsRow")
             }
-            .accessibilityIdentifier("SettingsDeveloperDiagnosticsRow")
             #endif
 
         } header: {

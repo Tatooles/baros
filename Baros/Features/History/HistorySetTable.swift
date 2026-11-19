@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftUI
 import UIKit
 
@@ -39,11 +40,12 @@ struct HistorySetTable: View {
         // for its header and every row. The stacked layout does not need them.
         let widths = (
             weight: stacked ? weightWidth : fittedWidth(measuredSets.map { weightText($0) }, minimum: weightWidth),
-            reps: stacked ? repsWidth : fittedWidth(measuredSets.map { repsText($0) }, minimum: repsWidth)
+            reps: stacked ? repsWidth : fittedWidth(measuredSets.map { measureText($0) }, minimum: repsWidth)
         )
+        let weightHeader = showsWeight ? weightUnit.shortUnitLabel.uppercased() : ""
         return Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 0) {
             if stacked {
-                Text("\(weightUnit.shortUnitLabel.uppercased()) × REPS")
+                Text(weightHeader.isEmpty ? measureHeader : "\(weightHeader) × \(measureHeader)")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -52,7 +54,7 @@ struct HistorySetTable: View {
                 GridRow {
                     Text("SET").gridColumnAlignment(.leading)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        valueColumns(weight: weightUnit.shortUnitLabel.uppercased(), reps: "REPS", stacked: false, widths: widths)
+                        valueColumns(weight: weightHeader, reps: measureHeader, stacked: false, widths: widths)
                         if hasRPE {
                             Text("RPE")
                                 .fixedSize()
@@ -114,7 +116,7 @@ struct HistorySetTable: View {
         return layout {
             valueColumns(
                 weight: weightText(row.set),
-                reps: repsText(row.set),
+                reps: measureText(row.set),
                 stacked: stacked,
                 widths: widths
             )
@@ -134,7 +136,9 @@ struct HistorySetTable: View {
     // Header and data use the same columns, including space reserved for record/RPE annotations.
     @ViewBuilder
     private func valueColumns(weight: String, reps: String, stacked: Bool, widths: (weight: Double, reps: Double)) -> some View {
-        if stacked {
+        if stacked, weight.isEmpty {
+            Text(reps).frame(maxWidth: .infinity, alignment: .leading)
+        } else if stacked {
             let separator = Text(" × ").foregroundColor(AppTheme.textSecondary)
             // A single text run can wrap between values instead of forcing the
             // entire weight × reps expression beyond the block's available width.
@@ -154,6 +158,8 @@ struct HistorySetTable: View {
             Text("×")
                 .foregroundStyle(AppTheme.textSecondary)
                 .frame(width: separatorWidth)
+                // An unweighted timed set keeps the column but shows only its time.
+                .opacity(weight.isEmpty ? 0 : 1)
             Text(reps)
                 .fixedSize()
                 .frame(width: widths.reps, alignment: .trailing)
@@ -171,6 +177,17 @@ struct HistorySetTable: View {
         rows.map(\.set) + alignedSets
     }
 
+    /// "TIME" when the table's exercise was logged by time.
+    private var measureHeader: String {
+        (rows.first?.set.trackingMethod ?? .reps).fieldLabel
+    }
+
+    /// Timed work is often unweighted; its weight header appears only when one
+    /// of this table's own sets has a weight.
+    private var showsWeight: Bool {
+        rows.contains { !weightText($0.set).isEmpty }
+    }
+
     private var hasRPE: Bool {
         measuredSets.contains { WorkoutNumericInputPolicy.validatedRPE($0.rpe) != nil }
     }
@@ -183,36 +200,64 @@ struct HistorySetTable: View {
         Self.weightText(set, unit: weightUnit)
     }
 
-    private func repsText(_ set: LoggedSet) -> String {
-        Self.repsText(set)
+    private func measureText(_ set: LoggedSet) -> String {
+        Self.measureText(set)
     }
 
     private func accessibilityLabel(_ row: Row) -> String {
         Self.accessibilityLabel(set: row.set, number: row.number, recordKinds: [], unit: weightUnit)
     }
 
-    // Visible values always group thousands, matching Records.
+    // Visible values always group thousands, matching Records. A timed set
+    // without weight has no weight text at all, where a rep set shows a dash.
     static func weightText(_ set: LoggedSet, unit: MeasurementUnit) -> String {
         unit.displayWeight(fromCanonicalPounds: WorkoutNumericInputPolicy.validatedWeight(set.weight))
-            .map(WorkoutFormatters.groupedNumber) ?? "–"
+            .map(WorkoutFormatters.groupedNumber) ?? (set.trackingMethod == .duration ? "" : "–")
     }
 
-    static func repsText(_ set: LoggedSet) -> String {
-        WorkoutNumericInputPolicy.validatedReps(set.reps).map { WorkoutFormatters.groupedNumber(Double($0)) } ?? "–"
+    /// The set's reps, or its time for a timed exercise.
+    static func measureText(_ set: LoggedSet) -> String {
+        if set.trackingMethod == .duration {
+            return WorkoutNumericInputPolicy.validatedDuration(set.durationSeconds)
+                .map(WorkoutFormatters.setDuration) ?? "–"
+        }
+        return WorkoutNumericInputPolicy.validatedReps(set.reps)
+            .map { WorkoutFormatters.groupedNumber(Double($0)) } ?? "–"
+    }
+
+    /// A set as one run of text: "135 × 8", "45 × 1:30", or "1:30".
+    static func valueText(_ set: LoggedSet, unit: MeasurementUnit) -> Text {
+        let weight = weightText(set, unit: unit)
+        guard !weight.isEmpty else { return Text(measureText(set)) }
+        return Text("\(weight)\(Text(" × ").foregroundColor(AppTheme.textSecondary))\(measureText(set))")
+    }
+
+    /// Names what the bare numbers mean, from the newest set: "lb × reps",
+    /// "lb × time", or "time" when no timed set carries weight.
+    static func valueCaption(for sets: [LoggedSet], unit: MeasurementUnit) -> String {
+        guard sets.first?.trackingMethod == .duration else { return "\(unit.shortUnitLabel) × reps" }
+        let hasWeight = sets.contains { WorkoutNumericInputPolicy.validatedWeight($0.weight) != nil }
+        return hasWeight ? "\(unit.shortUnitLabel) × time" : "time"
     }
 
     /// The complete spoken set, shared by tables and compact set tokens.
     static func accessibilityLabel(
         set: LoggedSet, number: Int, recordKinds: [ExerciseHistoryRecordKind], unit: MeasurementUnit
     ) -> String {
+        let isTimed = set.trackingMethod == .duration
         let weight = unit.displayWeight(
             fromCanonicalPounds: WorkoutNumericInputPolicy.validatedWeight(set.weight)
-        ).map { "\(WorkoutFormatters.number($0)) \(unit.displayName.lowercased())" } ?? "no weight"
-        let reps = WorkoutNumericInputPolicy.validatedReps(set.reps)
-            .map { "\($0) \($0 == 1 ? "rep" : "reps")" } ?? "no reps"
+        ).map { "\(WorkoutFormatters.number($0)) \(unit.displayName.lowercased())" }
+            ?? (isTimed ? nil : "no weight")
+        let measure = isTimed
+            ? WorkoutNumericInputPolicy.validatedDuration(set.durationSeconds)
+                .map(WorkoutFormatters.setDurationAccessibilityDescription) ?? "no time"
+            : WorkoutNumericInputPolicy.validatedReps(set.reps)
+                .map { "\($0) \($0 == 1 ? "rep" : "reps")" } ?? "no reps"
         let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe)
             .map { ", RPE \(WorkoutFormatters.number($0))" } ?? ""
-        return (["Set \(number), \(weight), \(reps)\(rpe)"] + recordKinds.map(\.title))
+        let spoken = ["Set \(number)", weight, measure].compactMap { $0 }.joined(separator: ", ")
+        return ([spoken + rpe] + recordKinds.map(\.title))
             .joined(separator: ", ")
     }
 }

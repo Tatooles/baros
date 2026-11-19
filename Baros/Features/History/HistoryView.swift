@@ -1,3 +1,4 @@
+import BarosCore
 import Observation
 import SwiftData
 import SwiftUI

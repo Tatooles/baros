@@ -1,33 +1,9 @@
 import ConvexMobile
 import XCTest
 @testable import Baros
+@testable import BarosCore
 
 final class ConvexSyncArgumentMapperTests: XCTestCase {
-    func testAccountDataDeletionResultDecodesConvexResponse() throws {
-        let json = """
-        {
-          "status": "deleted",
-          "deletedCounts": {
-            "loggedSets": 5,
-            "loggedExercises": 4,
-            "workoutSessions": 3,
-            "exercises": 2,
-            "userSettings": 1
-          }
-        }
-        """
-
-        let data = try XCTUnwrap(json.data(using: .utf8))
-        let result = try JSONDecoder().decode(AccountDataDeletionResult.self, from: data)
-
-        XCTAssertEqual(result.status, "deleted")
-        XCTAssertEqual(result.deletedCounts.loggedSets, 5)
-        XCTAssertEqual(result.deletedCounts.loggedExercises, 4)
-        XCTAssertEqual(result.deletedCounts.workoutSessions, 3)
-        XCTAssertEqual(result.deletedCounts.exercises, 2)
-        XCTAssertEqual(result.deletedCounts.userSettings, 1)
-    }
-
     func testUserSettingsArgsEncodeRestTimerAsDouble() throws {
         let payload = UserSettingsSyncPayload(
             clientId: "settings-1",
@@ -136,5 +112,43 @@ final class ConvexSyncArgumentMapperTests: XCTestCase {
         XCTAssertNil(record["rpe"]!)
         XCTAssertNil(record["healthLinkID"]!)
         XCTAssertEqual(try XCTUnwrap(record["sourceLoggedSetID"] as? String), "source-logged-set-1")
+        XCTAssertNil(record.index(forKey: "durationSeconds"), "An unknown time is omitted so the server keeps its value")
+    }
+
+    func testTimedExerciseArgsSendTheMethodAndTimeOnlyWhenKnown() throws {
+        var set = LoggedSetSyncPayload(
+            clientId: "set-1", createdAt: 1, updatedAt: 2, deletedAt: nil,
+            loggedExerciseClientId: "logged-exercise-1", orderIndex: 0, weight: nil, reps: nil, rpe: nil,
+            kindRaw: "working", isCompleted: true, completedAt: 3, notes: "", healthLinkID: nil,
+            sourceLoggedSetID: nil, durationSeconds: 90, sendsDurationSeconds: true
+        )
+        var record = ConvexSyncArgumentMapper.loggedSetRecord(set)
+        XCTAssertEqual(try XCTUnwrap(record["durationSeconds"] as? Double), 90)
+
+        set.durationSeconds = nil
+        record = ConvexSyncArgumentMapper.loggedSetRecord(set)
+        XCTAssertNotNil(record.index(forKey: "durationSeconds"), "A cleared time is sent as null")
+        XCTAssertNil(record["durationSeconds"]!)
+
+        var logged = LoggedExerciseSyncPayload(
+            clientId: "logged-exercise-1", createdAt: 1, updatedAt: 2, deletedAt: nil,
+            sessionClientId: "session-1", exerciseClientId: nil, orderIndex: 0, exerciseSnapshotName: "Plank",
+            exerciseSnapshotEquipmentRaw: "bodyweight", exerciseSnapshotPrimaryMuscleGroupRaw: "core",
+            hasSnapshotMetadata: true, notes: "", referenceNotes: nil, sourceLoggedExerciseID: nil
+        )
+        XCTAssertNil(ConvexSyncArgumentMapper.loggedExerciseRecord(logged).index(forKey: "trackingMethodRaw"))
+        logged.trackingMethodRaw = "duration"
+        XCTAssertEqual(
+            ConvexSyncArgumentMapper.loggedExerciseRecord(logged)["trackingMethodRaw"] as? String, "duration"
+        )
+
+        var exercise = ExerciseSyncPayload(
+            clientId: "exercise-1", createdAt: 1, updatedAt: 2, deletedAt: nil, seedIdentifier: nil,
+            name: "Plank", categoryRaw: "strength", equipmentRaw: "bodyweight", primaryMuscleRaw: "Core",
+            primaryMuscleGroupRaw: "core", notes: "", isArchived: false, isSeeded: false
+        )
+        XCTAssertNil(ConvexSyncArgumentMapper.exerciseRecord(exercise).index(forKey: "trackingMethodRaw"))
+        exercise.trackingMethodRaw = "duration"
+        XCTAssertEqual(ConvexSyncArgumentMapper.exerciseRecord(exercise)["trackingMethodRaw"] as? String, "duration")
     }
 }

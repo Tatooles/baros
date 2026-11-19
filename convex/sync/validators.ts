@@ -41,6 +41,9 @@ export const exercisePayloadValidator = v.object({
   notes: v.string(),
   isArchived: v.boolean(),
   isSeeded: v.boolean(),
+  // "reps" or "duration". Builds from before timed exercises omit it, and
+  // the upsert's patch keeps the stored value.
+  trackingMethodRaw: v.optional(v.string()),
 });
 
 export const workoutSessionPayloadValidator = v.object({
@@ -79,6 +82,8 @@ export const loggedExercisePayloadValidator = v.object({
   sourceLoggedExerciseID: v.optional(nullableString),
   // Omission is a legacy upload; null explicitly removes grouping.
   supersetGroupID: v.optional(nullableString),
+  // Omitted by builds from before timed exercises; the stored value is kept.
+  trackingMethodRaw: v.optional(v.string()),
 });
 
 export const loggedSetPayloadValidator = v.object({
@@ -99,6 +104,8 @@ export const loggedSetPayloadValidator = v.object({
   notes: v.string(),
   healthLinkID: nullableString,
   sourceLoggedSetID: v.optional(nullableString),
+  // Omission is a legacy upload and keeps the stored time; null clears it.
+  durationSeconds: v.optional(nullableNumber),
 });
 
 // Entries are stored inside the template, so the server merges them by id:

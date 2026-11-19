@@ -1,3 +1,4 @@
+import BarosCore
 import SwiftData
 import SwiftUI
 
@@ -27,7 +28,8 @@ struct SettingsTabView: View {
         .navigationTitle("Settings")
         .toolbar {
             #if DEBUG
-            if AppEnvironmentConfiguration.current.environment == .development {
+            if AppEnvironmentConfiguration.current.environment == .development,
+               !MarketingScreenshotSeeder.isCapturing {
                 ToolbarItem(placement: .topBarTrailing) {
                     Text("DEV")
                         .font(.system(size: 11, weight: .bold))

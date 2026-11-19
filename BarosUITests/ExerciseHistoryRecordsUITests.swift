@@ -10,7 +10,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         let app = openRecords()
         let heaviest = app.buttons["ExerciseRecord-heaviestRep"]
         let estimate = app.buttons["ExerciseRecord-estimated1RM"]
-        XCTAssertTrue(heaviest.waitForExistence(timeout: 5))
+        XCTAssertTrue(heaviest.waitToExist(timeout: 5))
         XCTAssertTrue(estimate.exists)
         XCTAssertTrue(heaviest.label.hasPrefix("Heaviest Rep, 225 pounds, from 225 pounds for 1 rep, Set 3,"), heaviest.label)
         XCTAssertTrue(estimate.label.hasPrefix("Estimated 1RM, about 245 pounds, from 210 pounds for 5 reps, Set 2,"), estimate.label)
@@ -20,7 +20,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
 
         let info = app.buttons["AboutStrengthRecordsButton"]
         info.tap()
-        XCTAssertTrue(app.navigationBars["About strength records"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["About strength records"].waitToExist(timeout: 3))
         XCTAssertTrue(app.staticTexts["The estimate does not account for effort."].exists)
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Tap a record to see the set")).firstMatch.exists)
         attachScreenshot(named: "Strength records explanation", app: app)
@@ -50,9 +50,9 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         let app = openRecords(extraArguments: [
             "--uitest-accessibility-dynamic-type",
         ])
-        XCTAssertTrue(app.descendants(matching: .any)["ExerciseRecord-heaviestRep"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["ExerciseRecord-heaviestRep"].waitToExist(timeout: 5))
         let badge = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "ExerciseHistorySetValue-", "Estimated 1RM")).firstMatch
-        for _ in 0..<12 where !badge.isHittable { app.swipeUp() }
+        for _ in 0..<12 where !(badge.exists && badge.isHittable) { app.swipeUp() }
         XCTAssertTrue(badge.isHittable)
         XCTAssertGreaterThanOrEqual(badge.frame.minX, 0)
         XCTAssertLessThanOrEqual(badge.frame.maxX, app.frame.maxX)
@@ -60,7 +60,8 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
     }
 
     func testExerciseHistoryDetailPresentsJournalSectionsAndCompleteSetAnnouncements() {
-        for appearance in ["dark", "light"] {
+        // One appearance: the assertions do not depend on it.
+        for appearance in ["dark"] {
             let app = openRecords(extraArguments: ["-Baros.AppAppearance.preference", appearance])
 
             XCTAssertTrue(app.staticTexts["Records"].exists)
@@ -69,7 +70,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             let sourceWorkout = app.buttons.matching(
                 NSPredicate(format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-")
             ).firstMatch
-            XCTAssertTrue(sourceWorkout.waitForExistence(timeout: 3))
+            XCTAssertTrue(sourceWorkout.waitToExist(timeout: 3))
             XCTAssertTrue(sourceWorkout.label.contains("Upper Body"))
             XCTAssertTrue(sourceWorkout.label.contains("3 sets"))
             XCTAssertGreaterThanOrEqual(sourceWorkout.frame.height, 44)
@@ -98,7 +99,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             case "same-set":
                 let value = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"))
                     .matching(NSPredicate(format: "label CONTAINS %@", "225 pounds, 5 reps")).firstMatch
-                for _ in 0..<5 where !value.isHittable { app.swipeUp() }
+                for _ in 0..<5 where !(value.exists && value.isHittable) { app.swipeUp() }
                 XCTAssertTrue(value.isHittable)
                 XCTAssertTrue(value.label.contains("Heaviest Rep"))
                 XCTAssertTrue(value.label.contains("Estimated 1RM"))
@@ -106,10 +107,10 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
                 XCTAssertFalse(app.staticTexts["Set 3"].exists)
                 XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseRecordBadge-")).count, 0)
             case "no-estimate":
-                XCTAssertTrue(app.staticTexts["No estimate yet"].waitForExistence(timeout: 3))
+                XCTAssertTrue(app.staticTexts["No estimate yet"].waitToExist(timeout: 3))
                 XCTAssertFalse(app.descendants(matching: .any)["ExerciseRecord-estimated1RM"].exists)
             default:
-                XCTAssertTrue(app.staticTexts["No records yet"].waitForExistence(timeout: 3))
+                XCTAssertTrue(app.staticTexts["No records yet"].waitToExist(timeout: 3))
                 XCTAssertFalse(app.descendants(matching: .any)["ExerciseRecord-heaviestRep"].exists)
             }
             attachScreenshot(named: "Strength records \(scenario)", app: app)
@@ -126,18 +127,18 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         ]
         app.launch()
         let start = app.buttons["StartWorkoutButton"]
-        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        XCTAssertTrue(start.waitToExist(timeout: 5))
         start.tap()
         app.buttons["UsePastWorkoutButton"].tap()
         let pastWorkout = app.buttons["PastWorkoutButton-0"]
-        XCTAssertTrue(pastWorkout.waitForExistence(timeout: 3))
+        XCTAssertTrue(pastWorkout.waitToExist(timeout: 3))
         pastWorkout.tap()
         app.buttons["StartFromPastWorkoutConfirmButton"].tap()
         let menu = app.buttons["ExerciseMenuButton-0"]
-        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        XCTAssertTrue(menu.waitToExist(timeout: 5))
         menu.tap()
         app.buttons["ExerciseHistoryButton-0"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["QuickExerciseHistoryHeading"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["QuickExerciseHistoryHeading"].waitToExist(timeout: 5))
 
         let values = app.descendants(matching: .any).matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"
@@ -165,7 +166,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
                 "-UIPreferredContentSizeCategoryName", size,
             ], kilograms: unit == "kilograms")
             let record = app.descendants(matching: .any)["ExerciseRecord-heaviestRep"]
-            XCTAssertTrue(record.waitForExistence(timeout: 5))
+            XCTAssertTrue(record.waitToExist(timeout: 5))
             XCTAssertTrue(record.label.contains("Set 2,"))
             XCTAssertTrue(record.label.contains("2025"))
             let estimate = app.descendants(matching: .any)["ExerciseRecord-estimated1RM"]
@@ -178,7 +179,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
                 format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"
             ))
             let longValue = values.matching(NSPredicate(format: "label CONTAINS %@", "1000 reps")).firstMatch
-            for _ in 0..<8 where !longValue.isHittable { app.swipeUp() }
+            for _ in 0..<8 where !(longValue.exists && longValue.isHittable) { app.swipeUp() }
             XCTAssertTrue(longValue.isHittable)
             XCTAssertTrue(longValue.label.hasPrefix("Set 2,"))
             XCTAssertTrue(longValue.label.contains(unit))
@@ -187,7 +188,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             attachScreenshot(named: "review-long-values-\(unit)", app: app)
 
             let secondNote = app.staticTexts["Second occurrence note"]
-            for _ in 0..<8 where !secondNote.isHittable { app.swipeUp() }
+            for _ in 0..<8 where !(secondNote.exists && secondNote.isHittable) { app.swipeUp() }
             XCTAssertTrue(secondNote.isHittable)
             XCTAssertEqual(values.count, 3)
             attachScreenshot(named: "review-duplicate-occurrences-\(unit)", app: app)
@@ -205,7 +206,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         ))
         for rpe in ["RPE 10", "RPE 9.5"] {
             let row = values.matching(NSPredicate(format: "label CONTAINS %@", rpe)).firstMatch
-            for _ in 0..<8 where !row.isHittable { app.swipeUp() }
+            for _ in 0..<8 where !(row.exists && row.isHittable) { app.swipeUp() }
             XCTAssertTrue(row.isHittable)
             XCTAssertGreaterThanOrEqual(row.frame.minX, 32)
             XCTAssertLessThanOrEqual(row.frame.maxX, app.frame.maxX - 32)
@@ -224,27 +225,32 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.segmentedControls["HistoryModePicker"].buttons["Workouts"].tap()
         let workout = app.buttons["WorkoutHistoryButton-0"]
-        XCTAssertTrue(workout.waitForExistence(timeout: 3))
+        XCTAssertTrue(workout.waitToExist(timeout: 3))
         workout.tap()
         assertMaximumValuesFit(in: app, identifierPrefix: "WorkoutHistorySetSummary-", screen: "workout")
 
         app.tabButton(.home).tap()
         let start = app.buttons["StartWorkoutButton"]
-        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        XCTAssertTrue(start.waitToExist(timeout: 5))
         start.tap()
         app.buttons["UsePastWorkoutButton"].tap()
         let pastWorkout = app.buttons["PastWorkoutButton-0"]
-        XCTAssertTrue(pastWorkout.waitForExistence(timeout: 3))
+        XCTAssertTrue(pastWorkout.waitToExist(timeout: 3))
         pastWorkout.tap()
         let confirm = app.buttons["StartFromPastWorkoutConfirmButton"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
-        for _ in 0..<5 where !confirm.isHittable { app.swipeUp() }
+        XCTAssertTrue(confirm.waitToExist(timeout: 3))
+        for _ in 0..<5 where !(confirm.exists && confirm.isHittable) { app.swipeUp() }
         confirm.tap()
         let menu = app.buttons["ExerciseMenuButton-0"]
-        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        XCTAssertTrue(menu.waitToExist(timeout: 5))
+        // At this size the card's menu starts under the pinned Edit/Add Exercise actions,
+        // which take the tap, so bring it above them first.
+        app.revealAboveWorkoutActions(menu)
         menu.tap()
-        app.buttons["ExerciseHistoryButton-0"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["QuickExerciseHistoryHeading"].waitForExistence(timeout: 5))
+        let viewHistory = app.buttons["ExerciseHistoryButton-0"]
+        XCTAssertTrue(viewHistory.waitToExist(timeout: 3))
+        viewHistory.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["QuickExerciseHistoryHeading"].waitToExist(timeout: 5))
         assertMaximumValuesFit(in: app, identifierPrefix: "ExerciseHistorySetValue-", screen: "quick-history")
     }
 
@@ -254,7 +260,7 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         ))
         for weight in ["10000 pounds", "9,999.99 pounds"] {
             let row = rows.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", weight, "1000 reps")).firstMatch
-            for _ in 0..<12 where !row.isHittable { app.swipeUp() }
+            for _ in 0..<12 where !(row.exists && row.isHittable) { app.swipeUp() }
             XCTAssertTrue(row.isHittable)
             XCTAssertGreaterThanOrEqual(row.frame.minX, 32)
             XCTAssertLessThanOrEqual(row.frame.maxX, app.frame.maxX - 32)
@@ -273,15 +279,15 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         if kilograms {
             app.tabButton(.settings).tap()
             let units = app.segmentedControls["WeightUnitPicker"]
-            XCTAssertTrue(units.waitForExistence(timeout: 3))
+            XCTAssertTrue(units.waitToExist(timeout: 3))
             units.buttons["Kilograms"].tap()
         }
         let history = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "HistoryTab", "History")).firstMatch
-        XCTAssertTrue(history.waitForExistence(timeout: 5))
+        XCTAssertTrue(history.waitToExist(timeout: 5))
         history.tap()
         app.segmentedControls["HistoryModePicker"].buttons["Exercises"].tap()
         let exercise = app.buttons["ExerciseHistoryButton-0"]
-        XCTAssertTrue(exercise.waitForExistence(timeout: 3))
+        XCTAssertTrue(exercise.waitToExist(timeout: 3))
         exercise.tap()
         return app
     }
