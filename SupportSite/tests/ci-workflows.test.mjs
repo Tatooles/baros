@@ -21,6 +21,7 @@ const appPaths = [
   "LiftingLog.xcodeproj/**",
   "ci_scripts/**",
   "convex/auth.config.ts",
+  "convex/syncSim/merge-vectors.json",
   "project.yml",
 ];
 const convexPaths = [

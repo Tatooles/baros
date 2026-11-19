@@ -323,6 +323,45 @@ final class SyncClientConvergenceTests: XCTestCase {
         XCTAssertNotNil(entries.first { $0.entityID == graph.session.id }, "The workout the server never got is queued again.")
     }
 
+    func testLoggedExerciseWaitsForItsExerciseWhileTheExercisesCreateKeepsFailing() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let graph = completedWorkout(context: context)
+        let exercise = ownedExercise("Never Uploaded", context: context)
+        graph.loggedExercise.exercise = exercise
+        let recorder = SyncOutboxRecorder()
+        try recorder.recordCreate(entityKind: .exercise, entityID: exercise.id, ownerTokenIdentifier: owner, context: context, now: start)
+        try recorder.recordUpdate(entityKind: .loggedExercise, entityID: graph.loggedExercise.id, ownerTokenIdentifier: owner, context: context, now: start)
+        try markBootstrapped(context, upgraded: true)
+        let client = FakeSyncClient()
+        client.onUpsertExercise = { _ in throw SyncServerRejection(code: "invalidPayload", message: "bad") }
+
+        try await SyncCoordinator(client: client, clock: { self.start }).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertTrue(client.upsertedLoggedExercises.isEmpty)
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first { $0.entityID == graph.loggedExercise.id })
+        XCTAssertEqual(entry.status, .pending, "It waits instead of being rejected for a missing reference.")
+        XCTAssertEqual(entry.rejectionCount, 0)
+    }
+
+    func testFailingEditOfAWorkoutTheServerHasDoesNotHoldBackItsSets() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let graph = completedWorkout(context: context)
+        let blockedEdit = SyncOutboxEntry(
+            entityKind: .workoutSession, entityID: graph.session.id, operation: .update, status: .blocked,
+            ownerTokenIdentifier: owner, createdAt: start, updatedAt: start, attemptCount: 9
+        )
+        context.insert(blockedEdit)
+        try SyncOutboxRecorder().recordUpdate(entityKind: .loggedSet, entityID: graph.set.id, ownerTokenIdentifier: owner, context: context, now: start)
+        try markBootstrapped(context, upgraded: true)
+
+        let client = FakeSyncClient()
+        try await SyncCoordinator(client: client, clock: { self.start }).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertEqual(client.upsertedLoggedSets.map(\.clientId), [graph.set.id.uuidString.lowercased()])
+    }
+
     func testAccountWideRejectionsStopTheRunWithoutCounting() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

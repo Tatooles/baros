@@ -841,9 +841,11 @@ public final class SyncCoordinator {
         )
     }
 
-    /// Whether a record upload must wait for its workout or logged exercise,
-    /// which the server rejected this run or which is still failing. A delete
-    /// never waits: the server stores it even before its record.
+    /// Whether a record upload must wait for a record it depends on: its
+    /// workout, its logged exercise, or the exercise a logged exercise names.
+    /// It waits while that record's own upload was rejected this run, or while
+    /// its create keeps failing, so the server may not have it. A delete never
+    /// waits: the server stores it even before its record.
     private func dependsOnRejectedParent(
         _ entry: SyncOutboxEntry,
         rejectedThisRun: Set<SyncOutboxKey>,
@@ -851,26 +853,31 @@ public final class SyncCoordinator {
         context: ModelContext
     ) throws -> Bool {
         guard entry.operation != .delete else { return false }
-        var parents: [SyncOutboxKey] = []
+        var dependencies: [SyncOutboxKey] = []
         switch entry.entityKind {
         case .some(.loggedExercise):
-            if let session = try findLoggedExercise(id: entry.entityID, context: context)?.session {
-                parents.append(SyncOutboxKey(kind: .workoutSession, id: session.id))
+            let loggedExercise = try findLoggedExercise(id: entry.entityID, context: context)
+            if let session = loggedExercise?.session {
+                dependencies.append(SyncOutboxKey(kind: .workoutSession, id: session.id))
+            }
+            if let exercise = loggedExercise?.exercise {
+                dependencies.append(SyncOutboxKey(kind: .exercise, id: exercise.id))
             }
         case .some(.loggedSet):
             if let loggedExercise = try findLoggedSet(id: entry.entityID, context: context)?.loggedExercise {
-                parents.append(SyncOutboxKey(kind: .loggedExercise, id: loggedExercise.id))
+                dependencies.append(SyncOutboxKey(kind: .loggedExercise, id: loggedExercise.id))
                 if let session = loggedExercise.session {
-                    parents.append(SyncOutboxKey(kind: .workoutSession, id: session.id))
+                    dependencies.append(SyncOutboxKey(kind: .workoutSession, id: session.id))
                 }
             }
         default:
             return false
         }
-        return parents.contains { parent in
-            if rejectedThisRun.contains(parent) { return true }
-            return (activeEntriesByKey[parent] ?? []).contains { parentEntry in
-                parentEntry.status == .failed || parentEntry.status == .blocked
+        return dependencies.contains { dependency in
+            if rejectedThisRun.contains(dependency) { return true }
+            return (activeEntriesByKey[dependency] ?? []).contains { dependencyEntry in
+                (dependencyEntry.status == .failed || dependencyEntry.status == .blocked)
+                    && dependencyEntry.operation == .create
             }
         }
     }
