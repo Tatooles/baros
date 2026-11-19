@@ -122,11 +122,9 @@ private struct SearchableExercisePicker: View {
             onSelectAsSuperset: onSelectAsSuperset,
             onSelect: onSelect
         )
-        .searchable(
-            text: $searchText,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "Search exercises"
-        )
+        // Automatic puts search in the bottom toolbar on iPhone, under the
+        // thumb; the commit bar stacks above it.
+        .searchable(text: $searchText, prompt: "Search exercises")
     }
 }
 
