@@ -4417,6 +4417,8 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
     var onUpsertExercise: ((ExerciseSyncPayload) throws -> Void)?
     var onUpsertLoggedExercise: ((LoggedExerciseSyncPayload) throws -> Void)?
     var onUpsertLoggedSet: ((LoggedSetSyncPayload) throws -> Void)?
+    var onUpsertWorkoutSession: ((WorkoutSessionSyncPayload) throws -> Void)?
+    var onTombstone: ((SyncEntityKind, UUID) throws -> Void)?
     var error: Error?
     var fetchError: Error?
 
@@ -4441,6 +4443,7 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
 
     func upsertWorkoutSession(_ record: WorkoutSessionSyncPayload) async throws -> SyncMutationResult {
         if let error { throw error }
+        try onUpsertWorkoutSession?(record)
         operationLog.append("upsertWorkoutSession:\(record.clientId)")
         upsertedWorkoutSessions.append(record)
         if !workoutSessionMutationResults.isEmpty {
@@ -4483,6 +4486,7 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
 
     func tombstone(entityKind: SyncEntityKind, clientId: UUID, deletedAt: Date) async throws -> SyncMutationResult {
         if let error { throw error }
+        try onTombstone?(entityKind, clientId)
         tombstones.append((entityKind, clientId, deletedAt))
         if !tombstoneResults.isEmpty {
             return tombstoneResults.removeFirst()
