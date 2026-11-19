@@ -76,7 +76,8 @@ final class BarosUITests: XCTestCase {
         let gateError = app.staticTexts["AccountTransitionErrorMessage"]
         XCTAssertTrue(app.buttons["AccountSignOutButton"].waitToDisappear(timeout: 3),
                       (gateError.exists ? "Finish reported: \(gateError.label)" : "Finish showed no error")
-                      + (app.buttons["ActiveWorkoutAccessory"].exists ? "; the workout is still active" : "; the workout is no longer active"))
+                      + (app.buttons["ActiveWorkoutAccessory"].exists
+                          ? "; active workout accessory present" : "; active workout accessory absent"))
         XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitToDisappear(timeout: 3))
         tapTab(.history, in: app)
         XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitToExist(timeout: 3))
