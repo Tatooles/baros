@@ -27,6 +27,8 @@ public enum SyncFailureCategory: String, CaseIterable, Equatable {
 
 public enum SyncStableErrorCode: String, CaseIterable, Equatable, Sendable {
     case failedOutboxPush = "failed_outbox_push"
+    /// An outbox entry was dead-lettered after repeated rejections.
+    case blockedOutboxEntry = "blocked_outbox_entry"
     case incompleteRemotePull = "incomplete_remote_pull"
     case syncRunFailed = "sync_run_failed"
     case ownerMismatch = "owner_mismatch"

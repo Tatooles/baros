@@ -378,7 +378,7 @@ public struct WorkoutHistoryMutationService {
         }
 
         if didChangeSessionFields {
-            session.updatedAt = now
+            session.stampEdit(now: now)
             try recordUpdateIfNeeded(
                 entityKind: .workoutSession,
                 entityID: session.id,
@@ -409,7 +409,7 @@ public struct WorkoutHistoryMutationService {
                     now: now
                 )
                 loggedExercise.notes = exerciseDraft.notes
-                loggedExercise.updatedAt = now
+                loggedExercise.stampEdit(now: now)
                 try recordUpdateIfNeeded(
                     entityKind: .loggedExercise,
                     entityID: loggedExercise.id,
@@ -533,7 +533,7 @@ public struct WorkoutHistoryMutationService {
         }
 
         if didChangeChildRecords && !didChangeSessionFields {
-            session.updatedAt = now
+            session.stampEdit(now: now)
             try recordUpdateIfNeeded(
                 entityKind: .workoutSession,
                 entityID: session.id,
@@ -711,7 +711,7 @@ public struct WorkoutHistoryMutationService {
         }
 
         guard didChange else { return false }
-        set.updatedAt = now
+        set.stampEdit(now: now)
         return true
     }
 
@@ -731,7 +731,7 @@ public struct WorkoutHistoryMutationService {
         var didChange = false
         for (index, set) in loggedExercise.sortedSets.enumerated() where set.orderIndex != index {
             set.orderIndex = index
-            set.updatedAt = now
+            set.stampEdit(now: now)
             try recordUpdateIfNeeded(
                 entityKind: .loggedSet,
                 entityID: set.id,

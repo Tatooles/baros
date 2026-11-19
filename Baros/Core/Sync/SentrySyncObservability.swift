@@ -349,6 +349,7 @@ enum SentrySyncEventScrubber {
     ]
     private static let durableErrorCodes: Set<String> = [
         SyncStableErrorCode.failedOutboxPush.rawValue,
+        SyncStableErrorCode.blockedOutboxEntry.rawValue,
         SyncStableErrorCode.incompleteRemotePull.rawValue,
         SyncStableErrorCode.syncRunFailed.rawValue,
         SyncStableErrorCode.ownerMismatch.rawValue,

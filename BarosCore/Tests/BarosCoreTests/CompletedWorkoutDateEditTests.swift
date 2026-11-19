@@ -8,7 +8,9 @@ final class CompletedWorkoutDateEditTests: XCTestCase {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let originalStart = date("2026-09-06T21:30:17Z")
-        let savedAt = date("2026-09-06T23:00:00Z")
+        // Saved after the fixtures, which are created at the real current time:
+        // an edit is never stamped below the version it replaces.
+        let savedAt = Date.now.addingTimeInterval(60)
         let set = LoggedSet(orderIndex: 0, reps: 5, isCompleted: true, completedAt: originalStart)
         let exercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Squat", sets: [set])
         let session = WorkoutSession(

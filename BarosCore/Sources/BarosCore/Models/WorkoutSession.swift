@@ -19,6 +19,11 @@ public final class WorkoutSession: Identifiable {
     var createdAt: Date
     public var updatedAt: Date
     public var deletedAt: Date?
+    /// The server's `updatedAt` for the version this copy descends from: set
+    /// when a pull applies the server's version or an upload is stored, and
+    /// sent as `baseUpdatedAt`. Nil for a record never synced, and on rows
+    /// saved before the field existed.
+    var syncBaseUpdatedAt: Double?
     var healthLinkID: UUID?
     public var syncOwnerTokenIdentifier: String? = nil
     @Relationship(deleteRule: .cascade, inverse: \LoggedExercise.session) public var loggedExercises: [LoggedExercise]
@@ -155,12 +160,11 @@ public final class WorkoutSession: Identifiable {
     }
 
     public func touch(now: Date = .now) {
-        updatedAt = now
+        stampEdit(now: now)
     }
 
     func markDeleted(now: Date = .now) {
-        deletedAt = now
-        updatedAt = now
+        deletedAt = stampEdit(now: now)
     }
 
     func markDeletedCascade(now: Date = .now) {
@@ -175,6 +179,8 @@ public final class WorkoutSession: Identifiable {
 
     func restoreFromDeletion(now: Date = .now) {
         deletedAt = nil
-        updatedAt = now
+        stampEdit(now: now)
     }
 }
+
+extension WorkoutSession: SyncEditStamped {}

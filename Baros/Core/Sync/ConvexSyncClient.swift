@@ -11,7 +11,7 @@ struct ConvexSyncClient: SyncClient, @unchecked Sendable {
 
     func upsertUserSettings(_ record: UserSettingsSyncPayload) async throws -> SyncMutationResult {
         let args = ConvexSyncArgumentMapper.upsertUserSettingsArgs(record)
-        return try await client.mutation(
+        return try await syncMutation(
             "sync:upsertUserSettings",
             with: args
         )
@@ -19,42 +19,42 @@ struct ConvexSyncClient: SyncClient, @unchecked Sendable {
 
     func upsertExercise(_ record: ExerciseSyncPayload) async throws -> SyncMutationResult {
         let args = ConvexSyncArgumentMapper.upsertExerciseArgs(record)
-        return try await client.mutation(
+        return try await syncMutation(
             "sync:upsertExercise",
             with: args
         )
     }
 
     func upsertWorkoutSession(_ record: WorkoutSessionSyncPayload) async throws -> SyncMutationResult {
-        return try await client.mutation(
+        return try await syncMutation(
             "sync:upsertWorkoutSession",
             with: ConvexSyncArgumentMapper.upsertWorkoutSessionArgs(record)
         )
     }
 
     func upsertLoggedExercise(_ record: LoggedExerciseSyncPayload) async throws -> SyncMutationResult {
-        return try await client.mutation(
+        return try await syncMutation(
             "sync:upsertLoggedExercise",
             with: ConvexSyncArgumentMapper.upsertLoggedExerciseArgs(record)
         )
     }
 
     func upsertLoggedSet(_ record: LoggedSetSyncPayload) async throws -> SyncMutationResult {
-        return try await client.mutation(
+        return try await syncMutation(
             "sync:upsertLoggedSet",
             with: ConvexSyncArgumentMapper.upsertLoggedSetArgs(record)
         )
     }
 
     func upsertWorkoutTemplate(_ record: WorkoutTemplateSyncPayload) async throws -> SyncMutationResult {
-        return try await client.mutation(
+        return try await syncMutation(
             "sync:upsertWorkoutTemplate",
             with: ConvexSyncArgumentMapper.upsertWorkoutTemplateArgs(record)
         )
     }
 
     func tombstone(entityKind: SyncEntityKind, clientId: UUID, deletedAt: Date) async throws -> SyncMutationResult {
-        return try await client.mutation(
+        return try await syncMutation(
             "sync:tombstone",
             with: [
                 "entityKind": entityKind.rawValue,
@@ -65,10 +65,32 @@ struct ConvexSyncClient: SyncClient, @unchecked Sendable {
     }
 
     func fetchChanges(cursors: SyncChangeCursors, limit: Int) async throws -> SyncFetchChangesResponse {
-        return try await client.mutation(
+        return try await syncMutation(
             "sync:fetchChangesOnce",
             with: ConvexSyncArgumentMapper.fetchChangesArgs(cursors: cursors, limit: limit)
         )
+    }
+
+    /// Runs a sync mutation, turning every server-side error into a
+    /// `SyncServerRejection` with its `ConvexError` code, if any, so the
+    /// coordinator can tell a record the server refuses from a failure that
+    /// may pass.
+    private func syncMutation<T: Decodable>(
+        _ name: String,
+        with args: [String: ConvexEncodable?]
+    ) async throws -> T {
+        do {
+            return try await client.mutation(name, with: args)
+        } catch let error as ClientError {
+            switch error {
+            case let .ConvexError(data):
+                throw SyncServerRejection.fromConvexErrorData(data)
+            case let .ServerError(message):
+                throw SyncServerRejection(code: nil, message: message)
+            case .InternalError:
+                throw error
+            }
+        }
     }
 
     func deleteAccountData(cancellationToken: UUID) async throws -> AccountDataDeletionResult {
@@ -116,7 +138,7 @@ enum ConvexSyncArgumentMapper {
     }
 
     static func userSettingsRecord(_ record: UserSettingsSyncPayload) -> [String: ConvexEncodable?] {
-        [
+        var args: [String: ConvexEncodable?] = [
             "clientId": record.clientId,
             "createdAt": record.createdAt,
             "updatedAt": record.updatedAt,
@@ -125,6 +147,9 @@ enum ConvexSyncArgumentMapper {
             "defaultRestTimerSeconds": Double(record.defaultRestTimerSeconds),
             "hasCompletedOnboarding": record.hasCompletedOnboarding,
         ]
+        // Always sent, null for a record never synced (convex/sync/validators.ts).
+        args.updateValue(record.baseUpdatedAt, forKey: "baseUpdatedAt")
+        return args
     }
 
     static func exerciseRecord(_ record: ExerciseSyncPayload) -> [String: ConvexEncodable?] {
@@ -146,11 +171,13 @@ enum ConvexSyncArgumentMapper {
         if let trackingMethodRaw = record.trackingMethodRaw {
             args["trackingMethodRaw"] = trackingMethodRaw
         }
+        // Always sent, null for a record never synced (convex/sync/validators.ts).
+        args.updateValue(record.baseUpdatedAt, forKey: "baseUpdatedAt")
         return args
     }
 
     static func workoutSessionRecord(_ record: WorkoutSessionSyncPayload) -> [String: ConvexEncodable?] {
-        [
+        var args: [String: ConvexEncodable?] = [
             "clientId": record.clientId,
             "createdAt": record.createdAt,
             "updatedAt": record.updatedAt,
@@ -167,6 +194,9 @@ enum ConvexSyncArgumentMapper {
             "healthLinkID": record.healthLinkID,
             "sourceTemplateID": record.sourceTemplateID,
         ]
+        // Always sent, null for a record never synced (convex/sync/validators.ts).
+        args.updateValue(record.baseUpdatedAt, forKey: "baseUpdatedAt")
+        return args
     }
 
     static func loggedExerciseRecord(_ record: LoggedExerciseSyncPayload) -> [String: ConvexEncodable?] {
@@ -193,6 +223,8 @@ enum ConvexSyncArgumentMapper {
         if let trackingMethodRaw = record.trackingMethodRaw {
             args["trackingMethodRaw"] = trackingMethodRaw
         }
+        // Always sent, null for a record never synced (convex/sync/validators.ts).
+        args.updateValue(record.baseUpdatedAt, forKey: "baseUpdatedAt")
         return args
     }
 
@@ -207,7 +239,7 @@ enum ConvexSyncArgumentMapper {
                 "supersetGroupID": entry.supersetGroupID,
             ] as [String: ConvexEncodable?]
         }
-        return [
+        var args: [String: ConvexEncodable?] = [
             "clientId": record.clientId,
             "createdAt": record.createdAt,
             "updatedAt": record.updatedAt,
@@ -215,6 +247,9 @@ enum ConvexSyncArgumentMapper {
             "name": record.name,
             "entries": entries,
         ]
+        // Always sent, null for a record never synced (convex/sync/validators.ts).
+        args.updateValue(record.baseUpdatedAt, forKey: "baseUpdatedAt")
+        return args
     }
 
     static func loggedSetRecord(_ record: LoggedSetSyncPayload) -> [String: ConvexEncodable?] {
@@ -239,6 +274,8 @@ enum ConvexSyncArgumentMapper {
             // updateValue keeps a nil, which encodes as null.
             args.updateValue(record.durationSeconds.map(Double.init), forKey: "durationSeconds")
         }
+        // Always sent, null for a record never synced (convex/sync/validators.ts).
+        args.updateValue(record.baseUpdatedAt, forKey: "baseUpdatedAt")
         return args
     }
 

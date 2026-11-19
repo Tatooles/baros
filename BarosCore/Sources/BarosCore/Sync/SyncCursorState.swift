@@ -14,6 +14,10 @@ public final class SyncCursorState: Identifiable {
     var workoutTemplatesCursor: Double = 0
     var hasBootstrappedSettingsExercises: Bool = false
     var hasBootstrappedWorkoutGraph: Bool = false
+    /// Set once this owner has run the one-time step for updating to the
+    /// server-decides sync rule: local deletes sent again and sync bases
+    /// adopted (`SyncCoordinator.runConvergenceUpgradeIfNeeded`).
+    var hasRunConvergenceUpgrade: Bool = false
 
     init(
         id: UUID = UUID(),
@@ -50,5 +54,26 @@ public final class SyncCursorState: Identifiable {
         let state = SyncCursorState(ownerTokenIdentifier: ownerTokenIdentifier)
         context.insert(state)
         return state
+    }
+
+    /// Moves a cursor back so the change at `serverUpdatedAt` is pulled again.
+    func rewind(_ kind: SyncEntityKind, toBefore serverUpdatedAt: Double) {
+        let target = max(0, serverUpdatedAt - 1)
+        switch kind {
+        case .userSettings:
+            userSettingsCursor = min(userSettingsCursor, target)
+        case .exercise:
+            exercisesCursor = min(exercisesCursor, target)
+        case .workoutSession:
+            workoutSessionsCursor = min(workoutSessionsCursor, target)
+        case .loggedExercise:
+            loggedExercisesCursor = min(loggedExercisesCursor, target)
+        case .loggedSet:
+            loggedSetsCursor = min(loggedSetsCursor, target)
+        case .workoutTemplate:
+            workoutTemplatesCursor = min(workoutTemplatesCursor, target)
+        case .healthDataLink, .seedMetadata:
+            break
+        }
     }
 }

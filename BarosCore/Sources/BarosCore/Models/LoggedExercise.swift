@@ -26,6 +26,11 @@ public final class LoggedExercise: Identifiable {
     var createdAt: Date
     var updatedAt: Date
     public var deletedAt: Date?
+    /// The server's `updatedAt` for the version this copy descends from: set
+    /// when a pull applies the server's version or an upload is stored, and
+    /// sent as `baseUpdatedAt`. Nil for a record never synced, and on rows
+    /// saved before the field existed.
+    var syncBaseUpdatedAt: Double?
     public var exercise: Exercise?
     public var session: WorkoutSession?
     @Relationship(deleteRule: .cascade, inverse: \LoggedSet.loggedExercise) public var sets: [LoggedSet]
@@ -135,17 +140,18 @@ public final class LoggedExercise: Identifiable {
     }
 
     func touch(now: Date = .now) {
-        updatedAt = now
+        stampEdit(now: now)
         session?.touch(now: now)
     }
 
     func markDeleted(now: Date = .now) {
-        deletedAt = now
-        updatedAt = now
+        deletedAt = stampEdit(now: now)
     }
 
     func restoreFromDeletion(now: Date = .now) {
         deletedAt = nil
-        updatedAt = now
+        stampEdit(now: now)
     }
 }
+
+extension LoggedExercise: SyncEditStamped {}

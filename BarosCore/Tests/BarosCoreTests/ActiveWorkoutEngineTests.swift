@@ -886,12 +886,12 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
-        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let session = try engine.startBlankWorkout(context: context, now: afterFixtureCreation(100))
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
         let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
         _ = try engine.addSet(to: loggedExercise, context: context)
-        let deletedAt = Date(timeIntervalSince1970: 200)
+        let deletedAt = afterFixtureCreation(200)
 
         try engine.removeLoggedExercise(loggedExercise, context: context, now: deletedAt)
 
@@ -936,7 +936,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
-        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let session = try engine.startBlankWorkout(context: context, now: afterFixtureCreation(100))
         let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
         let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         let row = Exercise(name: "Barbell Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
@@ -957,7 +957,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         original.notes = "Pause on the chest"
         original.referenceNotes = "Previous cue"
         try context.save()
-        let swapDate = Date(timeIntervalSince1970: 500)
+        let swapDate = afterFixtureCreation(500)
 
         let replacement = try engine.swapLoggedExercise(
             original,
@@ -1531,7 +1531,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let firstSet = loggedExercise.sets[0]
         let removedSet = try engine.addSet(to: loggedExercise, context: context)
         let thirdSet = try engine.addSet(to: loggedExercise, context: context)
-        let deletedAt = Date(timeIntervalSince1970: 400)
+        let deletedAt = afterFixtureCreation(400)
 
         try engine.removeSet(removedSet, context: context, now: deletedAt)
 
@@ -1683,8 +1683,8 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
-        let completionDate = Date(timeIntervalSince1970: 100)
-        let editDate = Date(timeIntervalSince1970: 200)
+        let completionDate = afterFixtureCreation(100)
+        let editDate = afterFixtureCreation(200)
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
@@ -1716,7 +1716,8 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertNil(set.rpe)
         XCTAssertTrue(set.isCompleted)
         XCTAssertEqual(set.completedAt, completionDate)
-        XCTAssertEqual(set.updatedAt, editDate)
+        // Two saved edits at the same instant: the second lands a step above the first.
+        assertStamped(set.updatedAt, at: editDate)
         XCTAssertEqual(loggedExercise.updatedAt, completionDate)
         XCTAssertEqual(session.updatedAt, completionDate)
         XCTAssertFalse(context.hasChanges)
@@ -1735,7 +1736,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         set.reps = 4
         set.rpe = 8
         try context.save()
-        try engine.toggleSetCompletion(set, context: context, now: Date(timeIntervalSince1970: 300))
+        try engine.toggleSetCompletion(set, context: context, now: afterFixtureCreation(300))
         var input = ActiveWorkoutSetInput()
         input.update("", for: .weight, isFocused: true)
         input.update("6", for: .reps, isFocused: true)
@@ -1746,7 +1747,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             isCompleted: set.isCompleted,
             previous: .init(weight: 185, reps: 5)
         )
-        let uncheckDate = Date(timeIntervalSince1970: 360)
+        let uncheckDate = afterFixtureCreation(360)
         var saveCount = 0
 
         try engine.toggleSetCompletion(
@@ -2100,7 +2101,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
-        let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
+        let session = try engine.startBlankWorkout(context: context, now: afterFixtureCreation(100))
         let squat = Exercise(name: "Back Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
         let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         let deadlift = Exercise(name: "Conventional Deadlift", category: .strength, equipment: .barbell, primaryMuscleGroup: .glutes)
@@ -2115,15 +2116,16 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             in: session,
             orderedIDs: [third.id, first.id, second.id],
             context: context,
-            now: Date(timeIntervalSince1970: 200)
+            now: afterFixtureCreation(200)
         )
 
         XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [third.id, first.id, second.id])
         XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2])
-        XCTAssertEqual(third.updatedAt, Date(timeIntervalSince1970: 200))
-        XCTAssertEqual(first.updatedAt, Date(timeIntervalSince1970: 200))
-        XCTAssertEqual(second.updatedAt, Date(timeIntervalSince1970: 200))
-        XCTAssertEqual(session.updatedAt, Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(third.updatedAt, afterFixtureCreation(200))
+        XCTAssertEqual(first.updatedAt, afterFixtureCreation(200))
+        XCTAssertEqual(second.updatedAt, afterFixtureCreation(200))
+        // Each reordered exercise stamps the workout again, a step above the last.
+        assertStamped(session.updatedAt, at: afterFixtureCreation(200))
     }
 
     func testReorderingLoggedExercisesPreservesExerciseData() throws {
@@ -2203,19 +2205,19 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let first = try engine.addExercise(squat, to: session, context: context)
         let removed = try engine.addExercise(bench, to: session, context: context)
         let third = try engine.addExercise(deadlift, to: session, context: context)
-        removed.markDeleted(now: Date(timeIntervalSince1970: 150))
+        removed.markDeleted(now: afterFixtureCreation(150))
 
         try engine.reorderLoggedExercises(
             in: session,
             orderedIDs: [third.id, first.id],
             context: context,
-            now: Date(timeIntervalSince1970: 400)
+            now: afterFixtureCreation(400)
         )
 
         XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [third.id, first.id])
         XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1])
         XCTAssertEqual(removed.orderIndex, 1)
-        XCTAssertEqual(removed.deletedAt, Date(timeIntervalSince1970: 150))
+        XCTAssertEqual(removed.deletedAt, afterFixtureCreation(150))
         XCTAssertEqual(try allLoggedExercises(in: context).count, 3)
     }
 

@@ -3779,7 +3779,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(failedEntry.lastErrorMessage, "offline")
 
         let retryClient = FakeSyncClient()
-        try await SyncCoordinator(client: retryClient).run(ownerTokenIdentifier: owner, context: context)
+        try await SyncCoordinator(client: retryClient, clock: { Date.now.addingTimeInterval(60) }).run(ownerTokenIdentifier: owner, context: context)
 
         XCTAssertEqual(retryClient.upsertedWorkoutSessions.map(\.clientId), [session.id.uuidString.lowercased()])
         XCTAssertEqual(retryClient.operationLog, ["upsertWorkoutSession:\(session.id.uuidString.lowercased())"])
@@ -3915,7 +3915,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertNotEqual(failedEntry.updatedAt, Date(timeIntervalSince1970: 100))
 
         let retryClient = FakeSyncClient()
-        try await SyncCoordinator(client: retryClient).run(ownerTokenIdentifier: "issuer|owner_a", context: context)
+        try await SyncCoordinator(client: retryClient, clock: { Date.now.addingTimeInterval(60) }).run(ownerTokenIdentifier: "issuer|owner_a", context: context)
 
         XCTAssertEqual(retryClient.tombstones.count, 1)
         XCTAssertEqual(retryClient.tombstones.first?.0, .exercise)
@@ -3967,7 +3967,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertNotEqual(failedEntry.updatedAt, Date(timeIntervalSince1970: 200))
 
         let retryClient = FakeSyncClient()
-        try await SyncCoordinator(client: retryClient).run(ownerTokenIdentifier: "issuer|owner_a", context: context)
+        try await SyncCoordinator(client: retryClient, clock: { Date.now.addingTimeInterval(60) }).run(ownerTokenIdentifier: "issuer|owner_a", context: context)
 
         XCTAssertEqual(retryClient.tombstones.count, 1)
         XCTAssertEqual(retryClient.tombstones.first?.0, .exercise)
@@ -4323,7 +4323,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty)
     }
 
-    func testRunLeavesSecondPendingEntryPendingAfterFirstEntryFailure() async throws {
+    func testRunKeepsPushingPastARejectedEntry() async throws {
         struct PushError: LocalizedError { var errorDescription: String? { "offline" } }
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -4349,16 +4349,21 @@ final class SyncCoordinatorTests: XCTestCase {
         try context.save()
 
         let client = FakeSyncClient()
-        client.error = PushError()
+        let failedID = failedExercise.id.uuidString.lowercased()
+        client.onUpsertExercise = { record in
+            if record.clientId == failedID { throw PushError() }
+        }
         let coordinator = SyncCoordinator(client: client)
         try await coordinator.run(ownerTokenIdentifier: "issuer|owner_a", context: context)
 
         let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>())
         let failedEntry = try XCTUnwrap(entries.first { $0.entityID == failedExercise.id })
-        let pendingEntry = try XCTUnwrap(entries.first { $0.entityID == pendingExercise.id })
         XCTAssertEqual(failedEntry.status, .failed)
         XCTAssertEqual(failedEntry.lastErrorMessage, "offline")
-        XCTAssertEqual(pendingEntry.status, .pending)
+        XCTAssertEqual(failedEntry.rejectionCount, 1)
+        // #96: one rejected record no longer holds back the rest of the queue.
+        XCTAssertFalse(entries.contains { $0.entityID == pendingExercise.id })
+        XCTAssertEqual(client.upsertedExercises.map(\.clientId), [pendingExercise.id.uuidString.lowercased()])
     }
 }
 

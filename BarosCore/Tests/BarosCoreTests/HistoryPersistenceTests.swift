@@ -259,7 +259,7 @@ final class HistoryPersistenceTests: XCTestCase {
         context.insert(exercise)
         context.insert(session)
         try context.save()
-        let deletedAt = Date(timeIntervalSince1970: 300)
+        let deletedAt = afterFixtureCreation(300)
 
         session.markDeletedCascade(now: deletedAt)
         try context.save()

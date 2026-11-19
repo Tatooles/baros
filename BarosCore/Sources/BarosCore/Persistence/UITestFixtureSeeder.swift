@@ -41,10 +41,10 @@ public enum UITestFixtureSeeder {
               let set = session.sortedLoggedExercises.first?.sortedSets.first else { return }
         let now = Date.now
         set.weight = (set.weight ?? 0) + 25
-        set.updatedAt = now
+        set.stampEdit(now: now)
         session.durationSeconds = session.effectiveDurationSeconds() + 600
         session.endedAt = session.startedAt.addingTimeInterval(TimeInterval(session.durationSeconds))
-        session.updatedAt = now
+        session.stampEdit(now: now)
         try context.save()
         concurrentHistorySaveSessionIDs.insert(session.id)
     }
