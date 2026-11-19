@@ -4,9 +4,11 @@ name: iOS UI Nightly
 # Never add pull_request or push triggers: this suite is not a PR gate yet.
 on:
   schedule:
-    # Scheduled runs always use the default branch (main). 09:23 UTC is
-    # overnight in the US and avoids the top-of-hour scheduler backlog.
-    - cron: "23 9 * * *"
+    # Scheduled runs always use the default branch (main). 12:23 AM Central
+    # avoids the top-of-hour scheduler backlog. GitHub treats schedules as
+    # best effort and has sent this event up to 9 hours late.
+    - cron: "23 0 * * *"
+      timezone: "America/Chicago"
   workflow_dispatch:
 
 permissions:
