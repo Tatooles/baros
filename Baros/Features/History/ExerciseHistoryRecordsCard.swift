@@ -161,7 +161,7 @@ struct ExerciseHistoryRecordsCard: View {
             Text("No estimate yet")
                 .font(.headline)
                 .foregroundStyle(AppTheme.textPrimary)
-            Text("Needs a completed working set with weight.")
+            Text("Needs a completed working or failure set with weight.")
                 .font(.subheadline)
                 .foregroundStyle(AppTheme.textSecondary)
         }

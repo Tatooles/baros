@@ -47,7 +47,7 @@ The greatest positive recorded load lifted for at least one completed repetition
 _Avoid_: Actual 1RM, actual maximum
 
 **Estimated 1RM**:
-An estimate of a one-repetition maximum from an exercise's eligible completed working or failure sets of one to ten repetitions with matching equipment. It describes recorded performance without adjusting for effort and does not establish what the person can currently lift.
+An estimate of a one-repetition maximum from an exercise's eligible completed working or failure sets with matching equipment; a set of more than ten repetitions counts as ten. It describes recorded performance without adjusting for effort and does not establish what the person can currently lift.
 _Avoid_: Actual 1RM, predicted ability
 
 **Durable Sync Failure**:

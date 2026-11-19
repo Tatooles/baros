@@ -135,8 +135,8 @@ The revision keeps the calculation and changes how the screen tells the story.
   record point is larger and a "Record" legend names it. Dragging selects a
   workout and shows `date · ≈ value from weight × reps`. VoiceOver reads a
   summary and exposes an audio graph.
-- **No estimate / no records.** "No estimate yet — Needs a completed working
-  set with weight." and "No records yet — Log a weight and reps on a completed
+- **No estimate / no records.** "No estimate yet — Needs a completed working or
+  failure set with weight." and "No records yet — Log a weight and reps on a completed
   set to see records here." No zeros, no extra explanation in the card; the
   information sheet holds the full rules.
 - **Exercise History log.** Each Exercise Performance is one row in a single
