@@ -38,22 +38,18 @@ enum SyncPushFailureKind: Equatable {
     /// The server will not accept this record as sent: `missingParent`,
     /// `missingExerciseReference` or `invalidPayload`.
     case record(code: String)
-    /// Any other failure, including an uncoded server error. It may be
-    /// permanent, so it counts toward dead-lettering, but it may also be a
+    /// An uncoded server error, or a code this build does not know. It may
+    /// be permanent, so it counts toward dead-lettering, but it may also be a
     /// server outage, so a streak of them stops the run.
     case unknown
-
-    var countsAsRejection: Bool {
-        switch self {
-        case .record, .unknown: true
-        case .transient, .accountWide: false
-        }
-    }
+    /// A failure on this device, not the server's verdict, such as a local
+    /// store error. It never counts toward dead-lettering.
+    case local
 
     var code: String? {
         switch self {
         case let .accountWide(code), let .record(code): code
-        case .transient, .unknown: nil
+        case .transient, .unknown, .local: nil
         }
     }
 }
@@ -66,7 +62,10 @@ enum SyncPushFailureClassifier {
         if let transient = TransientSyncConditionClassifier.errorCode(for: error) {
             return .transient(transient)
         }
-        guard let rejection = error as? SyncServerRejection, let code = rejection.code else {
+        guard let rejection = error as? SyncServerRejection else {
+            return .local
+        }
+        guard let code = rejection.code else {
             return .unknown
         }
         if accountWideCodes.contains(code) {

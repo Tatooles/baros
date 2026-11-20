@@ -4351,7 +4351,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let client = FakeSyncClient()
         let failedID = failedExercise.id.uuidString.lowercased()
         client.onUpsertExercise = { record in
-            if record.clientId == failedID { throw PushError() }
+            if record.clientId == failedID { throw SyncServerRejection(code: nil, message: "offline") }
         }
         let coordinator = SyncCoordinator(client: client)
         try await coordinator.run(ownerTokenIdentifier: "issuer|owner_a", context: context)

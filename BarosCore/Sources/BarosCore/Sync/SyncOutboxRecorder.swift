@@ -255,6 +255,14 @@ struct SyncOutboxRecorder {
         ) ? .blocked : .failed
     }
 
+    /// A failure on this device: retried after a short wait, never counted.
+    func markLocalFailure(_ entry: SyncOutboxEntry, message: String, now: Date) {
+        entry.status = .failed
+        entry.lastErrorMessage = message
+        entry.updatedAt = now
+        entry.nextAttemptAt = now.addingTimeInterval(SyncRejectionPolicy.firstBackoff)
+    }
+
     /// The person's Retry: sends blocked and backed-off entries again now,
     /// with a fresh rejection count. Returns how many entries it re-queued.
     @discardableResult

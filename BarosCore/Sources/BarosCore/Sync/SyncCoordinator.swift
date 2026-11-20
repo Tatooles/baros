@@ -696,7 +696,11 @@ public final class SyncCoordinator {
             }
         }
         var rejectedThisRun = Set<SyncOutboxKey>()
+        // Entries passed over this run because something they depend on is
+        // failing; their own dependents wait with them.
+        var heldBackThisRun = Set<SyncOutboxKey>()
         var accountWideRejections = 0
+        var lastAccountWideCode: String?
         var uncodedRejectionStreak = 0
         var needsSave = false
         var completedSinceLastSave = 0
@@ -716,7 +720,8 @@ public final class SyncCoordinator {
                 // A local edit, or the parent requeue below, changed it during the run.
                 continue
             }
-            if try dependsOnRejectedParent(entry, rejectedThisRun: rejectedThisRun, activeEntriesByKey: activeEntriesByKey, context: context) {
+            if try dependsOnRejectedParent(entry, rejectedThisRun: rejectedThisRun.union(heldBackThisRun), activeEntriesByKey: activeEntriesByKey, context: context) {
+                if let key = entry.outboxKey { heldBackThisRun.insert(key) }
                 continue
             }
             guard attemptedCount < maxPendingPushEntriesPerRun else {
@@ -793,9 +798,21 @@ public final class SyncCoordinator {
                     // record is fine, so the rejection is not counted.
                     restoreUncounted()
                     accountWideRejections += 1
+                    lastAccountWideCode = code
                     if accountWideRejections >= SyncRejectionPolicy.accountWideRejectionsBeforeStopping {
                         try context.save()
                         return SyncPushResult(didComplete: false, didPush: true, accountWideRejectionCode: code)
+                    }
+                    needsSave = true
+                    continue
+                case .local:
+                    // Not the server's verdict, so it does not count toward
+                    // dead-lettering. Retry after a short wait.
+                    if let key = entry.outboxKey {
+                        rejectedThisRun.insert(key)
+                    }
+                    if entry.status == .inFlight {
+                        recorder.markLocalFailure(entry, message: error.localizedDescription, now: clock())
                     }
                     needsSave = true
                     continue
@@ -844,6 +861,10 @@ public final class SyncCoordinator {
 
         if needsSave {
             try context.save()
+        }
+        if let lastAccountWideCode {
+            // Even one refused write means the run did not sync.
+            return SyncPushResult(didComplete: false, didPush: true, accountWideRejectionCode: lastAccountWideCode)
         }
         return SyncPushResult(
             didComplete: true,
@@ -923,7 +944,9 @@ public final class SyncCoordinator {
               try !hasActiveOutboxEntry(entityKind: target.kind, entityID: target.id, context: context) else {
             return
         }
-        try recorder.recordUpdate(
+        // A create, because the server confirmed it lacks the record, so
+        // records under it wait for it if it fails too.
+        try recorder.recordCreate(
             entityKind: target.kind,
             entityID: target.id,
             ownerTokenIdentifier: ownerTokenIdentifier,
@@ -1440,7 +1463,8 @@ public final class SyncCoordinator {
                         ownerTokenIdentifier: ownerTokenIdentifier,
                         context: context
                     )
-                    if !hasLocalIntent {
+                    // Deletes win, even over a waiting local edit.
+                    if !hasLocalIntent || record.deletedAt != nil {
                         apply(record, to: exercise, ownerTokenIdentifier: ownerTokenIdentifier)
                     }
                     continue
