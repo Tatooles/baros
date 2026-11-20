@@ -115,15 +115,15 @@ struct SettingsAccountRow: View {
                             Text(displayState.subtitle).foregroundStyle(.secondary)
                         }
                         Section {
-                            AccountTransitionButton(destination: .manageAccount,
-                                                    identifier: "AccountManageProfileButton") {
+                            AccountTransitionButton(destination: .manageAccount) {
                                 presentedSheet = hasPendingSessionTasks ? .auth : .userProfile
                             }
-                            AccountTransitionButton(destination: .signOut, role: .destructive,
-                                                    identifier: "AccountSignOutButton") {
+                            .accessibilityIdentifier("AccountManageProfileButton")
+                            AccountTransitionButton(destination: .signOut, role: .destructive) {
                                 try await signOut()
                                 presentedSheet = nil
                             }
+                            .accessibilityIdentifier("AccountSignOutButton")
                         }
                     }
                     .navigationTitle("Account")

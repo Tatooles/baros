@@ -13,96 +13,114 @@ struct AccountTransitionButton<Label: View>: View {
     /// The gate whose finish-or-discard choice is on screen. The alert's buttons act on
     /// this gate, never on a later one, so a late action cannot reach another request.
     @State private var choiceGate: WorkoutAccountTransition?
-    /// Shown under the button instead of in a second alert. An alert presented while the
-    /// choice alert was still closing could be dropped, so a failed choice looked like
-    /// nothing happened (#403, #417).
     @State private var errorMessage: String?
+    /// A failure from a choice waits here. It is promoted only after a view update in
+    /// which no prompt is presented, so it gets its own presentation instead of
+    /// replacing the payload of the choice alert as that alert closes.
+    @State private var pendingError: String?
     let destination: WorkoutAccountTransition.Destination
     var role: ButtonRole? = nil
-    /// Applied to the button alone. An identifier added outside would also replace the
-    /// error message's own identifier.
-    let identifier: String
     let action: () async throws -> Void
     let label: Label
 
-    init(destination: WorkoutAccountTransition.Destination, role: ButtonRole? = nil, identifier: String,
+    init(destination: WorkoutAccountTransition.Destination, role: ButtonRole? = nil,
          action: @escaping () async throws -> Void, @ViewBuilder label: () -> Label) {
         self.destination = destination
         self.role = role
-        self.identifier = identifier
         self.action = action
         self.label = label()
     }
 
-    private var isChoicePresented: Binding<Bool> {
+    private enum Prompt {
+        case choices(WorkoutAccountTransition)
+        case error(String)
+    }
+
+    /// One alert presents both the choice and any failure. Two `.alert` modifiers on one
+    /// view may let SwiftUI drop the error under load after the choice alert closes (#403).
+    private var prompt: Prompt? {
+        if let choiceGate { return .choices(choiceGate) }
+        return errorMessage.map(Prompt.error)
+    }
+
+    private var isPromptPresented: Binding<Bool> {
         Binding(
-            get: { choiceGate != nil },
-            set: { if !$0 { choiceGate = nil } }
+            get: { prompt != nil },
+            set: { isPresented in
+                // Only the choice is cleared here. An error is cleared by its OK button,
+                // so an extra dismissal write can never discard an error before it shows.
+                if !isPresented { choiceGate = nil }
+            }
         )
     }
 
-    /// The message is the button's sibling, so a Form shows it as its own row and the
-    /// button keeps its usual row and tap area.
     var body: some View {
-        Group {
-            Button(role: role) {
-                let gate = WorkoutAccountTransition(context: context, engine: engine,
-                    syncScheduler: scheduler, owner: { currentOwner.localDataOwnerTokenIdentifier })
-                transition = gate
-                choiceGate = nil
-                errorMessage = nil
-                Task {
-                    await gate.request(destination: destination, action)
-                    if gate.needsResolution {
-                        choiceGate = gate
-                    } else {
-                        errorMessage = gate.errorMessage
-                    }
+        Button(role: role) {
+            let gate = WorkoutAccountTransition(context: context, engine: engine,
+                syncScheduler: scheduler, owner: { currentOwner.localDataOwnerTokenIdentifier })
+            transition = gate
+            choiceGate = nil
+            errorMessage = nil
+            pendingError = nil
+            Task {
+                await gate.request(destination: destination, action)
+                if gate.needsResolution {
+                    choiceGate = gate
+                } else if let message = gate.errorMessage {
+                    errorMessage = message
                 }
-            } label: { label }
-            .disabled(transition?.isRunning == true || engine.isAccountTransitionInProgress)
-            .accessibilityIdentifier(identifier)
-            .alert("Resolve your workout first", isPresented: isChoicePresented, presenting: choiceGate) { gate in
+            }
+        } label: { label }
+        .disabled(transition?.isRunning == true || engine.isAccountTransitionInProgress)
+        .alert(promptTitle, isPresented: isPromptPresented, presenting: prompt) { prompt in
+            switch prompt {
+            case .choices(let gate):
                 Button("Finish Workout and \(destination.title)") { resolve(.finish, on: gate) }
                 Button("Discard Workout and \(destination.title)", role: .destructive) {
                     resolve(.discard, on: gate)
                 }
                 Button("Cancel", role: .cancel) { gate.cancel() }
-            } message: { _ in
+            case .error:
+                Button("OK", role: .cancel) { errorMessage = nil }
+            }
+        } message: { prompt in
+            switch prompt {
+            case .choices:
                 Text("Finish or discard the current account’s unfinished workouts before continuing. Cancel keeps your workout and account unchanged.")
+            case .error(let message):
+                Text(message)
             }
-            .onChange(of: errorMessage) { _, message in
-                guard let message else { return }
-                // High priority, so focus returning from the closing alert doesn't cut it off.
-                var announcement = AttributedString(message)
-                announcement.accessibilitySpeechAnnouncementPriority = .high
-                AccessibilityNotification.Announcement(announcement).post()
-            }
-            .onDisappear { transition?.cancel() }
+        }
+        .onChange(of: choiceGate == nil && pendingError != nil) { _, isReady in
+            if isReady { presentPendingError() }
+        }
+        .onDisappear { transition?.cancel() }
+    }
 
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(AppTheme.destructiveForeground)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("AccountTransitionErrorMessage")
-            }
+    private var promptTitle: String {
+        switch prompt {
+        case .error: "Couldn’t Continue"
+        case .choices, nil: "Resolve your workout first"
         }
     }
 
     private func resolve(_ resolution: WorkoutAccountTransition.Resolution, on gate: WorkoutAccountTransition) {
         Task {
             await gate.resolve(resolution)
-            errorMessage = gate.errorMessage
+            if let message = gate.errorMessage { pendingError = message }
         }
+    }
+
+    private func presentPendingError() {
+        guard let pendingError else { return }
+        errorMessage = pendingError
+        self.pendingError = nil
     }
 }
 
 extension AccountTransitionButton where Label == Text {
-    init(destination: WorkoutAccountTransition.Destination, role: ButtonRole? = nil, identifier: String,
+    init(destination: WorkoutAccountTransition.Destination, role: ButtonRole? = nil,
          action: @escaping () async throws -> Void) {
-        self.init(destination: destination, role: role, identifier: identifier, action: action) {
-            Text(destination.title)
-        }
+        self.init(destination: destination, role: role, action: action) { Text(destination.title) }
     }
 }

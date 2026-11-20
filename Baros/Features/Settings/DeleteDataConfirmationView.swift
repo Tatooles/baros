@@ -82,11 +82,11 @@ struct DeleteDataConfirmationView: View {
 
             Section {
                 if mode == .account {
-                    AccountTransitionButton(destination: .deleteAccount, role: .destructive,
-                                            identifier: "DeleteDataConfirmButton") {
+                    AccountTransitionButton(destination: .deleteAccount, role: .destructive) {
                         await coordinator.deleteAccount()
                     } label: { progressLabel }
                     .disabled(confirmationText != "DELETE" || coordinator.phase.isRunning)
+                    .accessibilityIdentifier("DeleteDataConfirmButton")
                 } else {
                     Button(role: .destructive) {
                         Task { await coordinator.deleteLocalData() }

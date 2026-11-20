@@ -68,19 +68,13 @@ public final class WorkoutAccountTransition {
     }
 
     public func resolve(_ resolution: Resolution) async {
-        // This gate's earlier choice is still running and reports its own outcome.
-        guard !isRunning else { return }
-        // Every other choice that changes nothing must say so; returning silently left
-        // the person tapping Finish with nothing happening (#417).
-        guard !engine.isAccountTransitionInProgress else {
-            errorMessage = TransitionError.transitionInProgress.localizedDescription
-            return
-        }
+        guard !isRunning, !engine.isAccountTransitionInProgress else { return }
+        // A choice whose request was cancelled must say so; returning silently left
+        // the person tapping Finish with nothing happening.
         guard needsResolution else {
             errorMessage = TransitionError.choiceExpired.localizedDescription
             return
         }
-        errorMessage = nil
         isRunning = true
         defer { isRunning = false }
         do {
@@ -120,7 +114,7 @@ public final class WorkoutAccountTransition {
         do {
             guard owner() == expectedOwner else { throw TransitionError.ownerChanged }
             guard try outgoingActiveSessions().isEmpty else { throw TransitionError.workoutsChanged }
-            guard let action else { throw TransitionError.actionExpired }
+            guard let action else { return }
             self.action = nil
             engine.isAccountTransitionInProgress = true
             defer { engine.isAccountTransitionInProgress = false }
@@ -148,7 +142,6 @@ public final class WorkoutAccountTransition {
 
     private enum TransitionError: LocalizedError {
         case hiddenWorkout, ownerChanged, workoutsChanged, pendingSetSave, choiceExpired
-        case transitionInProgress, actionExpired
         var errorDescription: String? {
             switch self {
             case .hiddenWorkout:
@@ -161,10 +154,6 @@ public final class WorkoutAccountTransition {
                 "A set could not be saved. Return to the workout to retry or discard that edit before continuing."
             case .choiceExpired:
                 "Your choice wasn’t applied. Your workout and account are unchanged. Try again."
-            case .transitionInProgress:
-                "Another account change is still in progress. Your workout and account are unchanged. Try again when it finishes."
-            case .actionExpired:
-                "The account action didn’t run, so your account is unchanged. Try again."
             }
         }
     }

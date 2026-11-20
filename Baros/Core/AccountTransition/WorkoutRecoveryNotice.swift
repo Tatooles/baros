@@ -39,10 +39,11 @@ struct WorkoutRecoveryNotice: View {
                     .font(.subheadline).foregroundStyle(.secondary)
                 if !hidden.isEmpty {
                     if currentOwner.localDataOwnerTokenIdentifier != nil {
-                        AccountTransitionButton(destination: .signOut, identifier: "WorkoutRecoverySignOutButton") {
+                        AccountTransitionButton(destination: .signOut) {
                             try await signOut()
                             showsSignIn = true
                         } label: { Text("Sign Out to Recover Workout") }
+                        .accessibilityIdentifier("WorkoutRecoverySignOutButton")
                     } else {
                         Button("Sign In to Recover Workout") { showsSignIn = true }
                             .accessibilityIdentifier("WorkoutRecoverySignInButton")
