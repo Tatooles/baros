@@ -133,6 +133,7 @@ private struct ExercisePickerList: View {
     @Environment(\.dismissSearch) private var dismissSearch
     @Environment(\.isSearching) private var isSearching
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let baseRows: [ExercisePickerRowContent]
     let mode: ExercisePickerMode
     var showsCancel = true
@@ -284,6 +285,9 @@ private struct ExercisePickerList: View {
         .scrollContentBackground(.hidden)
         .contentMargins(.top, noMatchesSuggestion == nil ? 8 : nil, for: .scrollContent)
         .contentMargins(.bottom, 24, for: .scrollContent)
+        // Swap's bar gets a hard edge from its warning text; Add's bar holds only glass
+        // buttons, so ask for the same backing to keep rows from reading through it.
+        .scrollEdgeEffectStyle(mode.isAddExercise && !selectedExercises.isEmpty ? .hard : nil, for: .bottom)
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle(mode.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
@@ -298,12 +302,16 @@ private struct ExercisePickerList: View {
         .onChange(of: sortOrder) { _, newValue in
             sortPreferenceStore.sortOrder = newValue
         }
+        // The commit bar appears only once something is picked, so an idle picker
+        // ends in just the search field.
         .safeAreaBar(edge: .bottom, spacing: 0) {
-            if let swapImpact {
-                swapConfirmBar(swapImpact)
-            } else if mode.isAddExercise {
+            if let swapImpact, let swapReplacement {
+                swapConfirmBar(swapImpact, replacement: swapReplacement)
+                    .transition(commitBarTransition)
+            } else if mode.isAddExercise, !selectedExercises.isEmpty {
                 HStack(spacing: 10) {
-                    if let onSelectAsSuperset {
+                    // A superset needs two exercises, so it joins Add only from the second pick.
+                    if let onSelectAsSuperset, selectedExercises.count >= 2 {
                         Button {
                             onSelectAsSuperset(selectedExercises)
                         } label: {
@@ -315,7 +323,7 @@ private struct ExercisePickerList: View {
                                 .padding(.vertical, 8)
                         }
                         .buttonStyle(.glass)
-                        .disabled(selectedExercises.count < 2)
+                        .transition(.opacity)
                         .accessibilityIdentifier("ExercisePickerAddAsSupersetButton")
                     }
                     Button {
@@ -335,8 +343,12 @@ private struct ExercisePickerList: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
+                .transition(commitBarTransition)
             }
         }
+        .animation(.smooth(duration: 0.25), value: selectedExercises.isEmpty)
+        .animation(.smooth(duration: 0.25), value: selectedExercises.count >= 2)
+        .animation(.smooth(duration: 0.25), value: swapReplacement == nil)
         .toolbar {
             if showsCancel {
                 ToolbarItem(placement: .topBarLeading) {
@@ -375,14 +387,23 @@ private struct ExercisePickerList: View {
         return swapImpact?.similarRows(in: baseRows) ?? []
     }
 
+    /// The commit bar slides up from the search field, or only fades with Reduce Motion on.
+    private var commitBarTransition: AnyTransition {
+        reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
+    }
+
+    private var swapReplacement: Exercise? {
+        guard let swapSelectionID else { return nil }
+        return baseRows.first { $0.id == swapSelectionID }?.exercise
+    }
+
     /// Swap picks one replacement, then commits from the bar, which says what the swap removes.
-    private func swapConfirmBar(_ impact: SwapExerciseImpact) -> some View {
-        let replacement = baseRows.first { $0.id == swapSelectionID }?.exercise
-        return VStack(spacing: 8) {
+    private func swapConfirmBar(_ impact: SwapExerciseImpact, replacement: Exercise) -> some View {
+        VStack(spacing: 8) {
             Group {
                 if impact.losesWork {
                     Label(impact.lossMessage, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(replacement == nil ? AppTheme.textSecondary : AppTheme.destructiveForeground)
+                        .foregroundStyle(AppTheme.destructiveForeground)
                 } else {
                     Text(impact.lossMessage)
                         .foregroundStyle(AppTheme.textSecondary)
@@ -393,9 +414,9 @@ private struct ExercisePickerList: View {
             .accessibilityIdentifier("ExercisePickerSwapImpactText")
 
             Button {
-                if let replacement { onSelect([replacement]) }
+                onSelect([replacement])
             } label: {
-                Text(replacement.map(impact.confirmTitle(for:)) ?? "Choose a Replacement")
+                Text(impact.confirmTitle(for: replacement))
                     .font(.headline)
                     // Wraps rather than truncating, so the equipment of a same-name variant stays readable.
                     .multilineTextAlignment(.center)
@@ -407,7 +428,7 @@ private struct ExercisePickerList: View {
             // A value, not a hint, so VoiceOver reads the loss even with hints turned off.
             .accessibilityValue(impact.losesWork ? impact.lossMessage : "")
             .tint(impact.losesWork ? AppTheme.destructiveFill : AppTheme.brandAccentFill)
-            .disabled(replacement == nil)
+            .modifier(IgnoresTapsWhileAppearing(trigger: replacement.id))
             .accessibilityIdentifier("ExercisePickerConfirmSwapButton")
         }
         .padding(.horizontal, 20)
@@ -527,5 +548,36 @@ private extension ExercisePickerMode {
     var isAddExercise: Bool {
         if case .add = self { return true }
         return false
+    }
+}
+
+/// The swap bar slides in over the lowest rows, and a swap commits without another prompt.
+/// For a moment after it appears, or after the pick changes, the button swallows taps, so a
+/// repeat tap on a row ("did that register?") can't commit a swap the user didn't mean.
+private struct IgnoresTapsWhileAppearing<Trigger: Equatable>: ViewModifier {
+    let trigger: Trigger
+    @State private var isArmed = false
+
+    func body(content: Content) -> some View {
+        content
+            .allowsHitTesting(isArmed)
+            .overlay {
+                if !isArmed {
+                    // Catches the tap so it doesn't reach the row underneath and change the pick.
+                    Color.clear
+                        .contentShape(.rect)
+                        .onTapGesture {}
+                        .accessibilityHidden(true)
+                }
+            }
+            .task(id: trigger) {
+                isArmed = false
+                do {
+                    try await Task.sleep(for: .milliseconds(700))
+                } catch {
+                    return
+                }
+                isArmed = true
+            }
     }
 }
