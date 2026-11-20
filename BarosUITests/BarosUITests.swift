@@ -55,7 +55,7 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testAccountWorkoutGateCancelThenFinish() {
         let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth", "--uitest-sync-owner", "issuer|ui_owner",
-            "--uitest-seed-large-active-workout"])
+            "--uitest-seed-large-active-workout", "--uitest-account-gate-trace"])
         app.launch()
         minimizeAccountWorkout(in: app)
         tapTab(.settings, in: app)
@@ -77,7 +77,8 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["AccountSignOutButton"].waitToDisappear(timeout: 3),
                       (gateError.exists ? "Finish reported: \(gateError.label)" : "Finish showed no error")
                       + (app.buttons["ActiveWorkoutAccessory"].exists
-                          ? "; active workout accessory present" : "; active workout accessory absent"))
+                          ? "; active workout accessory present" : "; active workout accessory absent")
+                      + "; " + accountGateTrace(in: app))
         XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitToDisappear(timeout: 3))
         tapTab(.history, in: app)
         XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitToExist(timeout: 3))
@@ -87,7 +88,7 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testAccountWorkoutGateSaveFailureKeepsWorkoutAndAccount() {
         let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth", "--uitest-sync-owner", "issuer|ui_owner",
-            "--uitest-seed-large-active-workout", "--uitest-fail-account-workout-save"])
+            "--uitest-seed-large-active-workout", "--uitest-fail-account-workout-save", "--uitest-account-gate-trace"])
         app.launch()
         minimizeAccountWorkout(in: app)
         tapTab(.settings, in: app)
@@ -96,7 +97,11 @@ final class BarosUITests: XCTestCase {
         app.buttons["Discard Workout and Sign Out"].tap()
         // The error shows under the button, not in a second alert that could be dropped (#403).
         let error = app.staticTexts["AccountTransitionErrorMessage"]
-        XCTAssertTrue(error.waitToExist(timeout: 3))
+        XCTAssertTrue(error.waitToExist(timeout: 3), accountGateTrace(in: app))
+        let trace = XCTAttachment(string: accountGateTrace(in: app))
+        trace.name = "Account gate trace"
+        trace.lifetime = .keepAlways
+        add(trace)
         XCTAssertTrue(error.label.hasPrefix("The workout could not be saved."), error.label)
         attachAccountEvidence("Save failure blocks sign out", app: app)
         XCTAssertTrue(app.buttons["AccountSignOutButton"].exists)
@@ -205,6 +210,14 @@ final class BarosUITests: XCTestCase {
             if app.buttons["ActiveWorkoutAccessory"].waitToExist(timeout: 4) { return }
         }
         XCTFail("Active workout did not minimize")
+    }
+
+    /// The steps `--uitest-account-gate-trace` recorded, read from the Sign Out button.
+    @MainActor
+    private func accountGateTrace(in app: XCUIApplication) -> String {
+        let button = app.buttons["AccountSignOutButton"]
+        guard button.exists else { return "gate trace: Sign Out button gone" }
+        return "gate trace: " + ((button.value as? String) ?? "none")
     }
 
     @MainActor

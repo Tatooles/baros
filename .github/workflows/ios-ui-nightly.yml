@@ -118,11 +118,14 @@ jobs:
         timeout-minutes: 240
         run: |
           set -o pipefail
+          # DIAGNOSTIC ONLY on t3/account-gate-trace: runs just the account-gate tests to
+          # read their trace on the runner. Restore -only-testing:BarosUITests before merging.
           xcodebuild test \
             -project Baros.xcodeproj \
             -scheme Baros \
             -destination "${IOS_TEST_DESTINATION}" \
-            -only-testing:BarosUITests \
+            -only-testing:BarosUITests/BarosUITests/testAccountWorkoutGateCancelThenFinish \
+            -only-testing:BarosUITests/BarosUITests/testAccountWorkoutGateSaveFailureKeepsWorkoutAndAccount \
             -parallel-testing-enabled NO \
             -maximum-concurrent-test-simulator-destinations 1 \
             -test-timeouts-enabled YES \
