@@ -68,9 +68,6 @@ jobs:
 
   ios-ui-full:
     name: ios-ui-full
-    permissions:
-      contents: read
-      actions: write
     needs: main-changes
     # Fails open: if the gate itself breaks, run the suite rather than skip it.
     if: ${{ !cancelled() && (needs.main-changes.result != 'success' || needs.main-changes.outputs.run == 'true') }}

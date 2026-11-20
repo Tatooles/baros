@@ -321,10 +321,7 @@ test("the nightly tracking issue uses minimal permissions and only follows main"
     "track-nightly-result",
   ]);
   assert.deepEqual(workflow.permissions, { contents: "read" });
-  assert.deepEqual(workflow.jobs["ios-ui-full"].permissions, {
-    contents: "read",
-    actions: "write",
-  });
+  assert.equal(workflow.jobs["ios-ui-full"].permissions, undefined);
   assert.deepEqual(tracker.permissions, { issues: "write" });
   assert.equal(tracker.needs, "ios-ui-full");
   assert.match(tracker.if, /^\$\{\{ always\(\) && github\.ref == 'refs\/heads\/main' && /);

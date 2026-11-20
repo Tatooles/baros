@@ -22,8 +22,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Checkout needs contents: read. Jobs that upload logs add actions: write
-# because the artifact API rejects a token that only has contents: read.
+# Checkout needs contents: read. upload-artifact uses the runner's own
+# artifact token, so the failure-log uploads need nothing more.
 permissions:
   contents: read
 
@@ -88,9 +88,6 @@ jobs:
 
   baros-core-tests:
     name: baros-core-tests
-    permissions:
-      contents: read
-      actions: write
     needs: app-changes
     if: ${{ always() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
     runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
@@ -129,9 +126,6 @@ jobs:
 
   ios-unit-tests:
     name: ios-unit-tests
-    permissions:
-      contents: read
-      actions: write
     needs: app-changes
     if: ${{ always() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
     runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
@@ -198,9 +192,6 @@ jobs:
 
   ios-ui-smoke:
     name: ios-ui-smoke
-    permissions:
-      contents: read
-      actions: write
     needs: app-changes
     if: ${{ always() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
     runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
