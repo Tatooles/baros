@@ -186,7 +186,7 @@ public struct SyncStatusDisplayState {
                 kind: .waiting,
                 title: "Sync Status",
                 subtitle: subtitle,
-                detailText: nil,
+                detailText: nil, // One line, like .syncing above.
                 trailingText: "Waiting",
                 systemImage: "icloud.and.arrow.up",
                 tint: .secondary,
