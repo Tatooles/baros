@@ -89,6 +89,9 @@ public final class RestTimerCoordinator {
     @ObservationIgnored private let foregroundAlert: () -> Void
     @ObservationIgnored private let voiceOverRunning: () -> Bool
     @ObservationIgnored private let schedulesTasks: Bool
+    /// Controls someone opens stay open until they close them. UI tests use this on runners
+    /// where one tap can take longer than the 6 s the controls normally stay open.
+    @ObservationIgnored private let keepsOpenedControls: Bool
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var collapseTask: Task<Void, Never>?
     @ObservationIgnored private var scenePhase = RestTimerScenePhase.foreground
@@ -103,7 +106,8 @@ public final class RestTimerCoordinator {
         notifications: any RestNotificationScheduling = SilentRestNotifications(),
         foregroundAlert: @escaping () -> Void = {},
         voiceOverRunning: @escaping () -> Bool = { false },
-        schedulesTasks: Bool = true
+        schedulesTasks: Bool = true,
+        keepsOpenedControls: Bool = false
     ) {
         savedRest = restoredRest
         self.isEnabled = isEnabled
@@ -114,6 +118,7 @@ public final class RestTimerCoordinator {
         self.foregroundAlert = foregroundAlert
         self.voiceOverRunning = voiceOverRunning
         self.schedulesTasks = schedulesTasks
+        self.keepsOpenedControls = keepsOpenedControls
     }
 
     public var showsHeaderFallback: Bool { current != nil && inlineIsVisible == false }
@@ -156,7 +161,7 @@ public final class RestTimerCoordinator {
         savedRest = period.rest
         persist(savedRest)
         notifications.schedule(period.rest, requestAuthorization: false)
-        scheduleCollapse(after: 6)
+        scheduleOpenedControlsCollapse()
         scheduleExpiry()
     }
 
@@ -256,7 +261,7 @@ public final class RestTimerCoordinator {
     public func toggleControls() {
         guard let period = current, !period.isFinished else { return }
         period.controlsExpanded.toggle()
-        scheduleCollapse(after: 6)
+        scheduleOpenedControlsCollapse()
     }
 
     public func collapseControls() {
@@ -299,6 +304,17 @@ public final class RestTimerCoordinator {
             guard self.current?.rest.id == restID else { return }
             self.clearPresentation()
         }
+    }
+
+    /// For tests: true from scheduling a collapse until it runs or is cancelled.
+    var isCollapseScheduled: Bool { collapseTask.map { !$0.isCancelled } ?? false }
+
+    private func scheduleOpenedControlsCollapse() {
+        guard !keepsOpenedControls else {
+            collapseTask?.cancel()
+            return
+        }
+        scheduleCollapse(after: 6)
     }
 
     private func scheduleCollapse(after seconds: Double) {

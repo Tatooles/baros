@@ -70,9 +70,12 @@ extension RestTimerCoordinator {
         #if DEBUG
             let isUITest = ProcessInfo.processInfo.arguments.contains("--uitest-in-memory-store")
             let uiTestEnabled = !ProcessInfo.processInfo.arguments.contains("--uitest-disable-rest-timers")
+            let keepsOpenedControls = isUITest
+                && ProcessInfo.processInfo.arguments.contains("--uitest-keep-rest-controls-open")
         #else
             let isUITest = false
             let uiTestEnabled = true
+            let keepsOpenedControls = false
         #endif
         // Absent means the default: on.
         let isEnabled = isUITest ? uiTestEnabled : (defaults.object(forKey: enabledKey) as? Bool ?? true)
@@ -98,7 +101,8 @@ extension RestTimerCoordinator {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 AudioServicesPlaySystemSound(1007)
             },
-            voiceOverRunning: { UIAccessibility.isVoiceOverRunning }
+            voiceOverRunning: { UIAccessibility.isVoiceOverRunning },
+            keepsOpenedControls: keepsOpenedControls
         )
     }
 }

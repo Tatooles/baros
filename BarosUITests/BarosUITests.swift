@@ -309,7 +309,9 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testEditWorkoutAddAndReorderWalkthrough() {
         let app = XCUIApplication()
-        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout"]
+        // UIKit animations stay off, as in makeApp: XCUITest waits for them after every step.
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth",
+                               "--uitest-seed-edit-workout", "--uitest-disable-animations"]
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 8))
         app.swipeUp()
@@ -319,11 +321,14 @@ final class BarosUITests: XCTestCase {
         app.swipeUp()
         XCTAssertTrue(app.buttons["AddExerciseButton"].isHittable)
         captureEditWorkout("02-workout-bottom")
-        app.swipeDown()
-        app.swipeDown()
-        app.swipeDown()
+        // A swipe's scroll distance varies, so swipe until the first set is back instead of a
+        // fixed count. Stopping once it's hittable keeps a spare swipe from moving the sheet.
         let field = app.textFields["SetWeightField-0-0"]
-        XCTAssertTrue(field.waitToExist(timeout: 3))
+        for _ in 0..<6 {
+            if field.exists && field.isHittable { break }
+            app.swipeDown()
+        }
+        XCTAssertTrue(waitForHittable(field, timeout: 3))
         field.tap()
         XCTAssertTrue(app.buttons["DismissKeyboardButton"].waitToExist(timeout: 3))
         XCTAssertFalse(app.buttons["ActiveWorkoutEditButton"].isHittable)
@@ -457,7 +462,9 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testRestBadgeControlsAndCollapsedHeaderFallback() {
-        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        // Opened controls normally close after 6 s, which is less than one tap takes on the
+        // nightly runner, so they stay open here until the test closes them.
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout", "--uitest-keep-rest-controls-open"])
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 8))
         app.buttons["SetCompletionButton-0-0"].tap()
@@ -470,6 +477,7 @@ final class BarosUITests: XCTestCase {
         badge.tap()
         app.buttons["Add 15 seconds"].tap()
         app.buttons["Subtract 15 seconds"].tap()
+        app.buttons["RestControlsTimeButton"].tap()
         XCTAssertTrue(badge.waitToExist(timeout: 8))
         app.buttons["ExerciseHeader-0"].tap()
         let headerBadge = app.buttons["RestTimerHeaderBadge"]
@@ -3760,6 +3768,9 @@ final class BarosUITests: XCTestCase {
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
             "--uitest-seed-completed-bench-workout", "Past Push",
+            // With UIKit animations on, the app never reported idle on the nightly runner after
+            // the RPE chip, so every later step waited 60 s.
+            "--uitest-disable-animations",
         ]
         app.launch()
         openFirstPastWorkout(in: app)
@@ -5226,8 +5237,12 @@ final class BarosUITests: XCTestCase {
     }
 
     /// Waits until keyboard avoidance and any follow-up scroll have finished moving `element`.
+    ///
+    /// Stability is counted in consecutive matching readings, not elapsed time. In the large
+    /// seeded workout one reading took about 2 s on the nightly runner, so a short time limit
+    /// ended the wait before three readings could be taken.
     @MainActor
-    private func waitForStableFrame(of element: XCUIElement, timeout: TimeInterval = 3) {
+    private func waitForStableFrame(of element: XCUIElement, timeout: TimeInterval = 20) {
         let deadline = Date().addingTimeInterval(timeout)
         var previous = element.frame
         var stableSamples = 0
