@@ -6,7 +6,7 @@ on:
   schedule:
     # Scheduled runs always use the default branch (main). 12:23 AM Central
     # avoids the top-of-hour scheduler backlog. GitHub treats schedules as
-    # best effort and has sent this event up to 9 hours late.
+    # best effort and has sent this event about 9 hours late.
     - cron: "23 0 * * *"
       timezone: "America/Chicago"
   workflow_dispatch:
