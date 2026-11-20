@@ -1,7 +1,5 @@
 name: iOS UI Nightly
 
-# Runs the full BarosUITests target to collect stability evidence for issue #63.
-# Never add pull_request or push triggers: this suite is not a PR gate yet.
 on:
   schedule:
     # Scheduled runs always use the default branch (main). 12:23 AM Central
@@ -16,11 +14,9 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Queue a manual run behind an in-flight nightly instead of discarding it.
   cancel-in-progress: false
 
 jobs:
-  # Cheap gate so an unchanged main does not reserve a macOS runner every night.
   main-changes:
     name: nightly-change-detection
     runs-on: ubuntu-latest
@@ -45,7 +41,6 @@ jobs:
             exit 0
           fi
 
-          # Cancelled runs produced no evidence, so they never justify a skip.
           if ! last_sha="$(
             gh run list --workflow ios-ui-nightly.yml --event schedule --branch main \
               --status completed --limit 20 --json headSha,conclusion \
@@ -69,7 +64,6 @@ jobs:
   ios-ui-full:
     name: ios-ui-full
     needs: main-changes
-    # Fails open: if the gate itself breaks, run the suite rather than skip it.
     if: ${{ !cancelled() && (needs.main-changes.result != 'success' || needs.main-changes.outputs.run == 'true') }}
     runs-on: macos-26
     timeout-minutes: 255
@@ -105,16 +99,6 @@ jobs:
           exit 1
 
       - name: Run full Baros UI test target
-        # Leaves time inside the job timeout to collect and upload diagnostics.
-        # The hosted runner ran the first nightly's tests about 2.5x slower than a
-        # local Mac (time-weighted; up to about 3.3x for the slowest tenth). A local
-        # full run takes about 51 minutes, so the target projects to roughly 130
-        # minutes here, plus a 9-minute build. 240 minutes fits a slow night plus
-        # two hangs.
-        # The per-test 1,800 s allowance is a hang guard, not a speed check: the
-        # slowest healthy test, testLinkModeKeepsScrolledCardsInPlaceInBothLists,
-        # takes 460-500 s locally, which projects to 1,150-1,650 s here. XCTest
-        # doesn't retry a test that exceeds its allowance.
         timeout-minutes: 240
         run: |
           set -o pipefail
@@ -138,7 +122,6 @@ jobs:
         id: bundle
         if: ${{ !cancelled() }}
         run: |
-          # A step timeout stops xcodebuild before it finalizes the bundle.
           if xcrun xcresulttool get test-results summary \
             --path "${RUNNER_TEMP}/BarosUIFull.xcresult" --compact > /dev/null 2>&1; then
             echo "readable=true" >> "${GITHUB_OUTPUT}"
@@ -170,7 +153,6 @@ jobs:
         id: failed
         if: ${{ !cancelled() }}
         run: |
-          # Falls back to the log when the result bundle is incomplete.
           if ! failed_tests="$(
             python3 ci_scripts/report_failed_tests.py \
               "${RUNNER_TEMP}/BarosUIFull.xcresult" \
@@ -197,8 +179,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # Keeps one tracking issue in sync with the nightly result on main.
-  # Branch runs from workflow_dispatch never touch the issue.
   track-nightly-result:
     name: track-nightly-result
     needs: ios-ui-full

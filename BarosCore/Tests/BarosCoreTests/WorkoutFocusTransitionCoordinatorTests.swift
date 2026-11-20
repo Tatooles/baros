@@ -32,7 +32,6 @@ final class WorkoutFocusTransitionCoordinatorTests: XCTestCase {
         coordinator.synchronizeFocus(weight)
 
         coordinator.observeFocusChange(from: weight, to: reps) { committedFields.append($0) }
-        // A repeated notification for the same focus is only an acknowledgement.
         coordinator.observeFocusChange(from: weight, to: reps) { committedFields.append($0) }
 
         XCTAssertEqual(committedFields, [weight])

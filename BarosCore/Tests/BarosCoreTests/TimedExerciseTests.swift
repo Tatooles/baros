@@ -3,11 +3,8 @@ import SwiftData
 import XCTest
 @testable import BarosCore
 
-/// Exercises logged by time instead of reps.
 @MainActor
 final class TimedExerciseTests: XCTestCase {
-    // MARK: Entry and display
-
     func testZeroAndOutOfRangeTimesAreNotRecorded() {
         XCTAssertNil(WorkoutNumericInputPolicy.validatedDuration(0))
         XCTAssertNil(WorkoutNumericInputPolicy.validatedDuration(-5))
@@ -75,8 +72,6 @@ final class TimedExerciseTests: XCTestCase {
         XCTAssertEqual(text(nil, nil), "—")
         XCTAssertEqual(PreviousSetPerformance(weight: nil, reps: 8).displayText(weightUnit: .pounds), "- × 8")
     }
-
-    // MARK: Tracking method
 
     func testExercisesAndWorkoutsFromBeforeTimedExercisesAreRepBased() throws {
         let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
@@ -151,8 +146,6 @@ final class TimedExerciseTests: XCTestCase {
         XCTAssertEqual(session.sortedLoggedExercises.map(\.trackingMethod), [.duration])
     }
 
-    // MARK: Logging
-
     func testATimedSetStoresSecondsAndNeverReps() throws {
         let (context, engine, logged) = try makeTimedWorkout()
         let set = try XCTUnwrap(logged.sortedSets.first)
@@ -222,7 +215,6 @@ final class TimedExerciseTests: XCTestCase {
         XCTAssertEqual(set.weight, 10)
         XCTAssertNil(set.reps)
 
-        // The exercise is switched to reps: its timed history offers no reps to fill.
         plank.trackingMethod = .reps
         let repLogged = try engine.swapLoggedExercise(
             logged, with: try insertExercise("Other", .reps, into: context), context: context
@@ -275,8 +267,6 @@ final class TimedExerciseTests: XCTestCase {
         XCTAssertEqual(plankSet.durationSeconds, 60)
         XCTAssertNil(plankSet.reps)
     }
-
-    // MARK: Completed workout edits, history, export
 
     func testEditingACompletedWorkoutChangesAndAddsTimedSets() throws {
         let context = try makeContext()
@@ -334,8 +324,6 @@ final class TimedExerciseTests: XCTestCase {
         XCTAssertEqual(lines.dropFirst().map { $0[9] }, ["", "25"])
     }
 
-    // MARK: Sync
-
     func testUploadsCarryTheMethodAndTimeOnceThisDeviceKnowsThem() throws {
         let context = try makeContext()
         let plank = try insertExercise("Plank", .duration, into: context)
@@ -358,14 +346,11 @@ final class TimedExerciseTests: XCTestCase {
         let plank = try insertExercise("Plank", .duration, into: context)
         let session = try insertCompletedWorkout(of: plank, sets: [(nil, nil)], into: context)
         let set = session.sortedLoggedExercises[0].sortedSets[0]
-        // The row was saved by a build without durations; only its exercise
-        // has since been pulled with the method.
         set.knowsDuration = nil
         set.weight = 25
 
         XCTAssertFalse(SyncPayloadMapper.loggedSetPayload(from: set).sendsDurationSeconds)
 
-        // Once the time is edited here, clearing it is this device's own change.
         var draft = CompletedWorkoutEditDraft(session: session)
         draft.exercises[0].sets[0].durationSeconds = 60
         try WorkoutHistoryMutationService().saveCompletedWorkoutEdit(draft, for: session, context: context)
@@ -377,7 +362,6 @@ final class TimedExerciseTests: XCTestCase {
         XCTAssertNil(cleared.durationSeconds)
         XCTAssertTrue(cleared.sendsDurationSeconds)
 
-        // The same holds for a time entered in a workout.
         set.knowsDuration = nil
         ActiveWorkoutSetInput.Values(set).settingDuration(45).write(to: set)
         ActiveWorkoutSetInput.Values(set).settingDuration(nil).write(to: set)
@@ -484,8 +468,6 @@ final class TimedExerciseTests: XCTestCase {
         XCTAssertEqual(set.durationSeconds, 90)
     }
 
-    // MARK: Persistence
-
     func testTimeAndMethodSurviveRelaunch() throws {
         let url = try makeStoreURL("test.store")
         do {
@@ -502,7 +484,6 @@ final class TimedExerciseTests: XCTestCase {
         XCTAssertEqual(logged.sortedSets.map(\.durationSeconds), [90])
     }
 
-    /// A store written before timed exercises opens with its history intact and rep-based.
     func testStoreFromBeforeTimedExercisesUpgradesAsRepBased() throws {
         let url = try makeStoreURL("legacy.store")
         let model = try XCTUnwrap(NSManagedObjectModel.makeManagedObjectModel(for: BarosSchema.models))
@@ -558,8 +539,6 @@ final class TimedExerciseTests: XCTestCase {
         try container.mainContext.save()
     }
 
-    // MARK: Helpers
-
     private var containers: [ModelContainer] = []
     private var directories: [URL] = []
 
@@ -607,7 +586,6 @@ final class TimedExerciseTests: XCTestCase {
         return (context, engine, try engine.addExercise(plank, to: session, context: context))
     }
 
-    /// One completed workout of `exercise`, each set given as (weight, seconds).
     private func insertCompletedWorkout(
         of exercise: Exercise,
         sets: [(Double?, Int?)],

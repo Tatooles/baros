@@ -65,8 +65,6 @@ struct CompletedWorkoutEditView: View {
                 .padding(.bottom, 28)
             }
             .revealsSetTimeCell(editing: timeEdit?.id)
-            // The keyboard toolbar belongs to text fields, so the time wheels
-            // get their own Done above them.
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if timeEdit != nil, focusedField == nil {
                     HStack {
@@ -146,7 +144,6 @@ struct CompletedWorkoutEditView: View {
                 Text(errorMessage ?? "Try saving again.")
             }
             .onChange(of: focusedField) { previousField, newField in
-                // A keyboard takes the place of the time wheels.
                 if newField != nil { endTimeEdit() }
                 guard let previousField, previousField != newField else { return }
 
@@ -238,7 +235,6 @@ struct CompletedWorkoutEditView: View {
     }
 
     private var datePickerMaximum: Date {
-        // Keep existing future dates visible; Save rejects newly chosen future days.
         max(initialDate, draft.calendar.startOfDay(for: .now))
     }
 
@@ -334,8 +330,6 @@ struct CompletedWorkoutEditView: View {
                     accessibilityIdentifier: "HistorySetWeightField-\(exerciseIndex)-\(visibleIndex)"
                 )
 
-                // Reps are typed; a timed exercise's time is chosen from
-                // wheels. Both sit in the same slot.
                 if draft.exercises[exerciseIndex].trackingMethod == .duration {
                     timeButton(exerciseIndex: exerciseIndex, setIndex: setIndex, visibleIndex: visibleIndex)
                 } else {
@@ -452,10 +446,8 @@ struct CompletedWorkoutEditView: View {
         let exercise = draft.exercises[exerciseIndex]
         let isEditing = timeEdit?.exerciseIndex == exerciseIndex && timeEdit?.setIndex == setIndex
         let stored = WorkoutNumericInputPolicy.validatedDuration(exercise.sets[setIndex].durationSeconds)
-        // While the wheels are open the cell shows what they read.
         let seconds = isEditing ? WorkoutNumericInputPolicy.validatedDuration(timeEdit?.seconds) ?? stored : stored
         let placeholder = exercise.trackingMethod.fieldLabel
-        // An empty set starts from the nearest time above it, as it would have in the workout.
         let timeAbove = exercise.sets[..<setIndex].reversed().lazy
             .filter { !$0.isRemoved }
             .compactMap { WorkoutNumericInputPolicy.validatedDuration($0.durationSeconds) }
@@ -506,15 +498,12 @@ struct CompletedWorkoutEditView: View {
         .accessibilityIdentifier("HistorySetTimeField-\(exerciseIndex)-\(visibleIndex)")
     }
 
-    /// Closes the time wheels. The set keeps the time they show even if
-    /// they were never moved.
     private func endTimeEdit() {
         guard let timeEdit else { return }
         if timeEdit.seconds > 0 { setTime(timeEdit.seconds, for: timeEdit) }
         self.timeEdit = nil
     }
 
-    /// Writes the wheels' time to the draft; zero removes it.
     private func setTime(_ seconds: Int, for edit: CompletedWorkoutSetTimeEdit) {
         updateDraftSet(exerciseIndex: edit.exerciseIndex, setIndex: edit.setIndex) { set in
             set.durationSeconds = seconds > 0 ? seconds : nil
@@ -595,8 +584,6 @@ struct CompletedWorkoutEditView: View {
     }
 
     private func removeSet(_ candidate: CompletedWorkoutSetRemovalCandidate) {
-        // Removing a set can shift the indexes the wheels are writing to,
-        // so they close first and their set keeps its time.
         endTimeEdit()
         guard draft.exercises.indices.contains(candidate.exerciseIndex),
               draft.exercises[candidate.exerciseIndex].sets.indices.contains(candidate.setIndex)
@@ -663,12 +650,9 @@ struct CompletedWorkoutEditView: View {
     }
 }
 
-/// The set whose time the picker sheet is editing.
-/// The set whose keyboard is the time wheels.
 private struct CompletedWorkoutSetTimeEdit {
     let exerciseIndex: Int
     let setIndex: Int
-    /// What the wheels read; zero is no time.
     var seconds: Int
 
     var id: String { "\(exerciseIndex)-\(setIndex)" }

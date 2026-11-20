@@ -1,9 +1,6 @@
 import BarosCore
 import SwiftUI
 
-/// The release sheet shipped for Baros 1.3. It shares onboarding's page
-/// layout, including the inline navigation bar the layout expects, so both
-/// launch experiences sit at the same position on screen.
 struct WhatsNewVersion1_3View: View {
     let onDismiss: () -> Void
 

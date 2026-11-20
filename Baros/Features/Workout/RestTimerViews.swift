@@ -8,8 +8,6 @@ struct RestGutterAnchorKey: PreferenceKey {
     }
 }
 
-/// Always occupies the existing divider position. Its observation is confined
-/// to one slot; opening a gutter doesn't rebuild the surrounding card or rows.
 struct RestSetDivider: View {
     let setID: UUID
     let slot: RestTimerSlot
@@ -25,8 +23,6 @@ struct RestSetDivider: View {
                     .id(period.rest.id)
                     .transition(.opacity)
             } else {
-                // Each open set already has field wells, so a rule between
-                // rows would add a second boundary; keep the spacing only.
                 Color.clear.frame(height: 1)
             }
         }
@@ -81,8 +77,6 @@ private struct RestProgressBar: View {
     }
 }
 
-/// Floats the 44pt hit target and controls on the whole set list. Putting them
-/// inside the short gutter clips hit testing to the divider's bounds.
 struct RestGutterOverlay: View {
     let anchors: [UUID: Anchor<CGRect>]
     let slots: [(UUID, RestTimerSlot)]
@@ -128,9 +122,6 @@ private struct RestInlineControls: View {
     }
 }
 
-/// The controls pill grows out of, and shrinks back into, the badge at its
-/// leading edge. It squashes toward the badge's proportions and stays opaque
-/// until it's nearly badge-sized, so the shrink reads instead of a fade.
 private struct RestControlsShrink: Transition {
     func body(content: Content, phase: TransitionPhase) -> some View {
         content.modifier(RestControlsShrinkEffect(progress: phase.isIdentity ? 1 : 0))
@@ -168,8 +159,6 @@ struct RestTimerBadge: View {
                 timer.toggleControls()
             } label: {
                 if showsHourglass {
-                    // Workout content scrolls under the header, so the header
-                    // badge needs the same glass backing as its neighbors.
                     HStack(spacing: 6) {
                         Image(systemName: "hourglass")
                         RestTimeText(period: period, date: timeline.date)
@@ -205,8 +194,6 @@ private func restSpokenValue(_ period: RestTimerPeriod, at date: Date) -> String
             .formatted(.units(allowed: [.minutes, .seconds], width: .wide))
 }
 
-/// Draws one tick of its caller's TimelineView, which also drives the
-/// button's spoken value; it doesn't schedule a second timeline.
 private struct RestTimeText: View {
     let period: RestTimerPeriod
     let date: Date
@@ -231,8 +218,6 @@ private struct RestTimeText: View {
 struct RestExpandedControls: View {
     let period: RestTimerPeriod
     let timer: RestTimerCoordinator
-    /// In the header's glass container, the pill morphs into and out of the
-    /// badge and progress pills instead of shrinking.
     var usesGlass = false
 
     var body: some View {
@@ -289,8 +274,6 @@ private struct RestControlsBackground: ViewModifier {
     }
 }
 
-/// Owns model observation for rest eligibility, including sync writes while
-/// the workout is minimized. None of these reads belongs in card/row bodies.
 struct RestTimerLifecycleObserver: View {
     let session: WorkoutSession?
     let timer: RestTimerCoordinator
@@ -316,8 +299,6 @@ struct RestTimerLifecycleState: Equatable {
         restID = rest?.id
         sessionID = session?.id
         self.ownerState = ownerState
-        // Without a rest, or with another workout visible, reconciliation
-        // doesn't read the starter; skip walking every set on each change.
         guard let rest, let session else {
             starterIsEligible = false
             return

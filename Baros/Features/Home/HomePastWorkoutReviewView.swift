@@ -6,8 +6,6 @@ struct HomePastWorkoutReviewView: View {
     private let presentation: HomePastWorkoutReviewPresentation
     let startWorkout: () -> Void
 
-    /// `history` is the Current Owner's completed workouts, so each exercise's
-    /// set count matches the rows the started workout will have.
     init(
         session: WorkoutSession,
         history: [WorkoutSession],
@@ -48,8 +46,6 @@ struct HomePastWorkoutReviewView: View {
                 } else {
                     let exercises = presentation.exercises
                     let blocks = SupersetGrouping.blocks(exercises, groupID: \.supersetGroupID)
-                    // The same grouped surface History uses, so the workout
-                    // being copied reads as one recognizable unit.
                     SurfaceCard(padding: 0) {
                         VStack(spacing: 0) {
                             ForEach(blocks) { block in

@@ -2,7 +2,6 @@ import Foundation
 import Observation
 import SwiftData
 
-/// Device-local state, intentionally kept out of the synced workout graph.
 public struct WorkoutRest: Codable, Equatable {
     public let id: UUID
     public let sessionID: UUID
@@ -22,7 +21,6 @@ public struct WorkoutRest: Codable, Equatable {
         min(1, max(0, endsAt.timeIntervalSince(date) / max(1, endsAt.timeIntervalSince(startedAt))))
     }
 
-    /// Whether every participant still exists and is completed in this workout.
     public func starterIsCompleted(in session: WorkoutSession) -> Bool {
         let completedIDs = Set(session.sortedLoggedExercises.flatMap { $0.sortedSets }
             .filter(\.isCompleted).map(\.id))
@@ -39,8 +37,6 @@ public final class RestTimerPeriod {
     init(rest: WorkoutRest) { self.rest = rest }
 }
 
-/// Stable per-set observation seam. Only the old and new gutter slots change
-/// when rest is replaced; cards and set rows never observe the global timer.
 @Observable
 public final class RestTimerSlot {
     public var period: RestTimerPeriod?
@@ -72,12 +68,8 @@ public struct SilentRestNotifications: RestNotificationScheduling {
 @MainActor
 public final class RestTimerCoordinator {
     public private(set) var current: RestTimerPeriod?
-    /// Device-local preference. Disabled means rest never starts, so nothing
-    /// downstream (gutter, header, alerts, notifications) has a rest to show.
     public private(set) var isEnabled: Bool
     private(set) var inlineIsVisible: Bool?
-    /// Visible dividers keep their slots alive; the coordinator keeps only the
-    /// slots it is presenting. Slots for other sets nobody shows are released.
     @ObservationIgnored private var slots: [UUID: WeakSlot] = [:]
     @ObservationIgnored private var presentedSlots: [RestTimerSlot] = []
     @ObservationIgnored private var visibleSetIDs: Set<UUID> = []
@@ -89,8 +81,6 @@ public final class RestTimerCoordinator {
     @ObservationIgnored private let foregroundAlert: () -> Void
     @ObservationIgnored private let voiceOverRunning: () -> Bool
     @ObservationIgnored private let schedulesTasks: Bool
-    /// Controls someone opens stay open until they close them. UI tests use this on runners
-    /// where one tap can take longer than the 6 s the controls normally stay open.
     @ObservationIgnored private let keepsOpenedControls: Bool
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var collapseTask: Task<Void, Never>?
@@ -132,8 +122,6 @@ public final class RestTimerCoordinator {
 
     var liveSlotCount: Int { slots.values.count(where: { $0.slot != nil }) }
 
-    /// Turning timers off ends any rest, including its alerts and resumable
-    /// state. Turning them on only affects later completions.
     public func setEnabled(_ enabled: Bool) {
         guard enabled != isEnabled else { return }
         isEnabled = enabled
@@ -191,8 +179,6 @@ public final class RestTimerCoordinator {
         notifications.remove()
     }
 
-    /// Called at the shell, including while the workout is minimized. A
-    /// disappearing workout sheet is not a workout ending.
     public var restForReconciliation: WorkoutRest? { current?.rest ?? savedRest }
 
     public func reconcile(with session: WorkoutSession?, ownerState: CurrentOwnerCoordinator.State = .localOnly) {
@@ -200,8 +186,6 @@ public final class RestTimerCoordinator {
             if restForReconciliation != nil { cancel() }
             return
         }
-        // Initial ownership recovery is asynchronous. Absence in that temporary
-        // scope is not proof that a persisted workout belongs to another owner.
         if current == nil, case .resolving(ownerTokenIdentifier: nil) = ownerState { return }
         guard let rest = current?.rest ?? savedRest else { return }
         guard let session, session.status == .active, !session.isDeleted, rest.starterIsCompleted(in: session)
@@ -220,12 +204,8 @@ public final class RestTimerCoordinator {
     }
 
     public func setScenePhase(_ phase: RestTimerScenePhase) {
-        // Reconcile elapsed background time before foregrounding, so an alert
-        // that belonged to the background is never replayed on return.
         if phase == .foreground, scenePhase == .background {
             expireIfNeeded()
-            // Back in the app, the delivered "Rest over" is stale. Relaunch
-            // reconciliation clears it the same way.
             if expiredInBackground { notifications.remove() }
             expiredInBackground = false
         }
@@ -242,7 +222,6 @@ public final class RestTimerCoordinator {
             notifications.remove()
             foregroundAlert()
         } else {
-            // Background delivery belongs to the OS until the user returns.
             expiredInBackground = true
         }
         if clock().timeIntervalSince(period.rest.endsAt) >= 4 {
@@ -306,7 +285,6 @@ public final class RestTimerCoordinator {
         }
     }
 
-    /// For tests: true from scheduling a collapse until it runs or is cancelled.
     var isCollapseScheduled: Bool { collapseTask.map { !$0.isCancelled } ?? false }
 
     private func scheduleOpenedControlsCollapse() {
@@ -332,8 +310,7 @@ private struct WeakSlot {
 }
 
 enum RestDurationLookup {
-    /// Exercise-aware seam for #296; today all exercises use the owner's setting.
-    static func seconds(for exercise: LoggedExercise, settings: UserSettings?) -> Int {
+    static func seconds(settings: UserSettings?) -> Int {
         settings?.defaultRestTimerSeconds ?? 90
     }
 }

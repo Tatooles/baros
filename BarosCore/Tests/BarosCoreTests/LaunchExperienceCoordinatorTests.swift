@@ -49,7 +49,6 @@ final class LaunchExperienceCoordinatorTests: XCTestCase {
     }
 
     func testExistingUserReceivesUnseenReleaseHighlightsAfterUpgrade() throws {
-        // The 1.1 user never saw a What's New sheet; the 1.4 user saw the previous one.
         let upgrades: [(current: String, lastProcessed: String, lastSeen: String?)] = [
             ("1.2", "1.1", nil),
             ("1.5", "1.4", "1.4"),

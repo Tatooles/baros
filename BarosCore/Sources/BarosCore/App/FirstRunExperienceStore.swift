@@ -3,10 +3,7 @@ import Foundation
 @MainActor
 public final class FirstRunExperienceStore {
     private enum Key {
-        // The beta rebrand intentionally uses a new defaults namespace so current
-        // installations see the Baros onboarding experience. Keep the original
-        // key value so users who completed the welcome remain completed.
-        static let hasCompletedOnboarding = "Baros.FirstRunExperience.hasSeenWelcome"
+        static let hasSeenWelcome = "Baros.FirstRunExperience.hasSeenWelcome"
         static let lastProcessedAppVersion = "Baros.FirstRunExperience.lastProcessedAppVersion"
         static let lastSeenWhatsNewVersion = "Baros.FirstRunExperience.lastSeenWhatsNewVersion"
     }
@@ -19,14 +16,14 @@ public final class FirstRunExperienceStore {
 
     public var state: LaunchExperienceState {
         LaunchExperienceState(
-            hasCompletedOnboarding: defaults.bool(forKey: Key.hasCompletedOnboarding),
+            hasCompletedOnboarding: defaults.bool(forKey: Key.hasSeenWelcome),
             lastProcessedAppVersion: defaults.string(forKey: Key.lastProcessedAppVersion),
             lastSeenWhatsNewVersion: defaults.string(forKey: Key.lastSeenWhatsNewVersion)
         )
     }
 
     public func markOnboardingCompleted(currentRelease: AppReleaseDefinition) {
-        defaults.set(true, forKey: Key.hasCompletedOnboarding)
+        defaults.set(true, forKey: Key.hasSeenWelcome)
         markAppVersionProcessed(currentRelease.version)
         if let currentWhatsNew = currentRelease.whatsNew {
             defaults.set(currentWhatsNew.version, forKey: Key.lastSeenWhatsNewVersion)
@@ -46,7 +43,7 @@ public final class FirstRunExperienceStore {
             return
         }
 
-        defaults.removeObject(forKey: Key.hasCompletedOnboarding)
+        defaults.removeObject(forKey: Key.hasSeenWelcome)
         defaults.removeObject(forKey: Key.lastProcessedAppVersion)
         defaults.removeObject(forKey: Key.lastSeenWhatsNewVersion)
     }

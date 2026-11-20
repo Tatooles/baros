@@ -2,8 +2,6 @@ import BarosCore
 import Charts
 import SwiftUI
 
-/// The Exercise History summary: the two all-time records, each traceable to
-/// its source set, and how the best estimate changed across workouts.
 struct ExerciseHistoryRecordsCard: View {
     let records: ExerciseHistoryRecords
     let weightUnit: MeasurementUnit
@@ -112,7 +110,6 @@ struct ExerciseHistoryRecordsCard: View {
         } label: {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    // The same glyph and color mark this record's set in the log.
                     Text("\(Image(systemName: kind.markerSymbol)) \(kind.title)")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(kind.markerColor)
@@ -135,7 +132,6 @@ struct ExerciseHistoryRecordsCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !dynamicTypeSize.isAccessibilitySize {
-                    // Points down to the log, styled like the log's own chevrons.
                     Image(systemName: "chevron.down")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppTheme.textTertiary)
@@ -195,8 +191,6 @@ struct ExerciseHistoryRecordsCard: View {
     }
 }
 
-/// A record number with its unit on the same baseline, moving the unit to its
-/// own line before the number would ever wrap between digits.
 private struct RecordValue: View {
     let number: String
     let unit: String
@@ -233,8 +227,6 @@ private struct RecordValue: View {
     }
 }
 
-/// Best Estimated 1RM per workout. Points only, no trend or projection, so the
-/// series stays a record of logged performance rather than a forecast.
 struct ExerciseHistoryEstimateChart: View {
     static let minimumPoints = 3
 
@@ -254,7 +246,6 @@ struct ExerciseHistoryEstimateChart: View {
         return points.min { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }
     }
 
-    /// Lowest and highest displayed estimates, rounded as the record is.
     private var yMarks: [Double] {
         let values = points.map(display)
         guard let low = values.min(), let high = values.max() else { return [] }
@@ -270,7 +261,6 @@ struct ExerciseHistoryEstimateChart: View {
         return (low - pad)...(high + pad)
     }
 
-    /// Insets the first and last points from the plot edges.
     private var xDomain: ClosedRange<Date> {
         guard let first = points.first?.date, let last = points.last?.date else { return Date.now...Date.now }
         let inset = max(last.timeIntervalSince(first) * 0.03, 12 * 3_600)
@@ -292,8 +282,6 @@ struct ExerciseHistoryEstimateChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // While dragging, the selected workout replaces the title so the
-            // header keeps one height instead of squeezing both onto a line.
             HStack(alignment: .firstTextBaseline) {
                 if let selectedPoint {
                     Text(selectionText(selectedPoint))
@@ -364,8 +352,6 @@ struct ExerciseHistoryEstimateChart: View {
         }
         .chartYScale(domain: yDomain)
         .chartXScale(domain: xDomain)
-        // Gridlines at the lowest and highest estimates, so the record point
-        // always sits on a labeled line.
         .chartYAxis {
             AxisMarks(position: .trailing, values: yMarks) { value in
                 AxisGridLine().foregroundStyle(AppTheme.subtleBorder)
@@ -378,7 +364,6 @@ struct ExerciseHistoryEstimateChart: View {
                 }
             }
         }
-        // The first and last workout dates, so any span reads correctly.
         .chartXAxis {
             AxisMarks(values: [points.first?.date].compactMap { $0 }) { value in
                 AxisValueLabel(anchor: .topLeading) {

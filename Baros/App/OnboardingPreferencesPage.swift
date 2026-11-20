@@ -2,9 +2,6 @@ import BarosCore
 import SwiftData
 import SwiftUI
 
-/// Onboarding's workout preferences: weight unit, rest timer, and RPE. Each
-/// question shows the current value; only questions someone taps are saved, and
-/// Settings stays the place to change them later.
 struct OnboardingPreferencesPage: View {
     let onContinue: () -> Void
 
@@ -109,8 +106,6 @@ struct OnboardingPreferencesPage: View {
         }
     }
 
-    /// Launch seeds settings before onboarding appears; this only covers a seed
-    /// that has not landed yet.
     private func seededSettings() throws -> UserSettings {
         let owner = currentOwnerCoordinator.localDataOwnerTokenIdentifier
         try SeedDataService.seedIfNeeded(context: modelContext, ownerTokenIdentifier: owner)
@@ -130,8 +125,6 @@ private enum OnboardingPreferencesError: LocalizedError {
     }
 }
 
-/// One question answered with large side-by-side choices. VoiceOver and Voice
-/// Control name each choice with its question, since several say "On".
 private struct OnboardingChoiceQuestion<Value: Hashable>: View {
     struct Option {
         let value: Value

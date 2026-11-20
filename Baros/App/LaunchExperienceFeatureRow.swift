@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// A reusable visual building block for launch experiences that choose to use
-/// the standard icon, title, and detail treatment.
 struct LaunchExperienceFeatureRow: View {
     let systemImage: String
     let title: String

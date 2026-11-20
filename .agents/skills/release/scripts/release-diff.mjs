@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-// Summarize what changed since the last shipped release: the input for scope
-// reconciliation, release notes, and the regression's focus areas.
-//
-//   node release-diff.mjs [<from-ref> [<to-ref>]]
-//
-// Defaults: from the newest v* tag, to origin/main. Run `git fetch --tags origin` first.
 
 import { execFileSync } from "node:child_process";
 
@@ -14,7 +8,6 @@ const from = process.argv[2] ?? git("describe", "--tags", "--abbrev=0", "--match
 const to = process.argv[3] ?? "origin/main";
 const range = `${from}..${to}`;
 
-// Merged PRs along main's first-parent history.
 const records = git("log", "--first-parent", "--format=%H%x1f%s%x1f%b%x1e", range)
   .split("\x1e")
   .map((r) => r.trim())
@@ -35,8 +28,7 @@ for (const record of records) {
   }
 }
 
-// Changed files grouped into areas. --no-renames lists a moved file at both its old
-// and new path, so the path-based signals below still see it.
+// --no-renames lists a moved file at both its old and new path, so the path-based signals below still see it.
 const numstat = git("diff", "--numstat", "--no-renames", range)
   .split("\n")
   .filter(Boolean)
@@ -68,7 +60,6 @@ for (const f of numstat) {
   areas.set(key, entry);
 }
 
-// Signals that change what the regression must cover.
 const paths = numstat.map((f) => f.path);
 const touched = (re) => paths.filter((p) => re.test(p));
 const projectYmlChanges = git("diff", "-U0", range, "--", "project.yml")

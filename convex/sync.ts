@@ -313,8 +313,6 @@ function normalizeLoggedExerciseUpdatePayload(
       defaultHasSnapshotMetadata,
     sourceLoggedExerciseID:
       record.sourceLoggedExerciseID ?? existing.sourceLoggedExerciseID ?? null,
-    // Builds from before supersets omit the field; keep the stored grouping.
-    // Grouped rows send an id; explicit removals send null. Unknown grouping stays omitted.
     supersetGroupID: record.supersetGroupID === undefined
       ? existing.supersetGroupID ?? null
       : record.supersetGroupID,
@@ -451,10 +449,6 @@ async function assertAccountDeletionNotStarted(
     return;
   }
 
-  // "started" guarantees no destructive batch has run (deleteAccountDataBatch
-  // advances the phase in the same mutation as the first delete), so an
-  // expired started marker is inert and can be resolved right here instead of
-  // waiting for the cleanup cron.
   if (marker.phaseRaw === "started" && accountDeletionMarkerExpired(marker)) {
     await ctx.db.delete(marker._id);
     return;
@@ -524,11 +518,6 @@ async function clearAccountDeletionMarker(
     existing.phaseRaw === "cloudDataDeleted" ||
     (existing.phaseRaw === "started" && accountDeletionMarkerExpired(existing));
 
-  // A matching token may clear the marker in any phase, including mid-wipe:
-  // the token holder is the device that initiated deletion, and the client
-  // always follows a successful cancellation with a full local re-push
-  // (SyncScheduler.recoverAfterFailedAccountDeletion), which restores any
-  // partially deleted cloud data.
   if (existing.cancellationToken !== cancellationToken && !ownerRecoverable) {
     throw new Error("Account deletion is already in progress on another client");
   }
@@ -693,9 +682,6 @@ async function upsertWorkoutSessionByClientId(
   return { status: "updated", serverUpdatedAt };
 }
 
-/// Starts each entry from the stored one with the same id, so fields an
-/// older build leaves out keep their values. Order and membership come from
-/// the upload.
 export function mergeWorkoutTemplateEntries(
   existing: Doc<"workoutTemplates">["entries"],
   uploaded: WorkoutTemplatePayload["entries"],
@@ -733,7 +719,6 @@ async function upsertWorkoutTemplateByClientId(
     return { status: "inserted", serverUpdatedAt };
   }
 
-  // patch keeps top-level fields the upload leaves out.
   await ctx.db.patch(
     existing._id,
     withServerFields(
@@ -1553,9 +1538,6 @@ export const clearExpiredAccountDeletionMarkers = internalMutation({
       }
     }
 
-    // Privacy backstop: markers whose cloud wipe finished long ago can never be
-    // cancelled once the Clerk account is gone, so purge them instead of
-    // retaining ownerTokenIdentifier forever.
     const completedAtPurgeCandidates = await ctx.db
       .query("accountDeletionMarkers")
       .withIndex("by_phaseRaw_and_cloudDataDeletedAt", (q) =>
@@ -1601,12 +1583,6 @@ export const clearExpiredAccountDeletionMarkers = internalMutation({
       deletedCount += 1;
     }
 
-    // Hourly retry for parked partial deletions. These markers stay in their
-    // bucket until the resume action completes, so bucket size alone cannot
-    // drive hasMore without looping; instead an opaque pagination cursor
-    // carried through the self-reschedule pages the bucket (including
-    // createdAt ties) so one page of stuck markers cannot starve the ones
-    // behind it.
     const parkedPage = await ctx.db
       .query("accountDeletionMarkers")
       .withIndex("by_phaseRaw_and_createdAt", (q) =>
@@ -1863,7 +1839,6 @@ async function fetchChangesForOwner(ctx: SyncReadCtx, args: FetchChangesArgs) {
     },
   };
 
-  // Builds from before templates get exactly the response they decode.
   const templateCursor = args.cursors.workoutTemplates;
   if (templateCursor === undefined) {
     return changes;

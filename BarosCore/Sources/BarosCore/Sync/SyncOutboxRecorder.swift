@@ -39,8 +39,6 @@ struct SyncOutboxRecorder {
         )
     }
 
-    /// Records one owner's graph with a single scoped lookup. The caller owns
-    /// the save/rollback transaction; this cache lives only for this call.
     func recordCreates(
         _ records: [CreateRecord],
         ownerTokenIdentifier: String?,
@@ -79,8 +77,6 @@ struct SyncOutboxRecorder {
                 entityID: record.entityID,
                 ownerTokenIdentifier: ownerTokenIdentifier
             )
-            // Re-evaluate updatedAt for repeated IDs, just as individual calls
-            // do when multiple active entries have the same createdAt.
             let existingEntry = entriesByKey[key]?.min(by: Self.activeEntryPrecedes)
             let entry = coalesceCreate(
                 entityKind: record.entityKind,

@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-// App Store Connect client for the release skill.
-//
-// Credentials: ~/.appstoreconnect/release.env with ASC_KEY_ID, ASC_ISSUER_ID and
-// ASC_KEY_PATH (a Team key with the App Manager role). Node built-ins only.
-//
-// Reads run immediately. Write commands (prepare, submit, release) print the
-// requests they would send and send them only with --apply.
-//
-//   node asc.mjs check
-//   node asc.mjs runs [--build <number>] [--commit <sha>] [--branch <name>] [--limit <n>]
-//   node asc.mjs versions [--limit <n>]
-//   node asc.mjs status <version>
-//   node asc.mjs prepare <version> --build <number> --whats-new <file> [--apply]
-//   node asc.mjs submit <version> [--apply]
-//   node asc.mjs release <version> [--apply]
-//   node asc.mjs listing <version> [--screenshots <dir>] [--apply]
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { createHash, createSign } from "node:crypto";
@@ -27,10 +11,8 @@ const API = "https://api.appstoreconnect.apple.com";
 // The 6.9" iPhone slot; App Store Connect scales it for every smaller iPhone.
 const SCREENSHOT_DISPLAY_TYPE = "APP_IPHONE_67";
 const LISTING_PATH = new URL("../../../../docs/release/listing.json", import.meta.url);
-// MD5 of each approved App Store image, written by `pnpm -C SupportSite listing-assets`.
 const APPROVED_LISTING_PATH = new URL("../../../../docs/release/listing-approved.json", import.meta.url);
 const SCREENSHOT_SLOT_LIMIT = 10;
-// States in which the version's build, release type and notes can still change.
 const EDITABLE = new Set([
   "PREPARE_FOR_SUBMISSION",
   "READY_FOR_REVIEW",
@@ -39,8 +21,6 @@ const EDITABLE = new Set([
   "METADATA_REJECTED",
   "INVALID_BINARY",
 ]);
-
-// ---------- auth and transport ----------
 
 function loadEnv() {
   const path = `${homedir()}/.appstoreconnect/release.env`;
@@ -103,8 +83,6 @@ async function api(method, path, body) {
 
 const get = (path) => api("GET", path);
 
-// ---------- lookups ----------
-
 async function appId() {
   const { data } = await get(`/v1/apps?filter[bundleId]=${BUNDLE_ID}&fields[apps]=name`);
   if (!data.length) fail(`No app with bundle ID ${BUNDLE_ID} is visible to this key.`);
@@ -153,8 +131,6 @@ async function submissionItems(submissionId) {
   );
   return data;
 }
-
-// ---------- commands ----------
 
 async function check() {
   const { data } = await get(`/v1/apps?filter[bundleId]=${BUNDLE_ID}&fields[apps]=name,bundleId`);
@@ -207,9 +183,6 @@ async function runs(opts) {
   if (!shown) console.log(searching ? `No Xcode Cloud run matched within the newest ${limit} runs.` : "No runs.");
 }
 
-// Recent App Store versions, newest first, with their "<version> release" milestone state.
-// Closing the milestone is the release's last step, so the active release is the newest
-// version whose milestone is still open; when none is, the next release is MARKETING_VERSION.
 async function versions(opts) {
   const app = await appId();
   const { data } = await get(
@@ -324,7 +297,6 @@ async function prepare(versionString, opts) {
 
   const loc = version ? await localization(version.id) : null;
   if (!version) {
-    // Dry run of a version that does not exist yet: the localization is resolved after creation.
     await plan.send(`Set ${LOCALE} What's New on the new version`, "PATCH", "/v1/appStoreVersionLocalizations/<new>", null);
   } else if (loc && loc.attributes.whatsNew?.trim() !== whatsNew) {
     await plan.send(`Set ${LOCALE} What's New`, "PATCH", `/v1/appStoreVersionLocalizations/${loc.id}`, {
@@ -407,7 +379,6 @@ async function submit(versionString, opts) {
   if (opts.apply) await status(versionString);
 }
 
-// The API equivalent of "Release This Version" for an approved manual release.
 async function release(versionString, opts) {
   requireVersion(versionString);
   const version = await findVersion(await appId(), versionString);
@@ -427,9 +398,6 @@ async function release(versionString, opts) {
   if (opts.apply) await status(versionString);
 }
 
-// The App Store listing against docs/release/listing.json: description, keywords and
-// promotional text, plus the 6.9" screenshot set when --screenshots names the generated
-// directory. Promotional text can change on a live version; the rest only on an editable one.
 async function listing(versionString, opts) {
   requireVersion(versionString);
   const wanted = JSON.parse(readFileSync(LISTING_PATH, "utf8"));
@@ -490,7 +458,6 @@ async function listing(versionString, opts) {
     screenshotsDiffer =
       files.length !== current.length ||
       files.some((f, i) => current[i]?.attributes.sourceFileChecksum !== f.md5);
-    // Matching bytes count only once App Store Connect has processed them; a failed one is redone.
     const deliveryState = (s) => s.attributes.assetDeliveryState?.state;
     if (!screenshotsDiffer && current.some((s) => deliveryState(s) === "FAILED")) screenshotsDiffer = true;
     const processing = screenshotsDiffer ? [] : current.filter((s) => deliveryState(s) !== "COMPLETE");
@@ -526,8 +493,6 @@ async function listing(versionString, opts) {
       });
       setId = created?.data.id ?? "<new set>";
     }
-    // Upload before deleting, so a failed run leaves the old set rather than a partial one.
-    // Only what the slot cannot hold alongside the new files goes first.
     const overflow = Math.max(0, current.length + files.length - SCREENSHOT_SLOT_LIMIT);
     const deleteScreenshot = (old) =>
       plan.send(`Delete old screenshot ${old.attributes.fileName}`, "DELETE", `/v1/appScreenshots/${old.id}`);
@@ -565,7 +530,6 @@ async function listing(versionString, opts) {
   plan.finish();
 }
 
-// App Store Connect processes each upload before it counts toward the set.
 async function waitForScreenshots(ids) {
   for (let attempt = 0; attempt < 30; attempt++) {
     const states = await Promise.all(
@@ -588,8 +552,6 @@ function oneLine(text) {
   const flat = text.replaceAll("\n", " ⏎ ");
   return flat.length > 140 ? `${flat.slice(0, 140)}…` : flat || "(empty)";
 }
-
-// ---------- helpers ----------
 
 class Plan {
   constructor(apply) {

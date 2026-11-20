@@ -706,7 +706,6 @@ final class SyncRecoveryCoordinatorTests: XCTestCase {
 }
 
 private struct ConfiguredSchedulerHarness {
-    // Retaining the container keeps the in-memory ModelContext alive for each test.
     let container: ModelContainer
     let client: FakeSyncClient
     let scheduler: SyncScheduler

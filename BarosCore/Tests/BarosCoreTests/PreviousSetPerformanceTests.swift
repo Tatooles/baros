@@ -408,9 +408,6 @@ final class PreviousSetPerformanceTests: XCTestCase {
             exercise: exercise,
             sourceLoggedExerciseID: sourceLogged.id
         )
-        // The first cloned row was deleted. The remaining rows keep their source
-        // positions (1 and 2), which read the newer session's sets at those positions;
-        // the newer session has no third set.
         activeLogged.sets.append(contentsOf: [
             LoggedSet(orderIndex: 0, sourceLoggedSetID: sourceSets[1].id),
             LoggedSet(orderIndex: 1, sourceLoggedSetID: sourceSets[2].id),
@@ -559,9 +556,6 @@ final class PreviousSetPerformanceTests: XCTestCase {
             exercise: exercise,
             sourceLoggedExerciseID: sourceLogged.id
         )
-        // Simulate deleting the first cloned set: only the second and third source
-        // sets remain, reindexed to active rows 0 and 1. Each keeps its stable
-        // sourceLoggedSetID link, so the previous values must not shift up.
         let secondActiveSet = LoggedSet(orderIndex: 0, sourceLoggedSetID: secondSourceSet.id)
         let thirdActiveSet = LoggedSet(orderIndex: 1, sourceLoggedSetID: thirdSourceSet.id)
         activeLogged.sets.append(contentsOf: [secondActiveSet, thirdActiveSet])
@@ -628,9 +622,6 @@ final class PreviousSetPerformanceTests: XCTestCase {
             exercise: exercise,
             sourceLoggedExerciseID: sourceLogged.id
         )
-        // Clone keeps the first two source sets, the third cloned set was deleted,
-        // and then a fresh set was added. The added row has no source link, so it
-        // must not reuse the deleted third source set's values.
         let firstActiveSet = LoggedSet(orderIndex: 0, sourceLoggedSetID: firstSourceSet.id)
         let secondActiveSet = LoggedSet(orderIndex: 1, sourceLoggedSetID: secondSourceSet.id)
         let addedActiveSet = LoggedSet(orderIndex: 2)
@@ -648,8 +639,6 @@ final class PreviousSetPerformanceTests: XCTestCase {
             sourceSessionID: active.sourceSessionID
         )
 
-        // Only the two cloned rows carry previous values; the added row (index 2)
-        // falls past the array so the row renders with no previous set.
         XCTAssertEqual(lookup[activeLogged.id], [
             PreviousSetPerformance(weight: 100, reps: 5),
             PreviousSetPerformance(weight: 110, reps: 3),
@@ -764,7 +753,6 @@ final class PreviousSetPerformanceTests: XCTestCase {
             sourceLoggedExerciseID: sourceBench.id
         )
         clonedBench.sets.append(LoggedSet(orderIndex: 0, sourceLoggedSetID: sourceBenchSet.id))
-        // A second Bench Press card added by hand after cloning carries no source link.
         let addedBench = LoggedExercise(orderIndex: 1, exercise: exercise)
         addedBench.sets.append(LoggedSet(orderIndex: 0))
         active.loggedExercises.append(contentsOf: [clonedBench, addedBench])
@@ -781,8 +769,6 @@ final class PreviousSetPerformanceTests: XCTestCase {
             sourceSessionID: active.sourceSessionID
         )
 
-        // Both cards show the newer session: the cloned card through its linked
-        // source position, the added card through normal history.
         XCTAssertEqual(lookup[clonedBench.id], [
             PreviousSetPerformance(weight: 225, reps: 3),
         ])
@@ -1040,7 +1026,6 @@ final class PreviousSetPerformanceTests: XCTestCase {
         context.insert(active)
         try context.save()
 
-        // Missing and deleted sources both fall back to the latest history for every row.
         for sourceIsDeleted in [false, true] {
             source.deletedAt = sourceIsDeleted ? Date(timeIntervalSince1970: 300) : nil
             let sessions = sourceIsDeleted ? [source, surviving, active] : [surviving, active]
@@ -1240,8 +1225,6 @@ final class PreviousSetPerformanceTests: XCTestCase {
         let beforeSync = PreviousSetPerformance.CacheKey(
             session: active, sessions: sessions, ownerTokenIdentifier: nil, lastSyncedAt: nil
         )
-        // Sync applies remote child-record edits without bumping the parent
-        // session's updatedAt, so a completed sync must invalidate on its own.
         let afterSync = PreviousSetPerformance.CacheKey(
             session: active, sessions: sessions, ownerTokenIdentifier: nil, lastSyncedAt: Date(timeIntervalSince1970: 300)
         )
@@ -1333,7 +1316,6 @@ final class PreviousSetPerformanceTests: XCTestCase {
 
         let editBaseline = afterNewSession
         let completed = sessions.first { $0.status == .completed }
-        // Real edits touch with .now, which always advances past creation times.
         completed?.touch(now: Date(timeIntervalSinceNow: 60))
         let afterHistoryEdit = PreviousSetPerformance.CacheKey(session: active, sessions: sessions, ownerTokenIdentifier: nil)
         XCTAssertNotEqual(editBaseline, afterHistoryEdit)

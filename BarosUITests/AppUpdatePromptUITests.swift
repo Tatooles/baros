@@ -4,8 +4,6 @@ import XCTest
 final class AppUpdatePromptUITests: XCTestCase {
     private func app(extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        // UIKit animations stay off, as in BarosUITests.makeApp: XCUITest waits for them
-        // after every action, and on CI some never reported done (60 s per step, #417).
         app.launchArguments = ["--uitest-in-memory-store", "--uitest-force-signed-out-auth",
                                "--uitest-skip-first-run-experience", "--uitest-update-available",
                                "--uitest-disable-animations"] + extra
@@ -17,7 +15,6 @@ final class AppUpdatePromptUITests: XCTestCase {
         app.launch()
         let alert = app.alerts["Update available"]
         XCTAssertTrue(alert.waitToExist(timeout: 12))
-        // Backgrounding is not a Later choice: the offer comes back on return.
         XCUIDevice.shared.press(.home)
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
         app.activate()
@@ -108,9 +105,6 @@ final class AppUpdatePromptUITests: XCTestCase {
         let finish = app.buttons["Finish Workout and Delete Account"]
         XCTAssertTrue(finish.waitToExist(timeout: 3))
         finish.tap()
-        // Resolving the workout returns to Home while the cloud action is still awaiting.
-        // The fixture holds that request until released, so the check below cannot race it.
-        // The release control appears only once the request is parked.
         XCTAssertTrue(app.staticTexts["HomeTitle"].waitToExist(timeout: 5))
         XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
         let release = app.buttons["UITestReleaseCloudDeletionButton"]

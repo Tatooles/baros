@@ -47,7 +47,6 @@ final class LocalDataResetServiceTests: XCTestCase {
         let originalExerciseCount = try context.fetch(FetchDescriptor<Exercise>()).count
         let originalExercise = try XCTUnwrap(session.loggedExercises.first?.exercise)
 
-        // A repeated failure must not accumulate replacement defaults either.
         XCTAssertThrowsError(try LocalDataResetService().reset(context: context))
         XCTAssertThrowsError(try LocalDataResetService().reset(context: context))
 

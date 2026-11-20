@@ -35,8 +35,6 @@ struct SettingsView: View {
                 .accessibilityIdentifier("SettingsTemplatesLink")
             }
 
-            // Logging preferences are controls, not destinations, so they sit
-            // apart from the icon-led navigation rows above.
             Section("Logging") {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Weight Unit")
@@ -75,8 +73,6 @@ struct SettingsView: View {
             }
 
             Section {
-                // An HStack, not LabeledContent, so the menu keeps its own
-                // accessibility element and only the trailing control opens it.
                 HStack(spacing: 12) {
                     Label("App Appearance", systemImage: appAppearanceStore.appearance.systemImage)
 
@@ -158,7 +154,6 @@ struct SettingsView: View {
     private var appInfoSection: some View {
         Section("App") {
             LabeledContent {
-                // The row title already says "Version".
                 Text(AppBuildInfo.current.versionAndBuild)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.trailing)
@@ -356,9 +351,6 @@ enum CopyAppInfoFeedbackState: Equatable {
 }
 
 
-/// Settings rows read as rows rather than links: the title uses the primary
-/// label color and the tinted icon carries the interaction cue. Titles that set
-/// their own color, such as destructive rows, keep it.
 struct SettingsRowLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         Label {

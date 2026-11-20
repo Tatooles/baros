@@ -1,12 +1,9 @@
 import Foundation
 
-/// The exercise a swap replaces, and what replacing it throws away.
-/// The swap picker states this above its confirm button instead of asking again in an alert.
 public struct SwapExerciseImpact {
     public let originalExerciseID: UUID?
     public let originalName: String
     let muscleGroup: ExerciseMuscleGroup?
-    /// Counted the way Edit Workout counts them: completed, or holding a weight or reps.
     let loggedSetCount: Int
     let hasNote: Bool
 
@@ -20,7 +17,6 @@ public struct SwapExerciseImpact {
 
     public var losesWork: Bool { loggedSetCount > 0 || hasNote }
 
-    /// "Removes 2 logged sets and the exercise note from Bench Press", or that nothing is logged yet.
     public var lossMessage: String {
         let sets: String? = switch loggedSetCount {
         case 0: nil
@@ -32,14 +28,12 @@ public struct SwapExerciseImpact {
         return "Removes \(parts.joined(separator: " and ")) from \(originalName)"
     }
 
-    /// Names the equipment when the replacement shares the original's name, so variants stay distinguishable.
     public func confirmTitle(for replacement: Exercise) -> String {
         let sharesName = originalName.localizedCaseInsensitiveCompare(replacement.name) == .orderedSame
         let name = sharesName ? "\(replacement.name) (\(replacement.equipment.displayName))" : replacement.name
         return "Swap for \(name)"
     }
 
-    /// Exercises already performed that train the same muscle group, most recent first.
     public func similarRows(
         in rows: [ExercisePickerRowContent],
         limit: Int = 4

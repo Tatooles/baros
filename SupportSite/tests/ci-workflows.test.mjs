@@ -251,26 +251,20 @@ test("the nightly UI suite runs the full target serially with the smoke job's se
   const testRun = job.steps[testIndex].run;
   assert.deepEqual(testRun.match(/-only-testing:\S+/g), ["-only-testing:BarosUITests"]);
   assert.match(testRun, /-parallel-testing-enabled NO/);
-  // A stuck test must fail by itself instead of using up the whole step.
   assert.match(testRun, /-test-timeouts-enabled YES/);
   for (const flag of ["default", "maximum"]) {
     const matches = [...testRun.matchAll(new RegExp(`-${flag}-test-execution-time-allowance\\s+(\\d+)`, "g"))];
     assert.equal(matches.length, 1, `set -${flag}-test-execution-time-allowance exactly once`);
     const seconds = Number(matches[0][1]);
-    // A hang guard: above the slowest healthy test's projected time on the hosted
-    // runner (up to about 1,650 s), in whole minutes as XCTest rounds, and small next
-    // to the step budget.
+    // XCTest rounds the allowance up to whole minutes.
     assert.ok(seconds >= 1800 && seconds % 60 === 0, `${flag} allowance ${seconds} s`);
     assert.ok(seconds * 6 <= job.steps[testIndex]["timeout-minutes"] * 60);
   }
   assert.match(testRun, /-maximum-concurrent-test-simulator-destinations 1\b/);
   assert.doesNotMatch(testRun, /-parallel-testing-enabled YES|-parallel-testing-worker-count/);
-  // A full run projects to roughly 140 minutes on the hosted runner; keep room for
-  // a slow night plus two hangs.
   assert.equal(job.steps[testIndex]["timeout-minutes"], 240);
   assert.ok(job.steps[testIndex]["timeout-minutes"] < job["timeout-minutes"]);
 
-  // Retry behavior must match the smoke gate.
   const smokeRun = smoke.steps.find((step) => step.run?.includes("xcodebuild test")).run;
   for (const flag of ["-retry-tests-on-failure", "-test-iterations 2"]) {
     assert.ok(smokeRun.includes(flag) && testRun.includes(flag), `both jobs must pass ${flag}`);
@@ -445,12 +439,9 @@ test("failed UI test names fall back to the log when the result bundle is unread
         "Test Case '-[BarosUITests.SupersetUITests testBroken]' failed (4.000 seconds).",
         "Test Case '-[BarosUITests.SupersetUITests testBroken]' started (Iteration 2 of 2).",
         "Test Case '-[BarosUITests.SupersetUITests testBroken]' failed (4.000 seconds).",
-        // Real xcodebuild output for a test killed by its allowance, then for a crash.
-        // Neither prints "failed", and XCTest doesn't retry either.
         "Test Case '-[BarosUITests.BarosUITests testHang]' started (Iteration 1 of 2).",
         "Test Case '-[BarosUITests.BarosUITests testHang]' exceeded execution time allowance of 30 minutes. The test may have hung; check Xcode's test report for additional diagnostics.",
         "Restarting after unexpected exit, crash, or test timeout; summary will include totals from previous launches.",
-        // If XCTest does retry a timed-out test, a later pass still wins.
         "Test Case '-[BarosUITests.BarosUITests testSlowOnce]' started (Iteration 1 of 2).",
         "Test Case '-[BarosUITests.BarosUITests testSlowOnce]' exceeded execution time allowance of 30 minutes. The test may have hung; check Xcode's test report for additional diagnostics.",
         "Restarting after unexpected exit, crash, or test timeout; summary will include totals from previous launches.",
@@ -459,7 +450,6 @@ test("failed UI test names fall back to the log when the result bundle is unread
         "Test Case '-[BarosUITests.BarosUITests testCrash]' started (Iteration 1 of 2).",
         "Swift/ContiguousArrayBuffer.swift:695: Fatal error: Index out of range",
         "Restarting after unexpected exit, crash, or test timeout; summary will include totals from previous launches.",
-        // A test that starts but never reports, followed by another test.
         "Test Case '-[BarosUITests.BarosUITests testLost]' started (Iteration 1 of 2).",
         "Test Case '-[BarosUITests.BarosUITests testAfterLost]' started (Iteration 1 of 2).",
         "Test Case '-[BarosUITests.BarosUITests testAfterLost]' passed (1.000 seconds).",

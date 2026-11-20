@@ -1,14 +1,11 @@
 import Foundation
 
-/// Store-independent input. Durations are elapsed seconds, not active-set time.
 public struct RingWorkout: Equatable {
     let date: Date
     let duration: TimeInterval
-    /// Nil for value-only DEBUG fixtures, which preview but never open.
     var id: UUID? = nil
     var title: String = WorkoutSession.defaultTitle
 
-    /// Reads only stored attributes; exercise counts are resolved for the scrubbed slot, not all history.
     public static func ringWorkouts(from sessions: [WorkoutSession], now: Date) -> [RingWorkout] {
         sessions.compactMap { session in
             let end = session.endedAt ?? session.startedAt
@@ -34,14 +31,10 @@ public enum HomeRingPeriod: String, CaseIterable {
 }
 
 public struct HomeRingSpoke: Equatable {
-    /// Zero is today / this week. Increasing indices run counterclockwise.
     public let angleIndex: Int
     public let normalizedLength: Double
-    /// Zero is the outer lap; 1...3 are earlier 52-week windows.
     public let lap: Int
 
-    /// Month length as a fraction of the dial diameter: 8.4...56 pt at 350 pt.
-    /// The daily 20...90 minute scale is linear; Year keeps its existing scale.
     public var monthLengthFraction: Double {
         0.024 + min(1, max(0, normalizedLength)) * 0.136
     }
@@ -53,13 +46,11 @@ public struct HomeRingModel: Equatable {
     let yearWorkoutCount: Int
     let monthSpokes: [HomeRingSpoke]
     public let yearSpokes: [HomeRingSpoke]
-    /// Scrubbable slots keyed by angle index, oldest first: Month days and the outer Year lap's weeks.
     let monthSlotWorkouts: [Int: [RingWorkout]]
     let yearSlotWorkouts: [Int: [RingWorkout]]
     let today: Date
     let thisWeek: Date
 
-    /// Year adds history only when a past workout falls outside Month's daily window.
     public var showsPeriodToggle: Bool { totalWorkouts > monthWorkoutCount }
 
     static func cappedDailyMinutes(_ seconds: TimeInterval) -> Double {
@@ -80,7 +71,6 @@ public struct HomeRingModel: Equatable {
         var yearSlots: [Int: [RingWorkout]] = [:]
 
         for (day, workoutsOnDay) in daily {
-            // Sum first: a double workout still occupies exactly one day on the dial.
             let minutes = Self.cappedDailyMinutes(workoutsOnDay.reduce(0) { $0 + max(0, $1.duration) })
             let daysBack = calendar.dateComponents([.day], from: day, to: today).day ?? 0
             if (0..<30).contains(daysBack) {
@@ -119,7 +109,6 @@ public struct HomeRingModel: Equatable {
         period == .month ? monthSpokes : yearSpokes
     }
 
-    /// Rest ticks belong only to the current lap, never to the historical tree rings.
     public func emptySlotIndices(for period: HomeRingPeriod) -> [Int] {
         let trained = Set(spokes(for: period).filter { $0.lap == 0 }.map(\.angleIndex))
         return (0..<period.slotCount).reversed().filter { !trained.contains($0) }
@@ -129,7 +118,6 @@ public struct HomeRingModel: Equatable {
         (period == .month ? monthSlotWorkouts : yearSlotWorkouts)[index] ?? []
     }
 
-    /// The day (Month) or week start (Year) that a slot stands for.
     func slotStart(for period: HomeRingPeriod, at index: Int, calendar: Calendar) -> Date {
         period == .month
             ? calendar.date(byAdding: .day, value: -index, to: today) ?? today
@@ -140,7 +128,6 @@ public struct HomeRingModel: Equatable {
         period == .month ? monthWorkoutCount : yearWorkoutCount
     }
 
-    /// Caption under the center count; it names the same window the dial draws.
     public func countCaption(for period: HomeRingPeriod) -> String {
         let noun = workoutCount(for: period) == 1 ? "workout" : "workouts"
         return "\(noun) in the past \(period == .month ? "30 days" : "year")"
@@ -156,10 +143,8 @@ public struct HomeRingModel: Equatable {
     }
 }
 
-/// Facts about one scrubbed slot, shown in the ring's center. It never suggests what to do next.
 public struct HomeRingSlotPreview: Equatable {
     public struct Row: Equatable {
-        /// The weekday in Year view, where a slot spans a week.
         public let label: String?
         public let title: String
     }
@@ -167,13 +152,10 @@ public struct HomeRingSlotPreview: Equatable {
     static let maximumRows = 5
 
     public let dateText: String
-    /// A lone Month workout gets a large title; everything else is a list of workouts.
     public let title: String?
     public let rows: [Row]
-    /// Workouts beyond `maximumRows`, summarized as "+N more".
     public let hiddenCount: Int
     public let detail: String?
-    /// Oldest first. Empty for rest slots and value-only fixtures, which never open.
     public let workoutIDs: [UUID]
 
     public var accessibilityValue: String {
@@ -182,7 +164,6 @@ public struct HomeRingSlotPreview: Equatable {
         return ([dateText, title].compactMap { $0 } + listed + more + [detail].compactMap { $0 }).joined(separator: ". ")
     }
 
-    /// `exerciseCount` loads logged exercises, so it runs only for a lone Month workout.
     public init(model: HomeRingModel, period: HomeRingPeriod, index: Int, calendar: Calendar,
          exerciseCount: (UUID) -> Int?) {
         let workouts = model.workouts(for: period, at: index)
@@ -214,7 +195,6 @@ public struct HomeRingSlotPreview: Equatable {
         detail = workouts.isEmpty ? (period == .month ? "No workout" : "No workouts") : nil
     }
 
-    /// Labels follow the ring's calendar and time zone, so a slot never reads as a neighboring day.
     private static func dateStyle(_ calendar: Calendar) -> Date.FormatStyle {
         Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
     }
@@ -226,7 +206,6 @@ public struct HomeRingSlotPreview: Equatable {
     }
 }
 
-/// Maps a touch to the slot under it. Index zero sits at 12 o'clock and indices run counterclockwise.
 public enum HomeRingScrubGeometry {
     public static func slotIndex(at location: CGPoint, center: CGPoint, slotCount: Int) -> Int {
         let angle = atan2(location.y - center.y, location.x - center.x)

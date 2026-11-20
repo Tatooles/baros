@@ -260,9 +260,6 @@ struct BarosApp: App {
 }
 
 #if DEBUG
-/// Swaps the scheduler's owner identity with the same calls the coordinator
-/// makes when a Clerk account switch starts resolving, so UI tests can verify
-/// visible screens drop the previous owner's data. Coordinator state is untouched.
 private struct CurrentOwnerSwitchUITestControl: View {
     let syncScheduler: SyncScheduler
 

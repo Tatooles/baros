@@ -6,8 +6,6 @@ public struct LocalDataResetService {
     public init() {}
 
     func reset(context: ModelContext) throws {
-        // Keep destructive changes out of the shared context until the store
-        // accepts them. A failed reset must leave its pending edits untouched.
         let resetContext = ModelContext(context.container)
         resetContext.autosaveEnabled = false
         do {
@@ -34,8 +32,6 @@ public struct LocalDataResetService {
             resetContext.rollback()
             throw error
         }
-        // A successful reset intentionally clears all local data, including
-        // changes that had not yet been saved by the shared context.
         context.rollback()
         context.undoManager?.removeAllActions()
     }

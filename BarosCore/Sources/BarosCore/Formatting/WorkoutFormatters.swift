@@ -14,7 +14,6 @@ public enum WorkoutFormatters {
         return "\(String(format: "%02d", minutes)):\(String(format: "%02d", remainder))"
     }
 
-    /// A timed set's length: "0:45", "1:30", "1:05:00".
     public static func setDuration(_ seconds: Int) -> String {
         let seconds = max(0, seconds)
         let remainder = String(format: "%02d", seconds % 60)
@@ -22,7 +21,6 @@ public enum WorkoutFormatters {
         return "\(seconds / 3_600):\(String(format: "%02d", seconds % 3_600 / 60)):\(remainder)"
     }
 
-    /// A timed set's length for VoiceOver: "1 minute, 30 seconds".
     public static func setDurationAccessibilityDescription(_ seconds: Int) -> String {
         let seconds = max(0, seconds)
         let parts = [
@@ -76,8 +74,6 @@ public enum WorkoutFormatters {
         "\(count) \(count == 1 ? "set" : "sets")"
     }
 
-    // Binds a spaced dash to the word before it so a wrapped name like
-    // "Lying Leg Curl - Cap" never starts a line with the dash.
     public static func exerciseHeaderTitle(_ name: String) -> String {
         name
             .replacingOccurrences(of: " - ", with: "\u{00A0}– ")
@@ -93,9 +89,6 @@ public enum WorkoutFormatters {
         date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 
-    // NumberFormatter allocation is expensive and number(_:) runs for every set
-    // row on every workout-form render, so both variants are cached. Main-thread
-    // use only: NumberFormatter is not thread-safe.
     private static let wholeNumberFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -131,14 +124,11 @@ public enum WorkoutFormatters {
         return formatter
     }()
 
-    /// Like `number(_:)`, but always groups thousands, so display values such
-    /// as records read "10,000" next to "9,999.99".
     public static func groupedNumber(_ value: Double) -> String {
         guard value.isFinite else { return "-" }
         return groupedNumberFormatter.string(from: NSNumber(value: value)) ?? String(value)
     }
 
-    /// Month and day, adding the year only outside the current year.
     public static func historyDate(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
         calendar.isDate(date, equalTo: now, toGranularity: .year)
             ? date.formatted(.dateTime.month(.abbreviated).day())
@@ -149,8 +139,6 @@ public enum WorkoutFormatters {
         number(unit.displayWeight(fromCanonicalPounds: canonicalPounds) ?? canonicalPounds)
     }
 
-    // One bounded cache shared by input callers. Synchronize locale selection
-    // and parsing together so concurrent callers cannot use each other's locale.
     private static let inputNumberFormatter = Mutex<NumberFormatter?>(nil)
 
     static func parseNumber(_ value: String, locale: Locale = .current) -> Double? {

@@ -70,8 +70,6 @@ final class SupersetGroupingTests: XCTestCase {
 
 @MainActor
 final class SupersetWorkoutTests: XCTestCase {
-    // MARK: Menu actions
-
     func testMenuActionsPairJoinMergeAndRemoveInOneSave() throws {
         let (context, session) = try makeWorkout(names: ["A", "B", "C", "D"])
         let engine = ActiveWorkoutEngine()
@@ -138,15 +136,11 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertTrue(grouped(session, [0, 1]), "The replacement takes the swapped exercise's place in the superset")
     }
 
-    // MARK: Linked rounds
-
     func testCheckingASetChecksTheRoundAndFillsEachPartnerLikeItsOwnCheck() throws {
         let (context, session) = try makeWorkout(names: ["A", "B", "C"], groups: [0, 0, 0], setCount: 2)
         let timer = RestTimerCoordinator(schedulesTasks: false)
         let engine = ActiveWorkoutEngine(restTimer: timer)
         let (a, b, c) = (session.sortedLoggedExercises[0], session.sortedLoggedExercises[1], session.sortedLoggedExercises[2])
-        // B's first set takes last time's values; C keeps what was typed and
-        // fills only its empty reps.
         engine.previousSetsByLoggedExerciseID = [
             b.id: [PreviousSetPerformance(weight: 95, reps: 12)],
             c.id: [PreviousSetPerformance(weight: 40, reps: 15)],
@@ -166,13 +160,11 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertEqual(b.sortedSets[0].completedAt, now)
         XCTAssertEqual(timer.current?.rest.setID, a.sortedSets[0].id, "Rest starts once, after the round")
 
-        // The next round fills from the set above before last time.
         try engine.toggleSetCompletion(c.sortedSets[1], context: context)
         XCTAssertEqual(b.sortedSets[1].weight, 95)
         XCTAssertEqual(b.sortedSets[1].reps, 12)
         XCTAssertTrue(a.sortedSets[1].isCompleted)
 
-        // Unchecking only unchecks that one set.
         try engine.toggleSetCompletion(b.sortedSets[1], context: context)
         XCTAssertFalse(b.sortedSets[1].isCompleted)
         XCTAssertTrue(a.sortedSets[1].isCompleted)
@@ -246,8 +238,6 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertEqual(partner.weight, 60)
     }
 
-    // MARK: Edit Workout sheet
-
     func testSheetMovesSupersetsAsBlocksAndKeepsGroupingThroughRemovalsAndAdditions() throws {
         let (context, session) = try makeWorkout(names: ["A", "B", "C", "D", "E"], groups: [nil, 0, 0, 1, 1])
         let engine = ActiveWorkoutEngine()
@@ -259,7 +249,6 @@ final class SupersetWorkoutTests: XCTestCase {
 
         var draft = WorkoutExerciseListDraft(session: session)
         XCTAssertEqual(draft.exercises.map(\.supersetGroupID), session.sortedLoggedExercises.map(\.supersetGroupID))
-        // Move the D–E superset to the top, drop E, and add a curl after B–C.
         draft.append([library])
         let addition = draft.additions[0].id
         draft.orderedIDs = [ids[3], ids[4], ids[0], ids[1], ids[2], addition]
@@ -291,7 +280,6 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertEqual(toggled([a, a, nil], below: 1), [a, a, a], "A single joins the superset above it")
         XCTAssertEqual(toggled([a, a, b, b], below: 1), [a, a, a, a], "The upper superset's id wins a merge")
 
-        // Splitting: the upper side keeps its id, and a lone side is ungrouped.
         XCTAssertEqual(toggled([a, a], below: 0), [nil, nil])
         let splitTrio = toggled([a, a, a, a], below: 1)
         XCTAssertEqual(Array(splitTrio[0...1]), [a, a])
@@ -320,7 +308,6 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertEqual(draft.exercises[4].supersetGroupID, draft.exercises[5].supersetGroupID)
         XCTAssertNotNil(draft.exercises[4].supersetGroupID)
         draft.orderedIDs.removeAll { $0 == ids[3] }
-        // Split A–B, then join C to the new superset below it.
         draft.regroup(SupersetGrouping.togglingLink(draft.exercises.map(\.supersetGroupID), below: 0))
         XCTAssertNil(draft.exercises[0].supersetGroupID)
         draft.regroup(SupersetGrouping.togglingLink(draft.exercises.map(\.supersetGroupID), below: 2))
@@ -384,7 +371,6 @@ final class SupersetWorkoutTests: XCTestCase {
         ))
         XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), draft.baseline)
 
-        // Grouping that changed after the sheet opened makes its draft stale.
         try engine.changeSuperset(.joinPrevious, for: session.sortedLoggedExercises[2], context: context)
         XCTAssertThrowsError(try engine.applyExerciseListChanges(
             in: session, orderedIDs: [ids[2], ids[0], ids[1]], baseline: draft.baseline, context: context,
@@ -401,8 +387,6 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertTrue(session.sortedLoggedExercises.allSatisfy { $0.supersetGroupID == nil })
     }
 
-    // MARK: Starting from a past workout, finishing and completed edits
-
     func testStartingFromAPastWorkoutCopiesGroupingWithFreshIDs() throws {
         let (context, past) = try makeWorkout(names: ["A", "B", "C", "D"], groups: [0, 0, nil, 1], status: .completed)
         let engine = ActiveWorkoutEngine()
@@ -418,7 +402,6 @@ final class SupersetWorkoutTests: XCTestCase {
     func testFinishingAndEditingACompletedWorkoutPreserveGrouping() throws {
         let (context, session) = try makeWorkout(names: ["A", "B", "C"], groups: [0, 0, 0], owner: "owner")
         let engine = ActiveWorkoutEngine()
-        // A lone id from another device stays as stored; completed edits never regroup.
         let lone = UUID()
         session.sortedLoggedExercises[2].supersetGroupID = lone
         try context.save()
@@ -453,7 +436,6 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertNotNil(groups[0])
     }
 
-    /// A store written before supersets existed opens with every exercise ungrouped.
     func testStoreFromBeforeSupersetsUpgradesWithExercisesUngrouped() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -531,8 +513,6 @@ final class SupersetWorkoutTests: XCTestCase {
         _ = try await SyncCoordinator(client: client).run(ownerTokenIdentifier: "issuer|owner", context: context)
         XCTAssertEqual(exercise.supersetGroupID, group)
     }
-
-    // MARK: Helpers
 
     private func grouped(_ session: WorkoutSession, _ positions: [Int]) -> Bool {
         let ids = session.sortedLoggedExercises.map(\.supersetGroupID)

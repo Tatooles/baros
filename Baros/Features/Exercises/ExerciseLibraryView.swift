@@ -169,8 +169,6 @@ struct ExerciseLibraryView: View {
             if restoring {
                 try service.restoreExercise(exercise, ownerTokenIdentifier: owner, context: modelContext)
             } else {
-                // History can arrive while the alert is open. Recheck before mutation;
-                // archiveOrDelete also checks so new history is never deleted.
                 let outcome = try exercise.removalOutcome(context: modelContext)
                 removalErrorTitle = outcome == .archived ? "Couldn't Archive Exercise" : "Couldn't Delete Exercise"
                 try service.removeExercise(exercise, ownerTokenIdentifier: owner, context: modelContext)

@@ -2,8 +2,6 @@ import Foundation
 import Observation
 import SwiftData
 
-/// Owns the finish/discard-before-account-action contract. Clerk lifecycle and
-/// local-data visibility remain exclusively owned by CurrentOwnerCoordinator.
 @MainActor
 @Observable
 public final class WorkoutAccountTransition {
@@ -69,8 +67,6 @@ public final class WorkoutAccountTransition {
 
     public func resolve(_ resolution: Resolution) async {
         guard !isRunning, !engine.isAccountTransitionInProgress else { return }
-        // A choice whose request was cancelled must say so; returning silently left
-        // the person tapping Finish with nothing happening.
         guard needsResolution else {
             errorMessage = TransitionError.choiceExpired.localizedDescription
             return
@@ -125,8 +121,6 @@ public final class WorkoutAccountTransition {
     private func outgoingActiveSessions() throws -> [WorkoutSession] {
         let sessions = try context.fetch(FetchDescriptor<WorkoutSession>()).filter { $0.status == .active && !$0.isDeleted }
             .sorted { $0.id.uuidString < $1.id.uuidString }
-        // Sign-out/switch must leave other owners' records untouched. Account
-        // deletion is different: its existing reset wipes the entire store.
         if destination == .deleteAccount,
            sessions.contains(where: { !$0.allowsHistoryMutation(ownerTokenIdentifier: expectedOwner) }) {
             throw TransitionError.hiddenWorkout

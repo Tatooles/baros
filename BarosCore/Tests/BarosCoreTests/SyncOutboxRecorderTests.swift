@@ -729,8 +729,6 @@ final class SyncOutboxRecorderTests: XCTestCase {
         delete.lastAttemptAt = Date(timeIntervalSince1970: 150)
         delete.lastErrorMessage = "preserve delete"
         add(.loggedSet, 3, .update).statusRaw = "future-status"
-        // The first repeated create refreshes the oldest updatedAt; the second
-        // must then select the other entry with the same oldest createdAt.
         _ = add(.loggedSet, 4, .update, createdAt: 90, updatedAt: 80)
         _ = add(.loggedSet, 4, .delete, createdAt: 90, updatedAt: 95)
         _ = add(.loggedSet, 4, .create, createdAt: 100, updatedAt: 20)
@@ -739,14 +737,12 @@ final class SyncOutboxRecorderTests: XCTestCase {
         add(.loggedSet, 6, .update, createdAt: 20).operationRaw = ""
         _ = add(.healthDataLink, 8, .update)
         _ = add(.loggedSet, 9, .update, createdAt: 1, updatedAt: 2)
-        // Same ID in a different kind, plus matching IDs owned by someone else.
         _ = add(.loggedExercise, 0, .delete, createdAt: 1)
         add(.workoutSession, 0, .delete, createdAt: 1).ownerTokenIdentifier = "issuer|owner_b"
         add(.loggedSet, 2, .update, createdAt: 1).ownerTokenIdentifier = owner == nil ? "issuer|owner_a" : nil
         try context.save()
     }
 
-    /// Compare every persisted field other than newly generated outbox row IDs.
     private func entryStates(_ context: ModelContext) throws -> [[String]] {
         try fetchEntries(context).map { entry in
             [entry.entityKindRaw, entry.entityID.uuidString, entry.operationRaw,

@@ -42,7 +42,6 @@ final class SyncStatusDisplayStateTests: XCTestCase {
     }
 
     func testNetworkUnavailableInterruptionMapsToWaitingForConnection() {
-        // `.available` covers a classified offline interruption while the path still looks available.
         for networkAvailability in [NetworkAvailability.unknown, .available] {
             let state = SyncStatusDisplayState.make(
                 ownerTokenIdentifier: "issuer|owner_a",
@@ -206,7 +205,6 @@ final class SyncStatusDisplayStateTests: XCTestCase {
     }
 
     func testRequiresConnectionKeepsManualRetryAvailable() {
-        // The first case has no unfinished work and must still not appear up to date.
         let cases: [(transientCondition: SyncStableErrorCode?, pendingCount: Int)] = [
             (nil, 0),
             (.networkUnavailable, 1),
@@ -328,8 +326,6 @@ final class SyncStatusDisplayStateTests: XCTestCase {
         XCTAssertFalse(state.showsGlobalFailureNotice)
     }
 
-    /// A settings change runs up to date → waiting → syncing → up to date. The row
-    /// must keep one secondary line throughout, or the Settings form jumps.
     func testLocalChangeSyncCycleKeepsOneSecondaryLine() {
         let lastSyncedAt = Date(timeIntervalSince1970: 700)
         let now = Date(timeIntervalSince1970: 1_000)

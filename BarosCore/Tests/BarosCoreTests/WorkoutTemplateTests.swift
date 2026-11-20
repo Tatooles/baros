@@ -6,10 +6,7 @@ private let owner = "issuer|owner_a"
 
 @MainActor
 final class WorkoutTemplateTests: XCTestCase {
-    /// Keeps helper-made containers alive for the test's duration.
     private var retainedContainers: [ModelContainer] = []
-
-    // MARK: - Mutations
 
     func testCreateRecordsAnOwnedCreateAndNormalizesGrouping() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
@@ -82,8 +79,6 @@ final class WorkoutTemplateTests: XCTestCase {
         ))
         XCTAssertEqual(template.name, "Theirs")
     }
-
-    // MARK: - Sync
 
     func testPushUploadsEntriesInOrderWithGrouping() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
@@ -253,8 +248,6 @@ final class WorkoutTemplateTests: XCTestCase {
         )
     }
 
-    // MARK: - Starting a workout
-
     func testStartingFromATemplateCopiesExercisesWithFreshGroups() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -346,8 +339,6 @@ final class WorkoutTemplateTests: XCTestCase {
         XCTAssertEqual(exercise.sortedSets.map(\.kind), [.working])
     }
 
-    /// The server rejects a logged exercise pointing at an exercise it never
-    /// received, which is what deleting one before its first upload leaves.
     func testADeletedExerciseIsNotLinkedWhenStarting() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -382,8 +373,6 @@ final class WorkoutTemplateTests: XCTestCase {
         }
         XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutSession>()).isEmpty)
     }
-
-    // MARK: - Editor draft
 
     func testDraftNeedsANameAndAnExercise() {
         let bench = makeExercise("Bench Press", owner: owner)
@@ -490,8 +479,6 @@ final class WorkoutTemplateTests: XCTestCase {
         XCTAssertEqual(items[1].metadata, "Cable • Lats")
     }
 
-    // MARK: - Save as template
-
     func testSavingAWorkoutCopiesItsExercisesInOrderWithFreshGroups() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -503,7 +490,6 @@ final class WorkoutTemplateTests: XCTestCase {
         let group = UUID()
         let session = WorkoutSession(title: "Upper Day", startedAt: .now, status: .completed, source: .blank, syncOwnerTokenIdentifier: owner)
         context.insert(session)
-        // Inserted out of order, with a removed exercise in the middle.
         for loggedExercise in [
             LoggedExercise(orderIndex: 3, exercise: curl, supersetGroupID: group),
             LoggedExercise(orderIndex: 0, exercise: bench),
@@ -566,7 +552,6 @@ final class WorkoutTemplateTests: XCTestCase {
         context.insert(deleted)
         let session = WorkoutSession(title: "Old", startedAt: .now, status: .completed, source: .blank, syncOwnerTokenIdentifier: owner)
         context.insert(session)
-        // Logged before snapshots stored metadata: the raw fields hold defaults.
         let legacy = LoggedExercise(
             orderIndex: 0, exercise: deleted, exerciseSnapshotName: "Hack Squat",
             exerciseSnapshotEquipmentRaw: ExerciseEquipment.other.rawValue,
@@ -603,8 +588,6 @@ final class WorkoutTemplateTests: XCTestCase {
         XCTAssertTrue(draft.canSave)
     }
 
-    // MARK: - Finish sheet template offer
-
     func testFinishOffersNothingForAnUnchangedTemplateWorkout() throws {
         let (context, template) = try makeSupersetTemplate()
         let session = try ActiveWorkoutEngine().startWorkout(fromTemplate: template, ownerTokenIdentifier: owner, context: context)
@@ -616,19 +599,16 @@ final class WorkoutTemplateTests: XCTestCase {
         let (context, template) = try makeSupersetTemplate()
         let engine = ActiveWorkoutEngine()
 
-        // Dropped an exercise.
         let dropped = try engine.startWorkout(fromTemplate: template, ownerTokenIdentifier: owner, context: context)
         dropped.sortedLoggedExercises[0].deletedAt = .now
         XCTAssertEqual(offer(for: dropped, in: context), .updateOrSaveAsNew(template))
         try engine.discardWorkout(dropped, context: context)
 
-        // Same exercises, superset split up.
         let ungrouped = try engine.startWorkout(fromTemplate: template, ownerTokenIdentifier: owner, context: context)
         ungrouped.sortedLoggedExercises.forEach { $0.supersetGroupID = nil }
         XCTAssertEqual(offer(for: ungrouped, in: context), .updateOrSaveAsNew(template))
         try engine.discardWorkout(ungrouped, context: context)
 
-        // Same exercises, new order.
         let reordered = try engine.startWorkout(fromTemplate: template, ownerTokenIdentifier: owner, context: context)
         let exercises = reordered.sortedLoggedExercises
         exercises[0].orderIndex = 5
@@ -681,9 +661,6 @@ final class WorkoutTemplateTests: XCTestCase {
         XCTAssertFalse(WorkoutTemplateEntry.haveSameExercises(template, swapped))
     }
 
-    // MARK: - Helpers
-
-    /// Bench, then Row and Curl in a superset.
     private func makeSupersetTemplate() throws -> (ModelContext, WorkoutTemplate) {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext

@@ -70,7 +70,6 @@ struct SettingsAccountSection: View {
 
     private var syncStatusRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            // A Label keeps the icon in the Form's shared icon column.
             Label {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(displayState.title)

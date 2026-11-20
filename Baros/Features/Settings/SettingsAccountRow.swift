@@ -14,7 +14,6 @@ enum UITestAuthOverride {
     }
 }
 
-/// The sheets the Settings account row opens.
 enum SettingsAccountSheet: String, Identifiable {
     case auth
     case userProfile
@@ -23,7 +22,6 @@ enum SettingsAccountSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
-/// What the account row and its sheets show for the current Clerk user.
 @MainActor
 private func accountDisplayState(clerk: Clerk) -> AccountDisplayState {
     if UITestAuthOverride.isForcedSignedOut {
@@ -72,7 +70,6 @@ struct SettingsAccountRow: View {
 
     var body: some View {
         Button {
-            // Match Clerk's UserButton: unfinished session tasks resume sign-in instead of the profile.
             if displayState.isSignedIn {
                 presentedSheet = workouts.contains { $0.status == .active && !$0.isDeleted }
                     ? .account : (hasPendingSessionTasks(clerk: clerk) ? .auth : .userProfile)
@@ -85,8 +82,6 @@ struct SettingsAccountRow: View {
                     avatar
                     identity
                 } else {
-                    // A Label puts the avatar in the Form's shared icon column,
-                    // so the account text lines up with the rows below it.
                     Label {
                         identity
                     } icon: {
@@ -131,7 +126,6 @@ struct SettingsAccountRow: View {
         }
     }
 
-    /// Accessibility sizes stack the row so the name and copy keep the full row width.
     private var rowLayout: AnyLayout {
         dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
@@ -168,7 +162,6 @@ struct SettingsAccountRow: View {
 }
 
 extension View {
-    /// Presents the account row's sheets. Apply it outside the Form.
     func settingsAccountSheets(_ presentedSheet: Binding<SettingsAccountSheet?>) -> some View {
         modifier(SettingsAccountSheets(presentedSheet: presentedSheet))
     }
@@ -230,12 +223,9 @@ private struct SettingsAccountSheets: ViewModifier {
                 presentedSheet = nil
             }
             .onChange(of: clerk.session?.id) { _, _ in
-                // A native switch can reveal a previously hidden active workout.
-                // Close the ungated profile as soon as Clerk replaces its session.
                 if presentedSheet == .userProfile || presentedSheet == .account { presentedSheet = nil }
             }
             .onChange(of: clerk.user) { _, user in
-                // Signing out from the profile sheet leaves nothing to show there.
                 if user == nil, presentedSheet == .userProfile || presentedSheet == .account {
                     presentedSheet = nil
                 }
@@ -243,7 +233,6 @@ private struct SettingsAccountSheets: ViewModifier {
     }
 }
 
-/// A Form row button that keeps row highlighting and, when navigable, the native disclosure chevron.
 private struct AccountRowButtonStyle: ButtonStyle {
     let showsDisclosure: Bool
 

@@ -62,9 +62,6 @@ public final class CurrentOwnerCoordinator {
     public private(set) var state: State = .resolving(ownerTokenIdentifier: nil)
     public private(set) var isRecoveringAuthentication = false
 
-    /// The owner whose local data screens may display and edit, or nil when
-    /// only Unclaimed Local Data is accessible. This is not authorization to
-    /// synchronize; cloud sync stays gated by the scheduler.
     public var localDataOwnerTokenIdentifier: String? {
         syncScheduler.currentOwnerTokenIdentifier
     }
@@ -306,9 +303,6 @@ public final class CurrentOwnerCoordinator {
                 )
                 return
             }
-            // The pinned provider fetches a standard Clerk session token.
-            // Its sid identifies the session that actually authenticated;
-            // the current Clerk snapshot cannot identify a late callback.
             guard let authenticatedSessionIdentifier = ClerkJWTIdentityResolver.sessionIdentifier(from: token),
                   authenticatedSessionIdentifier == clerkSessionProvider.state.sessionIdentifier else {
                 enterResolvingState(ownerTokenIdentifier: expectedOwnerTokenIdentifier)
@@ -343,9 +337,6 @@ public final class CurrentOwnerCoordinator {
             return
         }
 
-        // Convex may have validated the current Clerk session before its event
-        // arrives. Keep that validation, but pause sync for a replacement
-        // session even when it belongs to the same owner.
         if syncScheduler.currentOwnerTokenIdentifier != sessionState.ownerTokenIdentifier
             || state == .localOnly
             || validatedClerkSessionState != sessionState {

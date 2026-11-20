@@ -51,9 +51,6 @@ public struct HomePastWorkoutReviewPresentation: Equatable {
         return "\(exercises.count) \(exerciseLabel) · \(copiedSetCount) \(setLabel)"
     }
 
-    /// Counts the rows each exercise will start with, which follow a newer
-    /// performance of the exercise in `sessions` when there is one, the way
-    /// `ActiveWorkoutEngine.startWorkout(fromPast:)` seeds them.
     public init(session: WorkoutSession, sessions: [WorkoutSession], ownerTokenIdentifier: String?) {
         let newerSetKinds = PreviousSetPerformance.newerCompletedSetKindsByExerciseID(
             for: session,
@@ -92,15 +89,11 @@ public struct HomeContent {
             }
             return lhs.id.uuidString < rhs.id.uuidString
         }
-        // Home reflects what has happened. Future-dated completions (imports, wrong device clocks) stay in
-        // History and Use Past Workout but never mark days or read as "Today" before they occur.
         pastSessions = completedSessions.filter { session in
             (session.endedAt ?? session.startedAt) <= now
         }
     }
 
-    /// Computed on access because it loads logged exercises. Home builds this content on every body update,
-    /// including while the quick-start row is hidden behind an active workout.
     public var quickStartWorkouts: [HomeQuickStartWorkout] {
         HomeQuickStartWorkout.workouts(from: pastSessions)
     }
@@ -120,20 +113,14 @@ public struct HomeContent {
     }
 }
 
-/// A recent distinct completed workout that Home offers to repeat.
 public struct HomeQuickStartWorkout: Identifiable {
     static let maximumCount = 5
-    /// Bounds the main-thread work for people who repeat fewer than `maximumCount` distinct workouts, who
-    /// would otherwise load every logged exercise in their history on each Home update.
     static let maximumScannedSessionCount = 50
 
     let session: WorkoutSession
 
     public var id: UUID { session.id }
 
-    /// The workout's own title. Workouts still using the default title would all read "Workout", so they
-    /// are named by their two most-used muscle groups instead, ties kept in workout order, or by their
-    /// first exercise when no exercise has a known muscle group.
     public var name: String {
         guard Self.titleGroupingKey(session.title) == nil else { return session.title }
         let loggedExercises = session.sortedLoggedExercises
@@ -145,7 +132,6 @@ public struct HomeQuickStartWorkout: Identifiable {
             if counts[group] == nil { groups.append(group) }
             counts[group, default: 0] += 1
         }
-        // A stable sort keeps first appearance as the tie-break.
         let topGroups = groups.enumerated()
             .sorted { lhs, rhs in
                 let (lhsCount, rhsCount) = (counts[lhs.element, default: 0], counts[rhs.element, default: 0])
@@ -157,7 +143,6 @@ public struct HomeQuickStartWorkout: Identifiable {
         return loggedExercises.first?.exerciseSnapshotName ?? session.title
     }
 
-    /// When this workout was last done: Today, Yesterday, days ago within the week, then the date.
     public func lastDoneText(now: Date = .now, calendar: Calendar = .current) -> String {
         let days = calendar.dateComponents(
             [.day], from: calendar.startOfDay(for: session.startedAt), to: calendar.startOfDay(for: now)
@@ -175,16 +160,12 @@ public struct HomeQuickStartWorkout: Identifiable {
         }
     }
 
-    /// Expects `completedSessions` newest start first, the same date the ring and History use. Custom titles
-    /// group by title; workouts still using the default title group by their ordered exercises so unrenamed
-    /// workouts stay distinguishable.
     static func workouts(
         from completedSessions: [WorkoutSession]
     ) -> [HomeQuickStartWorkout] {
         var seenKeys = Set<String>()
         var workouts: [HomeQuickStartWorkout] = []
         for session in completedSessions.prefix(maximumScannedSessionCount) where workouts.count < maximumCount {
-            // A repeated custom title is skipped before its logged exercises are loaded.
             let titleKey = titleGroupingKey(session.title)
             if let titleKey, seenKeys.contains(titleKey) {
                 continue
@@ -199,7 +180,6 @@ public struct HomeQuickStartWorkout: Identifiable {
         return workouts
     }
 
-    /// Nil for the default title, which groups by exercises instead.
     private static func titleGroupingKey(_ title: String) -> String? {
         let normalizedTitle = normalized(title)
         guard normalizedTitle != normalized(WorkoutSession.defaultTitle) else {
@@ -209,7 +189,6 @@ public struct HomeQuickStartWorkout: Identifiable {
     }
 
     private static func exercisesGroupingKey(_ loggedExercises: [LoggedExercise]) -> String {
-        // Equipment keeps same-named variants (barbell vs. cable Row) apart.
         return "exercises:" + loggedExercises.map { loggedExercise in
             "\(normalized(loggedExercise.exerciseSnapshotName))|\(loggedExercise.resolvedSnapshotEquipmentRaw ?? "")"
         }.joined(separator: "\u{1F}")

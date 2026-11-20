@@ -38,8 +38,6 @@ struct SurfaceCard<Content: View>: View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(role.backgroundStyle, in: shape)
-            // Clip so collapsing content is swallowed by the card edge
-            // instead of sliding over it.
             .clipShape(shape)
             .overlay(
                 shape.strokeBorder(AppTheme.subtleBorder, lineWidth: 1)
@@ -53,8 +51,6 @@ struct SurfaceCard<Content: View>: View {
     }
 }
 
-/// A summary figure without its own well, for rows that already sit on a
-/// bounded surface.
 struct MetricSummaryColumn: View {
     let title: String
     let value: String

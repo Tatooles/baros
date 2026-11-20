@@ -43,7 +43,6 @@ final class AppNavigationStateTests: XCTestCase {
             XCTAssertTrue(navigationState.isActiveWorkoutPresented)
             XCTAssertFalse(navigationState.mountsActiveWorkoutAccessory)
 
-            // The start sheet also explicitly requests presentation after creating the session.
             navigationState.presentActiveWorkout()
             XCTAssertFalse(navigationState.mountsActiveWorkoutAccessory)
 
@@ -127,7 +126,6 @@ final class AppNavigationStateTests: XCTestCase {
     }
 
     func testFinishOrDiscardDismissesWorkoutAndReturnsHome() {
-        // The workout disappears the same way when the current owner changes.
         for selectedTab in [AppTab.settings, .history] {
             let navigationState = AppNavigationState()
             navigationState.reconcileActiveWorkout(sessionID: UUID())
