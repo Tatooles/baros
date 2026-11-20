@@ -5099,9 +5099,9 @@ final class BarosUITests: XCTestCase {
         XCTFail("Could not present Add Exercise sheet")
     }
 
-    @MainActor
     /// Swap's confirm button swallows taps for a moment after it appears or the pick changes,
     /// and XCTest can't see that, so tap until the picker closes.
+    @MainActor
     private func confirmSwap(in app: XCUIApplication) {
         let confirmButton = app.buttons["ExercisePickerConfirmSwapButton"]
         XCTAssertTrue(confirmButton.waitToExist(timeout: 3))
@@ -5111,6 +5111,7 @@ final class BarosUITests: XCTestCase {
         })
     }
 
+    @MainActor
     private func assertActiveWorkoutExerciseOrder(_ expectedNames: [String], in app: XCUIApplication) {
         for (index, expectedName) in expectedNames.enumerated() {
             let header = app.buttons["ExerciseHeader-\(index)"]
