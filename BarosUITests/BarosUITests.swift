@@ -2199,8 +2199,8 @@ final class BarosUITests: XCTestCase {
         startBlankWorkout(in: app)
         app.buttons["AddExerciseButton"].tap()
         let add = app.buttons["ExercisePickerAddSelectedButton"]
-        XCTAssertTrue(add.waitToExist(timeout: 3))
-        XCTAssertFalse(add.isEnabled)
+        XCTAssertTrue(app.navigationBars["Add Exercises"].waitToExist(timeout: 3))
+        XCTAssertFalse(add.exists)
         let bench = app.buttons["ExercisePickerRow-Bench Press-Barbell"]
         let squat = app.buttons["ExercisePickerRow-Back Squat-Barbell"]
         bench.tap()
@@ -2259,9 +2259,8 @@ final class BarosUITests: XCTestCase {
         app.buttons["ExercisePickerCancelButton"].tap()
         assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
         app.buttons["AddExerciseButton"].tap()
-        let add = app.buttons["ExercisePickerAddSelectedButton"]
-        XCTAssertTrue(add.waitToExist(timeout: 3))
-        XCTAssertFalse(add.isEnabled)
+        XCTAssertTrue(app.navigationBars["Add Exercises"].waitToExist(timeout: 3))
+        XCTAssertFalse(app.buttons["ExercisePickerAddSelectedButton"].exists)
     }
 
     @MainActor
@@ -2280,9 +2279,11 @@ final class BarosUITests: XCTestCase {
         blankWorkout.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)).tap()
         XCTAssertTrue(app.buttons["AddExerciseButton"].waitToExist(timeout: 3))
         app.buttons["AddExerciseButton"].tap()
+        let squat = app.buttons["ExercisePickerRow-Back Squat-Barbell"]
+        XCTAssertTrue(squat.waitToExist(timeout: 3))
+        squat.tap()
         let add = app.buttons["ExercisePickerAddSelectedButton"]
         XCTAssertTrue(add.waitToExist(timeout: 3))
-        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
         XCTAssertEqual(add.label, "Add 1 Exercise")
         XCTAssertTrue(add.isHittable)
         XCTAssertGreaterThanOrEqual(add.frame.height, 44)
@@ -2458,18 +2459,13 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(currentExercise.isEnabled)
         XCTAssertTrue(currentExercise.label.contains("Current exercise"))
 
-        // Search sits at the bottom, under the commit bar, and nothing commits until the bar is tapped.
+        // Search sits at the bottom. The commit bar appears above it only once a
+        // replacement is picked, and nothing commits until the bar is tapped.
         let searchField = app.searchFields.firstMatch
         XCTAssertTrue(searchField.waitToExist(timeout: 3))
         XCTAssertGreaterThan(searchField.frame.midY, app.frame.midY)
         let confirmButton = app.buttons["ExercisePickerConfirmSwapButton"]
-        XCTAssertLessThanOrEqual(confirmButton.frame.maxY, searchField.frame.minY)
-        XCTAssertFalse(confirmButton.isEnabled)
-        XCTAssertEqual(confirmButton.label, "Choose a Replacement")
-        XCTAssertEqual(
-            app.staticTexts["ExercisePickerSwapImpactText"].label,
-            "Bench Press has nothing logged yet"
-        )
+        XCTAssertFalse(confirmButton.exists)
         searchField.tap()
         searchField.typeText("Overhead Press")
         let replacementRow = app.buttons["ExercisePickerRow-Overhead Press-Barbell"]
@@ -2477,8 +2473,14 @@ final class BarosUITests: XCTestCase {
         replacementRow.tap()
 
         XCTAssertTrue(replacementRow.isSelected)
+        XCTAssertTrue(confirmButton.waitToExist(timeout: 3))
         XCTAssertTrue(confirmButton.isEnabled)
         XCTAssertEqual(confirmButton.label, "Swap for Overhead Press")
+        XCTAssertLessThanOrEqual(confirmButton.frame.maxY, searchField.frame.minY)
+        XCTAssertEqual(
+            app.staticTexts["ExercisePickerSwapImpactText"].label,
+            "Bench Press has nothing logged yet"
+        )
         confirmButton.tap()
 
         assertActiveWorkoutExerciseOrder(["Overhead Press"], in: app)
@@ -5042,22 +5044,23 @@ final class BarosUITests: XCTestCase {
                     for _ in 0..<8 {
                         let exerciseButton = app.buttons[exerciseRowIdentifier]
                         let navigationBar = app.navigationBars["Add Exercises"]
-                        let addSelectedButton = app.buttons["ExercisePickerAddSelectedButton"]
-                        // Rows scroll between the navigation bar and the pinned Add button,
-                        // which sits above the bottom search field.
+                        // Nothing is picked yet, so the Add bar is hidden and rows scroll
+                        // between the navigation bar and the bottom search field.
                         let visibleTop = navigationBar.frame.maxY
-                        let visibleBottom = addSelectedButton.frame.minY
+                        let visibleBottom = app.searchFields.firstMatch.frame.minY
                         let isFullyVisible = exerciseButton.exists
                             && exerciseButton.frame.minY >= visibleTop
                             && exerciseButton.frame.maxY <= visibleBottom
                         if isFullyVisible && exerciseButton.isHittable {
                             exerciseButton.tap()
+                            let addSelectedButton = app.buttons["ExercisePickerAddSelectedButton"]
+                            XCTAssertTrue(addSelectedButton.waitToExist(timeout: readyTimeout))
                             addSelectedButton.tap()
                             return
                         }
 
                         // At accessibility sizes a row is nearly a third of that band, and a
-                        // swipe's momentum carries it from under the Add button past the navigation
+                        // swipe's momentum carries it from under the search field past the navigation
                         // bar. Drag without momentum to center the row in the band instead.
                         let span = visibleBottom - visibleTop
                         let offset = exerciseButton.exists
