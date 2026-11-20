@@ -1160,24 +1160,8 @@ public final class SyncCoordinator {
             return
         }
 
-        let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
-        let refetchCursor = max(0, serverUpdatedAt - 1)
-        switch entry.entityKind {
-        case .some(.userSettings):
-            state.userSettingsCursor = min(state.userSettingsCursor, refetchCursor)
-        case .some(.exercise):
-            state.exercisesCursor = min(state.exercisesCursor, refetchCursor)
-        case .some(.workoutSession):
-            state.workoutSessionsCursor = min(state.workoutSessionsCursor, refetchCursor)
-        case .some(.loggedExercise):
-            state.loggedExercisesCursor = min(state.loggedExercisesCursor, refetchCursor)
-        case .some(.loggedSet):
-            state.loggedSetsCursor = min(state.loggedSetsCursor, refetchCursor)
-        case .some(.workoutTemplate):
-            state.workoutTemplatesCursor = min(state.workoutTemplatesCursor, refetchCursor)
-        default:
-            break
-        }
+        guard let kind = entry.entityKind else { return }
+        try SyncCursorState.state(for: ownerTokenIdentifier, context: context).rewind(kind, toBefore: serverUpdatedAt)
     }
 
     private func findUserSettings(id: UUID, context: ModelContext) throws -> UserSettings? {
@@ -1776,6 +1760,7 @@ public final class SyncCoordinator {
                     // copy this device holds.
                     if let held = try findLoggedExercise(id: id, context: context),
                        held.session?.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+                        try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedExercise, id: id), context: context)
                         applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
                     }
                     recordAppliedCursor(record.serverUpdatedAt)
@@ -1802,6 +1787,7 @@ public final class SyncCoordinator {
                         // Deletes win: apply it to a copy this device holds,
                         // even though the exercise it names is not here.
                         if let held = try findLoggedExercise(id: id, context: context) {
+                            try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedExercise, id: id), context: context)
                             applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
                         }
                         recordAppliedCursor(record.serverUpdatedAt)
@@ -1930,6 +1916,7 @@ public final class SyncCoordinator {
                     // it to a copy this device holds.
                     if let held = try findLoggedSet(id: id, context: context),
                        held.loggedExercise?.session?.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+                        try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedSet, id: id), context: context)
                         applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
                     }
                     recordAppliedCursor(record.serverUpdatedAt)
@@ -2052,6 +2039,9 @@ public final class SyncCoordinator {
         )
         switch decision {
         case .applyIncoming:
+            if incomingDeletedAt != nil {
+                try retireBlockedEntries(for: key, context: context)
+            }
             // Zero createdAt marks a placeholder: the server got the delete
             // before the record, so it has no content to copy.
             if incomingCreatedAt == 0, incomingDeletedAt != nil {
@@ -2075,6 +2065,23 @@ public final class SyncCoordinator {
             pullLocalIntents[key] = .pending
             return false
         }
+    }
+
+    /// A server tombstone replaced this record, so a dead-lettered upload of
+    /// it will never be sent: drop it, so it is not shown as waiting for Retry.
+    private func retireBlockedEntries(for key: SyncOutboxKey, context: ModelContext) throws {
+        guard pullLocalIntents[key] == .blocked else { return }
+        let kindRaw = key.kind.rawValue
+        let entityID = key.id
+        let blockedStatus = SyncOutboxStatus.blocked.rawValue
+        for entry in try context.fetch(FetchDescriptor<SyncOutboxEntry>(
+            predicate: #Predicate { entry in
+                entry.entityKindRaw == kindRaw && entry.entityID == entityID && entry.statusRaw == blockedStatus
+            }
+        )) where entry.operation != .delete {
+            context.delete(entry)
+        }
+        pullLocalIntents[key] = nil
     }
 
     /// Pull this record again after the push (`rewindPastKeptLocalRecords`).

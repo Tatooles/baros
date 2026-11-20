@@ -82,6 +82,27 @@ final class SyncClientConvergenceTests: XCTestCase {
         XCTAssertNotNil(exercise.deletedAt)
     }
 
+    func testServerTombstoneRetiresABlockedEditOfTheRecord() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = ownedExercise("Blocked Edit", context: context)
+        context.insert(SyncOutboxEntry(
+            entityKind: .exercise, entityID: exercise.id, operation: .update, status: .blocked,
+            ownerTokenIdentifier: owner, createdAt: start, updatedAt: start, attemptCount: 9
+        ))
+        try markBootstrapped(context, upgraded: true)
+        let client = FakeSyncClient()
+        client.fetchResponses = [
+            exerciseResponse([exerciseRecord(id: exercise.id, name: "Deleted", updatedAt: 1_900_000_000, deletedAt: 1_900_000_000, serverUpdatedAt: 30)], cursor: 30),
+        ]
+
+        try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertNotNil(exercise.deletedAt)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty,
+                      "A deleted record no longer waits for Retry.")
+    }
+
     func testUserSettingsLocalDeleteIsKeptWithoutSendingItAgain() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
