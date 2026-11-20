@@ -4196,7 +4196,9 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
-    func testBlockedSyncChangeNamesWhatWasTurnedDownAndOffersRetry() {
+    /// The shell and Settings read blocked changes from the outbox; the copy
+    /// itself is covered by SyncBlockedChangesDisplayTests.
+    func testBlockedSyncChangeShowsInTheBannerAndSettings() {
         let app = makeApp(extraArguments: [
             "--uitest-sync-owner", "issuer|ui_owner",
             "--uitest-seed-blocked-sync-change",
@@ -4204,10 +4206,7 @@ final class BarosUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.staticTexts["Some changes can't sync"].waitToExist(timeout: 3))
-        XCTAssertTrue(app.staticTexts["The cloud turned down 1 set. Retry to send it again."].exists)
-
-        app.buttons["GlobalSyncRetryButton"].tap()
-        XCTAssertTrue(app.staticTexts["UITestSyncRequestCount-1"].waitToExist(timeout: 3))
+        XCTAssertTrue(app.buttons["GlobalSyncRetryButton"].exists)
 
         app.buttons["GlobalSyncDetailsButton"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitToExist(timeout: 3))

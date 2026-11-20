@@ -243,17 +243,25 @@ public final class SyncCoordinator {
             try reassert(kind: .workoutTemplate, id: template.id)
         }
         for session in try context.fetch(FetchDescriptor<WorkoutSession>())
-        where session.syncOwnerTokenIdentifier == ownerTokenIdentifier && session.status != .active {
+        where session.syncOwnerTokenIdentifier == ownerTokenIdentifier && session.status == .completed {
             if session.isDeleted {
                 try reassert(kind: .workoutSession, id: session.id)
                 continue
             }
+            // A set or exercise removed during the workout never reached the
+            // server; sending its delete would only leave a placeholder.
+            func removedBeforeFinish(_ deletedAt: Date?) -> Bool {
+                guard let deletedAt, let endedAt = session.endedAt else { return false }
+                return deletedAt <= endedAt
+            }
             for loggedExercise in session.loggedExercises {
                 if loggedExercise.isDeleted {
-                    try reassert(kind: .loggedExercise, id: loggedExercise.id)
+                    if !removedBeforeFinish(loggedExercise.deletedAt) {
+                        try reassert(kind: .loggedExercise, id: loggedExercise.id)
+                    }
                     continue
                 }
-                for set in loggedExercise.sets where set.isDeleted {
+                for set in loggedExercise.sets where set.isDeleted && !removedBeforeFinish(set.deletedAt) {
                     try reassert(kind: .loggedSet, id: set.id)
                 }
             }
@@ -820,6 +828,12 @@ public final class SyncCoordinator {
                         recorder.markLocalFailure(entry, message: error.localizedDescription, now: clock())
                     }
                     needsSave = true
+                    // A failure on every entry is this device, not the records.
+                    uncodedRejectionStreak += 1
+                    if uncodedRejectionStreak >= SyncRejectionPolicy.uncodedRejectionStreakBeforeStopping {
+                        try context.save()
+                        return SyncPushResult(didComplete: false, didPush: true, accountWideRejectionCode: lastAccountWideCode)
+                    }
                     continue
                 case .record, .unknown:
                     if let key = entry.outboxKey {
@@ -970,7 +984,13 @@ public final class SyncCoordinator {
               let updatedAt = result.updatedAt else {
             return
         }
-        try syncedRecord(kind: entry.entityKind, id: entry.entityID, context: context)?.syncBaseUpdatedAt = updatedAt
+        guard let record = try syncedRecord(kind: entry.entityKind, id: entry.entityID, context: context) else { return }
+        record.syncBaseUpdatedAt = updatedAt
+        // An edit made while the upload was in flight must still outrank the
+        // version the server stored, which can sit above the uploaded stamp.
+        if entry.status == .pending, record.updatedAt.timeIntervalSince1970 <= updatedAt {
+            record.stampEdit(now: record.updatedAt)
+        }
     }
 
     private func syncedRecord(kind: SyncEntityKind?, id: UUID, context: ModelContext) throws -> (any SyncEditStamped)? {
@@ -1373,11 +1393,14 @@ public final class SyncCoordinator {
                     )
                     if !hasLocalIntent {
                         apply(record, to: settings, ownerTokenIdentifier: ownerTokenIdentifier)
-                    } else if settings.defaultRestTimerSeconds == UserSettings.seededRestTimerSeconds {
-                        // The pending change is a choice made before sign-in, such
-                        // as the onboarding weight unit. A rest duration still at
-                        // its seed was never chosen, so keep the account's.
-                        settings.defaultRestTimerSeconds = record.defaultRestTimerSeconds
+                    } else {
+                        noteKeptLocal(.userSettings, serverUpdatedAt: record.serverUpdatedAt)
+                        if settings.defaultRestTimerSeconds == UserSettings.seededRestTimerSeconds {
+                            // The pending change is a choice made before sign-in, such
+                            // as the onboarding weight unit. A rest duration still at
+                            // its seed was never chosen, so keep the account's.
+                            settings.defaultRestTimerSeconds = record.defaultRestTimerSeconds
+                        }
                     }
                     continue
                 }
@@ -1473,6 +1496,8 @@ public final class SyncCoordinator {
                     // Deletes win, even over a waiting local edit.
                     if !hasLocalIntent || record.deletedAt != nil {
                         apply(record, to: exercise, ownerTokenIdentifier: ownerTokenIdentifier)
+                    } else {
+                        noteKeptLocal(.exercise, serverUpdatedAt: record.serverUpdatedAt)
                     }
                     continue
                 }
@@ -2026,7 +2051,7 @@ public final class SyncCoordinator {
             return true
         case let .keepLocal(rewindCursor):
             if rewindCursor {
-                keptLocalFloors[kind] = min(keptLocalFloors[kind] ?? serverUpdatedAt, serverUpdatedAt)
+                noteKeptLocal(kind, serverUpdatedAt: serverUpdatedAt)
             }
             return false
         case .reassertLocalDelete:
@@ -2040,6 +2065,11 @@ public final class SyncCoordinator {
             pullLocalIntents[key] = .pending
             return false
         }
+    }
+
+    /// Pull this record again after the push (`rewindPastKeptLocalRecords`).
+    private func noteKeptLocal(_ kind: SyncEntityKind, serverUpdatedAt: Double) {
+        keptLocalFloors[kind] = min(keptLocalFloors[kind] ?? serverUpdatedAt, serverUpdatedAt)
     }
 
     /// Applies only the deletion of a server version, keeping local content.

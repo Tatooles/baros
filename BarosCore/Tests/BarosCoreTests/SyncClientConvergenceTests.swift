@@ -529,6 +529,77 @@ final class SyncClientConvergenceTests: XCTestCase {
         }
     }
 
+    func testStreakOfLocalFailuresStopsTheRun() async throws {
+        struct LocalStoreError: Error {}
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let recorder = SyncOutboxRecorder()
+        for index in 0 ..< 8 {
+            let exercise = ownedExercise("E\(index)", context: context)
+            try recorder.recordUpdate(entityKind: .exercise, entityID: exercise.id, ownerTokenIdentifier: owner, context: context, now: start.addingTimeInterval(Double(index)))
+        }
+        try markBootstrapped(context, upgraded: true)
+        let client = FakeSyncClient()
+        var attempts = 0
+        client.onUpsertExercise = { _ in
+            attempts += 1
+            throw LocalStoreError()
+        }
+
+        try await SyncCoordinator(client: client, clock: { self.start }).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertEqual(attempts, SyncRejectionPolicy.uncodedRejectionStreakBeforeStopping)
+    }
+
+    func testEditDuringUploadStaysAboveTheVersionTheServerStored() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = ownedExercise("Uploading", context: context)
+        exercise.updatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        try SyncOutboxRecorder().recordUpdate(entityKind: .exercise, entityID: exercise.id, ownerTokenIdentifier: owner, context: context, now: start)
+        try markBootstrapped(context, upgraded: true)
+        let client = FakeSyncClient()
+        // The server kept the upload above its own stamp, as after a fast clock.
+        client.exerciseMutationResults = [SyncMutationResult(status: "updated", serverUpdatedAt: 9, updatedAt: 1_900_000_000)]
+        let owner = self.owner
+        let start = self.start
+        client.whileExerciseUploadInFlight = {
+            exercise.name = "Edited While Uploading"
+            exercise.touch(now: Date(timeIntervalSince1970: 1_800_000_001))
+            try? SyncOutboxRecorder().recordUpdate(entityKind: .exercise, entityID: exercise.id, ownerTokenIdentifier: owner, context: context, now: start)
+        }
+
+        try await SyncCoordinator(client: client, clock: { start }).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertEqual(exercise.syncBaseUpdatedAt, 1_900_000_000)
+        XCTAssertGreaterThan(exercise.updatedAt.timeIntervalSince1970, 1_900_000_000,
+                             "Otherwise the server would read the next upload as a re-send with no edit.")
+    }
+
+    func testAdoptedSeedWithAWaitingEditIsPulledAgainAfterThePush() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let bench = Exercise(
+            seedIdentifier: "bench-press", name: "My Bench", category: .strength, equipment: .barbell,
+            primaryMuscle: "Chest", isSeeded: true
+        )
+        context.insert(bench)
+        try SyncOutboxRecorder().recordUpdate(entityKind: .exercise, entityID: bench.id, ownerTokenIdentifier: nil, context: context, now: start)
+        try context.save()
+        let remote = ExerciseSyncRecord(
+            clientId: UUID().uuidString.lowercased(), createdAt: 10, updatedAt: 20, deletedAt: nil, serverUpdatedAt: 31,
+            seedIdentifier: "bench-press", name: "Bench Press", categoryRaw: "strength", equipmentRaw: "barbell",
+            primaryMuscleRaw: "Chest", primaryMuscleGroupRaw: "chest", notes: "", isArchived: false, isSeeded: true
+        )
+        let client = FakeSyncClient()
+        client.fetchResponses = [exerciseResponse([remote], cursor: 31)]
+
+        try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertEqual(bench.name, "My Bench")
+        XCTAssertEqual(try SyncCursorState.state(for: owner, context: context).exercisesCursor, 30)
+    }
+
     func testLocalFailureIsRetriedWithoutCountingTowardDeadLettering() async throws {
         struct LocalStoreError: Error {}
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
@@ -653,6 +724,15 @@ final class SyncClientConvergenceTests: XCTestCase {
         deletedWorkout.session.markDeletedCascade(now: Date(timeIntervalSince1970: 20))
         let liveWorkout = completedWorkout(context: context)
         liveWorkout.set.markDeleted(now: Date(timeIntervalSince1970: 30))
+        // Removed during the workout, so the server never had it.
+        let removedMidWorkout = LoggedSet(orderIndex: 1, reps: 5, createdAt: Date(timeIntervalSince1970: 120),
+                                          updatedAt: Date(timeIntervalSince1970: 150), deletedAt: Date(timeIntervalSince1970: 150))
+        removedMidWorkout.loggedExercise = liveWorkout.loggedExercise
+        liveWorkout.loggedExercise.sets.append(removedMidWorkout)
+        context.insert(removedMidWorkout)
+        let discarded = completedWorkout(context: context)
+        discarded.session.status = .discarded
+        discarded.session.markDeletedCascade(now: Date(timeIntervalSince1970: 300))
         let settings = UserSettings(weightUnit: .pounds, syncOwnerTokenIdentifier: owner, deletedAt: Date(timeIntervalSince1970: 40))
         context.insert(settings)
         try markBootstrapped(context)

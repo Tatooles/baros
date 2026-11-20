@@ -6,6 +6,29 @@ import XCTest
 /// The sync models as installed builds store them, before rejection counts,
 /// dead-lettering, sync bases and the one-time update step.
 private enum InstalledSyncSchema {
+    /// One record model, to check `syncBaseUpdatedAt` migrates over existing rows.
+    @Model
+    final class UserSettings {
+        @Attribute(.unique) var id: UUID
+        var weightUnitRaw: String
+        var defaultRestTimerSeconds: Int
+        var hasCompletedOnboarding: Bool
+        var syncOwnerTokenIdentifier: String?
+        var createdAt: Date
+        var updatedAt: Date
+        var deletedAt: Date?
+
+        init(id: UUID) {
+            self.id = id
+            weightUnitRaw = "kilograms"
+            defaultRestTimerSeconds = 120
+            hasCompletedOnboarding = true
+            syncOwnerTokenIdentifier = "issuer|owner_a"
+            createdAt = Date(timeIntervalSince1970: 10)
+            updatedAt = Date(timeIntervalSince1970: 20)
+        }
+    }
+
     @Model
     final class SyncOutboxEntry {
         @Attribute(.unique) var id: UUID
@@ -69,12 +92,14 @@ final class SyncSchemaMigrationTests: XCTestCase {
         let url = directory.appendingPathComponent("installed.store")
         let entryID = UUID()
         let exerciseID = UUID()
+        let settingsID = UUID()
 
         do {
             let installed = try ModelContainer(
                 for: Schema([
                     InstalledSyncSchema.SyncOutboxEntry.self,
                     InstalledSyncSchema.SyncCursorState.self,
+                    InstalledSyncSchema.UserSettings.self,
                 ]),
                 configurations: ModelConfiguration(url: url)
             )
@@ -86,6 +111,7 @@ final class SyncSchemaMigrationTests: XCTestCase {
                 attemptCount: 41_000
             ))
             context.insert(InstalledSyncSchema.SyncCursorState(ownerTokenIdentifier: "issuer|owner_a"))
+            context.insert(InstalledSyncSchema.UserSettings(id: settingsID))
             try context.save()
         }
 
@@ -103,5 +129,10 @@ final class SyncSchemaMigrationTests: XCTestCase {
         XCTAssertEqual(state.exercisesCursor, 34)
         XCTAssertTrue(state.hasBootstrappedWorkoutGraph)
         XCTAssertFalse(state.hasRunConvergenceUpgrade, "The one-time update step still runs.")
+
+        let settings = try XCTUnwrap(context.fetch(FetchDescriptor<UserSettings>()).first)
+        XCTAssertEqual(settings.id, settingsID)
+        XCTAssertEqual(settings.weightUnitRaw, "kilograms")
+        XCTAssertNil(settings.syncBaseUpdatedAt)
     }
 }

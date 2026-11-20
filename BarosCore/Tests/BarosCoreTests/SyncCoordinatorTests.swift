@@ -4418,6 +4418,9 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
     var onUpsertLoggedExercise: ((LoggedExerciseSyncPayload) throws -> Void)?
     var onUpsertLoggedSet: ((LoggedSetSyncPayload) throws -> Void)?
     var onUpsertWorkoutSession: ((WorkoutSessionSyncPayload) throws -> Void)?
+    /// Runs on the main actor while an exercise upload is in flight, as a
+    /// local edit can.
+    var whileExerciseUploadInFlight: (@MainActor @Sendable () -> Void)?
     var onTombstone: ((SyncEntityKind, UUID) throws -> Void)?
     var error: Error?
     var fetchError: Error?
@@ -4434,6 +4437,9 @@ final class FakeSyncClient: SyncClient, @unchecked Sendable {
     func upsertExercise(_ record: ExerciseSyncPayload) async throws -> SyncMutationResult {
         if let error { throw error }
         try onUpsertExercise?(record)
+        if let whileExerciseUploadInFlight {
+            await whileExerciseUploadInFlight()
+        }
         upsertedExercises.append(record)
         if !exerciseMutationResults.isEmpty {
             return exerciseMutationResults.removeFirst()
