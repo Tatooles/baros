@@ -60,8 +60,6 @@ struct HistoryOverviewIconTile: View {
     }
 }
 
-/// Calendar-style leading tile: the date is the row's most useful anchor when
-/// scanning History, so the tile carries it instead of a repeated glyph.
 struct HistoryDateTile: View {
     let date: Date
     @ScaledMetric(relativeTo: .headline) private var side: CGFloat = 48
@@ -133,16 +131,12 @@ struct WorkoutHistoryRow: View {
     }
 
     private var historyListPresentation: some View {
-        // Resolve the row's strings once: metrics walk every set, and both
-        // ViewThatFits candidates below would otherwise recompute them.
         let summary = ListSummary(
             session: session,
             metrics: metrics,
             spellsOutDate: dynamicTypeSize.isAccessibilitySize
         )
         return HistoryOverviewRow(showsDivider: showsDivider) {
-            // Accessibility sizes give the text the full row width and spell
-            // the date out with the metrics instead.
             if !dynamicTypeSize.isAccessibilitySize {
                 HistoryDateTile(date: session.startedAt)
             }
@@ -167,7 +161,6 @@ struct WorkoutHistoryRow: View {
     }
 
     private struct ListSummary {
-        /// The tile shows month and day; other years need the year spelled out.
         let leadingDate: String?
         let duration: String
         let exercises: String
@@ -193,7 +186,6 @@ struct WorkoutHistoryRow: View {
             Text(leadingDate)
             metricSeparator(separated)
         }
-        // Beside a date tile, a bare "20:00" reads as a time of day.
         HStack(spacing: 3) {
             Image(systemName: "timer")
                 .imageScale(.small)
@@ -244,7 +236,6 @@ struct WorkoutHistoryRow: View {
     private var workoutMetrics: some View {
         ViewThatFits(in: .horizontal) {
             durationLabel
-            // Keep long durations intact even at the largest text size.
             durationLabel.labelStyle(.titleOnly)
         }
         Text(WorkoutFormatters.exerciseCount(session.visibleExerciseCount))

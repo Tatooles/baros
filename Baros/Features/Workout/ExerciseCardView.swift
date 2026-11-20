@@ -3,7 +3,6 @@ import SwiftData
 import SwiftUI
 
 struct ExerciseCardView: View {
-    /// The superset menu items that apply to this exercise; nil hides one.
     struct SupersetActions {
         var joinPrevious: (() -> Void)?
         var joinNext: (() -> Void)?
@@ -70,11 +69,9 @@ struct ExerciseCardView: View {
     }
 
     private static let menuButtonSize: CGFloat = 44
-    // Let the title use a little of the menu's empty leading margin.
     private var titleMenuSpacingAllowance: CGFloat { dynamicTypeSize.isAccessibilitySize ? 0 : 5 }
     @ScaledMetric(relativeTo: .footnote) private var progressPillContentMinWidth = WorkoutExerciseHeaderContent.progressPillContentMinWidth
 
-    /// Insets the menu so its ellipsis is centered over the progress pill below it.
     private var menuButtonTrailingInset: CGFloat {
         let pillWidth = progressPillContentMinWidth + 2 * WorkoutExerciseHeaderContent.progressPillHorizontalPadding
         return max(0, (pillWidth - Self.menuButtonSize) / 2)
@@ -102,8 +99,6 @@ struct ExerciseCardView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("ExerciseHeader-\(exerciseIndex)")
-                // The menu overlays the header so the metadata row and its progress pill
-                // can run underneath it, leaving the title the full width.
                 .overlay(alignment: Alignment(horizontal: .trailing, vertical: .firstTextBaseline)) {
                     Menu {
                         Button(action: viewHistory) {
@@ -116,7 +111,6 @@ struct ExerciseCardView: View {
                         }
                         .accessibilityIdentifier("SwapExerciseButton-\(exerciseIndex)")
 
-                        // Join Previous comes first: the superset it joins is above.
                         if let joinPrevious = supersetActions.joinPrevious {
                             Button(action: joinPrevious) {
                                 Label("Join Previous Superset", systemImage: "link")
@@ -239,8 +233,6 @@ struct ExerciseCardView: View {
                                     timer: engine.restTimer)
                             }
 
-                            // Add Set and the optional note share one footer row;
-                            // a visible note or accessibility text stacks them.
                             if isNoteVisible || dynamicTypeSize.isAccessibilitySize {
                                 addSetButton
                                     .padding(.horizontal, 4)
@@ -258,8 +250,6 @@ struct ExerciseCardView: View {
                             }
                         }
                     }
-                    // Content stays put and fades while the clipped card edge
-                    // swallows it; a .move transition here reads as jank.
                     .transition(.opacity)
                     .padding(.bottom, 8)
                 }
@@ -275,7 +265,6 @@ struct ExerciseCardView: View {
         }
         .onChange(of: showsStructuralError) { _, isPresented in
             guard !isPresented else { return }
-            // Alert actions dismiss after running, including a failed Retry.
             Task { @MainActor in
                 await Task.yield()
                 guard failedStructuralAction != nil else { return }

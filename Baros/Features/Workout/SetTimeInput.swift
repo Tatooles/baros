@@ -2,10 +2,8 @@ import BarosCore
 import SwiftUI
 import UIKit
 
-/// The time being chosen for one set while its wheels are the keyboard.
 struct SetTimeEntry: Equatable {
     let setID: UUID
-    /// What the wheels read; zero is no time.
     var seconds: Int
 
     init(setID: UUID, startingSeconds: Int) {
@@ -18,20 +16,13 @@ struct SetTimeEntry: Equatable {
     }
 }
 
-/// What a time cell asks of the screen that owns the set being timed.
 enum SetTimeEdit {
-    /// Open the wheels on this time.
     case open(Int)
-    /// The wheels settled on this time; zero is no time.
     case change(Int)
-    /// The wheels are closing.
     case close
 }
 
 extension View {
-    /// Makes a time cell an input whose keyboard is minutes and seconds
-    /// wheels. While `isEditing`, the cell holds the keyboard as a text field
-    /// would, so the system docks, draws and animates the wheels.
     func setTimeInput(
         isEditing: Bool,
         startingSeconds: Int,
@@ -52,9 +43,6 @@ extension View {
         }
     }
 
-    /// On a scroll view: when the wheels open on a cell they would cover,
-    /// scrolls just far enough to bring the cell above them, as the system
-    /// does for a text field and its keyboard. `editing` names the cell.
     func revealsSetTimeCell(editing: AnyHashable?) -> some View {
         modifier(SetTimeCellReveal(editing: editing))
     }
@@ -89,7 +77,6 @@ private struct SetTimeInput: UIViewRepresentable {
     }
 }
 
-/// Holds the keyboard for a time cell. It draws nothing; the cell does.
 private final class SetTimeResponder: UIView {
     var startingSeconds = 0
     var wantsKeyboard = false
@@ -97,7 +84,6 @@ private final class SetTimeResponder: UIView {
     var onEnd: (() -> Void)?
     private var wheels: SetTimeWheelsInputView?
 
-    /// The time cell whose wheels are up, if any.
     private static weak var holder: SetTimeResponder?
 
     /// Only the owning screen brings up the wheels; UIKit restoring a first
@@ -137,7 +123,6 @@ private final class SetTimeResponder: UIView {
         let resigned = super.resignFirstResponder()
         if resigned {
             wheels = nil
-            // Another field may be taking the keyboard inside a view update.
             DispatchQueue.main.async { [weak self] in
                 guard let self, !self.isFirstResponder else { return }
                 self.onEnd?()
@@ -147,8 +132,6 @@ private final class SetTimeResponder: UIView {
     }
 }
 
-/// Minutes and seconds wheels in the system keyboard's own container, with
-/// seconds in steps of five.
 private final class SetTimeWheelsInputView: UIInputView, UIPickerViewDataSource, UIPickerViewDelegate,
     UIPickerViewAccessibilityDelegate {
     private static let wheelsHeight: CGFloat = 216
@@ -156,8 +139,6 @@ private final class SetTimeWheelsInputView: UIInputView, UIPickerViewDataSource,
 
     private let picker = UIPickerView()
     private let minuteChoices = Array(0..<60)
-    /// Every fifth second, plus the starting second when it falls between
-    /// steps, so opening the wheels never changes a time already recorded.
     private let secondChoices: [Int]
     private let onChange: (Int) -> Void
 
@@ -194,7 +175,6 @@ private final class SetTimeWheelsInputView: UIInputView, UIPickerViewDataSource,
         fatalError("init(coder:) is not used")
     }
 
-    /// The unit sits beside the selected row, right of its digits.
     private func addUnitLabel(_ text: String, column: Int) {
         let label = UILabel()
         label.text = text
@@ -235,7 +215,6 @@ private final class SetTimeWheelsInputView: UIInputView, UIPickerViewDataSource,
     }
 }
 
-/// The bottom edge, on screen, of the time cell the wheels are open on.
 private struct SetTimeCellBottomKey: PreferenceKey {
     static let defaultValue: CGFloat? = nil
 
@@ -249,14 +228,10 @@ private struct SetTimeCellReveal: ViewModifier {
     @State private var position = ScrollPosition()
     @State private var geometry = Geometry()
 
-    /// Kept out of view state: it changes on every scrolled frame and
-    /// nothing draws from it.
     private final class Geometry: @unchecked Sendable {
         var offset: CGFloat = 0
         var topInset: CGFloat = 0
-        /// Where the list ends on screen: the top of the keyboard and its bar.
         var visibleBottom: CGFloat = 0
-        /// The bottom edge of the cell within the scrolled content.
         var cellBottom: CGFloat?
     }
 
@@ -276,8 +251,6 @@ private struct SetTimeCellReveal: ViewModifier {
             }
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: {
                 geometry.visibleBottom = $0
-                // The keyboard arrives after the cell is chosen, and the list
-                // may still be settling from a keyboard that just left.
                 guard editing != nil else { return }
                 reveal()
                 Task { @MainActor in
@@ -291,7 +264,6 @@ private struct SetTimeCellReveal: ViewModifier {
             .onChange(of: editing) { _, editing in
                 guard editing != nil else { return }
                 Task { @MainActor in
-                    // Let the cell report where it is first.
                     try? await Task.sleep(for: .milliseconds(80))
                     reveal()
                 }

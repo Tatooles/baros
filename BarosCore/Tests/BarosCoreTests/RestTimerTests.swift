@@ -90,7 +90,6 @@ final class RestTimerTests: XCTestCase {
     }
 
     func testBackgroundExpiryDoesNotReplayAndClearsDeliveredAlertOnReturn() {
-        // Expiry noticed on return, or by the resumed expiry task first.
         for taskFiresFirst in [false, true] {
             let h = Harness()
             h.timer.start(sessionID: UUID(), setID: UUID(), duration: 90)
@@ -133,7 +132,6 @@ final class RestTimerTests: XCTestCase {
             released = transient
         }
         XCTAssertNil(released)
-        // Rest on a set no view currently shows, e.g. while minimized.
         let unshown = UUID()
         h.timer.start(sessionID: UUID(), setID: unshown, duration: 90)
         let period = try XCTUnwrap(h.timer.current)
@@ -161,7 +159,6 @@ final class RestTimerTests: XCTestCase {
         for keepsOpened in [false, true] {
             let timer = RestTimerCoordinator(keepsOpenedControls: keepsOpened)
             timer.start(sessionID: UUID(), setID: UUID(), duration: 90)
-            // Controls that open on their own at the start of rest always close themselves.
             XCTAssertTrue(timer.isCollapseScheduled)
             timer.collapseControls()
             timer.toggleControls()
@@ -307,7 +304,6 @@ final class RestTimerTests: XCTestCase {
         XCTAssertTrue(h.notifications.authorizationRequests.isEmpty)
         XCTAssertEqual(h.alerts, 0)
 
-        // Re-enabling never starts rest for a set that is already complete.
         h.timer.setEnabled(true)
         XCTAssertNil(h.timer.current)
         let fourth = try engine.addSet(to: exercise, context: context)
@@ -351,8 +347,8 @@ final class RestTimerTests: XCTestCase {
         let settings = UserSettings(defaultRestTimerSeconds: 150)
         context.insert(settings)
         try context.save()
-        XCTAssertEqual(RestDurationLookup.seconds(for: exercise, settings: settings), 150)
-        XCTAssertEqual(RestDurationLookup.seconds(for: exercise, settings: nil), 90)
+        XCTAssertEqual(RestDurationLookup.seconds(settings: settings), 150)
+        XCTAssertEqual(RestDurationLookup.seconds(settings: nil), 90)
         try engine.toggleSetCompletion(exercise.sortedSets[0], context: context)
         XCTAssertEqual(h.timer.current?.rest.remainingSeconds(at: h.now), 150)
         h.timer.adjust(by: 15)

@@ -30,7 +30,6 @@ enum UIHangSurface: String, Equatable {
     case exercisePicker = "exercise_picker"
 }
 
-/// Count only the visible workout structure, without sorting or recording content.
 struct UIHangWorkoutSize {
     let exerciseCount: Int
     let setCount: Int
@@ -47,7 +46,6 @@ struct UIHangWorkoutSize {
     }
 }
 
-/// Shared, bounded buckets keep workout scale useful without sending exact counts.
 enum UIHangCountBucket: String, Equatable {
     case zero = "0"
     case one = "1"
@@ -191,7 +189,6 @@ final class UIHangContextObservability {
     }
 
     func settingsWhatsNewChanged(isPresented: Bool) {
-        // This sheet belongs to Settings, independently of the shell's launch sheet.
         guard !isPresented || (baseScreen == .settings && presentation == nil),
               isPresented != settingsWhatsNewIsPresented else { return }
         settingsWhatsNewIsPresented = isPresented
@@ -216,7 +213,6 @@ final class UIHangContextObservability {
     }
 
     func activeWorkoutBecameCurrent(exerciseCount: Int, setCount: Int) {
-        // Ignore a late child callback after the shell has changed presentation.
         guard baseScreen == nil || presentation == .activeWorkout else { return }
         activeWorkoutIsCurrent = true
         self.exerciseCountBucket = UIHangCountBucket(count: exerciseCount)

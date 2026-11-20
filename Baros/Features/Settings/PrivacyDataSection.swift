@@ -116,7 +116,6 @@ struct PrivacyDataSection: View {
     }
 }
 
-/// Builds the deletion coordinator where the confirmation screen is pushed onto the Settings path.
 struct DeleteDataDestination: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accountDeletionFactory) private var accountDeletionFactory

@@ -67,7 +67,6 @@ struct ExercisePickerView: View {
     @Query private var sessions: [WorkoutSession]
     let mode: ExercisePickerMode
     var showsCancel = true
-    /// Offers Add as Superset beside the add button when set.
     let onSelectAsSuperset: (([Exercise]) -> Void)?
     let onSelect: ([Exercise]) -> Void
     private let sortPreferenceStore: ExercisePickerSortPreferenceStore
@@ -122,8 +121,6 @@ private struct SearchableExercisePicker: View {
             onSelectAsSuperset: onSelectAsSuperset,
             onSelect: onSelect
         )
-        // Automatic puts search in the bottom toolbar on iPhone, under the
-        // thumb; the commit bar stacks above it.
         .searchable(text: $searchText, prompt: "Search exercises")
     }
 }
@@ -235,9 +232,6 @@ private struct ExercisePickerList: View {
                         .listRowBackground(AppTheme.groupedSurface)
                     }
                 } header: {
-                    // Creating is the exception; selection is the job, so the
-                    // create action shares the sort row instead of taking a
-                    // section of its own above the list.
                     let headerLayout = dynamicTypeSize.isAccessibilitySize
                         ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
                         : AnyLayout(HStackLayout())
@@ -285,8 +279,6 @@ private struct ExercisePickerList: View {
         .scrollContentBackground(.hidden)
         .contentMargins(.top, noMatchesSuggestion == nil ? 8 : nil, for: .scrollContent)
         .contentMargins(.bottom, 24, for: .scrollContent)
-        // Swap's bar gets a hard edge from its warning text; Add's bar holds only glass
-        // buttons, so ask for the same backing to keep rows from reading through it.
         .scrollEdgeEffectStyle(mode.isAddExercise && !selectedExercises.isEmpty ? .hard : nil, for: .bottom)
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle(mode.navigationTitle)
@@ -302,15 +294,12 @@ private struct ExercisePickerList: View {
         .onChange(of: sortOrder) { _, newValue in
             sortPreferenceStore.sortOrder = newValue
         }
-        // The commit bar appears only once something is picked, so an idle picker
-        // ends in just the search field.
         .safeAreaBar(edge: .bottom, spacing: 0) {
             if let swapImpact, let swapReplacement {
                 swapConfirmBar(swapImpact, replacement: swapReplacement)
                     .transition(commitBarTransition)
             } else if mode.isAddExercise, !selectedExercises.isEmpty {
                 HStack(spacing: 10) {
-                    // A superset needs two exercises, so it joins Add only from the second pick.
                     if let onSelectAsSuperset, selectedExercises.count >= 2 {
                         Button {
                             onSelectAsSuperset(selectedExercises)
@@ -381,13 +370,11 @@ private struct ExercisePickerList: View {
         return impact
     }
 
-    /// Shown only while search is empty, and listed once: the full list below leaves them out.
     private var similarRows: [ExercisePickerRowContent] {
         guard searchText.isEmpty else { return [] }
         return swapImpact?.similarRows(in: baseRows) ?? []
     }
 
-    /// The commit bar slides up from the search field, or only fades with Reduce Motion on.
     private var commitBarTransition: AnyTransition {
         reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
     }
@@ -397,7 +384,6 @@ private struct ExercisePickerList: View {
         return baseRows.first { $0.id == swapSelectionID }?.exercise
     }
 
-    /// Swap picks one replacement, then commits from the bar, which says what the swap removes.
     private func swapConfirmBar(_ impact: SwapExerciseImpact, replacement: Exercise) -> some View {
         VStack(spacing: 8) {
             Group {
@@ -418,7 +404,6 @@ private struct ExercisePickerList: View {
             } label: {
                 Text(impact.confirmTitle(for: replacement))
                     .font(.headline)
-                    // Wraps rather than truncating, so the equipment of a same-name variant stays readable.
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
@@ -444,7 +429,6 @@ private struct ExercisePickerList: View {
                 toggleSelection(row.exercise)
             } else {
                 swapSelectionID = row.exercise.id
-                // The choice is made; lower the keyboard to show the rest of the list.
                 UIApplication.shared.sendAction(
                     #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
                 )
@@ -551,9 +535,6 @@ private extension ExercisePickerMode {
     }
 }
 
-/// The swap bar slides in over the lowest rows, and a swap commits without another prompt.
-/// For a moment after it appears, or after the pick changes, the button swallows taps, so a
-/// repeat tap on a row ("did that register?") can't commit a swap the user didn't mean.
 private struct IgnoresTapsWhileAppearing<Trigger: Equatable>: ViewModifier {
     let trigger: Trigger
     @State private var isArmed = false

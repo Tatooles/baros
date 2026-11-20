@@ -2,8 +2,6 @@ import BarosCore
 import SwiftData
 import SwiftUI
 
-/// Shows a template's exercises before starting from it, like the past
-/// workout review without set counts.
 struct TemplateReviewView: View {
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Query private var exercises: [Exercise]

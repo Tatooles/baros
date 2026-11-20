@@ -2,15 +2,12 @@ import BarosCore
 import SwiftData
 import SwiftUI
 
-/// The owner's templates by name. Tapping one hands it to `open`; the
-/// editor opens for new templates and from each row's Edit action.
 struct TemplatesListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
     @Query private var allTemplates: [WorkoutTemplate]
     @Query private var exercises: [Exercise]
-    /// Nil opens the editor on tap, for managing templates from Settings.
     var open: ((WorkoutTemplate) -> Void)?
     @State private var editor: TemplateEditorPresentation?
     @State private var pendingDelete: WorkoutTemplate?
@@ -32,7 +29,6 @@ struct TemplatesListView: View {
         .navigationTitle("Templates")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            // The empty state has its own button.
             if !templates.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -82,7 +78,6 @@ struct TemplatesListView: View {
                 .listRowBackground(Color.clear)
                 // No destructive role on the swipe button: that role removes
                 // the row before the confirmation, even when it's cancelled.
-                // The app-wide tint turns these blue without an explicit one.
                 .swipeActions(allowsFullSwipe: false) {
                     Button("Delete") { pendingDelete = template }
                         .tint(AppTheme.destructive)

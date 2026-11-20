@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Flag tests that failed and then passed on retry, so a green run doesn't hide flakes."""
 
 import json
 import os

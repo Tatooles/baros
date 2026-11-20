@@ -1,10 +1,6 @@
 import Foundation
 import SwiftData
 
-/// The answers someone gave on the onboarding preferences page. A question they
-/// never tapped stays `nil` and is left alone, so it keeps following its usual
-/// default: the unit a later sign-in restores, and RPE turning on when rated
-/// sets arrive. A tap is a choice, even on the option already shown.
 public struct OnboardingWorkoutPreferences: Equatable {
     public var weightUnit: MeasurementUnit?
     public var restTimerEnabled: Bool?

@@ -1,13 +1,7 @@
 import Foundation
 import SwiftData
 
-/// Local data that still belongs to an owner while the app is local-only. Its
-/// presence means someone has signed in on this iPhone before, so Baros offers
-/// to sign back in instead of treating them as a new user. Deliberate sign-out
-/// and an expired session look the same here, so the copy stays neutral.
 public struct SignedOutOwnerData: Equatable {
-    /// The owner whose workouts reappear after signing back in, or nil when
-    /// several owners left data here and Baros can't tell which one signed out.
     let ownerTokenIdentifier: String?
     let completedWorkoutCount: Int
 
@@ -22,9 +16,6 @@ public struct SignedOutOwnerData: Equatable {
         }
     }
 
-    /// Scopes the count to the owner who signed out: the first preferred owner
-    /// with local data, otherwise the only owner on this iPhone. Never adds up
-    /// workouts across owners, because signing in reveals only one of them.
     static func find(
         in context: ModelContext,
         preferredOwnerTokenIdentifiers: [String?],
@@ -97,8 +88,6 @@ public struct SignedOutOwnerData: Equatable {
 }
 
 public enum SignedOutReminderPresentation {
-    /// The dismissible reminder only appears once the app has settled into
-    /// local-only mode, never while a signed-in owner is still resolving.
     public static func bannerData(
         currentOwnerState: CurrentOwnerCoordinator.State,
         signedOutOwnerData: SignedOutOwnerData?,
@@ -109,8 +98,6 @@ public enum SignedOutReminderPresentation {
     }
 }
 
-/// Persists the signed-out reminder until the next sign-in: which owner signed
-/// out (the last-known owner is cleared on sign-out) and whether it was dismissed.
 @MainActor
 public final class SignedOutReminderStore {
     static let standardKeyPrefix = "signedOutReminder"

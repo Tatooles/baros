@@ -87,9 +87,6 @@ final class AppNavigationState {
     private var isActiveWorkoutAccessoryReady: Bool
     private var requestsNextActiveWorkoutPresentation: Bool
 
-    /// Mount the accessory only after the first presentation covers the tab bar (or the workout
-    /// is minimized early). Then keep it mounted across reopen/minimize to preserve tab bar width.
-    /// Use `showsActiveWorkoutReturnAction` for "the workout is minimized" instead.
     var mountsActiveWorkoutAccessory: Bool {
         activeWorkoutID != nil && !suppressesActiveWorkoutAccessory && isActiveWorkoutAccessoryReady
     }

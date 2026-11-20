@@ -525,7 +525,6 @@ final class WorkoutDataExportServiceTests: XCTestCase {
         let group = UUID(), other = UUID()
         let session = WorkoutSession(title: "Upper", startedAt: Date(timeIntervalSince1970: 0), status: .completed, source: .blank)
         container.mainContext.insert(session)
-        // A lone stored id is not a superset.
         for (index, id) in [group, group, nil, other, other, UUID()].enumerated() {
             let exercise = LoggedExercise(orderIndex: index, exerciseSnapshotName: "E\(index)", supersetGroupID: id)
             container.mainContext.insert(exercise)

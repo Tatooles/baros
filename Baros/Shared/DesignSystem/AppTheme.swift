@@ -3,8 +3,6 @@ import SwiftUI
 import UIKit
 
 enum AppTheme {
-    // MARK: Backgrounds
-
     static let appCanvas = BarosAdaptiveColor.dynamic(
         light: 0xF7F6F3,
         dark: 0x000000
@@ -45,27 +43,21 @@ enum AppTheme {
 
     static let canvasBackground = appCanvas
 
-    // MARK: Accent
-
     static let brandAccentFill = BarosBrand.brandCobalt
     static let brandAccentForeground = BarosBrand.brandAccentForeground
     static let brandAccentMuted = BarosBrand.brandAccentMuted
     static let brandFocus = brandAccentForeground
-    /// Row wash behind a completed set; the checkmark still carries the state.
     static let completedSetFill = brandAccentMuted
-    /// Opaque band behind the keyboard bar's glass RPE and Done pills.
     static let keyboardBandFill = BarosAdaptiveColor.dynamic(
         light: 0xECECF0,
         dark: 0x1C1C1E
     )
-    /// Feathers the top edge of the keyboard bar's band over set rows.
     static let keyboardBandShadow = BarosAdaptiveColor.dynamic(
         light: 0x000000,
         lightAlpha: 0.08,
         dark: 0x000000,
         darkAlpha: 0.5
     )
-    /// Resting well behind an open set's weight and reps fields.
     static let setFieldWell = BarosAdaptiveColor.dynamic(
         light: 0x09121D,
         lightAlpha: 0.045,
@@ -73,7 +65,6 @@ enum AppTheme {
         darkAlpha: 0.06
     )
     static let destructive = Color(.systemRed)
-    /// Destructive button fill with at least 4.5:1 contrast against white labels.
     static let destructiveFill = BarosAdaptiveColor.dynamic(
         light: 0xB42318,
         dark: 0xC9342B
@@ -88,10 +79,6 @@ enum AppTheme {
         dark: 0x4CD964
     )
 
-    /// Record markers: informational categories, never interactive, so they
-    /// stay out of the cobalt family. Each clears 5.4:1 on grouped and
-    /// recessed surfaces in both appearances and always travels with its own
-    /// glyph and name, so color is never the only cue.
     static let recordHeaviestForeground = BarosAdaptiveColor.dynamic(
         light: 0x8A5700,
         dark: 0xE7BB6A
@@ -101,12 +88,8 @@ enum AppTheme {
         dark: 0xC2A5E8
     )
 
-    /// Foreground for content sitting on `brandAccentFill` or
-    /// `brandAccentGradient`.
     static let onBrandAccent = BarosBrand.onBrandAccent
     static let onDestructive = Color.white
-
-    // MARK: Text
 
     static let textPrimary = Color(.label)
     static let textSecondary = Color(.secondaryLabel)
@@ -121,13 +104,9 @@ enum AppTheme {
         endPoint: .bottomTrailing
     )
 
-    // MARK: Metrics
-
     static let cardCornerRadius: CGFloat = 26
     static let fieldCornerRadius: CGFloat = 14
     static let shellPadding: CGFloat = 16
-    /// Wide windows, such as the iPhone Duo's inner display, cap scrolling
-    /// content here so rows stay readable. Every other iPhone is narrower.
     static let readableContentWidth: CGFloat = 640
 
     static func formatDuration(_ seconds: Int) -> String {
@@ -141,8 +120,6 @@ enum AppTheme {
 }
 
 extension View {
-    /// Centers content in a column no wider than `AppTheme.readableContentWidth`.
-    /// Apply it inside a full-width scroll view so scrolling still spans the window.
     func readableContentWidth(_ maxWidth: CGFloat = AppTheme.readableContentWidth) -> some View {
         frame(maxWidth: maxWidth)
             .frame(maxWidth: .infinity)

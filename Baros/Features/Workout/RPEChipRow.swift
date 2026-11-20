@@ -7,15 +7,11 @@ struct RPEChipRow: View {
     let selected: Double?
     let onSelect: (Double?) -> Void
 
-    /// Tapping the selected value clears it, so the row needs no Clear chip
-    /// and every value fits without scrolling.
     static func selection(afterTapping value: Double, current: Double?) -> Double? {
         current == value ? nil : value
     }
 
     var body: some View {
-        // No spacing: each chip insets its own capsule, so the gaps between
-        // capsules still belong to a chip and the row has no dead zones.
         HStack(spacing: 0) {
             ForEach(Self.values, id: \.self) { value in
                 chip(value: value)

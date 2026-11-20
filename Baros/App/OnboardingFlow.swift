@@ -2,13 +2,6 @@ import ClerkKit
 import ClerkKitUI
 import SwiftUI
 
-/// The stable launch-experience boundary for onboarding.
-///
-/// A short introduction, workout preferences, then an optional sign-in
-/// invitation. Preferences come before sign-in because they don't need an
-/// account, and a choice made there wins over the settings a sign-in restores.
-/// Every exit that reaches the app calls `onCompleted`: continuing without an
-/// account, or finishing sign-in. Cancelling sign-in returns to the invitation.
 struct OnboardingFlow: View {
     let onCompleted: () -> Void
 
@@ -16,9 +9,6 @@ struct OnboardingFlow: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            // Every page forces the same inline navigation bar (see
-            // LaunchExperiencePage) so its geometry does not change mid-push,
-            // which would nudge the next page's content down after it lands.
             OnboardingIntroductionPage {
                 path.append(.preferences)
             }

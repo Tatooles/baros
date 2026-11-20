@@ -3,8 +3,6 @@ import Foundation
 public struct PreviousSetPerformance: Equatable {
     let weight: Double?
     let reps: Int?
-    /// Only the measure the exercise is tracked by is carried, so filling a
-    /// row from it never writes reps to a timed set or time to a rep set.
     var durationSeconds: Int? = nil
     var trackingMethod: ExerciseTrackingMethod = .reps
 
@@ -16,7 +14,6 @@ public struct PreviousSetPerformance: Equatable {
         if trackingMethod == .duration {
             let durationText = WorkoutNumericInputPolicy.validatedDuration(durationSeconds)
                 .map(WorkoutFormatters.setDuration)
-            // Timed work is often unweighted, so a time alone reads without a dash.
             switch (weightText, durationText) {
             case let (.some(weightText), .some(durationText)): return "\(weightText) × \(durationText)"
             case let (.none, .some(durationText)): return durationText
@@ -97,9 +94,6 @@ public struct PreviousSetPerformance: Equatable {
         )
     }
 
-    /// The completed set kinds from the most recent completed session that logged
-    /// the exercise, in set order. Uses the same history lookup as the Previous
-    /// column, so a newly added exercise gets one row per previous value.
     static func lastCompletedSetKinds(
         for route: ExerciseHistoryRoute,
         in sessions: [WorkoutSession],
@@ -111,12 +105,6 @@ public struct PreviousSetPerformance: Equatable {
         )[route.id]?.sets.map(\.kind) ?? []
     }
 
-    /// For each exercise of `pastSession` that a newer completed session logged,
-    /// that session's completed set kinds in set order. Repeating the workout
-    /// seeds those exercises from the newer performance instead of copying the
-    /// source rows, using the same newer-than-source test as the Previous
-    /// column. An exercise that appears more than once in `pastSession` is left
-    /// out, since the newer performance can't be paired with one occurrence.
     static func newerCompletedSetKindsByExerciseID(
         for pastSession: WorkoutSession,
         in sessions: [WorkoutSession],
@@ -131,7 +119,6 @@ public struct PreviousSetPerformance: Equatable {
             (exerciseID: $0.id, routeID: ExerciseHistoryRoute(loggedExercise: $0).id)
         }
         let routeCounts = Dictionary(routeIDsByExerciseID.map { ($0.routeID, 1) }, uniquingKeysWith: +)
-        // Only sessions ranked before the source are newer than it.
         let newerEntriesByRouteID = latestEntriesByRouteID(
             matching: Set(routeCounts.filter { $0.value == 1 }.keys),
             in: Array(sortedSessions.prefix(sourceRank))
@@ -145,13 +132,6 @@ public struct PreviousSetPerformance: Equatable {
         return result
     }
 
-    /// A repeated workout's rows stay linked to the sets they were copied from,
-    /// but Previous still shows the exercise's most recent performance. Copied
-    /// rows read the source workout's own sets only while no later session has
-    /// logged the exercise; otherwise each copied row reads the latest
-    /// session's set at its source set's position. Exercises seeded from a
-    /// newer performance (`newerCompletedSetKindsByExerciseID`) carry no source
-    /// link and read the latest session by position.
     private static func lastCompletedSetsByExerciseIDFromSourceSession(
         for loggedExercises: [LoggedExercise],
         in sessions: [WorkoutSession],
@@ -199,7 +179,6 @@ public struct PreviousSetPerformance: Equatable {
     }
 
     private struct LatestEntry {
-        /// Position of the entry's session in newest-first completed history.
         let sessionRank: Int
         let sets: [LoggedSet]
     }
@@ -212,8 +191,6 @@ public struct PreviousSetPerformance: Equatable {
             from: sessions,
             ownerTokenIdentifier: ownerTokenIdentifier
         )
-        // The id tie-break keeps the rank independent of input order, so the
-        // review screen, the start, and Previous agree about which is newer.
         .sorted { lhs, rhs in
             if lhs.startedAt != rhs.startedAt {
                 return lhs.startedAt > rhs.startedAt
@@ -262,9 +239,6 @@ public struct PreviousSetPerformance: Equatable {
         return result
     }
 
-    /// Maps each copied row to the set at its source set's position in
-    /// `previousSets`: the source exercise's own sets, or a later session's
-    /// completed sets for the same exercise.
     private static func alignedSetPerformances(
         for activeLoggedExercise: LoggedExercise,
         in sourceLoggedExercise: LoggedExercise,
@@ -276,11 +250,6 @@ public struct PreviousSetPerformance: Equatable {
             return []
         }
 
-        // Align each cloned row to its specific source set so rows keep their own
-        // previous values even after an earlier row is deleted or the rows are
-        // reordered. Rows added after cloning carry no source link and always sort
-        // after the cloned rows, so dropping everything past the last linked row
-        // leaves them with no previous value rather than reusing a previous set.
         let sourcePositionsByID = Dictionary(
             uniqueKeysWithValues: sourceLoggedExercise.sortedSets.enumerated().map { ($1.id, $0) }
         )
@@ -308,12 +277,6 @@ public struct PreviousSetPerformance: Equatable {
         )
     }
 
-    /// Captures everything the previous-set lookup depends on, so callers can
-    /// cache the (history-scanning) lookup and recompute only when this key
-    /// changes. Deliberately ignores in-progress value edits on the active
-    /// session — weight/reps/RPE/completion typing must not invalidate the
-    /// cache — while structural edits (rows, exercises, ordering, source
-    /// links) and any change to completed history do.
     public struct CacheKey: Equatable {
         private struct ExerciseEntry: Equatable {
             let id: UUID
@@ -328,9 +291,6 @@ public struct PreviousSetPerformance: Equatable {
         private let exerciseEntries: [ExerciseEntry]
         private let completedSessionCount: Int
         private let latestCompletedUpdatedAt: Date?
-        // Sync applies remote set/exercise records without cascading touch()
-        // to the parent session, so session updatedAt alone would miss those
-        // edits; a completed sync must invalidate the cache by itself.
         private let lastSyncedAt: Date?
 
         public init(

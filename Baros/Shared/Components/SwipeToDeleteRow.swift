@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Reveals a trailing delete action when the row is swiped left, mirroring
-/// `List` swipe actions — including full-swipe-to-delete with a threshold
-/// haptic — for rows hosted in a plain `ScrollView`.
 struct SwipeToDeleteRow<Content: View>: View {
     let deleteAccessibilityLabel: String
     var deleteAccessibilityIdentifier: String?
@@ -16,8 +13,6 @@ struct SwipeToDeleteRow<Content: View>: View {
     @State private var isArmedForFullSwipe = false
 
     private let revealWidth: CGFloat = 72
-    /// Dragging past this fraction of the row width commits the delete, like a
-    /// full swipe in `List`.
     private let fullSwipeFraction: CGFloat = 0.5
     private let deleteShape = RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
 
@@ -25,9 +20,6 @@ struct SwipeToDeleteRow<Content: View>: View {
         content
             .offset(x: offsetX)
             .background(alignment: .trailing) {
-                // The red area grows to exactly fill whatever the row has
-                // revealed, flush against the sliding content, like a List
-                // swipe action.
                 if offsetX < -1 {
                     Button(role: .destructive, action: performDelete) {
                         deleteShape
@@ -50,10 +42,6 @@ struct SwipeToDeleteRow<Content: View>: View {
             .contentShape(Rectangle())
             .onTapGesture { if isOpen { close() } }
             .simultaneousGesture(dragGesture)
-            // Native haptic when the swipe crosses the full-swipe threshold,
-            // matching Mail/Messages. Fires only on the false→true transition,
-            // so it re-arms if you pull back out and cross again, and stays
-            // silent for a button tap.
             .sensoryFeedback(trigger: isArmedForFullSwipe) { _, armed in
                 armed ? .impact(weight: .medium) : nil
             }
@@ -66,15 +54,12 @@ struct SwipeToDeleteRow<Content: View>: View {
         // on a text field — before this horizontal swipe engages.
         DragGesture(minimumDistance: 22)
             .onChanged { value in
-                // Lock to the dominant axis once per drag; vertical drags stay
-                // with the enclosing scroll view.
                 if lockedAxis == nil {
                     lockedAxis = abs(value.translation.width) > abs(value.translation.height) ? .horizontal : .vertical
                 }
                 guard lockedAxis == .horizontal else { return }
 
                 let proposed = restingOffset + value.translation.width
-                // Resist swiping right past the resting position.
                 offsetX = proposed > 0 ? proposed / 6 : proposed
                 isArmedForFullSwipe = isPastFullSwipe(proposed)
             }
@@ -85,8 +70,6 @@ struct SwipeToDeleteRow<Content: View>: View {
                 }
                 guard lockedAxis == .horizontal else { return }
 
-                // Actual distance commits the delete; a quick flick only reveals
-                // the button (so a fast short flick never deletes).
                 if isPastFullSwipe(restingOffset + value.translation.width) {
                     withAnimation(slideAnimation) { offsetX = -rowWidth }
                     performDelete()
@@ -114,7 +97,6 @@ struct SwipeToDeleteRow<Content: View>: View {
     private func performDelete() {
         withAnimation(slideAnimation) {
             onDelete()
-            // A failed prerequisite save can cancel deletion and keep this row.
             offsetX = 0
             isOpen = false
         }

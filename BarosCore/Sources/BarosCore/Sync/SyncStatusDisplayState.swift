@@ -60,8 +60,6 @@ public struct SyncStatusDisplayState {
             )
         }
 
-        // Being offline is never "up to date", even with nothing waiting: the
-        // app cannot know whether the cloud has newer changes.
         if networkAvailability == .unavailable || networkAvailability == .requiresConnection,
            lastFailureMessage == nil,
            failedCount == 0 {
@@ -94,9 +92,6 @@ public struct SyncStatusDisplayState {
                 kind: .syncing,
                 title: "Sync Status",
                 subtitle: "Sending and receiving changes.",
-                // Syncing and waiting follow every local edit, so they keep the
-                // one-line height of the up-to-date row; a second line here made
-                // the Settings form jump each time the user changed a value.
                 detailText: nil,
                 trailingText: "Syncing",
                 systemImage: "arrow.triangle.2.circlepath.icloud",
@@ -186,7 +181,7 @@ public struct SyncStatusDisplayState {
                 kind: .waiting,
                 title: "Sync Status",
                 subtitle: subtitle,
-                detailText: nil, // One line, like .syncing above.
+                detailText: nil,
                 trailingText: "Waiting",
                 systemImage: "icloud.and.arrow.up",
                 tint: .secondary,

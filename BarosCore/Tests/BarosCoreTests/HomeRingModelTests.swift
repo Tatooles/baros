@@ -74,7 +74,7 @@ final class HomeRingModelTests: XCTestCase {
         XCTAssertEqual(monthLength(minutes: 20), 8.4, accuracy: 0.001)
         XCTAssertEqual(monthLength(minutes: 90), 56, accuracy: 0.001)
         XCTAssertEqual(monthLength(minutes: 180), 56, accuracy: 0.001)
-        XCTAssertGreaterThan(monthLength(minutes: 5), 7.5) // Rest ticks are thinner and neutral gray.
+        XCTAssertGreaterThan(monthLength(minutes: 5), 7.5)
         for diameter in [280.0, 320, 350] {
             let outerEdge = diameter * 0.308 + 6 + monthLength(minutes: 180, diameter: diameter) + 5.5 / 2
             XCTAssertLessThanOrEqual(outerEdge, diameter / 2)
@@ -105,7 +105,6 @@ final class HomeRingModelTests: XCTestCase {
         XCTAssertEqual(model.emptySlotIndices(for: .month), Array((1..<30).reversed()))
         XCTAssertEqual(model.emptySlotIndices(for: .year), Array((1..<52).reversed()))
         XCTAssertTrue(model.yearSpokes.contains { $0.angleIndex == 1 && $0.lap == 1 })
-        // A tree-ring workout never suppresses a current-year rest tick.
         XCTAssertTrue(model.emptySlotIndices(for: .year).contains(1))
     }
 
@@ -162,7 +161,7 @@ final class HomeRingModelTests: XCTestCase {
         let model = HomeRingModel(workouts: workouts, now: now, calendar: calendar)
         XCTAssertEqual(model.yearSpokes.map(\.lap), [3, 3, 2, 2, 1, 1, 0])
         XCTAssertEqual(model.yearSpokes.map(\.angleIndex), [51, 0, 51, 0, 51, 0, 51])
-        XCTAssertEqual(model.totalWorkouts, 8) // Lifetime count includes older history.
+        XCTAssertEqual(model.totalWorkouts, 8)
         XCTAssertEqual(model.yearWorkoutCount, 1)
     }
 
@@ -206,8 +205,8 @@ final class HomeRingModelTests: XCTestCase {
 
     func testCenterCountAndCaptionFollowTheSelectedPeriod() {
         let workouts = [
-            workout(date(2024, 8, 20), minutes: 60), // Inner lap: lifetime only.
-            workout(date(2026, 6, 1), minutes: 60), // Past year, outside 30 days.
+            workout(date(2024, 8, 20), minutes: 60),
+            workout(date(2026, 6, 1), minutes: 60),
             workout(date(), minutes: 60),
         ]
         let model = HomeRingModel(workouts: workouts, now: date(), calendar: calendar)
@@ -265,7 +264,6 @@ final class HomeRingModelTests: XCTestCase {
         let workouts = (0..<500).map { index in
             workout(calendar.date(byAdding: .day, value: -(index * 1095 / 499), to: now)!, minutes: 60)
         }
-        // No baseline is recorded, so one measured pass keeps the timing visible.
         let options = XCTMeasureOptions()
         options.iterationCount = 1
         measure(options: options) {
@@ -275,8 +273,6 @@ final class HomeRingModelTests: XCTestCase {
             XCTAssertEqual(model.monthWorkoutCount, 14)
         }
     }
-
-    // MARK: Scrubbing
 
     private func named(_ date: Date, _ title: String, minutes: Double = 60, id: UUID = UUID()) -> RingWorkout {
         RingWorkout(date: date, duration: minutes * 60, id: id, title: title)
@@ -295,7 +291,6 @@ final class HomeRingModelTests: XCTestCase {
         let model = HomeRingModel(workouts: [later, lastYear, morning], now: date(), calendar: calendar)
         XCTAssertEqual(model.workouts(for: .month, at: 0), [morning, later])
         XCTAssertEqual(model.workouts(for: .year, at: 0), [morning, later])
-        // Tree-ring workouts share an angle with the outer lap but are not scrubbable.
         XCTAssertTrue(model.yearSpokes.contains { $0.angleIndex == 1 && $0.lap == 1 })
         XCTAssertTrue(model.workouts(for: .year, at: 1).isEmpty)
         XCTAssertEqual(model.slotStart(for: .month, at: 3, calendar: calendar), date(2026, 10, 6, hour: 0))
@@ -311,7 +306,6 @@ final class HomeRingModelTests: XCTestCase {
         XCTAssertEqual(result.detail, "1 hr 5 min · 5 exercises")
         XCTAssertEqual(result.workoutIDs, [id])
         XCTAssertEqual(result.accessibilityValue, "Today. Push Day. 1 hr 5 min · 5 exercises")
-        // Value-only fixtures have no store identity, so they preview without exercises and never open.
         let fixture = preview([RingWorkout(date: date(hour: 7), duration: 45 * 60)], .month, 0)
         XCTAssertEqual(fixture.detail, "45 min")
         XCTAssertTrue(fixture.workoutIDs.isEmpty)
@@ -430,7 +424,6 @@ final class HomeRingModelTests: XCTestCase {
     }
 
     func testPersonaAverageFrequencyAndDateBoundsAcrossSeasons() {
-        // Include a leap year, holiday months, DST, and midnight launches.
         let dates = [date(2024, 2, 29, hour: 0), date(2025, 1, 1, hour: 0),
                      date(2026, 3, 9, hour: 0), date(2026, 7, 1, hour: 0),
                      date(2026, 10, 11, hour: 0), date(2026, 12, 31, hour: 0)]
@@ -457,7 +450,7 @@ final class HomeRingModelTests: XCTestCase {
             let workouts = fixture.workouts(now: now, calendar: calendar)
             let model = HomeRingModel(workouts: workouts, now: now, calendar: calendar)
             let outer = model.yearSpokes.filter { $0.lap == 0 }
-            XCTAssertEqual(outer.count, 49, fixture.rawValue) // 52 weeks minus three fully missed.
+            XCTAssertEqual(outer.count, 49, fixture.rawValue)
             XCTAssertTrue(outer.allSatisfy { ![15, 16, 37].contains($0.angleIndex) })
             let inner = model.yearSpokes.filter { $0.lap == 1 }
             XCTAssertTrue((7...10).contains(inner.count))

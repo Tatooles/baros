@@ -1,7 +1,5 @@
 import Foundation
 
-/// Built on first use, not on creation: indexing reads every workout's logged
-/// exercises. History prepares it when search opens, before the first keystroke.
 public final class WorkoutHistorySearchIndex {
     private let indexedSessions: [WorkoutSession]
     private lazy var searchableFieldsBySessionID: [UUID: [String]] = Dictionary(

@@ -2363,7 +2363,6 @@ describe("timed exercises", () => {
 describe("workout templates", () => {
   const templateCursors = { ...zeroCursors, workoutTemplates: 0 };
 
-  /// Fetches with a template cursor, which always returns template changes.
   async function fetchTemplateChanges(
     client: ReturnType<ReturnType<typeof testDb>["withIdentity"]>,
     cursors: SyncCursors & { workoutTemplates?: number } = templateCursors,

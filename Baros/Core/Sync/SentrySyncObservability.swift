@@ -20,8 +20,6 @@ enum SentryRuntime {
             options.sampleRate = 1.0
             options.enableMetricKit = true
             options.enableMetricKitRawPayload = false
-            // Retain the existing hang detector until device ingestion and
-            // symbolication are verified. See docs/diagnostics.md for cutover.
 
             options.sendDefaultPii = false
             options.enableCaptureFailedRequests = false
@@ -49,9 +47,6 @@ enum SentryEventScrubber {
             return SentrySetSaveFailureReporter.scrub(event)
         }
         if event.tags?["component"] == "sync" {
-            // Sync events retain their original strict allowlist. UI scope data
-            // is useful for automatic hangs, but is intentionally excluded
-            // from manually captured durable sync failures.
             event.tags?.removeValue(forKey: "ui_surface")
             event.context?.removeValue(forKey: "ui")
             return SentrySyncEventScrubber.scrub(event)
@@ -64,8 +59,7 @@ enum SentryEventScrubber {
     }
 }
 
-/// MetricKit's timestamp is the payload interval start; the SDK applies the
-/// current scope/build. Delivery state must not masquerade as incident evidence.
+/// MetricKit's timestamp is the payload interval start; the SDK applies the current scope/build.
 enum SentryMetricKitEventScrubber {
     static func scrub(_ event: Event) -> Event {
         let mechanisms: Set<String> = ["mx_hang_diagnostic", "mx_cpu_exception", "mx_disk_write_exception"]
@@ -172,9 +166,8 @@ enum SentryUIHangEventScrubber {
     static func scrub(_ event: Event) -> Event? {
         let surface = event.tags?["ui_surface"]
         let context = event.context?["ui"]
-        if let surface, let context, isValid(surface: surface, context: context) {
-            // The scope already contains only approved typed values.
-        } else {
+        let hasValidUIScope = if let surface, let context { isValid(surface: surface, context: context) } else { false }
+        if !hasValidUIScope {
             event.tags?.removeValue(forKey: "ui_surface")
             event.context?.removeValue(forKey: "ui")
         }
@@ -191,8 +184,6 @@ enum SentryUIHangEventScrubber {
             return false
         }
 
-        // A failed cast must not make a present value look like an absent
-        // optional field: nested data must never survive under an approved key.
         for key in ["exercise_count_bucket", "set_count_bucket", "focused_field", "base_screen", "scene_phase"] {
             if let value = context[key], !(value is String) {
                 return false
@@ -215,8 +206,6 @@ enum SentryUIHangEventScrubber {
         let isWorkout = surface == UIHangSurface.activeWorkout.rawValue || surface == UIHangSurface.exercisePicker.rawValue
         if !isWorkout && (exerciseBucket != nil || context["focused_field"] != nil) { return false }
         if surface == UIHangSurface.exercisePicker.rawValue && context["focused_field"] != nil { return false }
-        // A shell presentation can be identified before its workout view has
-        // appeared and supplied counts. Legacy workout context still requires them.
         if surface == UIHangSurface.activeWorkout.rawValue, baseScreen == nil,
            exerciseBucket == nil || setBucket == nil {
             return false
@@ -491,7 +480,6 @@ private enum SentryDistributionChannelTagger {
     }
 }
 
-/// Only diagnostic codes cross this boundary; NSError userInfo can contain model data.
 enum SentrySetSaveFailureReporter {
     static func capture(
         _ failure: ActiveWorkoutSetSaveFailure,
@@ -501,7 +489,6 @@ enum SentrySetSaveFailureReporter {
         guard SentryRuntimeConfiguration(info: info).isEnabled,
               !isTestProcess(arguments: ProcessInfo.processInfo.arguments,
                              hasXCTest: NSClassFromString("XCTestCase") != nil) else { return }
-        // SDK capture queues delivery; recovery never waits for a network request or flush.
         send(makeEvent(failure))
     }
 

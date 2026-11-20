@@ -45,8 +45,6 @@ public final class ActiveWorkoutEngine {
     @ObservationIgnored public let restTimer: RestTimerCoordinator
     @ObservationIgnored public var restSettingsOwnerTokenIdentifier: String?
 
-    /// `reportSetSaveFailure` defaults to a no-op so the package needn't depend on Sentry. The app passes
-    /// `SentrySetSaveFailureReporter.capture` (see `BarosApp`); any new app-side construction must pass it too.
     public init(restTimer: RestTimerCoordinator = RestTimerCoordinator(), reportSetSaveFailure: @escaping (ActiveWorkoutSetSaveFailure) -> Void = { _ in }) {
         self.restTimer = restTimer
         self.reportSetSaveFailure = reportSetSaveFailure
@@ -56,8 +54,6 @@ public final class ActiveWorkoutEngine {
     var isStartingWorkout = false
     public var isAccountTransitionInProgress = false
     public var isAccountManagementPresented = false
-    /// Set when Finish saved the workout but not its template. The shell
-    /// shows the error, since the workout sheet is gone by then.
     public var failedToSaveTemplate = false
     public var lastErrorMessage: String?
     private var pendingSetSave: PendingSetSave?
@@ -67,8 +63,6 @@ public final class ActiveWorkoutEngine {
     @ObservationIgnored private var injectedReorderExercisesSaveFailureCount = 0
     #endif
     public var hasPendingSetSave: Bool { pendingSetSave != nil }
-    /// The Previous column's values, keyed by logged exercise. A linked round
-    /// fills each partner's empty fields from them, as that partner's own check would.
     @ObservationIgnored public var previousSetsByLoggedExerciseID: [UUID: [PreviousSetPerformance]] = [:]
     @ObservationIgnored public weak var setInputRegistry: ActiveSetInputRegistry?
     public var pendingSetSaveID: UUID? { pendingSetSave?.id }
@@ -157,9 +151,6 @@ public final class ActiveWorkoutEngine {
         let pastLoggedExercises = pastSession.sortedLoggedExercises
         let copiedGroupIDs = SupersetGrouping.copied(pastLoggedExercises.map(\.supersetGroupID))
         for (pastLoggedExercise, supersetGroupID) in zip(pastLoggedExercises, copiedGroupIDs) {
-            // When a newer session logged the exercise, its rows follow that
-            // performance, unlinked, as a template start's do. Otherwise they
-            // stay linked copies of the chosen workout's rows.
             let newerSetKinds = newerSetKindsByPastExerciseID[pastLoggedExercise.id]
             let rows: [(orderIndex: Int, kind: SetKind, sourceLoggedSetID: UUID?)] = newerSetKinds.map {
                 $0.enumerated().map { ($0.offset, $0.element, nil) }
@@ -173,9 +164,6 @@ public final class ActiveWorkoutEngine {
                 exerciseSnapshotName: pastLoggedExercise.exerciseSnapshotName,
                 exerciseSnapshotEquipmentRaw: resolvedEquipmentRaw,
                 exerciseSnapshotPrimaryMuscleGroupRaw: resolvedPrimaryMuscleGroupRaw,
-                // A linked copy is logged the way the chosen workout was, even
-                // if the library exercise has changed method since. Rows that
-                // follow a newer session take the exercise's current method.
                 trackingMethod: newerSetKinds == nil ? pastLoggedExercise.trackingMethod : nil,
                 sourceLoggedExerciseID: newerSetKinds == nil ? pastLoggedExercise.id : nil,
                 supersetGroupID: supersetGroupID,
@@ -209,8 +197,6 @@ public final class ActiveWorkoutEngine {
         return session
     }
 
-    /// Starts with the template's exercises in order. Each gets set rows the
-    /// way adding it would; an entry whose exercise is gone keeps its name.
     @discardableResult
     public func startWorkout(
         fromTemplate template: WorkoutTemplate,
@@ -301,7 +287,6 @@ public final class ActiveWorkoutEngine {
         )[0]
     }
 
-    /// Appends a picker selection in tap order, saving the whole group together.
     @discardableResult
     public func addExercises(
         _ exercises: [Exercise],
@@ -332,7 +317,6 @@ public final class ActiveWorkoutEngine {
         if let plannedSetKinds {
             setKinds = plannedSetKinds
         } else {
-            // Resolve history before inserting anything, so a fetch failure leaves no partial group.
             let history = try context.fetch(FetchDescriptor<WorkoutSession>())
             setKinds = exercises.map {
                 initialSetKinds(for: $0, ownerTokenIdentifier: ownerTokenIdentifier, sessions: history)
@@ -426,7 +410,6 @@ public final class ActiveWorkoutEngine {
         let originalSetStates = loggedExercise.sets.map { set in
             (set: set, updatedAt: set.updatedAt, deletedAt: set.deletedAt)
         }
-        // The replacement takes the slot, including its place in a superset.
         let replacement = LoggedExercise(
             orderIndex: loggedExercise.orderIndex,
             exercise: exercise,
@@ -494,8 +477,6 @@ public final class ActiveWorkoutEngine {
         )
     }
 
-    /// Commits a sheet's removals and order together. Restore only the fields
-    /// touched here on failure, preserving unrelated drafts and outbox work.
     public func applyExerciseListChanges(
         in session: WorkoutSession,
         orderedIDs: [UUID],
@@ -564,8 +545,6 @@ public final class ActiveWorkoutEngine {
                     didChangeGrouping = true
                 }
             }
-            // The sheet moves supersets as blocks. Removals can still leave one
-            // exercise alone, and other callers may split a run.
             if normalizeSupersets(orderedIDs.compactMap { exercisesByID[$0] }, now: now) { didChangeGrouping = true }
             guard didChangeOrder || didChangeGrouping || !removedExercises.isEmpty || !inserted.isEmpty else { return }
             for exercise in removedExercises { exercise.markDeleted(now: now) }
@@ -611,7 +590,6 @@ public final class ActiveWorkoutEngine {
         case remove
     }
 
-    /// Applies one exercise-menu superset action as a single save.
     public func changeSuperset(
         _ change: SupersetChange,
         for loggedExercise: LoggedExercise,
@@ -754,8 +732,6 @@ public final class ActiveWorkoutEngine {
         try save(context)
     }
 
-    /// Persists a focus-boundary weight/reps draft without turning a local
-    /// Active Workout checkpoint into a graph-level timestamp mutation.
     @discardableResult
     public func commitActiveSetDraft(
         _ set: LoggedSet,
@@ -840,7 +816,6 @@ public final class ActiveWorkoutEngine {
     }
 
     public func discardSetSave() {
-        // The failed attempt was already restored. Leaving must never need a save.
         guard hasPendingSetSave else { return }
         pendingSetSave = nil
     }
@@ -932,7 +907,7 @@ public final class ActiveWorkoutEngine {
                     let settings = UserSettings.visibleSettingsRecords(from: records,
                         ownerTokenIdentifier: restSettingsOwnerTokenIdentifier ?? session.syncOwnerTokenIdentifier).first
                     restTimer.start(sessionID: session.id, setID: set.id,
-                        duration: RestDurationLookup.seconds(for: exercise, settings: settings),
+                        duration: RestDurationLookup.seconds(settings: settings),
                         participatingSetIDs: roundSetIDs(for: set))
                 } else {
                     restTimer.cancel(ifStartedBy: set.id)
@@ -951,8 +926,6 @@ public final class ActiveWorkoutEngine {
         }
     }
 
-    /// Membership is captured at rest start, so deleting or unchecking any
-    /// participating set cancels that round even if its grouping later changes.
     private func roundSetIDs(for set: LoggedSet) -> [UUID] {
         guard let exercise = set.loggedExercise, let session = exercise.session,
               let position = exercise.sortedSets.firstIndex(where: { $0.id == set.id }),
@@ -964,9 +937,6 @@ public final class ActiveWorkoutEngine {
         }
     }
 
-    /// Checking set N in a superset checks set N on its partners. Each fills
-    /// empty fields the way its own check would: from the sets above it, then
-    /// from last time. Returns the partners changed, for restoring on failure.
     private func completeSupersetRound(of set: LoggedSet, now: Date) -> [(LoggedSet, SetSaveSnapshot)] {
         guard let exercise = set.loggedExercise, let session = exercise.session, session.status == .active,
               let position = exercise.sortedSets.firstIndex(where: { $0.id == set.id }),
@@ -977,7 +947,6 @@ public final class ActiveWorkoutEngine {
         var partners: [(LoggedSet, SetSaveSnapshot)] = []
         for partnerExercise in block.members where partnerExercise.id != exercise.id {
             let sets = partnerExercise.sortedSets
-            // An exercise with fewer sets sits out the extra rounds.
             guard sets.indices.contains(position), !sets[position].isCompleted else { continue }
             let partner = sets[position]
             let snapshot = SetSaveSnapshot(partner)
@@ -985,8 +954,6 @@ public final class ActiveWorkoutEngine {
             let previous = previousSetsByLoggedExerciseID[partnerExercise.id].flatMap {
                 $0.indices.contains(position) ? $0[position] : nil
             }
-            // A mounted row owns draft/rejection state. Use exactly the same
-            // preparation as its direct check; nil means there is no editor.
             let values = setInputRegistry?.prepareLinkedSet(id: partner.id,
                 current: .init(partner), previous: previous, suggestions: above)
                 ?? ActiveWorkoutSetInput().preparedLinkedValues(
@@ -1000,7 +967,6 @@ public final class ActiveWorkoutEngine {
         return partners
     }
 
-    /// Only the fields changed by a set edit, never the whole model context.
     private struct SetSaveSnapshot {
         let values: ActiveWorkoutSetInput.Values
         let knowsDuration: Bool?
@@ -1040,9 +1006,6 @@ public final class ActiveWorkoutEngine {
         try context.save()
     }
 
-    /// Applies a draft title in a single commit. Text fields hold keystrokes in
-    /// view-local drafts and call this on focus loss; nothing in the workout
-    /// form may write + save per keystroke.
     public func commitWorkoutTitle(_ title: String, session: WorkoutSession, context: ModelContext) throws {
         session.title = title
         try finalizeWorkoutTitle(session, context: context)
@@ -1072,8 +1035,6 @@ public final class ActiveWorkoutEngine {
             syncScheduler: syncScheduler, context: context, now: now, save: save)
     }
 
-    /// Account transitions may resolve legacy records together. Stage every
-    /// graph in the same transaction; timer and sync effects follow the save.
     func finishWorkouts(
         _ sessions: [WorkoutSession],
         ownerTokenIdentifier: String? = nil,
@@ -1130,8 +1091,6 @@ public final class ActiveWorkoutEngine {
             try save(context)
         } catch {
             context.rollback()
-            // Rollback alone may leave observed model instances at attempted
-            // values. Restore every captured workout, including earlier ones.
             for (session, baseline) in zip(sessions, baselines) { baseline.restore(session) }
             throw error
         }
@@ -1168,8 +1127,6 @@ public final class ActiveWorkoutEngine {
         }
     }
 
-    /// Visibility must never be used as proof that the device has no active workout.
-    /// This check reveals no outgoing-owner model to the caller and never finalizes it.
     private func requireWorkoutStartAllowed(ownerTokenIdentifier: String?, context: ModelContext) throws {
         guard !isAccountTransitionInProgress, !isAccountManagementPresented else {
             throw ActiveWorkoutEngineError.accountTransitionInProgress
@@ -1207,8 +1164,6 @@ public final class ActiveWorkoutEngine {
         .contains { $0.id == session.id }
     }
 
-    /// One blank row per completed set from the exercise's last performance,
-    /// keeping each row's set kind, or a single working set when there is none.
     private func initialSetKinds(
         for exercise: Exercise,
         ownerTokenIdentifier: String?,
@@ -1245,7 +1200,6 @@ public final class ActiveWorkoutEngine {
         }
     }
 
-    /// Keeps stored grouping in the shape readers trust after a structure change.
     @discardableResult
     private func normalizeSupersets(_ orderedExercises: [LoggedExercise], now: Date) -> Bool {
         let normalized = SupersetGrouping.normalized(orderedExercises.map(\.supersetGroupID))

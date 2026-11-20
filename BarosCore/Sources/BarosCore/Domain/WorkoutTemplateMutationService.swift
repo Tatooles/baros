@@ -95,7 +95,6 @@ public struct WorkoutTemplateMutationService {
         syncScheduler?.requestSync()
     }
 
-    /// Stores grouping in the shape readers trust: runs of two or more.
     private static func normalized(_ entries: [WorkoutTemplateEntry]) -> [WorkoutTemplateEntry] {
         let groupIDs = SupersetGrouping.normalized(entries.map(\.supersetGroupID))
         return zip(entries, groupIDs).map { entry, groupID in

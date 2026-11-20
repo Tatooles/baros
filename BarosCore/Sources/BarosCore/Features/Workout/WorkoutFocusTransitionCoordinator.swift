@@ -1,7 +1,5 @@
 import Foundation
 
-/// Tracks the focused Active Workout field so the departing field commits its
-/// draft once, whether focus moves programmatically or from a tap.
 @MainActor
 public final class WorkoutFocusTransitionCoordinator {
     public init() {}
@@ -31,9 +29,6 @@ public final class WorkoutFocusTransitionCoordinator {
         to newField: WorkoutField?,
         commit: (WorkoutField?) -> Void
     ) {
-        // Programmatic transitions update currentField synchronously before
-        // assigning FocusState. Their onChange notification is only an
-        // acknowledgement and must not cancel a reveal they scheduled.
         guard currentField != newField else { return }
 
         commit(previousField)
@@ -41,7 +36,6 @@ public final class WorkoutFocusTransitionCoordinator {
         cancelPendingReveal()
     }
 
-    /// Runs `reveal` after `delay` unless focus changes first.
     public func scheduleReveal(
         after delay: Duration,
         _ reveal: @escaping @MainActor () -> Void

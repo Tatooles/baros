@@ -1,7 +1,6 @@
 import BarosCore
 import SwiftUI
 
-/// A finite animation. Only the fixed-size Canvas interpolates each frame.
 struct HomeYearRingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.calendar) private var calendar
@@ -10,7 +9,6 @@ struct HomeYearRingView: View {
     @State private var drawsTrack = false
     @State private var scrubReady = false
     @State private var selectedIndex: Int?
-    /// The ring keeps drawing the last selection while `emphasis` fades it out.
     @State private var highlightIndex: Int?
     @State private var emphasis: Double = 0
     @State private var touch: ScrubTouch?
@@ -22,11 +20,8 @@ struct HomeYearRingView: View {
     let period: HomeRingPeriod
     let diameter: CGFloat
     let replayID: Int
-    /// Loads one workout's logged exercises; called only for the slot being previewed.
     let exerciseCount: (UUID) -> Int?
-    /// Returns true when it presented a picker instead of opening a workout.
     let open: ([UUID]) -> Bool
-    /// True while that picker is up; the selection stays until it closes.
     let holdsSelection: Bool
 
     private var innerLapCount: Int {
@@ -46,7 +41,6 @@ struct HomeYearRingView: View {
                            period: period, progress: progress, drawsTrack: drawsTrack,
                            highlightIndex: highlightIndex, emphasis: emphasis)
             if let preview {
-                // The list's widest rows sit mid-height, where the circle inside the tree rings is widest.
                 previewText(preview)
                     .frame(width: diameter * (innerLapCount > 0 ? 0.46 : 0.58))
                     .transition(centerTransition)
@@ -78,7 +72,6 @@ struct HomeYearRingView: View {
         }
     }
 
-    /// Scrubbing swaps the center instantly; only clearing animates, so the swap is a fade, not a cut.
     private var centerTransition: AnyTransition {
         reduceMotion ? .opacity : AnyTransition(BlurReplaceTransition(configuration: .downUp))
     }
@@ -123,7 +116,6 @@ struct HomeYearRingView: View {
             }
             if !preview.rows.isEmpty {
                 VStack(spacing: 3) {
-                    // One size for every row: long names truncate rather than shrinking unevenly.
                     Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 6, verticalSpacing: 3) {
                         ForEach(Array(preview.rows.enumerated()), id: \.offset) { _, row in
                             GridRow {
@@ -159,8 +151,6 @@ struct HomeYearRingView: View {
         .multilineTextAlignment(.center)
     }
 
-    // MARK: Scrubbing
-
     private struct ScrubTouch {
         let startedInCenter: Bool
         var moved = false
@@ -172,13 +162,10 @@ struct HomeYearRingView: View {
                 let center = CGPoint(x: diameter / 2, y: diameter / 2)
                 if touch == nil {
                     clearSelection?.cancel()
-                    // Anywhere inside the track counts as the center. A tap on the edge of a long name
-                    // opens what the preview shows, and a tap on a past year's tree ring selects nothing.
                     let tapRadius = HomeRingCanvas.trackRadius(side: diameter, period: period) - 4
                     touch = ScrubTouch(startedInCenter: distance(value.startLocation, center) < tapRadius)
                 }
                 if hypot(value.translation.width, value.translation.height) > 8 { touch?.moved = true }
-                // A touch that starts in the center stays a tap until it moves.
                 guard touch?.startedInCenter == false || touch?.moved == true,
                       distance(value.location, center) > 12 else { return }
                 select(HomeRingScrubGeometry.slotIndex(at: value.location, center: center,
@@ -188,7 +175,6 @@ struct HomeYearRingView: View {
                 let ended = touch
                 touch = nil
                 guard let ended else { return }
-                // Dragging only browses; the preview lingers so a tap on it (or a spoke) can open.
                 if ended.moved || selectedIndex.map({ model.workouts(for: period, at: $0).isEmpty }) ?? true {
                     scheduleClear(after: 2.5)
                 } else {
@@ -225,11 +211,9 @@ struct HomeYearRingView: View {
     private func openSelection() {
         guard let preview, !preview.workoutIDs.isEmpty else { return }
         clearSelection?.cancel()
-        // A picker holds the selection until it closes; a pushed detail clears it behind the push.
         if !open(preview.workoutIDs) { scheduleClear(after: 0.6) }
     }
 
-    /// Up moves toward today; down moves back in time. The first swipe lands on today or this week.
     private func adjust(_ direction: AccessibilityAdjustmentDirection) {
         clearSelection?.cancel()
         guard model.totalWorkouts > 0 else { return }
@@ -243,8 +227,6 @@ struct HomeYearRingView: View {
         @unknown default: break
         }
     }
-
-    // MARK: Sweep
 
     private struct SweepTrigger: Equatable {
         let replayID: Int
@@ -267,7 +249,6 @@ struct HomeYearRingView: View {
             hasAppeared = true
             return
         }
-        // Let SwiftUI commit the reset before interpolating the Canvas. Start is never gated.
         try? await Task.sleep(for: .milliseconds(25))
         guard !Task.isCancelled else { return }
         hasAppeared = true
@@ -275,7 +256,6 @@ struct HomeYearRingView: View {
         withAnimation(drawsTrack ? .linear(duration: duration) : .easeOut(duration: duration)) {
             progress = 1
         }
-        // Scrubbing waits for the sweep so a touch never fights the animation.
         try? await Task.sleep(for: .seconds(duration))
         guard !Task.isCancelled else { return }
         scrubReady = true
@@ -290,7 +270,6 @@ private struct HomeRingCanvas: View, Animatable {
     var progress: Double
     let drawsTrack: Bool
     let highlightIndex: Int?
-    /// 1 while a slot is selected; animates to 0 as the selection clears.
     var emphasis: Double
 
     static func trackRadius(side: CGFloat, period: HomeRingPeriod) -> CGFloat {
@@ -306,10 +285,8 @@ private struct HomeRingCanvas: View, Animatable {
         Canvas { context, size in
             let side = min(size.width, size.height)
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            // Longer Month spokes grow outward; the center and dial's bounds stay clear.
             let radius = Self.trackRadius(side: side, period: period)
             let trackProgress = drawsTrack ? min(1, progress / 0.78) : 1
-            // While scrubbing, everything but the selected slot steps back.
             let dim = 1 - 0.68 * emphasis
             var track = Path()
             track.addArc(center: center, radius: radius,

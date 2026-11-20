@@ -57,7 +57,6 @@ test("every public route advertises automatic light and dark appearance", async 
 });
 
 test("public imagery matches the approved production assets", async () => {
-  // SHA-256 per public asset. `pnpm listing-assets` updates the app screens' entries.
   const approvedAssets = JSON.parse(await readFile(new URL("approved-assets.json", import.meta.url), "utf8"));
 
   for (const [asset, approvedHash] of Object.entries(approvedAssets)) {

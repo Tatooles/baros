@@ -116,8 +116,6 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
             }
             return cell
         }
-        /// Only watches touches: one outside the content of the row showing a member's
-        /// Delete closes it, including scrolls, other rows, and the reorder grip.
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
             guard let id = parent.memberReveal.id, let table = gestureRecognizer.view as? UITableView else { return false }
             let cell = table.visibleCells.first { cell in

@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""Print the identifiers of tests that still failed after any retries, one per line.
-
-Usage: report_failed_tests.py <xcresult> [<xcodebuild log>]
-
-The result bundle is authoritative. When it can't be read, for example because the
-test step hit its timeout before xcodebuild finalized it, the xcodebuild log is used
-instead. The log fallback also reports tests that never recorded a result: ones that
-exceeded their execution time allowance, crashed the test runner, or were still
-running when the log ended. XCTest doesn't retry those, and doesn't print "failed".
-"""
 
 import json
 import os
@@ -47,7 +37,8 @@ def failed_tests_from_result_bundle(path):
 
 
 def failed_tests_from_log(path):
-    # The last outcome for each test wins, so a test that passed on retry is not reported.
+    # XCTest prints no "failed" line for a test that exceeds its execution time allowance
+    # or crashes the runner, and doesn't retry it.
     outcomes = {}
     current = None
     with open(path, encoding="utf-8", errors="replace") as log:

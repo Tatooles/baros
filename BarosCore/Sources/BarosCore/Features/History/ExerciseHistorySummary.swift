@@ -29,7 +29,6 @@ public struct ExerciseHistorySummary: Identifiable, Hashable {
         return "\(performanceSummaryLabel) · \(completedSetCount) \(setLabel)"
     }
 
-    /// The Exercise History heading: how much history there is, then recency.
     public var exerciseHistoryHeadingLabel: String {
         let workoutLabel = performanceCount == 1 ? "workout" : "workouts"
         return "\(performanceCount) \(workoutLabel) · Last \(WorkoutFormatters.historyDate(lastPerformedAt))"
@@ -121,8 +120,6 @@ public struct ExerciseHistorySummary: Identifiable, Hashable {
                     .insert(exerciseID)
             }
         }
-        // Resolve ownership before grouping so counts, routes, and detail sessions all
-        // use the same conservative snapshot-attribution decision.
         let snapshotOwners = linkedExerciseIDsBySnapshotIdentity.compactMapValues { exerciseIDs in
             exerciseIDs.count == 1 ? exerciseIDs.first : nil
         }
@@ -326,8 +323,6 @@ struct ExerciseHistoryIndex {
         let snapshotIdentity = ExerciseHistorySnapshotIdentity(exercise: exercise)
         let hasVisibleLinkedClaim = linkedExerciseIDsBySnapshotIdentity[snapshotIdentity]?
             .contains { visibility.containsExercise(withID: $0) } == true
-        // A visible linked claim means this raw snapshot copy was either folded into
-        // that exercise already or belongs to another visible exercise.
         guard visibility.allowsSnapshotFallback(for: snapshotIdentity),
               !hasVisibleLinkedClaim,
               let snapshotSummary = snapshotOnlySummariesByIdentity[snapshotIdentity] else {

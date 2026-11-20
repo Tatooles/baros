@@ -1,13 +1,10 @@
 import Foundation
 import SwiftData
 
-/// A named, ordered list of exercises to start a workout from. A workout
-/// changes its template only when Update is chosen on the Finish sheet.
 @Model
 public final class WorkoutTemplate: Identifiable {
     @Attribute(.unique) public var id: UUID
     public var name: String
-    /// Replace the whole array to change it; SwiftData doesn't see in-place edits.
     public var entries: [WorkoutTemplateEntry] = []
     var syncOwnerTokenIdentifier: String?
     var createdAt: Date
@@ -40,9 +37,6 @@ public final class WorkoutTemplate: Identifiable {
         syncOwnerTokenIdentifier == ownerTokenIdentifier
     }
 
-    /// Points entries for one library exercise at another, for when sync
-    /// replaces an exercise's id or folds a duplicate into it. Returns whether
-    /// any entry changed.
     func repointEntries(from oldExerciseID: UUID, to newExerciseID: UUID) -> Bool {
         guard entries.contains(where: { $0.exerciseID == oldExerciseID }) else { return false }
         entries = entries.map { entry in
@@ -54,22 +48,12 @@ public final class WorkoutTemplate: Identifiable {
     }
 }
 
-/// One exercise in a template. The snapshot keeps the exercise showing by
-/// name after its library exercise is deleted.
-///
-/// New fields must be optional: entries saved before the field existed
-/// decode without it. On the server they must be nullable, because the
-/// server keeps a stored value an upload leaves out, so clearing one takes
-/// an explicit null.
 public struct WorkoutTemplateEntry: Codable, Hashable, Identifiable {
     public var id: UUID
-    /// The library exercise. Looked up by id rather than held as a
-    /// relationship so an entry pulled before its exercise still resolves.
     var exerciseID: UUID?
     var exerciseSnapshotName: String
     var exerciseSnapshotEquipmentRaw: String
     var exerciseSnapshotPrimaryMuscleGroupRaw: String
-    /// Shared by neighboring entries in a superset. See `SupersetGrouping`.
     var supersetGroupID: UUID?
 
     init(
@@ -98,9 +82,6 @@ public struct WorkoutTemplateEntry: Codable, Hashable, Identifiable {
         )
     }
 
-    /// A workout's exercises in order, for saving it as a template. Superset
-    /// groups get fresh ids so the template doesn't share them with the
-    /// workout. An exercise deleted from the library keeps its logged name.
     public static func entries(copying session: WorkoutSession) -> [WorkoutTemplateEntry] {
         let loggedExercises = session.sortedLoggedExercises
         let groupIDs = SupersetGrouping.copied(loggedExercises.map(\.supersetGroupID))

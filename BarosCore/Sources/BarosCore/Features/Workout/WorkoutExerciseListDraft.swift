@@ -1,7 +1,5 @@
 import Foundation
 
-/// Value-only baseline shared by confirmation and persistence. In particular,
-/// set edits do not always touch parent timestamps, so compare the leaves too.
 public struct WorkoutExerciseListSnapshot: Equatable {
     struct SetState: Equatable {
         let id: UUID
@@ -101,7 +99,6 @@ public struct WorkoutExerciseListSnapshot: Equatable {
     }
 }
 
-/// Draft workout membership; pending additions enter SwiftData only when Done saves.
 public struct WorkoutExerciseListDraft {
     public struct Addition {
         public let id = UUID()
@@ -112,7 +109,6 @@ public struct WorkoutExerciseListDraft {
 
     public let baseline: WorkoutExerciseListSnapshot
     public var orderedIDs: [UUID]
-    /// Superset ids by exercise, including pending additions.
     public private(set) var supersetGroupIDs: [UUID: UUID]
 
     public init(session: WorkoutSession) {
@@ -150,7 +146,6 @@ public struct WorkoutExerciseListDraft {
         }
     }
 
-    /// Replaces the superset ids, given in the order of `exercises`.
     public mutating func regroup(_ groupIDs: [UUID?]) {
         supersetGroupIDs = zip(orderedIDs, groupIDs).reduce(into: [:]) { $0[$1.0] = $1.1 }
     }

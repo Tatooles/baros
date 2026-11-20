@@ -42,7 +42,6 @@ final class HistoryPersistenceTests: XCTestCase {
                 exerciseSnapshotEquipmentRaw: ExerciseEquipment.barbell.rawValue
             )
             loggedExercise.sets = scenario.completed.enumerated().map { index, isCompleted in
-                // Unfinished rows are heavier so any leak into volume or records is visible.
                 LoggedSet(orderIndex: index, weight: isCompleted ? 100 : 400, reps: 5, isCompleted: isCompleted)
             }
             session.loggedExercises = [loggedExercise]
@@ -314,7 +313,6 @@ final class HistoryPersistenceTests: XCTestCase {
     }
 
     func testExerciseHistoryViewSnapshotResolvesHistoryOnceForAllConsumers() throws {
-        // The one deliberately large history: 100 workouts and 3,000 completed sets.
         let fixture = try makeHistoryViewPerformanceFixture(
             sessionCount: 100,
             exerciseCount: 20,
@@ -567,7 +565,6 @@ final class HistoryPersistenceTests: XCTestCase {
             ).resolvedHistory.summary(for: exercise)
         ).name
 
-        // A synced reorder updates the logged exercises without touching the session.
         first.orderIndex = 1
         second.orderIndex = 0
         try context.save()
@@ -609,7 +606,6 @@ final class HistoryPersistenceTests: XCTestCase {
             now: Date(timeIntervalSince1970: 5_000)
         )
 
-        // No save is routed here: a History edit reaches the key through its session.
         let updatedCompletedSetCount = completedSetCount(
             in: state.snapshot(
                 sessions: fixture.sessions,
@@ -974,7 +970,6 @@ final class HistoryPersistenceTests: XCTestCase {
         snapshot.resolvedHistory.summaries.reduce(0) { $0 + $1.completedSetCount }
     }
 
-    /// One completed, owned workout with a single completed set, saved before sync runs.
     @MainActor
     private struct SyncedHistoryFixture {
         let container: ModelContainer
@@ -993,7 +988,6 @@ final class HistoryPersistenceTests: XCTestCase {
             )
         }
 
-        /// Pulls one remote set record for the fixture's logged exercise.
         func pull(loggedSet id: UUID, isCompleted: Bool, deletedAt: Double? = nil) async throws {
             let client = FakeSyncClient()
             client.fetchResponses = [
@@ -1030,8 +1024,6 @@ final class HistoryPersistenceTests: XCTestCase {
         }
     }
 
-    /// With a store URL, the fixture is saved to disk and reopened in a fresh
-    /// container, so History starts from faults as it does after a cold launch.
     private func makeSyncedHistoryFixture(storeURL: URL? = nil) throws -> SyncedHistoryFixture {
         let container = try storeURL.map(SwiftDataTestSupport.makeDiskBackedContainer(storeURL:))
             ?? SwiftDataTestSupport.makeInMemoryContainer()
@@ -1095,8 +1087,6 @@ final class HistoryPersistenceTests: XCTestCase {
         )
     }
 
-    /// Routes each save to the state while it is being posted, as `HistoryView`'s
-    /// `onReceive` does, instead of replaying saves after sync returns.
     @MainActor
     private final class ImmediateHistorySaveForwarder {
         private(set) var deliveredCount = 0
@@ -1109,7 +1099,6 @@ final class HistoryPersistenceTests: XCTestCase {
                 object: nil,
                 queue: nil
             ) { [weak self] notification in
-                // Production saves post on the main thread, so this runs synchronously.
                 nonisolated(unsafe) let notification = notification
                 MainActor.assumeIsolated {
                     state.recordSave(notification, in: context)
@@ -1125,8 +1114,6 @@ final class HistoryPersistenceTests: XCTestCase {
         }
     }
 
-    /// Collects a context's saves so a test can route them to the state, as
-    /// `HistoryView` does.
     private final class HistorySaveNotificationCapture: @unchecked Sendable {
         private let lock = NSLock()
         private var notifications: [Notification] = []
@@ -1149,7 +1136,6 @@ final class HistoryPersistenceTests: XCTestCase {
             }
         }
 
-        /// Returns how many saves were delivered.
         @MainActor
         func deliver(to state: ExerciseHistoryViewState, in context: ModelContext) -> Int {
             let pending = lock.withLock {
@@ -1163,10 +1149,6 @@ final class HistoryPersistenceTests: XCTestCase {
         }
     }
 
-    /// Completed, owned history in which every exercise has the same number of
-    /// performances, provided `sessionCount` is a multiple of `exerciseCount`.
-    /// The defaults are the smallest history the cache tests need; only a test
-    /// about scale should ask for more.
     private func makeHistoryViewPerformanceFixture(
         sessionCount: Int = 4,
         exerciseCount: Int = 4,

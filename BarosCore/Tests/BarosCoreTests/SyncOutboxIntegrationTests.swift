@@ -1538,8 +1538,6 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         let settings = UserSettings(weightUnit: .pounds, syncOwnerTokenIdentifier: owner)
         context.insert(settings)
 
-        // 40 workouts bootstrap over 120 outbox entries, enough to need three 50-entry
-        // push pages; the behaviour under test is the multi-page drain, not scale.
         for index in 0..<40 {
             let session = WorkoutSession(
                 title: "Workout \(index)",

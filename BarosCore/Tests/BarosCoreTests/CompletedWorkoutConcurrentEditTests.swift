@@ -17,7 +17,6 @@ final class CompletedWorkoutConcurrentEditTests: XCTestCase {
             fixture.session.updatedAt = remoteTime
             try context.save()
 
-            // Use the same preparation that the editor performs before saving.
             draft.prepareTitleForSave()
             try save(draft, fixture: fixture, context: context)
 
@@ -94,7 +93,6 @@ final class CompletedWorkoutConcurrentEditTests: XCTestCase {
             let fixture = makeWorkout(context: context)
             try context.save()
             var draft = CompletedWorkoutEditDraft(session: fixture.session)
-            // This independent local change must also remain unapplied when a later field conflicts.
             draft.exercises[0].sets.append(CompletedWorkoutEditSetDraft(orderIndex: 1, weight: 50, reps: 10))
             conflict.edit(&draft)
             conflict.updateSaved(fixture)
@@ -201,8 +199,6 @@ final class CompletedWorkoutConcurrentEditTests: XCTestCase {
         draft.exercises[0].sets[0].isCompleted = false
         draft.exercises[0].sets.append(CompletedWorkoutEditSetDraft(orderIndex: 1, weight: 50, reps: 10))
 
-        // A pull can deliver a later completion after another device saved the
-        // set incomplete, then complete again. Its other values are unchanged.
         fixture.set.completedAt = remoteTime
         fixture.set.updatedAt = remoteTime
         let existingEntry = SyncOutboxEntry(
@@ -260,8 +256,6 @@ final class CompletedWorkoutConcurrentEditTests: XCTestCase {
         draft.exercises[0].sets[0].isRemoved = true
         draft.exercises[0].sets.append(CompletedWorkoutEditSetDraft(orderIndex: 1, weight: 50, reps: 10))
 
-        // A pull can deliver a later completion after another device saved the
-        // set incomplete, then complete again. Its other values are unchanged.
         fixture.set.completedAt = remoteTime
         fixture.set.updatedAt = remoteTime
         let existingEntry = SyncOutboxEntry(

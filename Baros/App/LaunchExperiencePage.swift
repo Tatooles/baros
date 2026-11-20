@@ -1,9 +1,5 @@
 import SwiftUI
 
-/// Shared layout for onboarding and What's New pages: hero symbol, title,
-/// optional summary, optional content, and actions. Actions pin to the bottom edge,
-/// except at accessibility text sizes, where they scroll with the content so
-/// large labels never crowd the page out.
 struct LaunchExperiencePage<Content: View, Actions: View>: View {
     let systemImage: String
     let title: String

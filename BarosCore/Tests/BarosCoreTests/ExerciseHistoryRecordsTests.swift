@@ -31,9 +31,6 @@ final class ExerciseHistoryRecordsTests: XCTestCase {
         }
     }
 
-    /// A heavy high-rep set proves at least ten reps at that load, so it can't
-    /// lose to a lighter ten-rep set and leave the estimate below a weight
-    /// actually lifted for many reps.
     func testHeavyHighRepSetOutranksLighterTenRepSet() throws {
         let lighter = makeSession(sets: [LoggedSet(orderIndex: 0, weight: 115, reps: 10, isCompleted: true)])
         lighter.startedAt = Date(timeIntervalSince1970: 1_000)
@@ -51,8 +48,6 @@ final class ExerciseHistoryRecordsTests: XCTestCase {
         XCTAssertTrue(result.recordsShareSource)
     }
 
-    /// Sets past the counted-rep cap tie on the estimate, so the set with more
-    /// reps holds both records even when a shorter set at the load is newer.
     func testTiedRecordsPreferMoreRepsOverNewerWorkout() throws {
         let fifteen = LoggedSet(orderIndex: 0, weight: 160, reps: 15, isCompleted: true)
         let older = makeSession(sets: [fifteen])
@@ -65,7 +60,6 @@ final class ExerciseHistoryRecordsTests: XCTestCase {
         XCTAssertEqual(result.heaviestRep?.setID, fifteen.id)
         XCTAssertEqual(result.estimated1RM?.setID, fifteen.id)
         XCTAssertTrue(result.recordsShareSource)
-        // Each workout still gets its own chart point at the capped value.
         XCTAssertEqual(result.estimateHistory.map(\.id), [older.id, newer.id])
         for point in result.estimateHistory {
             XCTAssertEqual(point.value, 213.333333, accuracy: 0.000001)
@@ -106,7 +100,6 @@ final class ExerciseHistoryRecordsTests: XCTestCase {
             XCTAssertTrue(result.kinds(for: set.id).isEmpty)
         }
 
-        // Explicit legacy snapshot values are known history even without the newer flag.
         occurrence.exerciseSnapshotEquipmentRaw = ExerciseEquipment.barbell.rawValue
         XCTAssertEqual(try records(from: [session]).heaviestRep?.setID, set.id)
     }
@@ -253,7 +246,6 @@ final class ExerciseHistoryRecordsTests: XCTestCase {
 
         let result = try records(from: [newer, ineligible, older])
 
-        // A workout without an eligible set adds no point rather than a zero.
         XCTAssertEqual(result.estimateHistory.map(\.id), [older.id, newer.id])
         XCTAssertEqual(try XCTUnwrap(result.estimateHistory.first?.value), 233.333333, accuracy: 0.000001)
         XCTAssertEqual(result.estimateHistory.last?.value, 252)
@@ -266,7 +258,6 @@ final class ExerciseHistoryRecordsTests: XCTestCase {
         XCTAssertEqual(MeasurementUnit.pounds.recordNumber(fromCanonicalPounds: 262.5, isEstimate: true), "263")
         XCTAssertEqual(MeasurementUnit.pounds.recordNumber(fromCanonicalPounds: 9_999.99, isEstimate: false), "9,999.99")
         XCTAssertEqual(MeasurementUnit.pounds.recordNumber(fromCanonicalPounds: 10_000, isEstimate: false), "10,000")
-        // 252 lb = 114.31 kg, shown to the nearest half kilogram.
         XCTAssertEqual(MeasurementUnit.kilograms.recordNumber(fromCanonicalPounds: 252, isEstimate: true), "114.5")
         XCTAssertEqual(MeasurementUnit.kilograms.recordNumber(fromCanonicalPounds: 235, isEstimate: false), "106.59")
     }

@@ -1,9 +1,6 @@
 import Foundation
 import SwiftData
 
-/// RPE entry is off until someone chooses it, unless they already have ratings:
-/// those on this device are checked once ever, and synced ones turn it on as they
-/// arrive. A choice in Settings is never overridden.
 public enum RPEPreference {
     public static let storageKey = "Baros.RPE.enabled"
     private static let didCheckExistingRatingsKey = "Baros.RPE.didCheckExistingRatings"
@@ -12,7 +9,6 @@ public enum RPEPreference {
         guard !defaults.bool(forKey: didCheckExistingRatingsKey) else { return }
         var descriptor = FetchDescriptor<LoggedSet>(predicate: #Predicate { $0.rpe != nil && $0.deletedAt == nil })
         descriptor.fetchLimit = 1
-        // A failed read tries again next launch.
         guard let ratedSets = try? context.fetch(descriptor) else { return }
         if !ratedSets.isEmpty {
             enableIfUndecided(defaults: defaults)
@@ -20,7 +16,6 @@ public enum RPEPreference {
         defaults.set(true, forKey: didCheckExistingRatingsKey)
     }
 
-    /// A choice the person made; nothing turns it back on or off for them.
     static func choose(_ enabled: Bool, defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: storageKey)
     }
