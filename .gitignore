@@ -26,8 +26,17 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
-.env.local
+.env
+.env.*
+!.env.example
 
 node_modules/
 
 .sentryclirc
+
+# Signing material and local credentials
+*.p8
+*.p12
+*.pem
+*.mobileprovision
+*.cer

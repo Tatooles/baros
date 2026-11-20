@@ -22,6 +22,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Checkout needs contents: read. Jobs that upload logs add actions: write
+# because the artifact API rejects a token that only has contents: read.
+permissions:
+  contents: read
+
 jobs:
   app-changes:
     name: app-change-detection
@@ -31,17 +36,17 @@ jobs:
 
     steps:
       - name: Check out repository history
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 10.26.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22.12.0
 
@@ -83,6 +88,9 @@ jobs:
 
   baros-core-tests:
     name: baros-core-tests
+    permissions:
+      contents: read
+      actions: write
     needs: app-changes
     if: ${{ always() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
     runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
@@ -94,7 +102,7 @@ jobs:
         run: exit 1
 
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Select Xcode 26.5
         run: sudo xcode-select -s /Applications/Xcode_26.5.app
@@ -112,7 +120,7 @@ jobs:
 
       - name: Upload BarosCore failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: BarosCoreTests-log
           path: ${{ runner.temp }}/BarosCoreTests.log
@@ -121,6 +129,9 @@ jobs:
 
   ios-unit-tests:
     name: ios-unit-tests
+    permissions:
+      contents: read
+      actions: write
     needs: app-changes
     if: ${{ always() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
     runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
@@ -134,7 +145,7 @@ jobs:
         run: exit 1
 
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Select Xcode 26.5
         run: sudo xcode-select -s /Applications/Xcode_26.5.app
@@ -176,7 +187,7 @@ jobs:
 
       - name: Upload iOS failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: BarosTests-xcresult
           path: |
@@ -187,6 +198,9 @@ jobs:
 
   ios-ui-smoke:
     name: ios-ui-smoke
+    permissions:
+      contents: read
+      actions: write
     needs: app-changes
     if: ${{ always() && (needs.app-changes.result != 'success' || needs.app-changes.outputs.changed == 'true') }}
     runs-on: ${{ needs.app-changes.outputs.changed == 'true' && 'macos-26' || 'ubuntu-latest' }}
@@ -200,7 +214,7 @@ jobs:
         run: exit 1
 
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Select Xcode 26.5
         run: sudo xcode-select -s /Applications/Xcode_26.5.app
@@ -264,7 +278,7 @@ jobs:
 
       - name: Upload UI smoke failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: BarosUISmoke-xcresult
           path: |

@@ -151,7 +151,7 @@ test("app classification is always reported and preserves its decision polarity"
   assert.equal(appChanges.outputs.changed, "${{ steps.detect.outputs.changed }}");
   assert.deepEqual(checkout, {
     name: "Check out repository history",
-    uses: "actions/checkout@v4",
+    uses: "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
     with: { "fetch-depth": 0 },
   });
   assert.deepEqual(classifier.env, {
@@ -187,12 +187,12 @@ test("the lightweight classifier always runs the workflow contract tests", async
 
   assert.deepEqual(classifierSteps[pnpmIndex], {
     name: "Set up pnpm",
-    uses: "pnpm/action-setup@v4",
+    uses: "pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320",
     with: { version: "10.26.1" },
   });
   assert.deepEqual(classifierSteps[nodeIndex], {
     name: "Set up Node.js",
-    uses: "actions/setup-node@v4",
+    uses: "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
     with: { "node-version": "22.12.0" },
   });
   assert.deepEqual(classifierSteps[installIndex], {
@@ -306,7 +306,7 @@ test("the nightly UI suite runs the full target serially with the smoke job's se
 
   const upload = stepNamed(job.steps, "Upload UI suite failure diagnostics");
   assert.equal(upload.if, "failure()");
-  assert.equal(upload.uses, "actions/upload-artifact@v4");
+  assert.equal(upload.uses, "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02");
   assert.match(upload.with.path, /BarosUIFull\.xcresult/);
   assert.match(upload.with.path, /BarosUIFull\.log/);
 });
@@ -321,7 +321,10 @@ test("the nightly tracking issue uses minimal permissions and only follows main"
     "track-nightly-result",
   ]);
   assert.deepEqual(workflow.permissions, { contents: "read" });
-  assert.equal(workflow.jobs["ios-ui-full"].permissions, undefined);
+  assert.deepEqual(workflow.jobs["ios-ui-full"].permissions, {
+    contents: "read",
+    actions: "write",
+  });
   assert.deepEqual(tracker.permissions, { issues: "write" });
   assert.equal(tracker.needs, "ios-ui-full");
   assert.match(tracker.if, /^\$\{\{ always\(\) && github\.ref == 'refs\/heads\/main' && /);

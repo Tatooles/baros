@@ -68,6 +68,9 @@ jobs:
 
   ios-ui-full:
     name: ios-ui-full
+    permissions:
+      contents: read
+      actions: write
     needs: main-changes
     # Fails open: if the gate itself breaks, run the suite rather than skip it.
     if: ${{ !cancelled() && (needs.main-changes.result != 'success' || needs.main-changes.outputs.run == 'true') }}
@@ -80,7 +83,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Select Xcode 26.5
         run: sudo xcode-select -s /Applications/Xcode_26.5.app
@@ -188,7 +191,7 @@ jobs:
 
       - name: Upload UI suite failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: BarosUIFull-xcresult
           path: |
