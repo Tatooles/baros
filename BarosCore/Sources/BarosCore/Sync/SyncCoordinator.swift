@@ -160,10 +160,16 @@ public final class SyncCoordinator {
 
     /// The one-time step a device runs after updating to this build.
     ///
-    /// - Every local delete is sent again, so the server applies the ones an
-    ///   older server rejected or later undid (#97, #98). Only the topmost
-    ///   deleted record of a workout is sent; the server deletes what is
-    ///   under it. User settings are left out.
+    /// - Every local delete of an exercise, a template, or a completed
+    ///   workout or anything in it is sent again, so the server applies the
+    ///   ones an older server rejected or later undid (#97, #98). Only the
+    ///   topmost deleted record of a workout is sent; the server deletes what
+    ///   is under it. Active and discarded workouts never synced, and user
+    ///   settings are left out. A set or exercise removed during a workout
+    ///   never reached the server, so its delete leaves a placeholder
+    ///   tombstone there. That is the price of healing: no stored time tells
+    ///   it apart from a delete an older server bounced, since that time can
+    ///   come from another device's clock.
     /// - Records already synced take their current version as their sync
     ///   base, so the next edit outranks the version this device holds. A
     ///   record with a waiting entry keeps no base: its edit may not have
