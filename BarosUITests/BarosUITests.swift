@@ -337,7 +337,12 @@ final class BarosUITests: XCTestCase {
         captureEditWorkout("05-edit-sheet")
         app.buttons["EditWorkoutAddExercisesButton"].tap()
         app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        // A superset needs two exercises, so its button joins Add only on the second pick.
+        let addAsSuperset = app.buttons["ExercisePickerAddAsSupersetButton"]
+        XCTAssertTrue(app.buttons["ExercisePickerAddSelectedButton"].waitToExist(timeout: 3))
+        XCTAssertFalse(addAsSuperset.exists)
         app.buttons["ExercisePickerRow-Biceps Curl-Dumbbell"].tap()
+        XCTAssertTrue(addAsSuperset.waitToExist(timeout: 3))
         captureEditWorkout("06-picker")
         app.buttons["ExercisePickerAddSelectedButton"].tap()
         XCTAssertTrue(app.navigationBars["Edit Workout"].waitToExist(timeout: 3))
@@ -2481,9 +2486,7 @@ final class BarosUITests: XCTestCase {
             app.staticTexts["ExercisePickerSwapImpactText"].label,
             "Bench Press has nothing logged yet"
         )
-        // The button ignores taps for a moment after it appears, so a repeat tap on a row can't commit.
-        XCTAssertTrue(waitUntil(timeout: 3) { confirmButton.isHittable })
-        confirmButton.tap()
+        confirmSwap(in: app)
 
         assertActiveWorkoutExerciseOrder(["Overhead Press"], in: app)
         let replacementWeightField = app.textFields["SetWeightField-0-0"]
@@ -2520,8 +2523,7 @@ final class BarosUITests: XCTestCase {
         let confirmButton = app.buttons["ExercisePickerConfirmSwapButton"]
         XCTAssertTrue(app.navigationBars["Swap Exercise"].waitToExist(timeout: 3))
         XCTAssertTrue(waitUntil(timeout: 3) { confirmButton.label == "Swap for Swap Test Press" })
-        XCTAssertTrue(waitUntil(timeout: 3) { confirmButton.isHittable })
-        confirmButton.tap()
+        confirmSwap(in: app)
 
         assertActiveWorkoutExerciseOrder(["Swap Test Press"], in: app)
     }
@@ -5098,6 +5100,17 @@ final class BarosUITests: XCTestCase {
     }
 
     @MainActor
+    /// Swap's confirm button swallows taps for a moment after it appears or the pick changes,
+    /// and XCTest can't see that, so tap until the picker closes.
+    private func confirmSwap(in app: XCUIApplication) {
+        let confirmButton = app.buttons["ExercisePickerConfirmSwapButton"]
+        XCTAssertTrue(confirmButton.waitToExist(timeout: 3))
+        XCTAssertTrue(waitUntil(timeout: 5) {
+            if confirmButton.exists { confirmButton.tap() }
+            return !confirmButton.exists
+        })
+    }
+
     private func assertActiveWorkoutExerciseOrder(_ expectedNames: [String], in app: XCUIApplication) {
         for (index, expectedName) in expectedNames.enumerated() {
             let header = app.buttons["ExerciseHeader-\(index)"]

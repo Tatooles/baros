@@ -428,7 +428,7 @@ private struct ExercisePickerList: View {
             // A value, not a hint, so VoiceOver reads the loss even with hints turned off.
             .accessibilityValue(impact.losesWork ? impact.lossMessage : "")
             .tint(impact.losesWork ? AppTheme.destructiveFill : AppTheme.brandAccentFill)
-            .modifier(IgnoresTapsWhileAppearing())
+            .modifier(IgnoresTapsWhileAppearing(trigger: replacement.id))
             .accessibilityIdentifier("ExercisePickerConfirmSwapButton")
         }
         .padding(.horizontal, 20)
@@ -552,16 +552,31 @@ private extension ExercisePickerMode {
 }
 
 /// The swap bar slides in over the lowest rows, and a swap commits without another prompt.
-/// Ignoring taps briefly keeps a repeat tap on one of those rows ("did that register?")
-/// from committing; it falls through to the row and picks it again.
-private struct IgnoresTapsWhileAppearing: ViewModifier {
+/// For a moment after it appears, or after the pick changes, the button swallows taps, so a
+/// repeat tap on a row ("did that register?") can't commit a swap the user didn't mean.
+private struct IgnoresTapsWhileAppearing<Trigger: Equatable>: ViewModifier {
+    let trigger: Trigger
     @State private var isArmed = false
 
     func body(content: Content) -> some View {
         content
             .allowsHitTesting(isArmed)
-            .task {
-                try? await Task.sleep(for: .milliseconds(700))
+            .overlay {
+                if !isArmed {
+                    // Catches the tap so it doesn't reach the row underneath and change the pick.
+                    Color.clear
+                        .contentShape(.rect)
+                        .onTapGesture {}
+                        .accessibilityHidden(true)
+                }
+            }
+            .task(id: trigger) {
+                isArmed = false
+                do {
+                    try await Task.sleep(for: .milliseconds(700))
+                } catch {
+                    return
+                }
                 isArmed = true
             }
     }
