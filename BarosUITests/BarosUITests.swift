@@ -2559,7 +2559,10 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Create Exercise"].waitToExist(timeout: 3))
         app.buttons["ExerciseEditorSaveButton"].tap()
         XCTAssertTrue(app.navigationBars["Add Exercises"].waitToExist(timeout: 3))
-        app.buttons["ExercisePickerAddSelectedButton"].tap()
+        // The new pick slides the Add bar in as the sheet closes; tap once it has settled above search.
+        let add = app.buttons["ExercisePickerAddSelectedButton"]
+        XCTAssertTrue(waitUntil(timeout: 3) { add.isHittable && add.frame.maxY <= search.frame.minY })
+        add.tap()
 
         XCTAssertTrue(app.alerts["Couldn't Add Exercises"].waitToExist(timeout: 3))
         app.alerts.buttons["OK"].tap()
