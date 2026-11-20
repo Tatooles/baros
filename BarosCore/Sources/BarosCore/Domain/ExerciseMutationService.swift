@@ -148,6 +148,8 @@ public struct ExerciseMutationService {
             let operation = entry.operationRaw, status = entry.statusRaw
             let created = entry.createdAt, updated = entry.updatedAt
             let error = entry.lastErrorMessage
+            // refreshPending clears the retry time; a rolled-back failure keeps it.
+            let nextAttemptAt = entry.nextAttemptAt
             return {
                 if entry.isDeleted {
                     context.insert(SyncOutboxEntry(
@@ -161,6 +163,7 @@ public struct ExerciseMutationService {
                     ))
                     return
                 }
+                entry.nextAttemptAt = nextAttemptAt
                 entry.operationRaw = operation
                 entry.statusRaw = status
                 entry.createdAt = created

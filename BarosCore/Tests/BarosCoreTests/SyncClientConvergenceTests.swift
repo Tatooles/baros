@@ -713,6 +713,28 @@ final class SyncClientConvergenceTests: XCTestCase {
         XCTAssertNil(entry.nextAttemptAt)
     }
 
+    func testFailedExerciseRemovalKeepsTheEntrysRetryTime() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let exercise = ownedExercise("Rejected", context: context)
+        let entry = SyncOutboxEntry(
+            entityKind: .exercise, entityID: exercise.id, operation: .update, status: .failed,
+            ownerTokenIdentifier: owner, createdAt: start, updatedAt: start, attemptCount: 2
+        )
+        let retryAt = start.addingTimeInterval(600)
+        entry.nextAttemptAt = retryAt
+        context.insert(entry)
+        try context.save()
+
+        XCTAssertThrowsError(try ExerciseMutationService().removeExercise(
+            exercise, ownerTokenIdentifier: owner, context: context, now: start,
+            save: { _ in throw CocoaError(.fileWriteUnknown) }
+        ))
+
+        XCTAssertEqual(entry.status, .failed)
+        XCTAssertEqual(entry.nextAttemptAt, retryAt, "A rolled-back edit must not make a rejected entry due early.")
+    }
+
     // MARK: One-time update step
 
     func testUpdateSendsTopmostLocalDeletesOnceAndSkipsSettings() async throws {
