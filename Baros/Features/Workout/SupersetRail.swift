@@ -7,14 +7,10 @@ struct SupersetRail<Content: View>: View {
     static var railSpacing: CGFloat { 6 }
     /// How far the rail reaches into the leading margin.
     static var marginWidth: CGFloat { railWidth + railSpacing }
-    static var labelSpacing: CGFloat { 6 }
+    private static var labelSpacing: CGFloat { 6 }
 
     let count: Int
     var spacing: CGFloat = 8
-    /// Off where the leading margin holds other controls, such as edit-mode lists.
-    var reachesIntoMargin = true
-    /// Equal label space below keeps native row controls centered on the members.
-    var balancesLabel = false
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -29,13 +25,8 @@ struct SupersetRail<Content: View>: View {
                         .frame(width: Self.railWidth)
                         .accessibilityHidden(true)
                 }
-            if balancesLabel {
-                SupersetLabel(count: count)
-                    .hidden()
-                    .accessibilityHidden(true)
-            }
         }
-        .padding(.leading, reachesIntoMargin ? -Self.marginWidth : 0)
+        .padding(.leading, -Self.marginWidth)
         .accessibilityElement(children: .contain)
     }
 }
