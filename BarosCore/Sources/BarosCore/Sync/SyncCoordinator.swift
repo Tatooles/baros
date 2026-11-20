@@ -1631,6 +1631,8 @@ public final class SyncCoordinator {
                 context: context,
                 now: now
             )
+            // The same pulled page may carry this template; keep the repoint.
+            pullLocalIntents[SyncOutboxKey(kind: .workoutTemplate, id: template.id)] = .pending
         }
     }
 
@@ -1797,6 +1799,11 @@ public final class SyncCoordinator {
                let exerciseID = UUID(uuidString: exerciseClientId) {
                 guard let resolvedExercise = try findExercise(id: exerciseID, context: context) else {
                     guard incomingDeletedAt == nil else {
+                        // Deletes win: apply it to a copy this device holds,
+                        // even though the exercise it names is not here.
+                        if let held = try findLoggedExercise(id: id, context: context) {
+                            applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
+                        }
                         recordAppliedCursor(record.serverUpdatedAt)
                         continue
                     }

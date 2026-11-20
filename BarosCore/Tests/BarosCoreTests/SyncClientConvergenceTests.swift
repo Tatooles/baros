@@ -164,6 +164,75 @@ final class SyncClientConvergenceTests: XCTestCase {
         XCTAssertNotNil(bench.deletedAt, "Deletes win, even over a waiting local edit.")
     }
 
+    func testLoggedExerciseTombstoneNamingAnUnknownExerciseStillDeletesTheLocalCopy() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let graph = completedWorkout(context: context)
+        try markBootstrapped(context, upgraded: true)
+        let client = FakeSyncClient()
+        client.fetchResponses = [SyncFetchChangesResponse(
+            userSettings: [], exercises: [], workoutSessions: [],
+            loggedExercises: [LoggedExerciseSyncRecord(
+                clientId: graph.loggedExercise.id.uuidString.lowercased(), createdAt: 110, updatedAt: 1_900_000_000,
+                deletedAt: 1_900_000_000, serverUpdatedAt: 70, sessionClientId: graph.session.id.uuidString.lowercased(),
+                exerciseClientId: UUID().uuidString.lowercased(), orderIndex: 0, exerciseSnapshotName: "Swapped",
+                exerciseSnapshotEquipmentRaw: "barbell", exerciseSnapshotPrimaryMuscleGroupRaw: "chest",
+                hasSnapshotMetadata: true, notes: "", referenceNotes: nil, sourceLoggedExerciseID: nil
+            )],
+            loggedSets: [],
+            cursors: SyncChangeCursors(userSettings: 0, exercises: 0, loggedExercises: 70),
+            hasMore: SyncHasMore(userSettings: false, exercises: false)
+        )]
+
+        try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertNotNil(graph.loggedExercise.deletedAt)
+    }
+
+    func testTemplateRepointedBySeedAdoptionSurvivesTheSamePage() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let bench = Exercise(
+            seedIdentifier: "bench-press", name: "Bench Press", category: .strength, equipment: .barbell,
+            primaryMuscle: "Chest", isSeeded: true
+        )
+        context.insert(bench)
+        let localID = bench.id
+        let entryID = UUID()
+        let template = WorkoutTemplate(
+            name: "Push",
+            entries: [WorkoutTemplateEntry(id: entryID, exerciseID: localID, exerciseSnapshotName: "Bench Press",
+                                           exerciseSnapshotEquipmentRaw: "barbell", exerciseSnapshotPrimaryMuscleGroupRaw: "chest")],
+            syncOwnerTokenIdentifier: owner
+        )
+        context.insert(template)
+        try context.save()
+        let remoteID = UUID()
+        var response = exerciseResponse([ExerciseSyncRecord(
+            clientId: remoteID.uuidString.lowercased(), createdAt: 10, updatedAt: 20, deletedAt: nil, serverUpdatedAt: 31,
+            seedIdentifier: "bench-press", name: "Bench Press", categoryRaw: "strength", equipmentRaw: "barbell",
+            primaryMuscleRaw: "Chest", primaryMuscleGroupRaw: "chest", notes: "", isArchived: false, isSeeded: true
+        )], cursor: 31)
+        // The server still holds the template as this device uploaded it before.
+        response.workoutTemplates = [WorkoutTemplateSyncRecord(
+            clientId: template.id.uuidString.lowercased(), createdAt: 10, updatedAt: 1_900_000_000, deletedAt: nil,
+            serverUpdatedAt: 32, name: "Push",
+            entries: [WorkoutTemplateEntrySyncPayload(
+                id: entryID.uuidString.lowercased(), exerciseClientId: localID.uuidString.lowercased(),
+                exerciseSnapshotName: "Bench Press", exerciseSnapshotEquipmentRaw: "barbell",
+                exerciseSnapshotPrimaryMuscleGroupRaw: "chest", supersetGroupID: nil
+            )]
+        )]
+        let client = FakeSyncClient()
+        client.fetchResponses = [response]
+
+        try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertEqual(bench.id, remoteID)
+        XCTAssertEqual(template.entries.first?.exerciseID, remoteID)
+        XCTAssertEqual(client.upsertedWorkoutTemplates.last?.entries.first?.exerciseClientId, remoteID.uuidString.lowercased())
+    }
+
     // MARK: Sync base and stamps
 
     func testEditClockStampsAboveTheLocalVersionAndTheSyncBase() {
