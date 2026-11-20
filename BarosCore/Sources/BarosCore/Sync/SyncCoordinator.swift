@@ -792,7 +792,12 @@ public final class SyncCoordinator {
                 case let .transient(condition):
                     restoreUncounted()
                     try context.save()
-                    return SyncPushResult(didComplete: false, didPush: true, transientCondition: condition)
+                    return SyncPushResult(
+                        didComplete: false,
+                        didPush: true,
+                        transientCondition: condition,
+                        accountWideRejectionCode: lastAccountWideCode
+                    )
                 case let .accountWide(code):
                     // Nothing will succeed for this account right now; the
                     // record is fine, so the rejection is not counted.
@@ -852,7 +857,7 @@ public final class SyncCoordinator {
                     needsSave = true
                     if uncodedRejectionStreak >= SyncRejectionPolicy.uncodedRejectionStreakBeforeStopping {
                         try context.save()
-                        return SyncPushResult(didComplete: false, didPush: true)
+                        return SyncPushResult(didComplete: false, didPush: true, accountWideRejectionCode: lastAccountWideCode)
                     }
                     continue
                 }
@@ -875,9 +880,11 @@ public final class SyncCoordinator {
 
     /// Whether a record upload must wait for a record it depends on: its
     /// workout, its logged exercise, or the exercise a logged exercise names.
-    /// It waits while that record's own upload was rejected this run, or while
-    /// its create keeps failing, so the server may not have it. A delete never
-    /// waits: the server stores it even before its record.
+    /// It waits while that record's own upload was rejected or held back this
+    /// run, or while its upload keeps failing and the server may not have it:
+    /// a create, or a record no server version was ever confirmed for. A
+    /// failing edit of a record the server holds does not hold back the rest.
+    /// A delete never waits: the server stores it even before its record.
     private func dependsOnRejectedParent(
         _ entry: SyncOutboxEntry,
         rejectedThisRun: Set<SyncOutboxKey>,
@@ -885,31 +892,32 @@ public final class SyncCoordinator {
         context: ModelContext
     ) throws -> Bool {
         guard entry.operation != .delete else { return false }
-        var dependencies: [SyncOutboxKey] = []
+        var dependencies: [(key: SyncOutboxKey, record: any SyncEditStamped)] = []
         switch entry.entityKind {
         case .some(.loggedExercise):
             let loggedExercise = try findLoggedExercise(id: entry.entityID, context: context)
             if let session = loggedExercise?.session {
-                dependencies.append(SyncOutboxKey(kind: .workoutSession, id: session.id))
+                dependencies.append((SyncOutboxKey(kind: .workoutSession, id: session.id), session))
             }
             if let exercise = loggedExercise?.exercise {
-                dependencies.append(SyncOutboxKey(kind: .exercise, id: exercise.id))
+                dependencies.append((SyncOutboxKey(kind: .exercise, id: exercise.id), exercise))
             }
         case .some(.loggedSet):
             if let loggedExercise = try findLoggedSet(id: entry.entityID, context: context)?.loggedExercise {
-                dependencies.append(SyncOutboxKey(kind: .loggedExercise, id: loggedExercise.id))
+                dependencies.append((SyncOutboxKey(kind: .loggedExercise, id: loggedExercise.id), loggedExercise))
                 if let session = loggedExercise.session {
-                    dependencies.append(SyncOutboxKey(kind: .workoutSession, id: session.id))
+                    dependencies.append((SyncOutboxKey(kind: .workoutSession, id: session.id), session))
                 }
             }
         default:
             return false
         }
         return dependencies.contains { dependency in
-            if rejectedThisRun.contains(dependency) { return true }
-            return (activeEntriesByKey[dependency] ?? []).contains { dependencyEntry in
+            if rejectedThisRun.contains(dependency.key) { return true }
+            let serverMayLackIt = dependency.record.syncBaseUpdatedAt == nil
+            return (activeEntriesByKey[dependency.key] ?? []).contains { dependencyEntry in
                 (dependencyEntry.status == .failed || dependencyEntry.status == .blocked)
-                    && dependencyEntry.operation == .create
+                    && (dependencyEntry.operation == .create || serverMayLackIt)
             }
         }
     }
@@ -944,9 +952,8 @@ public final class SyncCoordinator {
               try !hasActiveOutboxEntry(entityKind: target.kind, entityID: target.id, context: context) else {
             return
         }
-        // A create, because the server confirmed it lacks the record, so
-        // records under it wait for it if it fails too.
-        try recorder.recordCreate(
+        // An update, so deleting the record later still sends its tombstone.
+        try recorder.recordUpdate(
             entityKind: target.kind,
             entityID: target.id,
             ownerTokenIdentifier: ownerTokenIdentifier,

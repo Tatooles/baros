@@ -375,6 +375,7 @@ final class SyncClientConvergenceTests: XCTestCase {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let graph = completedWorkout(context: context)
+        graph.session.syncBaseUpdatedAt = 200
         let blockedEdit = SyncOutboxEntry(
             entityKind: .workoutSession, entityID: graph.session.id, operation: .update, status: .blocked,
             ownerTokenIdentifier: owner, createdAt: start, updatedAt: start, attemptCount: 9
@@ -440,7 +441,34 @@ final class SyncClientConvergenceTests: XCTestCase {
         XCTAssertEqual(set.rejectionCount, 0)
     }
 
-    func testMissingParentIsQueuedAsACreateSoItsChildrenWaitForIt() async throws {
+    func testRequeuedMissingParentHoldsBackItsChildrenWhileItKeepsFailing() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let graph = completedWorkout(context: context)
+        let recorder = SyncOutboxRecorder()
+        try recorder.recordUpdate(entityKind: .loggedExercise, entityID: graph.loggedExercise.id, ownerTokenIdentifier: owner, context: context, now: start)
+        try markBootstrapped(context, upgraded: true)
+        let client = FakeSyncClient()
+        client.onUpsertLoggedExercise = { _ in throw SyncServerRejection(code: "missingParent", message: "No workout") }
+        var now = start
+        let coordinator = SyncCoordinator(client: client, clock: { now })
+        try await coordinator.run(ownerTokenIdentifier: owner, context: context)
+
+        // The workout is queued again, and its upload fails too.
+        let parent = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first { $0.entityID == graph.session.id })
+        XCTAssertEqual(parent.operation, .update)
+        client.onUpsertWorkoutSession = { _ in throw SyncServerRejection(code: "invalidPayload", message: "bad") }
+        try recorder.recordUpdate(entityKind: .loggedSet, entityID: graph.set.id, ownerTokenIdentifier: owner, context: context, now: start)
+        now = start.addingTimeInterval(10)
+        try await coordinator.run(ownerTokenIdentifier: owner, context: context)
+
+        // The logged exercise is still backing off; its set waits with it.
+        XCTAssertTrue(client.upsertedLoggedSets.isEmpty)
+        let set = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first { $0.entityID == graph.set.id })
+        XCTAssertEqual(set.rejectionCount, 0)
+    }
+
+    func testDeletingARequeuedParentStillSendsItsTombstone() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let graph = completedWorkout(context: context)
@@ -448,11 +476,13 @@ final class SyncClientConvergenceTests: XCTestCase {
         try markBootstrapped(context, upgraded: true)
         let client = FakeSyncClient()
         client.onUpsertLoggedExercise = { _ in throw SyncServerRejection(code: "missingParent", message: "No workout") }
-
         try await SyncCoordinator(client: client, clock: { self.start }).run(ownerTokenIdentifier: owner, context: context)
 
+        graph.session.markDeletedCascade(now: start)
+        try SyncOutboxRecorder().recordDelete(entityKind: .workoutSession, entityID: graph.session.id, ownerTokenIdentifier: owner, context: context, now: start)
+
         let parent = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first { $0.entityID == graph.session.id })
-        XCTAssertEqual(parent.operation, .create)
+        XCTAssertEqual(parent.operation, .delete)
     }
 
     func testSingleAccountWideRejectionDoesNotReportTheRunAsSynced() async throws {
@@ -473,6 +503,30 @@ final class SyncClientConvergenceTests: XCTestCase {
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<SyncOutboxEntry>()).first)
         XCTAssertEqual(entry.status, .pending)
         XCTAssertEqual(entry.rejectionCount, 0)
+    }
+
+    func testAccountWideRejectionIsReportedWhenALaterNetworkErrorEndsTheRun() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let first = ownedExercise("First", context: context)
+        let second = ownedExercise("Second", context: context)
+        let recorder = SyncOutboxRecorder()
+        try recorder.recordUpdate(entityKind: .exercise, entityID: first.id, ownerTokenIdentifier: owner, context: context, now: start)
+        try recorder.recordUpdate(entityKind: .exercise, entityID: second.id, ownerTokenIdentifier: owner, context: context, now: start.addingTimeInterval(1))
+        try markBootstrapped(context, upgraded: true)
+        let client = FakeSyncClient()
+        let firstID = first.id.uuidString.lowercased()
+        client.onUpsertExercise = { record in
+            if record.clientId == firstID { throw SyncServerRejection(code: "unauthenticated", message: "Signed out") }
+            throw URLError(.notConnectedToInternet)
+        }
+
+        do {
+            try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+            XCTFail("Expected the run to report the refused write")
+        } catch let SyncCoordinatorError.accountUnavailable(code) {
+            XCTAssertEqual(code, "unauthenticated")
+        }
     }
 
     func testLocalFailureIsRetriedWithoutCountingTowardDeadLettering() async throws {
