@@ -17,10 +17,11 @@ struct SettingsView: View {
     @State private var copyFeedbackResetTask: Task<Void, Never>?
     @State private var copyFeedbackState = CopyAppInfoFeedbackState.idle
     @State private var sheetPresentation: SettingsSheetPresentation?
+    @State private var accountSheet: SettingsAccountSheet?
 
     var body: some View {
         Form {
-            SettingsAccountSection()
+            SettingsAccountSection(accountSheet: $accountSheet)
 
             Section("Workouts") {
                 NavigationLink(value: SettingsRoute.exerciseLibrary) {
@@ -130,6 +131,7 @@ struct SettingsView: View {
         .onChange(of: isWhatsNewPresented, initial: true) { _, isPresented in
             UIHangContextObservability.shared.settingsWhatsNewChanged(isPresented: isPresented)
         }
+        .settingsAccountSheets($accountSheet)
         .sheet(item: $sheetPresentation) { presentation in
             switch presentation {
             case .export(let exportFile):

@@ -6,6 +6,7 @@ struct SettingsAccountSection: View {
     @Environment(SyncScheduler.self) private var syncScheduler
     @Environment(\.syncRecoveryAction) private var syncRecoveryAction
     @Query(sort: \SyncOutboxEntry.updatedAt, order: .reverse) private var outboxEntries: [SyncOutboxEntry]
+    @Binding var accountSheet: SettingsAccountSheet?
 
     private var displayState: SyncStatusDisplayState {
         let entries = relevantOutboxEntries
@@ -36,7 +37,7 @@ struct SettingsAccountSection: View {
 
     var body: some View {
         Section {
-            SettingsAccountRow()
+            SettingsAccountRow(presentedSheet: $accountSheet)
 
             WorkoutRecoveryNotice()
 
