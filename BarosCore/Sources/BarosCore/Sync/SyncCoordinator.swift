@@ -2075,8 +2075,9 @@ public final class SyncCoordinator {
         }
     }
 
-    /// A server tombstone replaced this record, so a dead-lettered upload of
-    /// it will never be sent: drop it, so it is not shown as waiting for Retry.
+    /// A server tombstone replaced this record, so a dead-lettered upload or
+    /// delete of it has nothing left to do: drop it, so it is not shown as
+    /// waiting for Retry.
     private func retireBlockedEntries(for key: SyncOutboxKey, context: ModelContext) throws {
         guard pullLocalIntents[key] == .blocked else { return }
         let kindRaw = key.kind.rawValue
@@ -2086,7 +2087,7 @@ public final class SyncCoordinator {
             predicate: #Predicate { entry in
                 entry.entityKindRaw == kindRaw && entry.entityID == entityID && entry.statusRaw == blockedStatus
             }
-        )) where entry.operation != .delete {
+        )) {
             context.delete(entry)
         }
         pullLocalIntents[key] = nil

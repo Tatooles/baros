@@ -83,11 +83,17 @@ final class SyncClientConvergenceTests: XCTestCase {
     }
 
     func testServerTombstoneRetiresABlockedEditOfTheRecord() async throws {
+        for operation in [SyncOperation.update, .delete] {
+            try await assertServerTombstoneRetiresABlockedEntry(operation: operation)
+        }
+    }
+
+    private func assertServerTombstoneRetiresABlockedEntry(operation: SyncOperation) async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
         let exercise = ownedExercise("Blocked Edit", context: context)
         context.insert(SyncOutboxEntry(
-            entityKind: .exercise, entityID: exercise.id, operation: .update, status: .blocked,
+            entityKind: .exercise, entityID: exercise.id, operation: operation, status: .blocked,
             ownerTokenIdentifier: owner, createdAt: start, updatedAt: start, attemptCount: 9
         ))
         try markBootstrapped(context, upgraded: true)
