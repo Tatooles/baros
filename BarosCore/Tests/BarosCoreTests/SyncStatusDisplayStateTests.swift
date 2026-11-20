@@ -328,6 +328,36 @@ final class SyncStatusDisplayStateTests: XCTestCase {
         XCTAssertFalse(state.showsGlobalFailureNotice)
     }
 
+    /// A settings change runs up to date → waiting → syncing → up to date. The row
+    /// must keep one secondary line throughout, or the Settings form jumps.
+    func testLocalChangeSyncCycleKeepsOneSecondaryLine() {
+        let lastSyncedAt = Date(timeIntervalSince1970: 700)
+        let now = Date(timeIntervalSince1970: 1_000)
+        let states = [
+            SyncStatusDisplayState.make(
+                ownerTokenIdentifier: "issuer|owner_a", isSyncing: false, lastSyncedAt: lastSyncedAt,
+                lastFailureMessage: nil, pendingCount: 0, failedCount: 0, now: now
+            ),
+            SyncStatusDisplayState.make(
+                ownerTokenIdentifier: "issuer|owner_a", isSyncing: false, lastSyncedAt: lastSyncedAt,
+                lastFailureMessage: nil, pendingCount: 1, failedCount: 0, now: now
+            ),
+            SyncStatusDisplayState.make(
+                ownerTokenIdentifier: "issuer|owner_a", isSyncing: false, hasQueuedSyncRequest: true,
+                lastSyncedAt: lastSyncedAt, lastFailureMessage: nil, pendingCount: 0, failedCount: 0, now: now
+            ),
+            SyncStatusDisplayState.make(
+                ownerTokenIdentifier: "issuer|owner_a", isSyncing: true, lastSyncedAt: lastSyncedAt,
+                lastFailureMessage: nil, pendingCount: 1, failedCount: 0, now: now
+            ),
+        ]
+
+        XCTAssertEqual(states.map(\.kind), [.upToDate, .waiting, .waiting, .syncing])
+        for state in states {
+            XCTAssertNil(state.detailText, "\(state.kind)")
+        }
+    }
+
     func testLastSyncedUsesRelativeMinutes() {
         let state = SyncStatusDisplayState.make(
             ownerTokenIdentifier: "issuer|owner_a",
