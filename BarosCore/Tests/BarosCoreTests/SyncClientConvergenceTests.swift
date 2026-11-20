@@ -724,12 +724,13 @@ final class SyncClientConvergenceTests: XCTestCase {
         deletedWorkout.session.markDeletedCascade(now: Date(timeIntervalSince1970: 20))
         let liveWorkout = completedWorkout(context: context)
         liveWorkout.set.markDeleted(now: Date(timeIntervalSince1970: 30))
-        // Removed during the workout, so the server never had it.
-        let removedMidWorkout = LoggedSet(orderIndex: 1, reps: 5, createdAt: Date(timeIntervalSince1970: 120),
-                                          updatedAt: Date(timeIntervalSince1970: 150), deletedAt: Date(timeIntervalSince1970: 150))
-        removedMidWorkout.loggedExercise = liveWorkout.loggedExercise
-        liveWorkout.loggedExercise.sets.append(removedMidWorkout)
-        context.insert(removedMidWorkout)
+        // Deleted at a time before the workout ended by another clock: an
+        // older server bounced it as stale (#98). It must be sent again.
+        let bouncedDelete = LoggedSet(orderIndex: 1, reps: 5, createdAt: Date(timeIntervalSince1970: 120),
+                                      updatedAt: Date(timeIntervalSince1970: 150), deletedAt: Date(timeIntervalSince1970: 150))
+        bouncedDelete.loggedExercise = liveWorkout.loggedExercise
+        liveWorkout.loggedExercise.sets.append(bouncedDelete)
+        context.insert(bouncedDelete)
         let discarded = completedWorkout(context: context)
         discarded.session.status = .discarded
         discarded.session.markDeletedCascade(now: Date(timeIntervalSince1970: 300))
@@ -740,7 +741,11 @@ final class SyncClientConvergenceTests: XCTestCase {
         let client = FakeSyncClient()
         try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
 
-        XCTAssertEqual(Set(client.tombstones.map(\.1)), [deletedExercise.id, deletedWorkout.session.id, liveWorkout.set.id])
+        XCTAssertEqual(
+            Set(client.tombstones.map(\.1)),
+            [deletedExercise.id, deletedWorkout.session.id, liveWorkout.set.id, bouncedDelete.id],
+            "A discarded workout never synced, so it is not sent."
+        )
         XCTAssertTrue(try SyncCursorState.state(for: owner, context: context).hasRunConvergenceUpgrade)
 
         let again = FakeSyncClient()

@@ -248,20 +248,17 @@ public final class SyncCoordinator {
                 try reassert(kind: .workoutSession, id: session.id)
                 continue
             }
-            // A set or exercise removed during the workout never reached the
-            // server; sending its delete would only leave a placeholder.
-            func removedBeforeFinish(_ deletedAt: Date?) -> Bool {
-                guard let deletedAt, let endedAt = session.endedAt else { return false }
-                return deletedAt <= endedAt
-            }
+            // Every deleted child is sent, including one removed during the
+            // workout that never reached the server: that only leaves a
+            // placeholder tombstone. Its times cannot tell it apart from a
+            // delete an older server bounced, because they can come from
+            // another device's clock (#98).
             for loggedExercise in session.loggedExercises {
                 if loggedExercise.isDeleted {
-                    if !removedBeforeFinish(loggedExercise.deletedAt) {
-                        try reassert(kind: .loggedExercise, id: loggedExercise.id)
-                    }
+                    try reassert(kind: .loggedExercise, id: loggedExercise.id)
                     continue
                 }
-                for set in loggedExercise.sets where set.isDeleted && !removedBeforeFinish(set.deletedAt) {
+                for set in loggedExercise.sets where set.isDeleted {
                     try reassert(kind: .loggedSet, id: set.id)
                 }
             }
