@@ -1654,7 +1654,7 @@ public final class SyncCoordinator {
                     maxAppliedServerUpdatedAt = max(maxAppliedServerUpdatedAt ?? 0, record.serverUpdatedAt)
                     continue
                 }
-                apply(record, to: session, ownerTokenIdentifier: ownerTokenIdentifier)
+                try apply(record, to: session, ownerTokenIdentifier: ownerTokenIdentifier)
                 didApplyLocalGraphRecord = true
             } else {
                 guard incomingDeletedAt == nil else {
@@ -1691,7 +1691,7 @@ public final class SyncCoordinator {
         )
     }
 
-    private func apply(_ record: WorkoutSessionSyncRecord, to session: WorkoutSession, ownerTokenIdentifier: String) {
+    private func apply(_ record: WorkoutSessionSyncRecord, to session: WorkoutSession, ownerTokenIdentifier: String) throws {
         session.syncOwnerTokenIdentifier = ownerTokenIdentifier
         session.title = record.title
         session.startedAt = Date(timeIntervalSince1970: record.startedAt)
@@ -1709,12 +1709,17 @@ public final class SyncCoordinator {
         session.healthLinkID = record.healthLinkID.flatMap(UUID.init(uuidString:))
         session.syncBaseUpdatedAt = record.updatedAt
         if let deletedAt = session.deletedAt {
-            cascadeRemoteWorkoutSessionDeletion(session, deletedAt: deletedAt)
+            try cascadeRemoteWorkoutSessionDeletion(session, deletedAt: deletedAt)
         }
     }
 
-    private func cascadeRemoteWorkoutSessionDeletion(_ session: WorkoutSession, deletedAt: Date) {
+    private func cascadeRemoteWorkoutSessionDeletion(_ session: WorkoutSession, deletedAt: Date) throws {
         for loggedExercise in session.loggedExercises {
+            // A child whose create was turned down never reached the server,
+            // so no tombstone of its own will arrive to retire its entry.
+            if let context = session.modelContext {
+                try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedExercise, id: loggedExercise.id), context: context)
+            }
             if loggedExercise.deletedAt == nil {
                 loggedExercise.deletedAt = deletedAt
             }
@@ -1723,6 +1728,9 @@ public final class SyncCoordinator {
             }
 
             for set in loggedExercise.sets {
+                if let context = session.modelContext {
+                    try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedSet, id: set.id), context: context)
+                }
                 if set.deletedAt == nil {
                     set.deletedAt = deletedAt
                 }
@@ -1761,7 +1769,7 @@ public final class SyncCoordinator {
                     if let held = try findLoggedExercise(id: id, context: context),
                        held.session?.syncOwnerTokenIdentifier == ownerTokenIdentifier {
                         try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedExercise, id: id), context: context)
-                        applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
+                        try applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
                     }
                     recordAppliedCursor(record.serverUpdatedAt)
                     continue
@@ -1788,7 +1796,7 @@ public final class SyncCoordinator {
                         // even though the exercise it names is not here.
                         if let held = try findLoggedExercise(id: id, context: context) {
                             try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedExercise, id: id), context: context)
-                            applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
+                            try applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
                         }
                         recordAppliedCursor(record.serverUpdatedAt)
                         continue
@@ -1917,7 +1925,7 @@ public final class SyncCoordinator {
                     if let held = try findLoggedSet(id: id, context: context),
                        held.loggedExercise?.session?.syncOwnerTokenIdentifier == ownerTokenIdentifier {
                         try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedSet, id: id), context: context)
-                        applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
+                        try applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
                     }
                     recordAppliedCursor(record.serverUpdatedAt)
                     continue
@@ -2045,7 +2053,7 @@ public final class SyncCoordinator {
             // Zero createdAt marks a placeholder: the server got the delete
             // before the record, so it has no content to copy.
             if incomingCreatedAt == 0, incomingDeletedAt != nil {
-                applyDeletion(of: incomingUpdatedAt, deletedAt: incomingDeletedAt, to: local)
+                try applyDeletion(of: incomingUpdatedAt, deletedAt: incomingDeletedAt, to: local)
                 return false
             }
             return true
@@ -2090,14 +2098,14 @@ public final class SyncCoordinator {
     }
 
     /// Applies only the deletion of a server version, keeping local content.
-    private func applyDeletion(of incomingUpdatedAt: Double, deletedAt incomingDeletedAt: Double?, to local: some SyncEditStamped) {
+    private func applyDeletion(of incomingUpdatedAt: Double, deletedAt incomingDeletedAt: Double?, to local: some SyncEditStamped) throws {
         guard let incomingDeletedAt else { return }
         let deletedAt = local.deletedAt ?? Date(timeIntervalSince1970: incomingDeletedAt)
         local.deletedAt = deletedAt
         local.updatedAt = Date(timeIntervalSince1970: incomingUpdatedAt)
         local.syncBaseUpdatedAt = incomingUpdatedAt
         if let session = local as? WorkoutSession {
-            cascadeRemoteWorkoutSessionDeletion(session, deletedAt: deletedAt)
+            try cascadeRemoteWorkoutSessionDeletion(session, deletedAt: deletedAt)
         }
     }
 

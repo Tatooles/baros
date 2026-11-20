@@ -103,6 +103,37 @@ final class SyncClientConvergenceTests: XCTestCase {
                       "A deleted record no longer waits for Retry.")
     }
 
+    func testWorkoutTombstoneRetiresBlockedCreatesOfItsChildren() async throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let graph = completedWorkout(context: context)
+        // The set's create was turned down, so the server never had it.
+        context.insert(SyncOutboxEntry(
+            entityKind: .loggedSet, entityID: graph.set.id, operation: .create, status: .blocked,
+            ownerTokenIdentifier: owner, createdAt: start, updatedAt: start, attemptCount: 9
+        ))
+        try markBootstrapped(context, upgraded: true)
+        let client = FakeSyncClient()
+        client.fetchResponses = [SyncFetchChangesResponse(
+            userSettings: [], exercises: [],
+            workoutSessions: [WorkoutSessionSyncRecord(
+                clientId: graph.session.id.uuidString.lowercased(), createdAt: 100, updatedAt: 1_900_000_000,
+                deletedAt: 1_900_000_000, serverUpdatedAt: 40, title: "Push", startedAt: 100, endedAt: 200,
+                durationSeconds: 100, notes: "", referenceNotes: nil, statusRaw: "completed", sourceRaw: "blank",
+                sourceSessionID: nil, healthLinkID: nil
+            )],
+            loggedExercises: [], loggedSets: [],
+            cursors: SyncChangeCursors(userSettings: 0, exercises: 0, workoutSessions: 40),
+            hasMore: SyncHasMore(userSettings: false, exercises: false)
+        )]
+
+        try await SyncCoordinator(client: client).run(ownerTokenIdentifier: owner, context: context)
+
+        XCTAssertNotNil(graph.set.deletedAt)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).isEmpty,
+                      "No tombstone of the set's own will come, so the workout's retires its entry.")
+    }
+
     func testUserSettingsLocalDeleteIsKeptWithoutSendingItAgain() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
