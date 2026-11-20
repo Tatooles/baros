@@ -2199,10 +2199,10 @@ final class BarosUITests: XCTestCase {
         startBlankWorkout(in: app)
         app.buttons["AddExerciseButton"].tap()
         let add = app.buttons["ExercisePickerAddSelectedButton"]
-        XCTAssertTrue(app.navigationBars["Add Exercises"].waitToExist(timeout: 3))
-        XCTAssertFalse(add.exists)
         let bench = app.buttons["ExercisePickerRow-Bench Press-Barbell"]
         let squat = app.buttons["ExercisePickerRow-Back Squat-Barbell"]
+        XCTAssertTrue(bench.waitToExist(timeout: 3))
+        XCTAssertFalse(add.exists)
         bench.tap()
         squat.tap()
         bench.tap()
@@ -2259,7 +2259,7 @@ final class BarosUITests: XCTestCase {
         app.buttons["ExercisePickerCancelButton"].tap()
         assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
         app.buttons["AddExerciseButton"].tap()
-        XCTAssertTrue(app.navigationBars["Add Exercises"].waitToExist(timeout: 3))
+        XCTAssertTrue(app.buttons["ExercisePickerRow-Back Squat-Barbell"].waitToExist(timeout: 3))
         XCTAssertFalse(app.buttons["ExercisePickerAddSelectedButton"].exists)
     }
 
@@ -2476,11 +2476,13 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(confirmButton.waitToExist(timeout: 3))
         XCTAssertTrue(confirmButton.isEnabled)
         XCTAssertEqual(confirmButton.label, "Swap for Overhead Press")
-        XCTAssertLessThanOrEqual(confirmButton.frame.maxY, searchField.frame.minY)
+        XCTAssertTrue(waitUntil(timeout: 3) { confirmButton.frame.maxY <= searchField.frame.minY })
         XCTAssertEqual(
             app.staticTexts["ExercisePickerSwapImpactText"].label,
             "Bench Press has nothing logged yet"
         )
+        // The button ignores taps for a moment after it appears, so a repeat tap on a row can't commit.
+        XCTAssertTrue(waitUntil(timeout: 3) { confirmButton.isHittable })
         confirmButton.tap()
 
         assertActiveWorkoutExerciseOrder(["Overhead Press"], in: app)
@@ -2518,6 +2520,7 @@ final class BarosUITests: XCTestCase {
         let confirmButton = app.buttons["ExercisePickerConfirmSwapButton"]
         XCTAssertTrue(app.navigationBars["Swap Exercise"].waitToExist(timeout: 3))
         XCTAssertTrue(waitUntil(timeout: 3) { confirmButton.label == "Swap for Swap Test Press" })
+        XCTAssertTrue(waitUntil(timeout: 3) { confirmButton.isHittable })
         confirmButton.tap()
 
         assertActiveWorkoutExerciseOrder(["Swap Test Press"], in: app)
@@ -5040,7 +5043,9 @@ final class BarosUITests: XCTestCase {
                         let exerciseButton = app.buttons[exerciseRowIdentifier]
                         XCTAssertTrue(exerciseButton.waitToExist(timeout: readyTimeout))
                         exerciseButton.tap()
-                        app.buttons["ExercisePickerAddSelectedButton"].tap()
+                        let addSelectedButton = app.buttons["ExercisePickerAddSelectedButton"]
+                        XCTAssertTrue(addSelectedButton.waitToExist(timeout: readyTimeout))
+                        addSelectedButton.tap()
                         return
                     }
 

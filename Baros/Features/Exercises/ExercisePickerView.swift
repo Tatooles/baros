@@ -133,6 +133,7 @@ private struct ExercisePickerList: View {
     @Environment(\.dismissSearch) private var dismissSearch
     @Environment(\.isSearching) private var isSearching
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let baseRows: [ExercisePickerRowContent]
     let mode: ExercisePickerMode
     var showsCancel = true
@@ -306,10 +307,11 @@ private struct ExercisePickerList: View {
         .safeAreaBar(edge: .bottom, spacing: 0) {
             if let swapImpact, let swapReplacement {
                 swapConfirmBar(swapImpact, replacement: swapReplacement)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(commitBarTransition)
             } else if mode.isAddExercise, !selectedExercises.isEmpty {
                 HStack(spacing: 10) {
-                    if let onSelectAsSuperset {
+                    // A superset needs two exercises, so it joins Add only from the second pick.
+                    if let onSelectAsSuperset, selectedExercises.count >= 2 {
                         Button {
                             onSelectAsSuperset(selectedExercises)
                         } label: {
@@ -321,7 +323,7 @@ private struct ExercisePickerList: View {
                                 .padding(.vertical, 8)
                         }
                         .buttonStyle(.glass)
-                        .disabled(selectedExercises.count < 2)
+                        .transition(.opacity)
                         .accessibilityIdentifier("ExercisePickerAddAsSupersetButton")
                     }
                     Button {
@@ -341,10 +343,11 @@ private struct ExercisePickerList: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .transition(commitBarTransition)
             }
         }
         .animation(.smooth(duration: 0.25), value: selectedExercises.isEmpty)
+        .animation(.smooth(duration: 0.25), value: selectedExercises.count >= 2)
         .animation(.smooth(duration: 0.25), value: swapReplacement == nil)
         .toolbar {
             if showsCancel {
@@ -384,6 +387,11 @@ private struct ExercisePickerList: View {
         return swapImpact?.similarRows(in: baseRows) ?? []
     }
 
+    /// The commit bar slides up from the search field, or only fades with Reduce Motion on.
+    private var commitBarTransition: AnyTransition {
+        reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
+    }
+
     private var swapReplacement: Exercise? {
         guard let swapSelectionID else { return nil }
         return baseRows.first { $0.id == swapSelectionID }?.exercise
@@ -420,6 +428,7 @@ private struct ExercisePickerList: View {
             // A value, not a hint, so VoiceOver reads the loss even with hints turned off.
             .accessibilityValue(impact.losesWork ? impact.lossMessage : "")
             .tint(impact.losesWork ? AppTheme.destructiveFill : AppTheme.brandAccentFill)
+            .modifier(IgnoresTapsWhileAppearing())
             .accessibilityIdentifier("ExercisePickerConfirmSwapButton")
         }
         .padding(.horizontal, 20)
@@ -539,5 +548,21 @@ private extension ExercisePickerMode {
     var isAddExercise: Bool {
         if case .add = self { return true }
         return false
+    }
+}
+
+/// The swap bar slides in over the lowest rows, and a swap commits without another prompt.
+/// Ignoring taps briefly keeps a repeat tap on one of those rows ("did that register?")
+/// from committing; it falls through to the row and picks it again.
+private struct IgnoresTapsWhileAppearing: ViewModifier {
+    @State private var isArmed = false
+
+    func body(content: Content) -> some View {
+        content
+            .allowsHitTesting(isArmed)
+            .task {
+                try? await Task.sleep(for: .milliseconds(700))
+                isArmed = true
+            }
     }
 }
