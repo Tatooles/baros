@@ -7,12 +7,12 @@ import Foundation
 /// clock says. The server reads an upload stamped at or below its base as a
 /// re-send with no edit (`convex/sync/merge.ts`), so an edit stamped any
 /// lower would be dropped. Every edit site goes through `stampEdit(now:)`.
-public enum SyncEditClock {
+enum SyncEditClock {
     /// The smallest step that keeps an edit strictly above what it replaced.
     /// Matches the server's `versionStepSeconds`.
-    public static let step: TimeInterval = 0.001
+    static let step: TimeInterval = 0.001
 
-    public static func stamp(previous: Date, syncBase: Double?, now: Date) -> Date {
+    static func stamp(previous: Date, syncBase: Double?, now: Date) -> Date {
         var stamp = max(now, previous.addingTimeInterval(step))
         if let syncBase {
             stamp = max(stamp, Date(timeIntervalSince1970: syncBase + step))

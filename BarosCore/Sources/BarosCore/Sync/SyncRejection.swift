@@ -7,8 +7,8 @@ public struct SyncServerRejection: Error, LocalizedError, Equatable, Sendable {
     /// The `ConvexError` code, or nil for an uncoded server error. Convex
     /// rejects arguments that fail validation before any handler code runs,
     /// so those arrive uncoded.
-    public let code: String?
-    public let message: String
+    let code: String?
+    let message: String
 
     public init(code: String?, message: String) {
         self.code = code

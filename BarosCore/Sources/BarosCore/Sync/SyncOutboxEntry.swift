@@ -17,12 +17,12 @@ public final class SyncOutboxEntry: Identifiable {
     /// Server rejections since the entry was last retried by hand. Separate
     /// from `attemptCount`, which older builds grew without bound on entries
     /// that never sent.
-    public var rejectionCount: Int = 0
+    var rejectionCount: Int = 0
     var firstRejectedAt: Date?
     /// Earliest time the entry is sent again after a rejection.
     var nextAttemptAt: Date?
     /// The server's error code for the last rejection, or nil when uncoded.
-    public var lastRejectionCode: String?
+    var lastRejectionCode: String?
 
     init(
         id: UUID = UUID(),
