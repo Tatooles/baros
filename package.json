@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
-    "convex-test": "^0.0.53",
+    "convex-test": "^0.0.54",
     "typescript": "^6.0.3",
     "vitest": "^4.1.12"
   }
