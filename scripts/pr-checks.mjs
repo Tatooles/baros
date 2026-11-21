@@ -40,9 +40,10 @@ export const HIGH_RISK_AREAS = [
     path: /^BarosCore\/Sources\/BarosCore\/Domain\/\w+MutationService\.swift$/,
   },
   {
+    // SeedDataService hands records with no owner to the account that signs in.
     name: "sign-out, local-data reset, account deletion, or workout recovery",
     path: new RegExp(
-      `^${APP_SOURCES}/(?:AccountDeletion|AccountTransition|Ownership)/|^BarosCore/Sources/BarosCore/Persistence/LocalDataResetService\\.swift$`,
+      `^${APP_SOURCES}/(?:AccountDeletion|AccountTransition|Ownership)/|^BarosCore/Sources/BarosCore/Persistence/(?:LocalDataResetService|SeedDataService)\\.swift$`,
     ),
   },
   {
@@ -71,6 +72,9 @@ export function parseDiff(diff) {
   for (const line of diff.split("\n")) {
     if (line.startsWith("diff --git ")) {
       file = { path: null, oldPath: null, isNew: false, added: [], removedText: [] };
+      // A mode change has no ---/+++ lines; its header names the same path twice.
+      const samePath = line.match(/^diff --git a\/(.+) b\/\1$/);
+      if (samePath) file.path = decodeGitPath(samePath[1]);
       files.push(file);
       inHunk = false;
       continue;
@@ -89,6 +93,10 @@ export function parseDiff(diff) {
       file.added.push({ line: nextLine++, text: line.slice(1) });
     } else if (line.startsWith("-")) {
       file.removedText.push(line.slice(1));
+    } else if (!inHunk && line.startsWith("Binary files ")) {
+      // A binary file has no ---/+++ lines either, but it still changes the app.
+      const sides = line.match(/^Binary files (.+) and (.+) differ$/);
+      if (sides) file.path = headerPath(sides[2], "b/") ?? headerPath(sides[1], "a/") ?? file.path;
     } else if (!inHunk && line.startsWith("rename from ")) {
       file.oldPath = decodeGitPath(line.slice("rename from ".length));
     } else if (!inHunk && line.startsWith("rename to ")) {

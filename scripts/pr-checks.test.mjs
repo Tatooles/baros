@@ -497,3 +497,32 @@ test("a stray */ inside a line comment can't hide a sleep before it", () => {
     [3, "no-new-sleep"],
   ]);
 });
+
+test("binary and mode-only changes still count toward risk", () => {
+  const files = parseDiff(
+    [
+      "diff --git a/Baros/Assets/App Icon.png b/Baros/Assets/App Icon.png",
+      "index f584f40..6bf43ff 100644",
+      "Binary files a/Baros/Assets/App Icon.png and b/Baros/Assets/App Icon.png differ",
+      "diff --git a/scripts/run.sh b/scripts/run.sh",
+      "old mode 100644",
+      "new mode 100755",
+      "diff --git a/docs/new.png b/docs/new.png",
+      "new file mode 100644",
+      "Binary files /dev/null and b/docs/new.png differ",
+      diffFor("README.md", { added: ["A note."] }),
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    files.map((file) => file.path),
+    ["Baros/Assets/App Icon.png", "scripts/run.sh", "docs/new.png", "README.md"],
+  );
+  assert.equal(classifyRisk(files).label, "risk:medium");
+});
+
+test("SeedDataService counts as ownership code", () => {
+  const path = "BarosCore/Sources/BarosCore/Persistence/SeedDataService.swift";
+  assert.deepEqual(riskOf(diffFor(path, { added: ["claim()"], removed: ["keep()"] })).areas, [
+    { name: "sign-out, local-data reset, account deletion, or workout recovery", paths: [path] },
+  ]);
+});
