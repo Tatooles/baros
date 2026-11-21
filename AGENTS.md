@@ -18,14 +18,14 @@
 
 CI labels each PR by what it touches, not how much (`HIGH_RISK_AREAS` in `scripts/pr-checks.mjs`):
 
-- **`risk:high`** changes code in an area where a mistake can lose a user's workouts or reaches production on merge: stored data models (any `@Model`, and the enums they store by raw value), sync, code that edits saved data (the mutation services and any app file that queues uploads), sign-out, local-data reset, account deletion, or workout recovery (including the UI that starts them, and the code that decides which account owns a record), or anything the Convex deploy ships or installs (`convex/` sources other than tests, simulator files, and type declarations; `package.json`, `pnpm-lock.yaml`, `convex-ci.yml`).
+- **`risk:high`** changes code in an area where a mistake can lose a user's workouts or reaches production on merge: stored data models (any `@Model`, and the enums they store by raw value), sync, code that edits saved data (the mutation services and any app file that queues uploads), any `BarosCore` type those three use, sign-out, local-data reset, account deletion, or workout recovery (including the UI that starts them, and the code that decides which account owns a record), or anything the Convex deploy ships or installs (`convex/` sources other than tests, simulator files, and type declarations; `package.json`, `pnpm-lock.yaml`, `convex-ci.yml`).
 - **`risk:low`** changes only docs, tests, or comments in Swift files, and removes no tests.
 - **`risk:medium`** is everything else.
 
 A Swift file whose code is unchanged once comments are removed doesn't count, so a large comment cleanup can be low and a one-line merge change is high. Comment edits in other languages still count. A `risk:high` PR shows this proof under Tests, for each area the label's PR comment names:
 
 - **Stored data models:** new fields are optional or defaulted, and a `BarosCore` test opens a store written with the shipped models and checks every row survives the migration.
-- **Sync, or edits to saved data:** a test that fails without the change for each behavior it changes, and the existing sync tests pass.
+- **Sync, edits to saved data, or code they use:** a test that fails without the change for each behavior it changes, and the existing sync tests pass.
 - **Sign-out, local-data reset, account deletion, or workout recovery:** run that flow's `BarosUITests` on a pool simulator with `-only-testing:BarosUITests/<Class>/<test>`, and name the tests. Don't run the whole suite for this; the nightly run covers it on `main`.
 - **Convex:** a "Production deploy compatibility" section that says how installed builds keep working (README → "Production deploys").
 

@@ -473,13 +473,40 @@ function contentArea(file, readFile) {
   return match && HIGH_RISK_AREAS.find((area) => area.name === match.name);
 }
 
+// The areas whose code reads or writes saved workouts directly. A BarosCore type they use is part
+// of that data path too, such as WorkoutNumericInputPolicy, which sync uses to clamp set values.
+const DATA_PATH_AREAS = new Set([STORED_MODELS, "sync", SAVED_DATA_EDITS]);
+const DEPENDENCY_AREA = { name: "code that sync or stored data uses" };
+const TOP_LEVEL_TYPE =
+  /^(?:(?:public|internal|package|@\w+)\s+)*(?:final\s+)?(?:struct|enum|class|protocol|actor)\s+([A-Z]\w+)/gm;
+
+function dependencyArea(file, readFile, listFiles, cache) {
+  if (!/^BarosCore\/Sources\/.*\.swift$/.test(file.path)) return undefined;
+  const names = new Set();
+  for (const text of [readFile("after", file.path), readFile("before", file.oldPath ?? file.path)]) {
+    for (const match of text?.matchAll(TOP_LEVEL_TYPE) ?? []) names.add(match[1]);
+  }
+  if (names.size === 0) return undefined;
+  cache.dataPath ??= listFiles("BarosCore/Sources")
+    .filter((path) =>
+      HIGH_RISK_AREAS.some((area) => DATA_PATH_AREAS.has(area.name) && area.path.test(path)),
+    )
+    .map((path) => (readFile("after", path) ?? "").replace(/\/\/.*$/gm, ""));
+  const used = [...names].some((name) =>
+    cache.dataPath.some((text) => new RegExp(`\\b${name}\\b`).test(text)),
+  );
+  return used ? DEPENDENCY_AREA : undefined;
+}
+
 /**
  * The PR's risk from what it touches, not how much: high when it reaches a data-safety area or
  * production, low when it changes only docs, tests, or comments, and medium otherwise.
- * `readFile(side, path)` returns a file's text on the "before" or "after" side, or null.
+ * `readFile(side, path)` returns a file's text on the "before" or "after" side, or null, and
+ * `listFiles(prefix)` lists the files under a directory on the after side.
  */
-export function classifyRisk(files, readFile = () => null) {
+export function classifyRisk(files, readFile = () => null, listFiles = () => []) {
   const areas = [];
+  const cache = {};
   for (const file of files) {
     if (onlyCommentsChange(file, readFile)) continue;
     const paths = [...new Set([file.path, file.oldPath].filter(Boolean))];
@@ -487,7 +514,7 @@ export function classifyRisk(files, readFile = () => null) {
     let area = path && HIGH_RISK_AREAS.find((candidate) => candidate.path.test(path));
     if (!area) {
       path = file.path;
-      area = contentArea(file, readFile);
+      area = contentArea(file, readFile) ?? dependencyArea(file, readFile, listFiles, cache);
     }
     if (!area) continue;
     let entry = areas.find((existing) => existing.name === area.name);
@@ -672,7 +699,11 @@ function loadFiles({ base, head }) {
       return null;
     }
   };
-  return { files, readLines, readFile };
+  const listFiles = (prefix) =>
+    git(head ? ["ls-tree", "-r", "--name-only", head, "--", prefix] : ["ls-files", "--", prefix])
+      .split("\n")
+      .filter(Boolean);
+  return { files, readLines, readFile, listFiles };
 }
 
 function parseArgs(argv) {
@@ -691,7 +722,7 @@ function parseArgs(argv) {
 function main(argv) {
   process.chdir(git(["rev-parse", "--show-toplevel"]).trim());
   const options = parseArgs(argv);
-  const { files, readLines, readFile } = loadFiles(options);
+  const { files, readLines, readFile, listFiles } = loadFiles(options);
 
   if (options.command === "hygiene") {
     const findings = checkHygiene(files, readLines);
@@ -710,7 +741,7 @@ function main(argv) {
     return findings.length ? 1 : 0;
   }
 
-  const risk = classifyRisk(files, readFile);
+  const risk = classifyRisk(files, readFile, listFiles);
   const delta = measureTestDelta(files);
   const comment = prComment(risk, delta);
 

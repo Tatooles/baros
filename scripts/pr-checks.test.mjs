@@ -530,7 +530,6 @@ test("SeedDataService and the owner identity resolver count as ownership code", 
       { name: "sign-out, local-data reset, account deletion, or workout recovery", paths: [path] },
     ]);
   }
-  assert.equal(riskOf(diffFor("BarosCore/Sources/BarosCore/Auth/ClerkConfiguration.swift", { added: ["x()"] })).label, "risk:medium");
 });
 
 test("stored enums, @Model files anywhere, and every deployed Convex file are high", () => {
@@ -702,4 +701,21 @@ test("lengthening a multi-line sleep's argument is a new sleep; re-indenting it 
     checkHygiene(parseDiff(diffFor("BarosTests/ATests.swift", { start: 4, added: [allowed[2]], removed: ["x"] })), () => ["    func testA() {", "", ...lines.slice(1)]),
   );
   assert.deepEqual(noReason, [[4, "no-new-sleep"]]);
+});
+
+test("a BarosCore type that sync, models, or saved-data edits use is high", () => {
+  const policy = "BarosCore/Sources/BarosCore/Domain/WorkoutNumericInputPolicy.swift";
+  const sync = "BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift";
+  const view = "Baros/Features/Workout/WorkoutView.swift";
+  const texts = {
+    [policy]: "public enum WorkoutNumericInputPolicy {\n    static let maximumWeightPounds = 2000.0\n}",
+    [sync]: "let weight = WorkoutNumericInputPolicy.clamp(set.weight)",
+    [view]: "struct WorkoutView: View { let label = HomeLabel() }",
+    "BarosCore/Sources/BarosCore/Features/Home/HomeLabel.swift": "public struct HomeLabel {}",
+  };
+  const readFile = (side, path) => (side === "after" ? texts[path] ?? null : null);
+  const listFiles = () => Object.keys(texts);
+  const change = (path) => classifyRisk(parseDiff(diffFor(path, { added: ["x"], removed: ["y"] })), readFile, listFiles);
+  assert.deepEqual(change(policy).areas, [{ name: "code that sync or stored data uses", paths: [policy] }]);
+  assert.equal(change("BarosCore/Sources/BarosCore/Features/Home/HomeLabel.swift").label, "risk:medium", "a view's use doesn't count");
 });
