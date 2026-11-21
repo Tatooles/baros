@@ -42,6 +42,9 @@ function area(path) {
   if (parts[0] === "Baros" && ["Features", "Core"].includes(parts[1]) && parts.length > 3) {
     return parts.slice(0, 3).join("/");
   }
+  if (parts[0] === "BarosCore" && parts[1] === "Sources" && parts[3] === "Features" && parts.length > 5) {
+    return parts.slice(0, 5).join("/");
+  }
   if (parts[0] === "BarosCore" && parts[1] === "Sources" && parts.length > 4) {
     return parts.slice(0, 4).join("/");
   }
@@ -70,9 +73,10 @@ const signals = {
     ...touched(/\.entitlements$|Info\.plist$|PrivacyInfo\.xcprivacy$/),
     ...(projectYmlChanges.length ? [`project.yml (${projectYmlChanges.length} non-version lines)`] : []),
   ],
-  "Upgrade test (persisted model or schema)": touched(/^Baros\/Core\/Persistence\/|^Baros\/(Core\/)?Models?\/|^BarosCore\/Sources\/BarosCore\/(Persistence|Models)\//).filter(
-    (p) => !p.includes("UITestFixture"),
-  ),
+  // A new @Model must be registered in Persistence/BarosSchema.swift, so only the existing ones outside Models/ need naming.
+  "Upgrade test (persisted model or schema)": touched(
+    /^Baros\/Core\/Persistence\/|^Baros\/(Core\/)?Models?\/|^BarosCore\/Sources\/BarosCore\/(Persistence|Models)\/|^BarosCore\/Sources\/BarosCore\/Sync\/Sync(OutboxEntry|CursorState)\.swift$/,
+  ).filter((p) => !p.includes("UITestFixture")),
   "Dependencies (Swift packages)": touched(/Package\.resolved$/),
   "Backend contract (Convex schema/functions)": touched(/^convex\/(?!_generated\/).*\.ts$/).filter((p) => !p.includes(".test.")),
 };
