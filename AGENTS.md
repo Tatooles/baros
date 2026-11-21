@@ -16,22 +16,21 @@
 
 ## PR risk
 
-CI labels each PR by what it touches, not how much (`HIGH_RISK_AREAS` in `scripts/pr-checks.mjs`):
+Each PR gets a `risk:high`, `risk:medium`, or `risk:low` label: the higher of a floor from the paths it changes and the **Risk:** line in its description.
 
-- **`risk:high`** changes code in an area where a mistake can lose a user's workouts or reaches production on merge: stored data models (any `@Model`, and the enums they store by raw value), sync, code that edits saved data (the mutation services and any app file that queues uploads), any `BarosCore` type those three use, sign-out, local-data reset, account deletion, or workout recovery (including the UI that starts them, and the code that decides which account owns a record), or anything the Convex deploy ships or installs (`convex/` sources other than tests, simulator files, and type declarations; `package.json`, `pnpm-lock.yaml`, `convex-ci.yml`).
-- **`risk:low`** changes only docs, tests, or comments in Swift files, and removes no tests.
-- **`risk:medium`** is everything else.
+- **The floor** (`HIGH_RISK_AREAS` in `scripts/pr-checks.mjs`) is high for any change to stored data or sync (`Models/`, `Domain/`, `Sync/`, `Persistence/`, `ActiveWorkoutEngine`), to sign-out, reset, deletion, or recovery, or to what the Convex deploy ships. It's low when the PR changes only docs and tests, and medium otherwise.
+- **The Risk: line** is yours to set, with one sentence on why. Raise it above the floor when the change can still lose or overwrite workouts, such as a helper that sync calls. It can't lower the floor.
 
-A Swift file whose code is unchanged once comments are removed doesn't count, so a large comment cleanup can be low and a one-line merge change is high. Comment edits in other languages still count. A `risk:high` PR shows this proof under Tests, for each area the label's PR comment names:
+A `risk:high` PR shows this proof under Tests, for each area it touches:
 
 - **Stored data models:** new fields are optional or defaulted, and a `BarosCore` test opens a store written with the shipped models and checks every row survives the migration.
-- **Sync, edits to saved data, or code they use:** a test that fails without the change for each behavior it changes, and the existing sync tests pass.
+- **Sync or edits to saved data:** a test that fails without the change for each behavior it changes, and the existing sync tests pass.
 - **Sign-out, local-data reset, account deletion, or workout recovery:** run that flow's `BarosUITests` on a pool simulator with `-only-testing:BarosUITests/<Class>/<test>`, and name the tests. Don't run the whole suite for this; the nightly run covers it on `main`.
 - **Convex:** a "Production deploy compatibility" section that says how installed builds keep working (README → "Production deploys").
 
 ## Testing
 
-- Before you push, run `scripts/check-changed.sh`. It runs the CI checks for the paths the branch changed, builds the app and test targets, checks test hygiene, and prints the PR's risk. Hosted `BarosTests` and `BarosUITests` need a simulator, so run the affected ones yourself; CI's `ios-unit-tests` runs all of `BarosTests`.
+- Before you push, run `scripts/check-changed.sh`. It runs the CI checks for the paths the branch changed, builds the app and test targets, checks test hygiene, and prints the PR's risk floor. Hosted `BarosTests` and `BarosUITests` need a simulator, so run the affected ones yourself; CI's `ios-unit-tests` runs all of `BarosTests`.
 - Tests wait on events, not time. A new sleep in a test target needs `// allow-sleep: <why>` at the end of its line or as a comment on the line directly above. A new skip names its tracking issue (`#403`) or carries `// allow-skip: <why>` in the same places. CI's `test-hygiene` check enforces both on added lines; it catches the common calls, and the rule covers every way of waiting on time.
 - Logic lives in the `BarosCore` package. Test it on macOS with `swift test --package-path BarosCore`; that is the default loop for any change outside SwiftUI views and app wiring.
 - New logic and its tests go in `BarosCore` when they need only Foundation, SwiftData, or other cross-platform frameworks. Code that imports SwiftUI, UIKit, ActivityKit, StoreKit, Clerk, Sentry, or ConvexMobile stays in `Baros/`; when package code needs it, define a protocol in the package and keep the adapter in the app, as `CurrentOwnerAdapters` and `ConvexClientFactory` do. Mark only what the app uses `public`.
@@ -57,7 +56,7 @@ A full `BarosUITests` run takes about two hours in CI, so the suite covers only 
 ## Review guidelines
 
 - Treat as P0 any change that can lose or overwrite a user's logged workouts: sync merges, SwiftData model changes, sign-out, local-data reset, and account deletion.
-- Flag a PR that carries more risk than its `risk:` label, such as a change to code that sync or a data-safety flow calls from outside the paths the label checks.
+- Flag a PR whose **Risk:** line is lower than the change deserves, such as a change to code that sync or a data-safety flow calls from outside the floor's paths.
 - Flag a change to a public Convex function's arguments or return shape, or to `convex/schema.ts`, that installed builds can't handle (README → "Production deploys").
 - Flag logic tested through `BarosUITests` or hosted `BarosTests` that `BarosCore` could test, and new UI tests outside the list in "UI tests".
 - Flag new tests that repeat a case an existing test covers, or check what the types already guarantee.

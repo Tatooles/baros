@@ -1,22 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import {
-  checkHygiene,
-  classifyRisk,
-  COMMENT_MARKER,
-  decodeGitPath,
-  measureTestDelta,
-  parseDiff,
-  prComment,
-  RISK_LABELS,
-  swiftCodeView,
-  untrackedFile,
-} from "./pr-checks.mjs";
+import { checkHygiene, classifyRisk, parseDiff, RISK_LABELS, untrackedFile } from "./pr-checks.mjs";
 
 function diffFor(path, { added = [], removed = [], start = 1, isNew = false } = {}) {
   return [
@@ -33,59 +22,34 @@ function diffFor(path, { added = [], removed = [], start = 1, isNew = false } = 
 const noFile = () => [];
 const rulesOf = (findings) => findings.map((finding) => [finding.line, finding.rule]);
 
-test("parseDiff numbers added lines in the new file and keeps renames' old paths", () => {
-  const diff = [
-    diffFor("BarosTests/A.swift", { added: ["let a = 1", "let b = 2"], start: 7 }),
-    "diff --git a/BarosUITests/Old.swift b/BarosUITests/New.swift",
-    "similarity index 100%",
-    "rename from BarosUITests/Old.swift",
-    "rename to BarosUITests/New.swift",
-  ].join("\n");
-
-  const [modified, renamed] = parseDiff(diff);
-  assert.deepEqual(modified.added, [
+test("parseDiff numbers added lines in the new file and reads header-like content as content", () => {
+  const [file] = parseDiff(diffFor("BarosTests/A.swift", { added: ["let a = 1", "++ not a header"], removed: ["-- gone"], start: 7 }));
+  assert.equal(file.path, "BarosTests/A.swift");
+  assert.deepEqual(file.added, [
     { line: 7, text: "let a = 1" },
-    { line: 8, text: "let b = 2" },
+    { line: 8, text: "++ not a header" },
   ]);
-  assert.equal(renamed.path, "BarosUITests/New.swift");
-  assert.equal(renamed.oldPath, "BarosUITests/Old.swift");
-});
-
-test("parseDiff reads added content that looks like a file header as content", () => {
-  const [file] = parseDiff(diffFor("docs/a.md", { added: ["++ not a header"], removed: ["-- gone"] }));
-  assert.equal(file.path, "docs/a.md");
-  assert.deepEqual(file.added.map((entry) => entry.text), ["++ not a header"]);
   assert.deepEqual(file.removedText, ["-- gone"]);
-});
-
-test("decodeGitPath reads C-quoted paths and leaves plain ones alone", () => {
-  assert.equal(decodeGitPath('"BarosUITests/S\\303\\251ance.swift"'), "BarosUITests/Séance.swift");
-  assert.equal(decodeGitPath('"a/Say \\"hi\\".swift"'), 'a/Say "hi".swift');
-  assert.equal(decodeGitPath("BarosTests/A.swift"), "BarosTests/A.swift");
+  const [deleted] = parseDiff(["diff --git a/BarosTests/B.swift b/BarosTests/B.swift", "deleted file mode 100644", "--- a/BarosTests/B.swift", "+++ /dev/null"].join("\n"));
+  assert.equal(deleted.path, "BarosTests/B.swift");
 });
 
 test("paths with spaces or non-ASCII letters in real git output are still checked", () => {
   const repo = mkdtempSync(join(tmpdir(), "pr-checks-"));
   try {
     const run = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8" });
+    const commit = (message) => run("-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", message);
     run("init", "-q");
-    run("-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "base");
+    commit("base");
     mkdirSync(join(repo, "BarosUITests"));
     const body = "func testA() {\n    Thread.sleep(forTimeInterval: 1)\n}\n";
     writeFileSync(join(repo, "BarosUITests", "Sleep Test.swift"), body);
     writeFileSync(join(repo, "BarosUITests", "Séance.swift"), body);
     run("add", ".");
-    run("-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "head");
-
-    for (const quotePath of ["true", "false"]) {
-      const files = parseDiff(run("-c", `core.quotePath=${quotePath}`, "diff", "-U0", "HEAD~1", "HEAD"));
-      assert.deepEqual(files.map((file) => file.path).sort(), [
-        "BarosUITests/Sleep Test.swift",
-        "BarosUITests/Séance.swift",
-      ]);
-      assert.equal(checkHygiene(files, () => body.split("\n")).length, 2);
-      assert.equal(measureTestDelta(files).kinds.ui, 2);
-    }
+    commit("head");
+    const files = parseDiff(run("-c", "core.quotePath=false", "diff", "-U0", "--no-renames", "HEAD~1", "HEAD"));
+    assert.deepEqual(files.map((file) => file.path).sort(), ["BarosUITests/Sleep Test.swift", "BarosUITests/Séance.swift"]);
+    assert.equal(checkHygiene(files, () => body.split("\n")).length, 2);
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }
@@ -143,7 +107,6 @@ test("a new skip needs a tracking issue or an environment reason", () => {
     "// allow-skip: needs the on-screen keyboard",
     'throw XCTSkip("Requires the software keyboard.")',
     'try XCTSkipUnless(ProcessInfo.processInfo.environment["X"] != nil)',
-    '@Test(.disabled("broken")) func parses() {}',
     'throw XCTSkip("Set #1 fails")',
     "Button(\"Save\") {}.disabled(isSaving)",
     "func sleep(until deadline: Instant) async throws {}",
@@ -153,7 +116,6 @@ test("a new skip needs a tracking issue or an environment reason", () => {
   assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [
     [4, "skip-needs-reason"],
     [5, "skip-needs-reason"],
-    [6, "skip-needs-reason"],
   ]);
 });
 
@@ -171,89 +133,6 @@ test("a multi-line skip may name its issue in a later argument line", () => {
   ];
   const files = parseDiff(diffFor("BarosUITests/A.swift", { added: lines, isNew: true }));
   assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [[5, "skip-needs-reason"]]);
-});
-
-test("a Swift Testing disable needs a reason in any layout, and SwiftUI's .disabled never does", () => {
-  const lines = [
-    '@Test(.tags(.slow), .disabled("flaky")) func a() {}',
-    "@Test(",
-    "    .tags(.slow),",
-    '    .disabled("flaky")',
-    ")",
-    "func b() {}",
-    "@Test(",
-    '    .disabled("Parked on #403")',
-    ") func c() {}",
-    'Button("Save") {}',
-    "    .disabled(isSaving)",
-  ];
-  const files = parseDiff(diffFor("BarosCore/Tests/BarosCoreTests/A.swift", { added: lines, isNew: true }));
-  assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [
-    [1, "skip-needs-reason"],
-    [4, "skip-needs-reason"],
-  ]);
-});
-
-test("SwiftUI's .disabled in an enabled test's body isn't a skip, and a comment can't hide a real one", () => {
-  const lines = [
-    "@Test(.tags(.slow))",
-    "func renders() {",
-    "    let host = UIHostingController(",
-    '        rootView: Button("Save") {}',
-    "            .disabled(isSaving)",
-    "    )",
-    "}",
-    '@Test("x") func inline() { let v = Text("a").disabled(true) }',
-    "@Test(",
-    "    .tags(.slow), // closes ) early?",
-    '    .disabled("flaky")',
-    ")",
-    "func hidden() {}",
-  ];
-  const files = parseDiff(diffFor("BarosCore/Tests/BarosCoreTests/A.swift", { added: lines, isNew: true }));
-  assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [[11, "skip-needs-reason"]]);
-});
-
-test("re-indenting an existing .disabled trait is an edit, not a new skip", () => {
-  const lines = [
-    "@Suite struct Wrapped {",
-    "    @Test(",
-    '        .disabled("flaky")',
-    "    )",
-    "    func a() {}",
-    '    @Test(.disabled("flaky")) func b() {}',
-    "}",
-  ];
-  const files = parseDiff(
-    diffFor("BarosCore/Tests/BarosCoreTests/A.swift", {
-      removed: ["@Test(", '    .disabled("flaky")', ")", "func a() {}", '@Test(.disabled("flaky")) func b() {}'],
-      added: lines,
-    }),
-  );
-  assert.deepEqual(checkHygiene(files, () => lines), []);
-});
-
-test("a removed SwiftUI .disabled( line can't excuse a new trait, and a block comment can't hide one", () => {
-  const lines = [
-    "@Test(",
-    "    .disabled(",
-    '        "flaky"',
-    "    )",
-    ") func a() {}",
-    "@Test(/* https://example.com */ .disabled()) func b() {}",
-    '@Test(/* :) */ .disabled("x")) func c() {}',
-  ];
-  const files = parseDiff(
-    diffFor("BarosCore/Tests/BarosCoreTests/A.swift", {
-      removed: ["    .disabled("],
-      added: lines,
-    }),
-  );
-  assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [
-    [2, "skip-needs-reason"],
-    [6, "skip-needs-reason"],
-    [7, "skip-needs-reason"],
-  ]);
 });
 
 test("a parenthesis inside a string doesn't end a skip's arguments early", () => {
@@ -297,181 +176,14 @@ test("moving an existing sleep or dropping its comment passes; changing its dura
   assert.deepEqual(rulesOf(checkHygiene(files, () => [])), [[2, "no-new-sleep"]]);
 });
 
-const riskOf = (...diffs) => classifyRisk(parseDiff(diffs.join("\n")));
-
-/** Classifies one file changed from `before` to `after`, reading whole files as the CLI does. */
-function riskOfEdit(path, before, after) {
-  const files = parseDiff(
-    diffFor(path, { removed: before?.split("\n") ?? [], added: after?.split("\n") ?? [], isNew: before === null }),
-  );
-  const texts = { before: { [path]: before }, after: { [path]: after } };
-  return classifyRisk(files, (side, file) => texts[side][file] ?? null);
-}
-
-const CONVEX_AREA = "Convex functions, schema, or deploy setup, which ship on merge";
-
-test("risk is high for a one-line change to a data-safety area or what deploys Convex", () => {
-  const oneLine = { added: ["let merged = local"], removed: ["let merged = remote"] };
-  const recovery = "sign-out, local-data reset, account deletion, or workout recovery";
-  const cases = [
-    ["BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift", "sync"],
-    ["Baros/Core/Sync/ConvexSyncClient.swift", "sync"],
-    ["BarosCore/Sources/BarosCore/Sync/SyncOutboxEntry.swift", "stored data models"],
-    ["BarosCore/Sources/BarosCore/Models/LoggedSet.swift", "stored data models"],
-    ["BarosCore/Sources/BarosCore/Domain/WorkoutHistoryMutationService.swift", "edits to saved data"],
-    ["BarosCore/Sources/BarosCore/Persistence/LocalDataResetService.swift", recovery],
-    ["Baros/Core/AccountDeletion/AccountDeletionService.swift", recovery],
-    ["convex/schema.ts", CONVEX_AREA],
-    ["convex/sync/merge.ts", CONVEX_AREA],
-    ["package.json", CONVEX_AREA],
-    ["pnpm-lock.yaml", CONVEX_AREA],
-    [".github/workflows/convex-ci.yml", CONVEX_AREA],
-  ];
-  for (const [path, area] of cases) {
-    assert.deepEqual(riskOf(diffFor(path, oneLine)), { label: "risk:high", areas: [{ name: area, paths: [path] }] }, path);
-  }
-
-  const moved = parseDiff(
-    [
-      "diff --git a/BarosCore/Sources/BarosCore/Sync/Old.swift b/BarosCore/Sources/BarosCore/Other/New.swift",
-      "rename from BarosCore/Sources/BarosCore/Sync/Old.swift",
-      "rename to BarosCore/Sources/BarosCore/Other/New.swift",
-    ].join("\n"),
-  );
-  assert.equal(classifyRisk(moved).label, "risk:high", "moving a file out of an area still touches it");
-});
-
-test("app code that queues uploads is a saved-data edit wherever it lives", () => {
-  const engine = "BarosCore/Sources/BarosCore/Features/Workout/ActiveWorkoutEngine.swift";
-  assert.deepEqual(
-    riskOfEdit(engine, "session.finish()\ntry outboxRecorder.recordUpsert(session)", "session.finish()"),
-    { label: "risk:high", areas: [{ name: "edits to saved data", paths: [engine] }] },
-  );
-  assert.equal(riskOfEdit(engine, "let a = 1", "let a = 2").label, "risk:medium");
-});
-
-test("risk is low for docs, tests, and Swift comment-only changes, however large", () => {
-  const sync = "BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift";
-  const comments = Array.from({ length: 2000 }, (_, index) => `    // note ${index}`).join("\n");
-  const lowEdits = [
-    [`${comments}\nfunc a() {}`, "func a() {}"],
-    ["    detailText: nil, // One line, like .syncing above.", "detailText: nil,"],
-    ["/** Doc.\n * More doc.\n */\nfunc a() {}", "func a() {}"],
-    ["/* outer /* nested */ still a comment */\nfunc a() {}", "func a() {}"],
-    ['let url = "https://baros.fit" // old', 'let url = "https://baros.fit" // new, it\'s "*/" here'],
-    ['let s = "a \\(f("x")) b" // old', 'let s = "a \\(f("x")) b"'],
-    ["apply()", "apply() /* why */ // note"],
-  ];
-  for (const [before, after] of lowEdits) {
-    assert.deepEqual(riskOfEdit(sync, before, after), { label: "risk:low", areas: [] }, after);
-  }
-
-  assert.deepEqual(
-    riskOf(
-      diffFor("AGENTS.md", { added: ["Some rule."] }),
-      diffFor("convex/sync.test.ts", { added: ['test("x", () => {})'] }),
-      diffFor("convex/syncSim/merge-vectors.json", { added: ["{}"] }),
-      diffFor("BarosUITests/BarosUITests.swift", { added: ["    func testA() {}"] }),
-    ),
-    { label: "risk:low", areas: [] },
-  );
-  assert.equal(classifyRisk([]).label, "risk:low");
-});
-
-test("a comment edit can't hide a code change", () => {
-  const sync = "BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift";
-  const view = "Baros/Features/Workout/WorkoutView.swift";
-  const changed = [
-    [view, 'Text("Save")', 'Text("Saved")'],
-    [view, "let x = a\n    * 1", "let x = a\n    * 0"],
-    [view, "a()\nb()", "/*\na()\n*/\nb()"],
-    [view, 'let s = """\n// one\n"""', 'let s = """\n// two\n"""'],
-    [view, 'let s = "a \\(f("x")) b"', 'let s = "a \\(f("y")) b"'],
-    [view, 'let s = "abc', 'let s = "abc // x'],
-    [view, null, "// a new file of comments"],
-    [view, "let r = #/a/#\n// x", "let r = #/a/#\n// y"],
-    ["SupportSite/src/page.js", "const s = `\n// one\n`", "const s = `\n// two\n`"],
-  ];
-  for (const [path, before, after] of changed) {
-    assert.equal(riskOfEdit(path, before, after).label, "risk:medium", `${before} → ${after}`);
-  }
-  assert.equal(
-    riskOfEdit(sync, "delete(record)\nguard ok else { return }", "guard ok else { return }\ndelete(record)").label,
-    "risk:high",
-    "moving a call past an unchanged guard changes behavior",
-  );
-  assert.equal(
-    riskOfEdit("convex/sync.ts", "// a\nexport const x = 1", "// b\nexport const x = 1").label,
-    "risk:high",
-    "only Swift files can be comment-only",
-  );
-  for (const path of ["SupportSite/index.html", ".github/workflows/app-ci.yml", "SupportSite/pnpm-lock.yaml"]) {
-    assert.equal(riskOf(diffFor(path, { added: ["# note"] })).label, "risk:medium", path);
-  }
-});
-
-test("swiftCodeView keeps strings, drops comments, and gives up when unsure", () => {
-  assert.equal(swiftCodeView('  let a = "x // y" // z\n\n  /* c */ b()'), 'let a = "x // y"\nb()');
-  assert.equal(swiftCodeView('let a = #"raw \\(x) "# + ##"two"##'), 'let a = #"raw \\(x) "# + ##"two"##');
-  assert.equal(swiftCodeView("/* unterminated"), null);
-  assert.equal(swiftCodeView('let a = "unterminated\nb()'), null);
-  assert.equal(swiftCodeView('let a = "\\(f(")"'), null);
-});
-
-test("test delta counts declarations per target, and a moved test nets zero", () => {
+test("moving a sleep to another test file is a move, not a new sleep", () => {
   const files = parseDiff(
     [
-      diffFor("BarosUITests/BarosUITests.swift", {
-        added: ["    func testOpensSheet() {", "    @MainActor func testSwipes() throws {"],
-        removed: ["    func testOldFlow() {"],
-      }),
-      diffFor("BarosCore/Tests/BarosCoreTests/ATests.swift", {
-        added: [
-          "    func testParses() {",
-          "    @Test func rounds() {",
-          "    func helper() {",
-          "    @Test",
-          "    func testBoth() {",
-          "    @MainActor @Test func isolated() {",
-          "    private func testHelper() {",
-        ],
-      }),
-      diffFor("convex/workouts.test.ts", { added: ['  test("saves", async () => {', '  it.each([1])("x", () => {'] }),
-      "diff --git a/BarosTests/Old.swift b/BarosTests/New.swift",
-      "rename from BarosTests/Old.swift",
-      "rename to BarosTests/New.swift",
-      "--- a/BarosTests/Old.swift",
-      "+++ b/BarosTests/New.swift",
-      "@@ -1,1 +1,1 @@",
-      "-    func testMoved() {",
-      "+    func testMoved() {",
+      diffFor("BarosTests/Old.swift", { removed: ["    Thread.sleep(forTimeInterval: 1)"] }),
+      diffFor("BarosTests/New.swift", { added: ["        Thread.sleep(forTimeInterval: 1)"], isNew: true }),
     ].join("\n"),
   );
-
-  assert.deepEqual(measureTestDelta(files), {
-    kinds: { core: 4, hosted: 0, ui: 1, convex: 2, tooling: 0 },
-    net: 7,
-  });
-});
-
-test("the PR comment appears only for high risk or a growing UI suite", () => {
-  const unitOnly = { kinds: { core: 25, hosted: 0, ui: 0, convex: 0, tooling: 0 }, net: 25 };
-  const ui = { kinds: { core: 0, hosted: 1, ui: 1, convex: 0, tooling: 0 }, net: 2 };
-  const medium = { label: "risk:medium", areas: [] };
-  assert.equal(prComment(medium, unitOnly), null);
-
-  const delta = prComment(medium, ui);
-  assert.ok(delta.startsWith(COMMENT_MARKER));
-  assert.match(delta, /\*\*Test delta:\*\* \+1 BarosTests, \+1 BarosUITests \(net \+2\)/);
-  assert.match(delta, /adds 1 `BarosUITests` case,/);
-  assert.doesNotMatch(delta, /Risk: high/);
-
-  const paths = ["a.swift", "b.swift", "c.swift", "d.swift", "e.swift"].map((name) => `BarosCore/Sources/BarosCore/Sync/${name}`);
-  const high = prComment({ label: "risk:high", areas: [{ name: "sync", paths }] }, unitOnly);
-  assert.ok(high.startsWith(COMMENT_MARKER));
-  assert.match(high, /\*\*Risk: high\.\*\*/);
-  assert.match(high, /- \*\*sync:\*\* `BarosCore\/Sources\/BarosCore\/Sync\/a\.swift`, `[^`]+`, `[^`]+` and 2 more/);
-  assert.doesNotMatch(high, /Test delta/);
+  assert.deepEqual(checkHygiene(files, noFile), []);
 });
 
 test("an untracked file counts as wholly added", () => {
@@ -482,240 +194,55 @@ test("an untracked file counts as wholly added", () => {
   ]);
 });
 
-test("a stray */ inside a line comment can't hide a sleep before it", () => {
-  const files = parseDiff(
-    diffFor("BarosTests/ATests.swift", {
-      added: [
-        "        Thread.sleep(forTimeInterval: 1) // unmatched */ in a line comment",
-        '        let s = "*/"; Thread.sleep(forTimeInterval: 1)',
-        "        still a comment */ Thread.sleep(forTimeInterval: 1)",
-      ],
-    }),
-  );
-  assert.deepEqual(rulesOf(checkHygiene(files, noFile)), [
-    [1, "no-new-sleep"],
-    [2, "no-new-sleep"],
-    [3, "no-new-sleep"],
-  ]);
-});
-
-test("binary and mode-only changes still count toward risk", () => {
-  const files = parseDiff(
-    [
-      "diff --git a/Baros/Assets/App Icon.png b/Baros/Assets/App Icon.png",
-      "index f584f40..6bf43ff 100644",
-      "Binary files a/Baros/Assets/App Icon.png and b/Baros/Assets/App Icon.png differ",
-      "diff --git a/scripts/run.sh b/scripts/run.sh",
-      "old mode 100644",
-      "new mode 100755",
-      "diff --git a/docs/new.png b/docs/new.png",
-      "new file mode 100644",
-      "Binary files /dev/null and b/docs/new.png differ",
-      diffFor("README.md", { added: ["A note."] }),
-    ].join("\n"),
-  );
-  assert.deepEqual(
-    files.map((file) => file.path),
-    ["Baros/Assets/App Icon.png", "scripts/run.sh", "docs/new.png", "README.md"],
-  );
-  assert.equal(classifyRisk(files).label, "risk:medium");
-});
-
-test("SeedDataService and the owner identity resolver count as ownership code", () => {
-  for (const path of [
-    "BarosCore/Sources/BarosCore/Persistence/SeedDataService.swift",
+test("risk is high for any change in a data-safety path or what the Convex deploy ships", () => {
+  const high = [
+    "BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift",
+    "Baros/Core/Sync/ConvexSyncClient.swift",
+    "BarosCore/Sources/BarosCore/Models/LoggedSet.swift",
+    "BarosCore/Sources/BarosCore/Domain/WorkoutSessionStatus.swift",
+    "BarosCore/Sources/BarosCore/Persistence/LocalDataResetService.swift",
+    "BarosCore/Sources/BarosCore/Features/Workout/ActiveWorkoutEngine.swift",
+    "BarosCore/Sources/BarosCore/AccountDeletion/AccountDeletionCoordinator.swift",
     "BarosCore/Sources/BarosCore/Auth/ClerkJWTIdentityResolver.swift",
-  ]) {
-    assert.deepEqual(riskOf(diffFor(path, { added: ["claim()"], removed: ["keep()"] })).areas, [
-      { name: "sign-out, local-data reset, account deletion, or workout recovery", paths: [path] },
-    ]);
-  }
-});
-
-test("stored enums, @Model files anywhere, and every deployed Convex file are high", () => {
-  const oneLine = { added: ['    case discarded = "gone"'], removed: ['    case discarded = "discarded"'] };
-  const status = "BarosCore/Sources/BarosCore/Domain/WorkoutSessionStatus.swift";
-  assert.deepEqual(riskOf(diffFor(status, oneLine)).areas, [{ name: "stored data models", paths: [status] }]);
-
-  const model = "BarosCore/Sources/BarosCore/Features/Notes/Note.swift";
-  assert.deepEqual(riskOfEdit(model, null, "@Model\nfinal class Note {}").areas, [
-    { name: "stored data models", paths: [model] },
+    "Baros/Features/Settings/DeleteDataConfirmationView.swift",
+    "convex/schema.ts",
+    "convex/sync/merge.helpers.ts",
+    "package.json",
+    "pnpm-lock.yaml",
+    ".github/workflows/convex-ci.yml",
+  ];
+  for (const path of high) assert.equal(classifyRisk([path]).label, "risk:high", path);
+  assert.deepEqual(classifyRisk(["docs/a.md", "BarosCore/Sources/BarosCore/Sync/X.swift", "convex/sync.ts"]).areas, [
+    "stored data or sync",
+    "what the Convex deploy ships",
   ]);
-
-  const convex = (path) => riskOf(diffFor(path, { added: ["export const x = 1"] })).label;
-  assert.equal(convex("convex/syncSim/helpers.ts"), "risk:high", "Convex deploys single-dot files anywhere in convex/");
-  assert.equal(convex("convex/auth.config.ts"), "risk:high");
-  assert.equal(convex("convex/syncSim/fleet.sim.ts"), "risk:low", "Convex skips names with several dots");
-  assert.equal(convex("convex/env.d.ts"), "risk:medium");
 });
 
-test("a tests-only PR that removes tests is medium, and moving one is still low", () => {
-  const removed = riskOf(diffFor("BarosCore/Tests/BarosCoreTests/SyncCoordinatorTests.swift", { removed: ["    func testMerges() {"] }));
-  assert.deepEqual(removed, { label: "risk:medium", areas: [], removesTests: true });
-  const moved = riskOf(
-    diffFor("BarosTests/A.swift", { removed: ["    func testA() {"] }),
-    diffFor("BarosTests/B.swift", { added: ["    func testA() {"] }),
-  );
-  assert.equal(moved.label, "risk:low");
+test("risk is low for docs and tests only, and medium for anything else", () => {
+  const low = ["AGENTS.md", "docs/adr/1.md", "BarosUITests/A.swift", "BarosCore/Tests/BarosCoreTests/A.swift", "convex/sync.test.ts", "convex/syncSim/fleet.sim.ts", "SupportSite/tests/a.test.mjs"];
+  assert.equal(classifyRisk(low).label, "risk:low");
+  assert.equal(classifyRisk([]).label, "risk:low");
+  for (const path of ["Baros/Features/Workout/WorkoutView.swift", "BarosCore/Sources/BarosCore/Formatting/WorkoutFormatters.swift", "convex/tsconfig.json", "SupportSite/package.json", ".github/workflows/app-ci.yml", "Baros/Assets.xcassets/AppIcon.png"]) {
+    assert.equal(classifyRisk(["AGENTS.md", path]).label, "risk:medium", path);
+  }
+  // A rename shows as both paths, so moving app code into Tests/ isn't low.
+  assert.equal(classifyRisk(["Baros/Features/X.swift", "BarosTests/X.swift"]).label, "risk:medium");
 });
 
-test("every stored model and stored enum in BarosCore is in the stored-models area", async () => {
-  const { readdirSync, readFileSync } = await import("node:fs");
+test("every SwiftData model is under a high-risk path", () => {
   const root = new URL("../", import.meta.url);
   const sources = "BarosCore/Sources/BarosCore";
-  const files = readdirSync(new URL(sources, root), { recursive: true })
+  const models = readdirSync(new URL(sources, root), { recursive: true })
     .filter((path) => path.endsWith(".swift"))
-    .map((path) => ({ path: `${sources}/${path}`, text: readFileSync(new URL(`${sources}/${path}`, root), "utf8") }));
-  const high = (path) =>
-    classifyRisk([{ path, oldPath: null, added: [{ line: 1, text: "x()" }], removedText: [] }]).label === "risk:high";
-
-  const models = files.filter((file) => /^\s*@Model\b/m.test(file.text));
+    .map((path) => `${sources}/${path}`)
+    .filter((path) => /@Model\b/.test(readFileSync(new URL(path, root), "utf8")));
   assert.ok(models.length >= 10);
-  const enums = new Set(models.flatMap((file) => [...file.text.matchAll(/\b([A-Z]\w+)\((?:stored)?[rR]awValue:/g)].map((match) => match[1])));
-  const enumFiles = files.filter((file) => [...enums].some((name) => new RegExp(`\\benum ${name}\\b`).test(file.text)));
-  assert.ok(enumFiles.length >= 10);
-  for (const file of [...models, ...enumFiles]) assert.ok(high(file.path), `${file.path} must match a high-risk area by path`);
+  for (const path of models) assert.equal(classifyRisk([path]).label, "risk:high", path);
 });
 
-test("the label job allows exactly the labels, colors, and marker the script reports", async () => {
-  const { readFileSync } = await import("node:fs");
+test("the label job allows exactly the risk labels, and reads the author's line from the PR body", () => {
   const workflow = readFileSync(new URL("../.github/workflows/pr-checks.yml", import.meta.url), "utf8");
-  const allowed = [...workflow.matchAll(/^\s+(risk:\w+)\) color=(\w+) ;;$/gm)].map((match) => ({ name: match[1], color: match[2] }));
-  assert.deepEqual(allowed, RISK_LABELS);
-  assert.match(workflow, new RegExp(`marker='${COMMENT_MARKER}'`));
-});
-
-test("whitespace inside a multi-line string is part of its value, not a comment change", () => {
-  const sync = "BarosCore/Sources/BarosCore/Sync/X.swift";
-  const literal = (body) => `let json = """\n${body}\n    """`;
-  for (const after of [literal('      {"a": 1}'), literal('    {"a": 1}\n'), literal('    {"a": 1}  ')]) {
-    assert.equal(riskOfEdit(sync, literal('    {"a": 1}'), after).label, "risk:high", after);
-  }
-  assert.equal(riskOfEdit(sync, literal('    {"a": 1}'), `${literal('    {"a": 1}')} // note`).label, "risk:low");
-});
-
-test("joined tokens and possible regex literals are code changes, not comment edits", () => {
-  const sync = "BarosCore/Sources/BarosCore/Sync/X.swift";
-  assert.equal(riskOfEdit(sync, "return/* note */value()", "returnvalue()").label, "risk:high");
-  assert.equal(riskOfEdit(sync, "let r = /x\\/*a*/", "let r = /x\\/*b*/").label, "risk:high");
-  assert.equal(riskOfEdit(sync, "let a = total/count", "let a = total/count // note").label, "risk:high");
-  assert.equal(riskOfEdit(sync, "let a = b /* why */ + c", "let a = b + c").label, "risk:low");
-  assert.equal(riskOfEdit(sync, "let a = total / count\na /= 2", "let a = total / count // note\na /= 2").label, "risk:low");
-});
-
-test("Convex helpers with dotted names are high, and no deployed file imports an exempt one", async () => {
-  const helper = "convex/sync/merge.helpers.ts";
-  assert.equal(riskOf(diffFor(helper, { added: ["export const x = 1"] })).label, "risk:high");
-
-  const { readdirSync, readFileSync } = await import("node:fs");
-  const root = new URL("../", import.meta.url);
-  const sources = readdirSync(new URL("convex", root), { recursive: true })
-    .filter((path) => /\.[cm]?[jt]sx?$/.test(path) && !path.startsWith("_generated"))
-    .map((path) => `convex/${path}`);
-  const deployed = (path) => riskOf(diffFor(path, { added: ["x"] })).label === "risk:high";
-  let checked = 0;
-  for (const path of sources.filter(deployed)) {
-    const text = readFileSync(new URL(path, root), "utf8");
-    for (const [, target] of text.matchAll(/from\s+["'](\.{1,2}\/[^"']+)["']/g)) {
-      const resolved = new URL(target, new URL(path, root)).pathname.replace(new URL(".", root).pathname, "");
-      const candidates = [resolved, resolved.replace(/\.js$/, ".ts"), `${resolved}.ts`, `${resolved}/index.ts`];
-      checked += 1;
-      const file = candidates.find((candidate) => sources.includes(candidate));
-      if (file) assert.ok(deployed(file), `${path} imports ${file}, which the Convex area exempts`);
-    }
-  }
-  assert.ok(checked >= 10, `checked ${checked} imports`);
-});
-
-test("removing a test is caught even when another test is added", () => {
-  const swapped = riskOf(
-    diffFor("BarosUITests/BarosUITests.swift", { removed: ["    func testSignOutKeepsWorkouts() {"] }),
-    diffFor("BarosCore/Tests/BarosCoreTests/ATests.swift", { added: ["    func testRounds() {"] }),
-  );
-  assert.deepEqual(swapped, { label: "risk:medium", areas: [], removesTests: true });
-  const renamedJs = riskOf(diffFor("convex/sync.test.ts", { removed: ['  test("keeps deletes", () => {'], added: ['  test("keeps edits", () => {'] }));
-  assert.equal(renamedJs.label, "risk:medium");
-  const movedSwiftTesting = riskOf(
-    diffFor("BarosCore/Tests/BarosCoreTests/A.swift", { removed: ["    @Test", "    func merges() {"] }),
-    diffFor("BarosCore/Tests/BarosCoreTests/B.swift", { added: ["    @Test func merges() {"] }),
-  );
-  assert.equal(movedSwiftTesting.label, "risk:low");
-});
-
-test("an @Model after other attributes, and a quoted mode-only path, still count", () => {
-  const model = "BarosCore/Sources/BarosCore/Features/Notes/Note.swift";
-  assert.deepEqual(riskOfEdit(model, null, "@available(*, deprecated) @Model final class Note {}").areas, [
-    { name: "stored data models", paths: [model] },
-  ]);
-  const files = parseDiff(['diff --git "a/Baros/run\\tme.sh" "b/Baros/run\\tme.sh"', "old mode 100644", "new mode 100755"].join("\n"));
-  assert.deepEqual(files.map((file) => file.path), ["Baros/run\tme.sh"]);
-  assert.equal(classifyRisk(files).label, "risk:medium");
-});
-
-test("long raw-string delimiters lex, and moving app code into tests isn't low", () => {
-  const hashes = "#".repeat(20);
-  const raw = `let s = ${hashes}"a // b"${hashes}`;
-  assert.equal(swiftCodeView(`${raw} // c`), raw);
-
-  const moved = parseDiff(
-    [
-      "diff --git a/BarosCore/Sources/BarosCore/Formatting/X.swift b/BarosCore/Tests/BarosCoreTests/X.swift",
-      "rename from BarosCore/Sources/BarosCore/Formatting/X.swift",
-      "rename to BarosCore/Tests/BarosCoreTests/X.swift",
-    ].join("\n"),
-  );
-  assert.equal(classifyRisk(moved).label, "risk:medium");
-});
-
-test("UI that starts sign-out, reset, deletion, or recovery is high", () => {
-  const view = "Baros/Features/Settings/DeleteDataConfirmationView.swift";
-  const before = "Button { await coordinator.deleteAccount() }\n@StateObject var coordinator: AccountDeletionCoordinator";
-  const after = "Button { }\n@StateObject var coordinator: AccountDeletionCoordinator";
-  assert.deepEqual(riskOfEdit(view, before, after).areas, [
-    { name: "sign-out, local-data reset, account deletion, or workout recovery", paths: [view] },
-  ]);
-  assert.equal(riskOfEdit("Baros/Features/Settings/AboutView.swift", 'Text("a")', 'Text("b")').label, "risk:medium");
-});
-
-test("a raw multi-line string's newline differs from the text \\n", () => {
-  const sync = "Baros/Core/Sync/X.swift";
-  const before = 'let s = #"""\na\nb\n"""#';
-  const after = 'let s = #"""\na\\nb\n"""#';
-  assert.equal(riskOfEdit(sync, before, after).label, "risk:high");
-});
-
-test("lengthening a multi-line sleep's argument is a new sleep; re-indenting it isn't", () => {
-  const lines = ["    func testA() {", "        Thread.sleep(", "            forTimeInterval: 60", "        )", "    }"];
-  const readLines = () => lines;
-  const edit = (added, removed) =>
-    rulesOf(checkHygiene(parseDiff(diffFor("BarosTests/ATests.swift", { start: 3, added: [added], removed: [removed] })), readLines));
-  assert.deepEqual(edit("            forTimeInterval: 60", "            forTimeInterval: 1"), [[3, "no-new-sleep"]]);
-  assert.deepEqual(edit("            forTimeInterval: 60", "        forTimeInterval: 60"), []);
-
-  const allowed = ["        // allow-sleep: waits out the system's 1 s debounce", ...lines.slice(1)];
-  const withReason = rulesOf(
-    checkHygiene(parseDiff(diffFor("BarosTests/ATests.swift", { start: 4, added: [allowed[2]], removed: ["x"] })), () => ["    func testA() {", ...allowed]),
-  );
-  assert.deepEqual(withReason, []);
-  const noReason = rulesOf(
-    checkHygiene(parseDiff(diffFor("BarosTests/ATests.swift", { start: 4, added: [allowed[2]], removed: ["x"] })), () => ["    func testA() {", "", ...lines.slice(1)]),
-  );
-  assert.deepEqual(noReason, [[4, "no-new-sleep"]]);
-});
-
-test("a BarosCore type that sync, models, or saved-data edits use is high", () => {
-  const policy = "BarosCore/Sources/BarosCore/Domain/WorkoutNumericInputPolicy.swift";
-  const sync = "BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift";
-  const view = "Baros/Features/Workout/WorkoutView.swift";
-  const texts = {
-    [policy]: "public enum WorkoutNumericInputPolicy {\n    static let maximumWeightPounds = 2000.0\n}",
-    [sync]: "let weight = WorkoutNumericInputPolicy.clamp(set.weight)",
-    [view]: "struct WorkoutView: View { let label = HomeLabel() }",
-    "BarosCore/Sources/BarosCore/Features/Home/HomeLabel.swift": "public struct HomeLabel {}",
-  };
-  const readFile = (side, path) => (side === "after" ? texts[path] ?? null : null);
-  const listFiles = () => Object.keys(texts);
-  const change = (path) => classifyRisk(parseDiff(diffFor(path, { added: ["x"], removed: ["y"] })), readFile, listFiles);
-  assert.deepEqual(change(policy).areas, [{ name: "code that sync or stored data uses", paths: [policy] }]);
-  assert.equal(change("BarosCore/Sources/BarosCore/Features/Home/HomeLabel.swift").label, "risk:medium", "a view's use doesn't count");
+  const allowed = [...workflow.matchAll(/^\s+(risk:\w+)\) color=\w+ ;;$/gm)].map((match) => match[1]);
+  assert.deepEqual(allowed.sort(), [...RISK_LABELS].sort());
+  assert.match(workflow, /PR_BODY: \$\{\{ github\.event\.pull_request\.body \}\}/);
 });

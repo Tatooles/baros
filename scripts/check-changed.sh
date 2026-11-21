@@ -133,7 +133,7 @@ if touches "$workflow_paths"; then
 fi
 
 echo
-node scripts/pr-checks.mjs summary --base "$base"
+echo "Risk floor: $(node scripts/pr-checks.mjs risk --base "$base") (see AGENTS.md → \"PR risk\")"
 
 if touches '^project\.yml$'; then
   echo "project.yml changed: run xcodegen generate and commit Baros.xcodeproj with it."

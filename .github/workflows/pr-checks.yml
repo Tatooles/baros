@@ -4,7 +4,8 @@ name: PR Checks
 # scripts/pr-checks.mjs holds the rules; scripts/check-changed.sh runs the same ones locally.
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+    # edited re-labels when the author changes the risk line.
+    types: [opened, reopened, synchronize, ready_for_review, edited]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -45,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      report: ${{ steps.classify.outputs.report }}
+      floor: ${{ steps.floor.outputs.floor }}
 
     steps:
       - name: Check out repository history
@@ -59,19 +60,18 @@ jobs:
         with:
           node-version: 22.12.0
 
-      - name: Classify risk and count the test delta
-        id: classify
+      - name: Find the risk floor from the changed paths
+        id: floor
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          report="$(node scripts/pr-checks.mjs report --base "${BASE_SHA}" --head "${HEAD_SHA}")"
-          echo "report=${report}" >> "${GITHUB_OUTPUT}"
-          jq -r '"PR risk: \(.label)" + (if (.areas | length) > 0 then " (\(.areas | map(.name) | join("; ")))" else "" end)' \
-            <<<"${report}" >> "${GITHUB_STEP_SUMMARY}"
+          result="$(node scripts/pr-checks.mjs risk --base "${BASE_SHA}" --head "${HEAD_SHA}")"
+          echo "floor=${result%% *}" >> "${GITHUB_OUTPUT}"
+          echo "Risk floor: ${result}" >> "${GITHUB_STEP_SUMMARY}"
 
   # Holds the write token, so it checks nothing out and runs no repository code. It treats the
-  # report as untrusted data and accepts only a known label and a comment that starts with the marker.
+  # floor and the PR body as untrusted data and applies only a known label.
   pr-risk-label:
     name: pr-risk-label
     needs: pr-risk
@@ -84,46 +84,32 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: Apply risk label and PR comment
+      - name: Apply the higher of the floor and the author's risk line
         env:
-          REPORT: ${{ needs.pr-risk.outputs.report }}
+          FLOOR: ${{ needs.pr-risk.outputs.floor }}
+          PR_BODY: ${{ github.event.pull_request.body }}
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
-          marker='<!-- pr-checks -->'
-          label="$(jq -r '.label' <<<"${REPORT}")"
+          rank() { case "$1" in risk:low) echo 1 ;; risk:medium) echo 2 ;; risk:high) echo 3 ;; *) echo 0 ;; esac; }
+          # The template's "**Risk:** medium, <why>" line. The author can raise the floor, never lower it.
+          declared="$(printf '%s\n' "${PR_BODY}" | grep -m 1 -ioE '^[*_ ]*risk[*_ ]*:[*_ ]*(high|medium|low)([^a-z]|$)' | grep -ioE 'high|medium|low' | tail -n 1 | tr 'A-Z' 'a-z' || true)"
+          label="${FLOOR}"
+          if (( $(rank "risk:${declared}") > $(rank "${label}") )); then label="risk:${declared}"; fi
           case "${label}" in
             risk:high) color=b60205 ;;
             risk:medium) color=fbca04 ;;
             risk:low) color=0e8a16 ;;
-            *) echo "::error::Unexpected risk label in report: ${label}"; exit 1 ;;
+            *) echo "::error::Unexpected risk floor: ${FLOOR}"; exit 1 ;;
           esac
-          comment="$(jq -r '.comment // empty' <<<"${REPORT}")"
-          if [[ -n "${comment}" && "${comment}" != "${marker}"* ]]; then
-            echo "::error::The PR comment doesn't start with its marker."
-            exit 1
-          fi
+          echo "Floor ${FLOOR}, author ${declared:-none}: applying ${label}" >> "${GITHUB_STEP_SUMMARY}"
 
           gh label create "${label}" --repo "${REPO}" --color "${color}" \
-            --description "From the paths the PR changes, not its size. See AGENTS.md → PR risk." --force
-
-          # size: labels came from the earlier version of this check.
-          for current in $(gh api "repos/${REPO}/issues/${PR}/labels" --jq '.[].name | select(startswith("risk:") or startswith("size:"))'); do
+            --description "The higher of the path floor and the author's risk line. See AGENTS.md → PR risk." --force
+          for current in $(gh api "repos/${REPO}/issues/${PR}/labels" --jq '.[].name | select(startswith("risk:"))'); do
             if [[ "${current}" != "${label}" ]]; then
               gh api -X DELETE "repos/${REPO}/issues/${PR}/labels/${current}" --silent
             fi
           done
           gh api -X POST "repos/${REPO}/issues/${PR}/labels" -f "labels[]=${label}" --silent
-
-          existing="$(gh api --paginate "repos/${REPO}/issues/${PR}/comments" \
-            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"${marker}\"))) | .id")"
-          existing="${existing%%$'\n'*}"
-
-          if [[ -n "${comment}" && -n "${existing}" ]]; then
-            gh api -X PATCH "repos/${REPO}/issues/comments/${existing}" -f "body=${comment}" --silent
-          elif [[ -n "${comment}" ]]; then
-            gh api -X POST "repos/${REPO}/issues/${PR}/comments" -f "body=${comment}" --silent
-          elif [[ -n "${existing}" ]]; then
-            gh api -X DELETE "repos/${REPO}/issues/comments/${existing}" --silent
-          fi

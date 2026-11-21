@@ -14,6 +14,9 @@ opening paragraph and Tests are often enough.
 <!-- Closes #<n> when this finishes an issue, Refs #<n> when more PRs follow. Delete if there's no issue. -->
 Closes #
 
+<!-- low, medium, or high, then why. CI labels the PR with this or the path floor, whichever is higher. -->
+**Risk:**
+
 ## Evidence
 
 <!--
@@ -30,7 +33,7 @@ Upload to GitHub. Never commit evidence.
 <!--
 For a bug fix: how it reproduces on main, then the test that fails without the fix and passes with it.
 Then the commands you ran and their results, starting with scripts/check-changed.sh.
-For a risk:high PR, add the proof AGENTS.md → "PR risk" lists for each area the PR comment names.
+For a risk:high PR, add the proof AGENTS.md → "PR risk" lists for each area it touches.
 -->
 
 ## Not in this change
