@@ -138,9 +138,13 @@ const codeOf = (text) => text.replace(/\s*\/\/.*$/, "").replace(/\s+/g, " ").tri
 /** The line with string contents and comments blanked out, keeping every column in place. */
 function maskCode(text) {
   const blank = (span) => " ".repeat(span.length);
+  // A line inside a multi-line block comment conventionally starts with `*`.
+  if (/^\s*\*(?:\s|\/|$)/.test(text)) return blank(text);
   return text
     .replace(/"(?:[^"\\]|\\.)*"/g, (literal) => `"${blank(literal.slice(2))}"`)
     .replace(/\/\*.*?\*\//g, blank)
+    .replace(/\/\*.*$/, blank)
+    .replace(/^.*?\*\//, blank)
     .replace(/\/\/.*$/, blank);
 }
 
