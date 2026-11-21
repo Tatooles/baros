@@ -44,10 +44,11 @@ export const HIGH_RISK_AREAS = [
     path: /^BarosCore\/Sources\/BarosCore\/Domain\/\w+MutationService\.swift$/,
   },
   {
-    // SeedDataService hands records with no owner to the account that signs in.
+    // SeedDataService hands records with no owner to the account that signs in, and
+    // ClerkJWTIdentityResolver decides which owner a session or recovered record belongs to.
     name: DATA_SAFETY_FLOWS,
     path: new RegExp(
-      `^${APP_SOURCES}/(?:AccountDeletion|AccountTransition|Ownership)/|^BarosCore/Sources/BarosCore/Persistence/(?:LocalDataResetService|SeedDataService)\\.swift$`,
+      `^${APP_SOURCES}/(?:AccountDeletion|AccountTransition|Ownership)/|^BarosCore/Sources/BarosCore/(?:Persistence/(?:LocalDataResetService|SeedDataService)|Auth/ClerkJWTIdentityResolver)\\.swift$`,
     ),
   },
   {

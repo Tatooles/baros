@@ -521,11 +521,16 @@ test("binary and mode-only changes still count toward risk", () => {
   assert.equal(classifyRisk(files).label, "risk:medium");
 });
 
-test("SeedDataService counts as ownership code", () => {
-  const path = "BarosCore/Sources/BarosCore/Persistence/SeedDataService.swift";
-  assert.deepEqual(riskOf(diffFor(path, { added: ["claim()"], removed: ["keep()"] })).areas, [
-    { name: "sign-out, local-data reset, account deletion, or workout recovery", paths: [path] },
-  ]);
+test("SeedDataService and the owner identity resolver count as ownership code", () => {
+  for (const path of [
+    "BarosCore/Sources/BarosCore/Persistence/SeedDataService.swift",
+    "BarosCore/Sources/BarosCore/Auth/ClerkJWTIdentityResolver.swift",
+  ]) {
+    assert.deepEqual(riskOf(diffFor(path, { added: ["claim()"], removed: ["keep()"] })).areas, [
+      { name: "sign-out, local-data reset, account deletion, or workout recovery", paths: [path] },
+    ]);
+  }
+  assert.equal(riskOf(diffFor("BarosCore/Sources/BarosCore/Auth/ClerkConfiguration.swift", { added: ["x()"] })).label, "risk:medium");
 });
 
 test("stored enums, @Model files anywhere, and every deployed Convex file are high", () => {
