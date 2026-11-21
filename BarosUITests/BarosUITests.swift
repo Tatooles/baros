@@ -4739,8 +4739,9 @@ final class BarosUITests: XCTestCase {
         pastWorkoutsBackButton.tap()
 
         XCTAssertTrue(app.buttons["StartBlankWorkoutButton"].waitToExist(timeout: 3))
+        // On the CI runner the sheet's Cancel item fills in after its root content during the pop.
         let cancelButton = app.buttons["StartWorkoutCancelButton"]
-        XCTAssertTrue(cancelButton.exists)
+        XCTAssertTrue(cancelButton.waitToExist(timeout: 3))
         cancelButton.tap()
 
         XCTAssertTrue(app.staticTexts["HomeTitle"].waitToExist(timeout: 3))

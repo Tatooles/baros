@@ -111,7 +111,9 @@ final class AppUpdatePromptUITests: XCTestCase {
         XCTAssertTrue(release.waitToExist(timeout: 5))
         XCTAssertFalse(app.alerts["Update available"].waitForExistence(timeout: 2))
         release.tap()
-        XCTAssertTrue(app.alerts["Update available"].waitToExist(timeout: 5))
+        // The prompt waits for the account change to end, then checks each second until
+        // nothing covers the screen. That took over 5 s on the CI runner.
+        XCTAssertTrue(app.alerts["Update available"].waitToExist(timeout: 10))
         app.alerts["Update available"].buttons["Later"].tap()
     }
 
