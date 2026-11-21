@@ -50,11 +50,11 @@ export const HIGH_RISK_AREAS = [
     ),
   },
   {
-    // Convex deploys every convex/ source file whose name has one dot, plus auth.config.ts and
-    // convex.config.ts; it skips other names with several dots, such as *.test.ts and *.sim.ts.
-    // The deploy job installs from the root manifest and lockfile.
+    // Convex bundles every convex/ source a function imports, whatever its name, so only test,
+    // simulator, and type-declaration files are exempt; a script test checks no deployed file
+    // imports one. The deploy job installs from the root manifest and lockfile.
     name: "Convex functions, schema, or deploy setup, which ship on merge",
-    path: /^convex\/(?!_generated\/)(?:(?:.*\/)?(?:auth|convex)\.config\.[jt]s|(?:[^/]+\/)*[^/.]+\.[cm]?[jt]sx?)$|^(?:package\.json|pnpm-lock\.yaml|\.github\/workflows\/convex-ci\.yml)$/,
+    path: /^convex\/(?!_generated\/)(?!.*\.(?:test|spec|sim)\.[cm]?[jt]sx?$)(?!.*\.d\.ts$).*\.[cm]?[jt]sx?$|^(?:package\.json|pnpm-lock\.yaml|\.github\/workflows\/convex-ci\.yml)$/,
   },
 ];
 
@@ -79,7 +79,11 @@ export function parseDiff(diff) {
       file = { path: null, oldPath: null, isNew: false, added: [], removedText: [] };
       // A mode change has no ---/+++ lines; its header names the same path twice.
       const samePath = line.match(/^diff --git a\/(.+) b\/\1$/);
+      const quoted = line.match(/^diff --git ("a\/.*") ("b\/.*")$/);
       if (samePath) file.path = decodeGitPath(samePath[1]);
+      else if (quoted && headerPath(quoted[1], "a/") === headerPath(quoted[2], "b/")) {
+        file.path = headerPath(quoted[2], "b/");
+      }
       files.push(file);
       inHunk = false;
       continue;
@@ -314,9 +318,17 @@ export function swiftCodeView(source) {
       if (at(index, "//")) {
         while (index < source.length && source[index] !== "\n") index += 1;
       } else if (at(index, "/*")) {
+        // A comment separates tokens, so `return/* x */value` isn't `returnvalue`.
+        space();
         index = blockComment(index);
-      } else if (char === '"' || (char === "#" && /^#+"/.test(source.slice(index, index + 16)))) {
+      } else if (char === '"' || (char === "#" && /^#+"/.test(source.slice(index).match(/^#*"?/)[0]))) {
         index = string(index);
+      } else if (char === " " || char === "\t") {
+        space();
+        index += 1;
+      } else if (char === "/" && !/[\s=]/.test(source[index + 1] ?? " ")) {
+        // A bare `/regex/` can hold `//` or `/*`; only spaced division and `/=` are certain.
+        throw new Unreadable();
       } else {
         if (interpolation && char === "(") depth += 1;
         if (interpolation && char === ")" && depth-- === 0) {
@@ -329,6 +341,12 @@ export function swiftCodeView(source) {
     }
     if (interpolation) throw new Unreadable();
     return index;
+  }
+
+  // Runs of spaces and tabs in code compare as one space.
+  function space() {
+    const last = out.at(-1);
+    if (last !== undefined && last !== " " && last !== "\n") out += " ";
   }
 
   function blockComment(index) {
@@ -357,6 +375,9 @@ export function swiftCodeView(source) {
     const close = open + hashes;
     out += hashes + open;
     index += open.length;
+    // Indentation, blank lines, and trailing spaces inside a multi-line string are part of its
+    // value, so its newlines stay visible and the final per-line trim can't touch its content.
+    const keep = (text) => (multiline ? text.replace(/\n/g, "\\n") : text);
     for (;;) {
       if (index >= source.length || (!multiline && source[index] === "\n")) throw new Unreadable();
       if (at(index, close)) {
@@ -365,10 +386,10 @@ export function swiftCodeView(source) {
       }
       if (source[index] === "\\" && at(index + 1, hashes)) {
         const after = index + 1 + hashes.length;
-        out += source.slice(index, after + 1);
+        out += keep(source.slice(index, after + 1));
         index = source[after] === "(" ? code(after + 1, true) : after + 1;
       } else {
-        out += source[index];
+        out += keep(source[index]);
         index += 1;
       }
     }
@@ -405,7 +426,7 @@ const APP_SWIFT_SOURCE = /^(?:BarosCore\/Sources|Baros)\/.*\.swift$/;
 
 // App code outside the listed paths that still belongs to an area, found by what it contains.
 const CONTENT_AREAS = [
-  { name: STORED_MODELS, pattern: /^\s*@Model\b/m },
+  { name: STORED_MODELS, pattern: /@Model\b/ },
   // Queues changes for upload, as ActiveWorkoutEngine does.
   { name: SAVED_DATA_EDITS, pattern: /\b(?:SyncOutboxRecorder|outboxRecorder)\b/ },
 ];
@@ -439,12 +460,14 @@ export function classifyRisk(files, readFile = () => null) {
     if (!entry.paths.includes(path)) entry.paths.push(path);
   }
   if (areas.length) return { label: "risk:high", areas };
+  // Both sides of a rename must be docs or tests: moving app code into Tests/ removes it.
+  const docOrTest = (path) => DOC_PATH.test(path) || TEST_PATH.test(path);
   const low = files.every(
     (file) =>
-      DOC_PATH.test(file.path) || TEST_PATH.test(file.path) || onlyCommentsChange(file, readFile),
+      [file.path, file.oldPath ?? file.path].every(docOrTest) || onlyCommentsChange(file, readFile),
   );
   // Deleting tests weakens what CI checks, so it never counts as low.
-  if (low && measureTestDelta(files).net < 0) return { label: "risk:medium", areas, removesTests: true };
+  if (low && removesTests(files)) return { label: "risk:medium", areas, removesTests: true };
   return { label: low ? "risk:low" : "risk:medium", areas };
 }
 
@@ -462,6 +485,39 @@ const SWIFT_TEST_FUNC =
   /^\s*(?:(?:@\w+|override|public|internal|final|nonisolated)\s+)*func\s+test\w*\s*\(/;
 const SWIFT_TEST_ATTRIBUTE = /^\s*(?:@\w+\s+)*@Test\b/;
 const JS_CASE = /^\s*(?:it|test)(?:\.\w+)*\s*\(/;
+
+/** Test names per declaration, as `kind:name`, so a test moved within its target matches itself. */
+function testNames(lines, path, kind) {
+  const names = [];
+  let afterAttribute = false;
+  for (const text of lines) {
+    if (!path.endsWith(".swift")) {
+      const js = text.match(/^\s*(?:it|test)(?:\.\w+)*\s*\(\s*(["'`])(.*?)\1/);
+      if (js) names.push(`${kind}:${js[2]}`);
+      continue;
+    }
+    const attribute = SWIFT_TEST_ATTRIBUTE.test(text);
+    const func = text.match(/\bfunc\s+(\w+)/);
+    if ((attribute || afterAttribute) && func) names.push(`${kind}:${func[1]}`);
+    else if (!attribute && func && SWIFT_TEST_FUNC.test(text)) names.push(`${kind}:${func[1]}`);
+    afterAttribute = attribute && !func;
+  }
+  return names;
+}
+
+/** True when a test disappears from its target, even if other tests are added elsewhere. */
+function removesTests(files) {
+  const added = new Set();
+  const removed = [];
+  for (const file of files) {
+    const kind = kindOf(file.path);
+    const oldPath = file.oldPath ?? file.path;
+    const oldKind = kindOf(oldPath);
+    if (kind) for (const name of testNames(file.added.map((entry) => entry.text), file.path, kind)) added.add(name);
+    if (oldKind) removed.push(...testNames(file.removedText, oldPath, oldKind));
+  }
+  return removed.some((name) => !added.has(name));
+}
 
 function countCases(lines, path) {
   if (!path.endsWith(".swift")) return lines.filter((text) => JS_CASE.test(text)).length;

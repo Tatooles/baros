@@ -580,3 +580,85 @@ test("the label job allows exactly the labels, colors, and marker the script rep
   assert.deepEqual(allowed, RISK_LABELS);
   assert.match(workflow, new RegExp(`marker='${COMMENT_MARKER}'`));
 });
+
+test("whitespace inside a multi-line string is part of its value, not a comment change", () => {
+  const sync = "BarosCore/Sources/BarosCore/Sync/X.swift";
+  const literal = (body) => `let json = """\n${body}\n    """`;
+  for (const after of [literal('      {"a": 1}'), literal('    {"a": 1}\n'), literal('    {"a": 1}  ')]) {
+    assert.equal(riskOfEdit(sync, literal('    {"a": 1}'), after).label, "risk:high", after);
+  }
+  assert.equal(riskOfEdit(sync, literal('    {"a": 1}'), `${literal('    {"a": 1}')} // note`).label, "risk:low");
+});
+
+test("joined tokens and possible regex literals are code changes, not comment edits", () => {
+  const sync = "BarosCore/Sources/BarosCore/Sync/X.swift";
+  assert.equal(riskOfEdit(sync, "return/* note */value()", "returnvalue()").label, "risk:high");
+  assert.equal(riskOfEdit(sync, "let r = /x\\/*a*/", "let r = /x\\/*b*/").label, "risk:high");
+  assert.equal(riskOfEdit(sync, "let a = total/count", "let a = total/count // note").label, "risk:high");
+  assert.equal(riskOfEdit(sync, "let a = b /* why */ + c", "let a = b + c").label, "risk:low");
+  assert.equal(riskOfEdit(sync, "let a = total / count\na /= 2", "let a = total / count // note\na /= 2").label, "risk:low");
+});
+
+test("Convex helpers with dotted names are high, and no deployed file imports an exempt one", async () => {
+  const helper = "convex/sync/merge.helpers.ts";
+  assert.equal(riskOf(diffFor(helper, { added: ["export const x = 1"] })).label, "risk:high");
+
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const root = new URL("../", import.meta.url);
+  const sources = readdirSync(new URL("convex", root), { recursive: true })
+    .filter((path) => /\.[cm]?[jt]sx?$/.test(path) && !path.startsWith("_generated"))
+    .map((path) => `convex/${path}`);
+  const deployed = (path) => riskOf(diffFor(path, { added: ["x"] })).label === "risk:high";
+  let checked = 0;
+  for (const path of sources.filter(deployed)) {
+    const text = readFileSync(new URL(path, root), "utf8");
+    for (const [, target] of text.matchAll(/from\s+["'](\.{1,2}\/[^"']+)["']/g)) {
+      const resolved = new URL(target, new URL(path, root)).pathname.replace(new URL(".", root).pathname, "");
+      const candidates = [resolved, resolved.replace(/\.js$/, ".ts"), `${resolved}.ts`, `${resolved}/index.ts`];
+      checked += 1;
+      const file = candidates.find((candidate) => sources.includes(candidate));
+      if (file) assert.ok(deployed(file), `${path} imports ${file}, which the Convex area exempts`);
+    }
+  }
+  assert.ok(checked >= 10, `checked ${checked} imports`);
+});
+
+test("removing a test is caught even when another test is added", () => {
+  const swapped = riskOf(
+    diffFor("BarosUITests/BarosUITests.swift", { removed: ["    func testSignOutKeepsWorkouts() {"] }),
+    diffFor("BarosCore/Tests/BarosCoreTests/ATests.swift", { added: ["    func testRounds() {"] }),
+  );
+  assert.deepEqual(swapped, { label: "risk:medium", areas: [], removesTests: true });
+  const renamedJs = riskOf(diffFor("convex/sync.test.ts", { removed: ['  test("keeps deletes", () => {'], added: ['  test("keeps edits", () => {'] }));
+  assert.equal(renamedJs.label, "risk:medium");
+  const movedSwiftTesting = riskOf(
+    diffFor("BarosCore/Tests/BarosCoreTests/A.swift", { removed: ["    @Test", "    func merges() {"] }),
+    diffFor("BarosCore/Tests/BarosCoreTests/B.swift", { added: ["    @Test func merges() {"] }),
+  );
+  assert.equal(movedSwiftTesting.label, "risk:low");
+});
+
+test("an @Model after other attributes, and a quoted mode-only path, still count", () => {
+  const model = "BarosCore/Sources/BarosCore/Features/Notes/Note.swift";
+  assert.deepEqual(riskOfEdit(model, null, "@available(*, deprecated) @Model final class Note {}").areas, [
+    { name: "stored data models", paths: [model] },
+  ]);
+  const files = parseDiff(['diff --git "a/Baros/run\\tme.sh" "b/Baros/run\\tme.sh"', "old mode 100644", "new mode 100755"].join("\n"));
+  assert.deepEqual(files.map((file) => file.path), ["Baros/run\tme.sh"]);
+  assert.equal(classifyRisk(files).label, "risk:medium");
+});
+
+test("long raw-string delimiters lex, and moving app code into tests isn't low", () => {
+  const hashes = "#".repeat(20);
+  const raw = `let s = ${hashes}"a // b"${hashes}`;
+  assert.equal(swiftCodeView(`${raw} // c`), raw);
+
+  const moved = parseDiff(
+    [
+      "diff --git a/BarosCore/Sources/BarosCore/Formatting/X.swift b/BarosCore/Tests/BarosCoreTests/X.swift",
+      "rename from BarosCore/Sources/BarosCore/Formatting/X.swift",
+      "rename to BarosCore/Tests/BarosCoreTests/X.swift",
+    ].join("\n"),
+  );
+  assert.equal(classifyRisk(moved).label, "risk:medium");
+});
