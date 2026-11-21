@@ -1,4 +1,3 @@
-// DEBUG-only synthetic history is made from values and is never inserted into SwiftData.
 #if DEBUG
 import Foundation
 
@@ -27,7 +26,6 @@ public enum HomeRingFixture: String, CaseIterable {
         var result: [RingWorkout] = []
         for age in (0..<days).reversed() {
             let week = age / 7
-            // Deterministic 3–4 days / week, with two vacation gaps and occasional doubles.
             guard [0, 2, 4].contains(age % 7) || (age % 7 == 6 && week % 3 == 1) else { continue }
             guard !(week % 26 == 11 || week % 26 == 12) else { continue }
             let type = result.count % durations.count
@@ -55,7 +53,6 @@ public enum HomeRingFixture: String, CaseIterable {
     private func personaWorkouts(target: Int, now: Date, calendar: Calendar) -> [RingWorkout] {
         let today = calendar.startOfDay(for: now)
         guard let start = calendar.date(byAdding: .month, value: -14, to: today) else { return [] }
-        // Monday-based preferences are independent of the user's firstWeekday setting.
         let mondayOffset = (calendar.component(.weekday, from: today) + 5) % 7
         guard let thisMonday = calendar.date(byAdding: .day, value: -mondayOffset, to: today),
               let startMonday = calendar.date(byAdding: .day,
@@ -63,15 +60,14 @@ public enum HomeRingFixture: String, CaseIterable {
         let weeks = (calendar.dateComponents([.day], from: startMonday, to: thisMonday).day ?? 0) / 7
         let preferred: [Int]
         switch target {
-        case 2: preferred = [1, 4] // Tuesday / Friday
-        case 3: preferred = [0, 2, 4] // Monday / Wednesday / Friday
+        case 2: preferred = [1, 4]
+        case 3: preferred = [0, 2, 4]
         case 4: preferred = [0, 1, 3, 5]
         default: preferred = [0, 1, 2, 4, 5]
         }
         var rng = HomeRingFixtureRandom(seed: 0xBA205 + UInt64(target))
         var result: [RingWorkout] = []
         for weeksBack in (0...weeks).reversed() {
-            // Three completely missed weeks per rolling year, including a two-week vacation.
             guard ![15, 16, 37].contains(weeksBack % 52),
                   let monday = calendar.date(byAdding: .day, value: -weeksBack * 7, to: thisMonday) else { continue }
             var days = preferred
@@ -94,9 +90,7 @@ public enum HomeRingFixture: String, CaseIterable {
                 }
                 occupied.insert(dayOffset)
                 guard let day = calendar.date(byAdding: .day, value: dayOffset, to: monday) else { continue }
-                // December is a quieter holiday stretch, not a perfectly maintained schedule.
                 let holidayCandidate = calendar.component(.month, from: day) == 12 && rng.unit() < 0.25
-                // Keep the holiday stretch distinct from the fully missed vacation/illness weeks.
                 let skipsHolidaySession = holidayCandidate && holidaySkips < days.count - 1
                 if skipsHolidaySession { holidaySkips += 1 }
                 let minutes = rng.durationMinutes()
@@ -104,7 +98,6 @@ public enum HomeRingFixture: String, CaseIterable {
                       let date = calendar.date(bySettingHour: day == today ? 0 : 17,
                                                minute: 0, second: 0, of: day), date <= now else { continue }
                 result.append(RingWorkout(date: date, duration: minutes * 60))
-                // Roughly two double days over fourteen months; sum before daily capping.
                 if weeksBack % 29 == 7, !addedDouble, day < today {
                     result.append(RingWorkout(date: date.addingTimeInterval(3_600), duration: 50 * 60))
                     addedDouble = true
@@ -133,7 +126,6 @@ private struct HomeRingFixtureRandom {
 
     mutating func durationMinutes() -> Double {
         if unit() < 0.07 { return (20 + unit() * 10).rounded() }
-        // Triangular distribution centered on 60 minutes, bounded to 35–85.
         return (35 + (unit() + unit()) * 25).rounded()
     }
 }

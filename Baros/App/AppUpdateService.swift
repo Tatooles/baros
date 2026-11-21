@@ -2,7 +2,6 @@ import Foundation
 import Observation
 import StoreKit
 
-/// Strict numeric marketing/OS versions. Missing trailing components compare as zero.
 struct UpdateVersion: Comparable, Equatable {
     private let components: [Int]
 
@@ -65,13 +64,11 @@ final class AppUpdateService {
         guard !checking else { return }
         checking = true
         defer { checking = false }
-        // Do not retain a deferred recommendation across foreground/storefront changes.
         offer = nil
         let throttled: Bool
         if let last = defaults.object(forKey: Self.attemptKey) as? Date,
            now().timeIntervalSince(last) < Self.interval { throttled = true }
         else { throttled = false }
-        // Persist before any asynchronous work, including failures and missing storefront.
         if !throttled {
             defaults.set(now(), forKey: Self.attemptKey)
             defaults.removeObject(forKey: "appUpdate.cachedResponse")
@@ -91,7 +88,7 @@ final class AppUpdateService {
             guard let version = Self.compatibleVersion(data: data, installed: installedVersion, os: osVersion),
                   !isDismissed(version) else { return }
             offer = AppUpdateOffer(version: version, country: country)
-        } catch { /* Optional discovery must remain silent offline. */ }
+        } catch {}
     }
 
     func later(_ offer: AppUpdateOffer) {
@@ -173,7 +170,6 @@ final class AppUpdateService {
                 #if DEBUG || targetEnvironment(simulator)
                 return nil
                 #else
-                // A verified production app transaction excludes TestFlight, Xcode and ad hoc builds.
                 guard Bundle.main.bundleIdentifier == "com.kevintatooles.LiftingLog",
                       let result = try? await AppTransaction.shared,
                       case .verified(let transaction) = result, transaction.environment == .production,

@@ -347,8 +347,6 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         harness.authenticationClient.sendAuthenticationState(.authenticated(token:
             CurrentOwnerCoordinatorHarness.makeJWT(ownerTokenIdentifier: ownerA, sessionIdentifier: "session_a")
         ))
-        // Wait for the client boundary to deliver the callback, rather than
-        // asserting the paused state before the late token has been handled.
         let deliveredStates = harness.authenticationClient.deliveredStateCount
         try await waitUntil { harness.authenticationClient.deliveredStateCount > deliveredStates }
 
@@ -1002,8 +1000,6 @@ final class CurrentOwnerCoordinatorTests: XCTestCase {
         XCTAssertFalse(harness.syncScheduler.isCloudSyncAuthorized)
         harness.finish()
     }
-
-    // MARK: - Local data owner
 
     func testLocalDataOwnerIsUnknownUntilClerkIdentifiesTheOwner() async throws {
         let harness = try CurrentOwnerCoordinatorHarness(clerkWaitsUntilResumed: true)

@@ -64,9 +64,6 @@ struct FinishWorkoutSheet: View {
                 }
             }
 
-            // One aligned row of figures; the sheet already bounds them, so
-            // they need no wells of their own. Accessibility sizes stack them
-            // so long values keep their full width.
             metricsLayout {
                 MetricSummaryColumn(title: "Duration", value: AppTheme.formatDuration(metrics.durationSeconds))
                 metricDivider
@@ -84,7 +81,6 @@ struct FinishWorkoutSheet: View {
             Button {
                 focusedField = nil
                 commitWorkoutTitle()
-                // Read before finishing; the save refreshes the queries.
                 let templateOffer = templateOffer
                 do {
                     try engine.finishWorkout(
@@ -115,8 +111,6 @@ struct FinishWorkoutSheet: View {
                 commitWorkoutTitle()
                 dismiss()
             } label: {
-                // A neutral fill keeps the secondary action's full-width
-                // shape visible on the sheet in both appearances.
                 Text("Keep Going")
                     .font(.headline)
                     .foregroundStyle(AppTheme.textPrimary)
@@ -163,7 +157,6 @@ struct FinishWorkoutSheet: View {
     }
 
     var body: some View {
-        // Accessibility text sizes outgrow the fixed height.
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 ScrollView { sheetContent }
@@ -183,8 +176,6 @@ struct FinishWorkoutSheet: View {
                 .accessibilityIdentifier("DismissKeyboardButton")
             }
         }
-        // Sync can delete the source template while the sheet is open; a
-        // choice made for the old control must not carry over.
         .onChange(of: templateOffer) { templateAction = .none }
         .onChange(of: focusedField) { previousField, newField in
             if previousField == .title, newField != .title {
@@ -220,8 +211,6 @@ struct FinishWorkoutSheet: View {
         }
     }
 
-    // Keystrokes stage in a view-local draft and commit in one save on focus
-    // loss or when leaving the sheet; never per keystroke.
     private var workoutTitleBinding: Binding<String> {
         Binding(
             get: { titleDraft ?? session.title },
@@ -255,8 +244,6 @@ struct FinishWorkoutSheet: View {
                 Text("Template")
                     .layoutPriority(1)
                 Spacer(minLength: 8)
-                // A Menu around the Picker keeps the choice on one line;
-                // a menu-style Picker wraps long template names.
                 Menu {
                     Picker("Template", selection: $templateAction) {
                         ForEach(FinishTemplateAction.allCases, id: \.self) { action in
@@ -281,7 +268,6 @@ struct FinishWorkoutSheet: View {
         }
     }
 
-    /// Runs after the workout is saved, which stands even if this fails.
     private func saveTemplate(_ offer: FinishTemplateOffer) {
         do {
             #if DEBUG
@@ -315,9 +301,6 @@ struct FinishWorkoutSheet: View {
     }
 
     private func commitWorkoutTitle() {
-        // The commit-then-clear-focus buttons also retrigger this through the
-        // focus onChange; the guard makes the second pass (and untouched
-        // dismissals) a no-op instead of a redundant save.
         guard let titleDraft else { return }
         try? engine.commitWorkoutTitle(titleDraft, session: session, context: modelContext)
         self.titleDraft = nil

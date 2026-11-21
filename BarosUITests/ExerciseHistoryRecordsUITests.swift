@@ -14,7 +14,6 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         XCTAssertTrue(estimate.exists)
         XCTAssertTrue(heaviest.label.hasPrefix("Heaviest Rep, 225 pounds, from 225 pounds for 1 rep, Set 3,"), heaviest.label)
         XCTAssertTrue(estimate.label.hasPrefix("Estimated 1RM, about 245 pounds, from 210 pounds for 5 reps, Set 2,"), estimate.label)
-        // Two workouts are too few for a progression chart.
         XCTAssertFalse(app.descendants(matching: .any)["ExerciseRecordEstimateChart"].exists)
         attachScreenshot(named: "Strength records summary", app: app)
 
@@ -29,7 +28,6 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         let values = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"))
         let heaviestValue = values.matching(NSPredicate(format: "label CONTAINS %@", "225 pounds, 1 rep")).firstMatch
         let estimateValue = values.matching(NSPredicate(format: "label CONTAINS %@", "210 pounds, 5 reps")).firstMatch
-        // Tapping a record scrolls its source set into view.
         XCTAssertTrue(estimate.isHittable)
         estimate.tap()
         let deadline = Date().addingTimeInterval(3)
@@ -60,7 +58,6 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
     }
 
     func testExerciseHistoryDetailPresentsJournalSectionsAndCompleteSetAnnouncements() {
-        // One appearance: the assertions do not depend on it.
         for appearance in ["dark"] {
             let app = openRecords(extraArguments: ["-Baros.AppAppearance.preference", appearance])
 
@@ -81,8 +78,6 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             XCTAssertEqual(values.count, 6)
             let heaviest = values.matching(NSPredicate(format: "label CONTAINS %@", "Heaviest Rep")).firstMatch
             XCTAssertEqual(heaviest.label, "Set 3, 225 pounds, 1 rep, Heaviest Rep")
-            // Both workouts hold a record, so each subtitle names only that record:
-            // the set boxes already show the count.
             let subtitles = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Heaviest rep"))
             XCTAssertGreaterThanOrEqual(subtitles.count, 1)
             XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "3 sets")).firstMatch.exists)
@@ -144,7 +139,6 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             format: "identifier BEGINSWITH %@", "ExerciseHistorySetValue-"
         ))
         XCTAssertEqual(values.count, 6)
-        // The same rows as Exercise History: record sets are marked, without the Records card.
         let heaviest = values.matching(NSPredicate(format: "label CONTAINS %@", "225 pounds")).firstMatch
         XCTAssertEqual(heaviest.label, "Set 3, 225 pounds, 1 rep, Heaviest Rep")
         let estimate = values.matching(NSPredicate(format: "label CONTAINS %@", "Estimated 1RM")).firstMatch
@@ -170,7 +164,6 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
             XCTAssertTrue(record.label.contains("Set 2,"))
             XCTAssertTrue(record.label.contains("2025"))
             let estimate = app.descendants(matching: .any)["ExerciseRecord-estimated1RM"]
-            // Full-width rows: the estimate sits below Heaviest Rep at the same width.
             XCTAssertEqual(record.frame.width, estimate.frame.width, accuracy: 1)
             XCTAssertGreaterThanOrEqual(estimate.frame.minY, record.frame.maxY - 1)
             attachScreenshot(named: "review-record-source-\(unit)", app: app)
@@ -243,8 +236,6 @@ final class ExerciseHistoryRecordsUITests: XCTestCase {
         confirm.tap()
         let menu = app.buttons["ExerciseMenuButton-0"]
         XCTAssertTrue(menu.waitToExist(timeout: 5))
-        // At this size the card's menu starts under the pinned Edit/Add Exercise actions,
-        // which take the tap, so bring it above them first.
         app.revealAboveWorkoutActions(menu)
         menu.tap()
         let viewHistory = app.buttons["ExerciseHistoryButton-0"]

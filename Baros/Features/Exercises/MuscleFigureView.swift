@@ -1,9 +1,6 @@
 import BarosCore
 import SwiftUI
 
-/// Front and back body figures that highlight the selected target area. The
-/// figure only shows the selection; choosing happens in the labeled picker
-/// above it. VoiceOver reads it as a single image.
 struct MuscleFigureView: View {
     let selection: ExerciseMuscleGroup
 

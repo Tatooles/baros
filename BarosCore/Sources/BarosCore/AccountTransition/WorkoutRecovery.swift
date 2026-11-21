@@ -1,8 +1,6 @@
 import Foundation
 import SwiftData
 
-/// Durable recovery policy: only explicit discard terminalizes an inaccessible
-/// workout. Merely observing authentication or relaunching never writes it.
 @MainActor
 public enum WorkoutRecovery {
     public static func activeSessions(in sessions: [WorkoutSession]) -> [WorkoutSession] {

@@ -2,21 +2,14 @@ import BarosCore
 import SwiftData
 import SwiftUI
 
-/// Each presenter owns its confirmation so a pushed screen or sheet cannot
-/// accidentally present another screen's account action.
 struct AccountTransitionButton<Label: View>: View {
     @Environment(\.modelContext) private var context
     @Environment(ActiveWorkoutEngine.self) private var engine
     @Environment(CurrentOwnerCoordinator.self) private var currentOwner
     @Environment(SyncScheduler.self) private var scheduler
     @State private var transition: WorkoutAccountTransition?
-    /// The gate whose finish-or-discard choice is on screen. The alert's buttons act on
-    /// this gate, never on a later one, so a late action cannot reach another request.
     @State private var choiceGate: WorkoutAccountTransition?
     @State private var errorMessage: String?
-    /// A failure from a choice waits here. It is promoted only after a view update in
-    /// which no prompt is presented, so it gets its own presentation instead of
-    /// replacing the payload of the choice alert as that alert closes.
     @State private var pendingError: String?
     let destination: WorkoutAccountTransition.Destination
     var role: ButtonRole? = nil
@@ -36,8 +29,6 @@ struct AccountTransitionButton<Label: View>: View {
         case error(String)
     }
 
-    /// One alert presents both the choice and any failure. Two `.alert` modifiers on one
-    /// view may let SwiftUI drop the error under load after the choice alert closes (#403).
     private var prompt: Prompt? {
         if let choiceGate { return .choices(choiceGate) }
         return errorMessage.map(Prompt.error)
@@ -47,8 +38,6 @@ struct AccountTransitionButton<Label: View>: View {
         Binding(
             get: { prompt != nil },
             set: { isPresented in
-                // Only the choice is cleared here. An error is cleared by its OK button,
-                // so an extra dismissal write can never discard an error before it shows.
                 if !isPresented { choiceGate = nil }
             }
         )

@@ -39,9 +39,6 @@ struct ActiveWorkoutAccessoryView: View {
                                 .background(AppTheme.brandAccentMuted, in: Circle())
                                 .accessibilityHidden(true)
 
-                            // One line each: the system can dock this capsule narrow (the closed
-                            // iPhone Duo, or half-open), and a wrapped title would push the
-                            // elapsed time out of it. The full title stays in the accessibility value.
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(session.title)
                                     .font(.subheadline.weight(.semibold))
@@ -64,7 +61,6 @@ struct ActiveWorkoutAccessoryView: View {
                                     .font(.caption)
                                     .foregroundStyle(AppTheme.textSecondary)
                             }
-                            // The set count never truncates; the title gives way instead.
                             .fixedSize(horizontal: true, vertical: false)
                         }
                     }

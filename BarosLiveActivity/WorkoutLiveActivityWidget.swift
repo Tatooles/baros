@@ -226,7 +226,6 @@ private struct WorkoutLiveActivityLockScreenView: View {
 private extension ActivityViewContext where Attributes == WorkoutLiveActivityAttributes {
     var isResting: Bool { state.restEndsAt != nil && !isStale }
 
-    /// Clamped so a backward clock change can't build an inverted range and trap.
     var restCountdownInterval: ClosedRange<Date>? {
         guard isResting, let end = state.restEndsAt else { return nil }
         return min(state.restStartedAt ?? attributes.startedAt, end)...end

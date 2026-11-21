@@ -32,8 +32,6 @@ struct WorkoutProgressiveNoteAddButton<Focus: Hashable>: View {
                 focusedField.wrappedValue = focusTarget
             }
         } label: {
-            // Notes are optional, so the label stays quieter than primary
-            // actions; the tinted icon still marks it as tappable.
             Label {
                 Text(title)
                     .foregroundStyle(AppTheme.textSecondary)
@@ -213,9 +211,7 @@ struct WorkoutExerciseHeaderContent: View {
     let metadata: String?
     let progress: WorkoutExerciseProgress
     var isCollapsed: Bool?
-    /// Width kept clear at the end of the title for a control overlaid on the header.
     var titleTrailingInset: CGFloat = 0
-    /// A shared minimum aligns ordinary set counts without scaling the fixed padding.
     static let progressPillContentMinWidth: CGFloat = 28
     static let progressPillHorizontalPadding: CGFloat = 12
     @ScaledMetric(relativeTo: .footnote) private var progressPillContentMinWidth = Self.progressPillContentMinWidth
@@ -239,7 +235,6 @@ struct WorkoutExerciseHeaderContent: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.trailing, titleTrailingInset)
 
-                // The progress pill shares the metadata row so the title can use the full width.
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     if let metadata {
                         Text(metadata)
@@ -381,8 +376,6 @@ struct LabeledWorkoutTitleField<Focus: Hashable>: View {
     }
 }
 
-/// Keeps shared-focus comparison and animation in the smallest practical
-/// leaf so a focus move does not rebuild each numeric field's content.
 private struct WorkoutNumericFocusChrome<Focus: Hashable>: View {
     let focusTarget: Focus
     var focusedField: FocusState<Focus?>.Binding

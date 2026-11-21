@@ -1,20 +1,12 @@
 import Foundation
 
 public enum WorkoutNumericInputPolicy {
-    /// 10,000 canonical pounds is intentionally well above plausible workout
-    /// equipment while still rejecting values that are clearly accidental.
     static let maximumWeightPounds = 10_000.0
 
-    /// 1,000 reps accommodates unusual endurance sets while rejecting accidental
-    /// extra digits. A recorded set must contain at least one repetition.
     static let repsRange = 1...1_000
 
-    /// A timed set lasts at least a second. The cap is the longest time the
-    /// picker's wheels can show, 59:59.
     public static let durationSecondsRange = 1...3_599
 
-    /// RPE uses the standard 1-to-10 exertion scale. The quick-pick UI emphasizes
-    /// 6 through 10, but manual entry supports the full scale.
     static let rpeRange = 1.0...10.0
 
     public static func validatedWeight(_ value: Double?) -> Double? {

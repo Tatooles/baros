@@ -36,8 +36,6 @@ public struct ExerciseHistoryRecord {
     fileprivate func isPreferred(over other: Self?) -> Bool {
         guard let other else { return true }
         if value != other.value { return value > other.value }
-        // More reps at the same value is the better performance, and estimates
-        // tie often because sets past the counted-rep cap share one value.
         if reps != other.reps { return reps > other.reps }
         if workoutDate != other.workoutDate { return workoutDate > other.workoutDate }
         if workoutID != other.workoutID { return workoutID.uuidString < other.workoutID.uuidString }
@@ -50,7 +48,6 @@ public struct ExerciseHistoryRecord {
     }
 }
 
-/// The best Estimated 1RM within one workout, for the progression chart.
 public struct ExerciseHistoryEstimatePoint: Identifiable {
     public let record: ExerciseHistoryRecord
     public var id: UUID { record.workoutID }
@@ -63,12 +60,9 @@ public struct ExerciseHistoryRecords {
     public let hasMixedEquipment: Bool
     public let heaviestRep: ExerciseHistoryRecord?
     public let estimated1RM: ExerciseHistoryRecord?
-    /// The most reps an estimate counts from one set.
     static let maximumEstimateReps = 10
-    /// Chronological, one point per workout that has an eligible estimate set.
     public var estimateHistory: [ExerciseHistoryEstimatePoint] = []
 
-    /// True when one set is the source of both records.
     public var recordsShareSource: Bool {
         guard let heaviestRep, let estimated1RM else { return false }
         return heaviestRep.setID == estimated1RM.setID
@@ -81,14 +75,12 @@ public struct ExerciseHistoryRecords {
         return kinds
     }
 
-    /// Uses the same owner-scoped, identity-resolved full history as the detail screen.
     public static func make(
         from groups: [ExerciseHistorySessionGroup],
         equipmentRaw: String?
     ) -> ExerciseHistoryRecords? {
         guard let equipmentRaw, let equipment = ExerciseEquipment(rawValue: equipmentRaw),
               equipment != .bodyweight, equipment != .resistanceBand else { return nil }
-        // Both records are measured in reps, so an exercise now logged by time has none.
         guard groups.first?.setEntries.first?.set.trackingMethod != .duration else { return nil }
 
         var heaviest: ExerciseHistoryRecord?
@@ -129,9 +121,6 @@ public struct ExerciseHistoryRecords {
                     heaviest = record
                 }
                 guard kind == .working || kind == .failure else { continue }
-                // Epley loses accuracy past ten reps, so a longer set counts as
-                // the ten reps it proves. Dropping it instead would let a much
-                // heavier high-rep set lose to a light ten-rep set.
                 let countedReps = min(reps, Self.maximumEstimateReps)
                 var estimate = record
                 estimate.value = countedReps == 1 ? weight : weight * (1 + Double(countedReps) / 30)
@@ -154,7 +143,6 @@ public struct ExerciseHistoryRecords {
 }
 
 extension MeasurementUnit {
-    /// "lb" or "kg", for weights beside a value.
     public var shortUnitLabel: String {
         switch self {
         case .pounds: "lb"
@@ -162,10 +150,6 @@ extension MeasurementUnit {
         }
     }
 
-    /// The displayed number for a record. Recorded loads keep their logged
-    /// precision; an estimate rounds to a whole pound or half kilogram so it
-    /// never reads more exact than the inference behind it. Winners are
-    /// chosen before this rounding.
     public func recordNumber(fromCanonicalPounds pounds: Double, isEstimate: Bool) -> String {
         let display = displayWeight(fromCanonicalPounds: pounds) ?? 0
         guard isEstimate else { return WorkoutFormatters.groupedNumber(display) }

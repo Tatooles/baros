@@ -43,7 +43,6 @@ final class ActiveWorkoutSetInputTests: XCTestCase {
             var input = ActiveWorkoutSetInput()
             input.update(weightText, for: .weight, isFocused: true)
             input.update(repsText, for: .reps, isFocused: true)
-            // Rejections must survive a focus-boundary commit before the action.
             let commit = input.commit(current: .init(weight: 100, reps: 8), weightUnit: .pounds)
             XCTAssertEqual(input.preparedValuesForSetAction(
                 current: commit.values,

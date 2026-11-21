@@ -22,8 +22,6 @@ final class OnboardingWorkoutPreferencesTests: XCTestCase {
         defaults.object(forKey: RPEPreference.storageKey) as? Bool
     }
 
-    // MARK: - New users
-
     func testContinuingWithoutTappingChangesNothing() throws {
         let (context, settings) = try makeSignedOutSettings()
         var persistedRestTimerChoices: [Bool] = []
@@ -69,8 +67,6 @@ final class OnboardingWorkoutPreferencesTests: XCTestCase {
         XCTAssertGreaterThan(settings.updatedAt, Date(timeIntervalSince1970: 10))
         XCTAssertEqual(try context.fetch(FetchDescriptor<SyncOutboxEntry>()).map(\.entityKind), [.userSettings])
     }
-
-    // MARK: - Returning users signing in after onboarding
 
     func testSignInRestoresTheSyncedUnitWhenTheQuestionWasUntouched() async throws {
         let (context, settings) = try makeSignedOutSettings()
@@ -134,7 +130,6 @@ final class OnboardingWorkoutPreferencesTests: XCTestCase {
         let (context, settings) = try makeSignedOutSettings()
         try apply(OnboardingWorkoutPreferences(), settings: settings, context: context)
 
-        // What SyncCoordinator does when a rated set arrives (see RPEPreferenceTests).
         RPEPreference.enableIfUndecided(defaults: defaults)
 
         XCTAssertEqual(storedRPEChoice, true)
@@ -148,8 +143,6 @@ final class OnboardingWorkoutPreferencesTests: XCTestCase {
 
         XCTAssertEqual(storedRPEChoice, false)
     }
-
-    // MARK: - Helpers
 
     private func makeSignedOutSettings() throws -> (ModelContext, UserSettings) {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()

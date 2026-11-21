@@ -42,8 +42,6 @@ struct ExerciseQuickHistorySheet: View {
             )
         } ?? []
         let recentGroups = Array(allGroups.prefix(3))
-        // Records come from the full history, so a recent set is marked only
-        // when it is the all-time record, as in Exercise History.
         let records = summary.flatMap {
             ExerciseHistoryRecords.make(from: allGroups, equipmentRaw: $0.equipmentRaw)
         }
@@ -65,8 +63,6 @@ struct ExerciseQuickHistorySheet: View {
                             message: "Completed workouts for this exercise will appear here."
                         )
                     } else {
-                        // The set boxes show bare numbers; name the unit as
-                        // the Exercise History log does.
                         Text(HistorySetTable.valueCaption(
                             for: recentGroups.flatMap { $0.setEntries.map(\.set) }, unit: weightUnit
                         ))
@@ -77,7 +73,6 @@ struct ExerciseQuickHistorySheet: View {
                             .padding(.bottom, -6)
                             .accessibilityHidden(true)
 
-                        // The same rows as the Exercise History log.
                         SurfaceCard(padding: 0) {
                             VStack(spacing: 0) {
                                 ForEach(Array(recentGroups.enumerated()), id: \.element.id) { index, group in

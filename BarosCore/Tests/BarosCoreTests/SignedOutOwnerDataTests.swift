@@ -161,7 +161,6 @@ final class SignedOutOwnerDataTests: XCTestCase {
         scheduler.currentOwnerTokenIdentifier = "issuer|owner_b"
 
         scheduler.enterSignedOutMode()
-        // A foreground check or relaunch runs again after the last-known owner was cleared.
         let relaunchedScheduler = makeScheduler(context: context, reminderStore: reminderStore)
         relaunchedScheduler.enterSignedOutMode()
 

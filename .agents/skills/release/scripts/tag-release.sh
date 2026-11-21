@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-# Create the two annotated tags that record a shipped release, and optionally push them.
-#
-#   tag-release.sh --version 1.5 --build 170 --commit <sha> --run <xcode-cloud-run-id> --date 2026-11-20 [--push]
-#
-# Tags (matching earlier releases):
-#   v<semver>                     "Baros <semver>; App Store build <build>"
-#   app-store-<version>-build-<n> "App Store Baros <version> build <n>; Xcode Cloud run <id>; released <date>"
-#
-# Existing tags are never moved: a tag already at the commit is reused, a tag elsewhere is an error.
 set -euo pipefail
 
 version="" build="" commit="" run="" date="" push=false

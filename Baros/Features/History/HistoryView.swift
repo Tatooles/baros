@@ -94,7 +94,6 @@ private struct HistorySearchContent: View {
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("HistoryModePicker")
 
-                // An empty list already explains the sign-out in its empty state.
                 if !isCurrentModeEmpty {
                     SignedOutReminderBanner()
                 }
@@ -277,8 +276,6 @@ enum HistoryExerciseSort: String, CaseIterable, Identifiable {
     }
 }
 
-/// Workouts grouped by calendar month, keeping each row's position in the
-/// full list for stable identifiers.
 struct HistoryMonthSection: Identifiable {
     struct Item {
         let index: Int
@@ -315,20 +312,12 @@ struct HistoryMonthSection: Identifiable {
     }
 }
 
-/// Caches the resolved Exercise History between `HistoryView` body updates.
-/// The invalidation key reads only session-level fields: walking every logged
-/// exercise and set on each update faults the whole history in on the main
-/// thread. Changes below the session level still reach the key. Completed-workout
-/// edits touch their session's `updatedAt`, and any save that changes completed
-/// history bumps `savedHistoryChangeCount`. That includes sync, which applies
-/// remote exercises and sets without touching their parent session.
 @MainActor
 @Observable
 final class ExerciseHistoryViewState {
     @ObservationIgnored private let resolveHistory: ExerciseHistoryViewSnapshot.ResolveHistory
     @ObservationIgnored private var invalidationKey: ExerciseHistoryInvalidationKey?
     @ObservationIgnored private var currentSnapshot: ExerciseHistoryViewSnapshot?
-    /// Replaced with the snapshot, so a prepared index survives unrelated body updates.
     @ObservationIgnored private(set) var workoutSearchIndex = WorkoutHistorySearchIndex(sessions: [])
     private var savedHistoryChangeCount = 0
 
@@ -381,16 +370,6 @@ final class ExerciseHistoryViewState {
     }
 }
 
-/// Exercise History reads only sessions, logged exercises, sets, and exercises,
-/// so saves of other models are ignored. Saves confined to an active workout are
-/// ignored too, including discarded sessions, so logging or discarding does not
-/// rebuild completed history.
-///
-/// Inserted models are not classified. When `HistoryView` receives `didSave`,
-/// they may not be registered under their saved identifiers yet, so their
-/// session can't be looked up. They don't need to be: a new session or exercise
-/// changes the History queries, and a new logged exercise or set changes its
-/// parent's relationship, so the parent is saved as updated.
 struct ExerciseHistorySaveChanges {
     private let changes: PreviousSetsCacheSaveChanges
 
@@ -403,7 +382,6 @@ struct ExerciseHistorySaveChanges {
         if changes.invalidatedAllIdentifiers {
             return true
         }
-        // A deleted model can no longer be traced to its session.
         if changes.deletedIDs.contains(where: Self.isHistoryInput) {
             return true
         }
@@ -443,8 +421,6 @@ struct ExerciseHistorySaveChanges {
         default:
             session = nil
         }
-        // Membership changes out of completed history are already in the session
-        // query/key. Active and discarded graphs contribute nothing to the cache.
         guard let session else { return false }
         return session.status != .completed
     }

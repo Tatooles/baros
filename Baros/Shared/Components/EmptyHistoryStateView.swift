@@ -3,9 +3,7 @@ import ClerkKitUI
 import SwiftUI
 
 enum EmptyHistoryPresentation: Equatable {
-    /// Someone signed in on this iPhone before; their workouts are hidden until they sign back in.
     case signedOutOwner(SignedOutOwnerData)
-    /// Nobody has signed in on this iPhone yet. Offer sign-in for people moving from another device.
     case firstTimeSignIn
     case syncing
     case ordinaryEmpty
@@ -156,8 +154,6 @@ struct EmptyHistoryStateView: View {
 
     #if DEBUG
     private func simulateInitialRecoveryForUITesting() {
-        // Exercise this view's real owner-transition policy without mutating
-        // the Current Owner, persisted data, or synchronization.
         let resolvingState = CurrentOwnerCoordinator.State.resolving(
             ownerTokenIdentifier: "issuer|ui_test_owner"
         )

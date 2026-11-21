@@ -42,10 +42,6 @@ struct HomeView: View {
         GeometryReader { geometry in
             let layout = HomeLayout(size: geometry.size, safeAreaInsets: geometry.safeAreaInsets,
                                     foldMidX: Self.foldMidX(in: geometry))
-            // Wide windows, such as the iPhone Duo's inner display, put the ring and the
-            // actions in their own halves so neither crosses the fold. Only the layout
-            // changes, not the views: folding keeps the ring's selection, the pills' scroll
-            // view, and any sheet or alert the header or recovery notice is showing.
             let arrangement = layout.isWide
                 ? AnyLayout(HStackLayout(alignment: .center, spacing: HomeLayout.columnSpacing))
                 : AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
@@ -54,8 +50,6 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         header
                         WorkoutRecoveryNotice()
-                        // Matching flexible spacers center the ring between the
-                        // header and the actions instead of crowding the bottom.
                         Spacer(minLength: layout.isWide ? 16 : 20)
                         ringSection(diameter: layout.ringDiameter, content: content)
                         Spacer(minLength: layout.isWide ? 0 : 28)
@@ -65,8 +59,6 @@ struct HomeView: View {
                             bleedsPills: !layout.isWide)
                         .frame(maxWidth: layout.isWide ? HomeLayout.actionsMaxWidth : .infinity)
                         .frame(maxWidth: .infinity)
-                        // VoiceOver reads the actions last, as in the phone column, so the
-                        // wide layout keeps the period picker next to its ring.
                         .accessibilitySortPriority(-1)
                 }
                 .padding(.horizontal, HomeLayout.horizontalPadding)
@@ -94,7 +86,6 @@ struct HomeView: View {
                                   onWorkoutStarted: handOffStartedWorkout)
         }
         .sheet(item: $quickStartSelection, onDismiss: presentStartedWorkoutIfNeeded) { selection in
-            // Re-resolve against the Current Owner before displaying a past workout.
             HomeQuickStartReviewSheet(
                 session: content.completedSessions.first { $0.id == selection.id },
                 history: content.completedSessions,
@@ -168,7 +159,6 @@ struct HomeView: View {
             .frame(width: 164)
             .accessibilityLabel("Ring history period")
             .accessibilityIdentifier("HomeRingPeriodPicker")
-            // Preserve the control's space so the ring/actions do not jump.
             .opacity(ring.showsPeriodToggle ? 1 : 0)
             .disabled(!ring.showsPeriodToggle)
             .accessibilityHidden(!ring.showsPeriodToggle)
@@ -176,7 +166,6 @@ struct HomeView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// Returns true when it presented a picker rather than opening a workout.
     private func openRingWorkouts(_ ids: [UUID], content: HomeContent) -> Bool {
         let sessions = ids.compactMap { id in content.completedSessions.first { $0.id == id } }
         guard sessions.count > 1 else {
@@ -196,10 +185,6 @@ struct HomeView: View {
         replayID += 1
     }
 
-    /// The center of the screen's fold, where the system reports one (iPhone Duo, iOS 27.1
-    /// and later). Region frames are in this view's coordinate space, so the result is
-    /// measured from the safe area's leading edge. Inactive regions count too, so the
-    /// columns stay put whether the display is half-open or flat.
     private static func foldMidX(in geometry: GeometryProxy) -> CGFloat? {
         // The fold API ships in newer SDKs (it is in the iOS 27.2 SDK's SwiftUI, 8.1.13);
         // builds with older Xcode versions, such as CI's, use the window midpoint.
@@ -265,29 +250,19 @@ struct HomeView: View {
     }
 }
 
-/// Chooses between the phone column and the two-column layout that wide,
-/// short windows (the iPhone Duo's inner display) use. The columns split at the
-/// fold: where the system reports it, otherwise the window's midpoint. Either way
-/// that is not the middle of the safe area, which the side tab rail pushes left.
 struct HomeLayout {
     static let columnSpacing: CGFloat = 48
     static let actionsMaxWidth: CGFloat = 420
     static let horizontalPadding: CGFloat = 24
-    /// Windows at least this wide, and wider than tall, get two columns.
     static let minimumWideWidth: CGFloat = 600
-    /// Header, period picker, and padding share the wide layout's height with the ring.
-    /// A fixed estimate: with large text, the sign-in banner, or the recovery notice,
-    /// the wide layout scrolls a little rather than shrinking the ring further.
     static let wideVerticalChrome: CGFloat = 200
     static let maxRingDiameter: CGFloat = 350
     static let ringWidthFraction: CGFloat = 0.8
 
     let isWide: Bool
     let ringDiameter: CGFloat
-    /// Width of the ring column in the wide layout; it ends half a gap before the fold.
     let leadingColumnWidth: CGFloat
 
-    /// `foldMidX` is the fold's center, measured from the safe area's leading edge.
     init(size: CGSize, safeAreaInsets: EdgeInsets = EdgeInsets(), foldMidX: CGFloat? = nil) {
         isWide = size.width > size.height && size.width >= Self.minimumWideWidth
         if isWide {
@@ -304,7 +279,6 @@ struct HomeLayout {
         }
     }
 
-    /// The center of the first vertical division that lies inside the view's width, if any.
     static func foldMidX(divisionFrames: [CGRect], width: CGFloat) -> CGFloat? {
         divisionFrames.first { frame in
             frame.height > frame.width && frame.midX > 0 && frame.midX < width
@@ -316,7 +290,6 @@ private struct HomeStartSheetPresentation: Identifiable {
     let id = UUID()
 }
 
-/// Several workouts share the opened slot, so Home asks which one to show.
 private struct HomeRingWorkoutChoice {
     struct Option: Identifiable {
         let id: UUID
@@ -330,11 +303,8 @@ private struct HomeQuickStartSelection: Identifiable {
     let id: UUID
 }
 
-/// Shares the capsule shape and centered label of the app's other primary
-/// actions, so Home's Start Workout matches the one a tap later.
 private struct HomePrimaryWorkoutButton: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// Grows with text size so the main action stays a generous target.
     @ScaledMetric(relativeTo: .title3) private var scaledMinHeight: CGFloat = 60
 
     let presentation: HomePrimaryWorkoutPresentation
@@ -378,11 +348,8 @@ private struct HomePrimaryWorkoutButton: View {
     }
 }
 
-/// Recent workouts retain their review-and-start behavior with neutral styling.
 private struct HomeStartFromPills: View {
     let pills: [(name: String, lastDone: String)]
-    /// The phone column scrolls the pills edge to edge. The wide layout keeps
-    /// them inside the actions column so they never slide under the tab rail.
     let bleedsToScreenEdges: Bool
     let select: (Int) -> Void
 
@@ -424,7 +391,6 @@ private struct HomeStartFromPills: View {
 }
 
 
-/// Value comparison invalidates bucketing only when history or its calendar window changes.
 private struct HomeRingInput: Equatable {
     let workouts: [RingWorkout]
     let day: Date

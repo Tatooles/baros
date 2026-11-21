@@ -3,9 +3,6 @@ import SwiftData
 import SwiftUI
 
 extension Animation {
-    /// Clearing workout focus with this animation collapses the keyboard bar's
-    /// inset alongside the keyboard, rather than snapping the scroll offset
-    /// once the keyboard is gone.
     static let workoutFocusDismissal = Animation.smooth(duration: 0.25)
 }
 
@@ -33,7 +30,6 @@ struct WorkoutSessionView: View {
     @State private var cachedSortedLoggedExercises: [LoggedExercise]?
     @State private var cachedPreviousSets: [UUID: [PreviousSetPerformance]] = [:]
     @State private var rpeEditingSetID: UUID?
-    /// The set whose keyboard is the time wheels.
     @State private var timeEntry: SetTimeEntry?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var setInputRegistry = ActiveSetInputRegistry()
@@ -111,8 +107,6 @@ struct WorkoutSessionView: View {
                         }
                     }
 
-                    // While a field is focused the keyboard bar owns the
-                    // bottom edge, so the actions return to the end of the list.
                     if !showsBottomActionBar {
                         workoutActions
                     }
@@ -121,12 +115,8 @@ struct WorkoutSessionView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 8)
             }
-            // A safe-area bar lets the system scroll-edge effect separate
-            // the floating metrics from the sets scrolling beneath them.
             .safeAreaBar(edge: .top, spacing: 0) {
                 ActiveWorkoutMetricsHeader(session: session, restTimer: engine.restTimer) {
-                    // Flush any in-progress field edit through the commit path
-                    // before the finish sheet reads the model.
                     guard prepareForPresentation() else { return }
                     isFinishSheetPresented = true
                 }
@@ -136,8 +126,6 @@ struct WorkoutSessionView: View {
                 if phase != .idle { engine.restTimer.collapseControls() }
             }
             .onChange(of: scenePhase) { _, newPhase in
-                // Resigning focus routes pending drafts through the normal
-                // commit path before the app is backgrounded or suspended.
                 if newPhase != .active, focusedField != nil || timeEntry != nil {
                     resignFocus()
                 }
@@ -155,8 +143,6 @@ struct WorkoutSessionView: View {
                 UIHangContextObservability.shared.focusChanged(to: newField)
                 if newField != nil {
                     engine.restTimer.collapseControls()
-                    // A keyboard takes the place of the time wheels, and the
-                    // set keeps the time they showed.
                     keepShownTime()
                     timeEntry = nil
                 }
@@ -171,8 +157,6 @@ struct WorkoutSessionView: View {
                     focusTransitionCoordinator.synchronizeFocus(nil)
                     focusedField = nil
                 }
-                // The time wheels hold no focus, so their set's RPE chips
-                // stay while they are open.
                 if timeEntry?.setID != rpeEditingSetID,
                    RPEEditingFocusPolicy.shouldReset(editingSetID: rpeEditingSetID, newFocusedField: newField) {
                     rpeEditingSetID = nil
@@ -182,8 +166,6 @@ struct WorkoutSessionView: View {
             .onChange(of: timeEntry?.setID) { _, setID in
                 if setID != nil { engine.restTimer.collapseControls() }
             }
-            // Reserved bottom chrome: the actions never sit on top of set rows,
-            // and the system scroll-edge effect separates them from the list.
             .safeAreaBar(edge: .bottom, spacing: 0) {
                 if showsBottomActionBar {
                     workoutActions
@@ -202,10 +184,6 @@ struct WorkoutSessionView: View {
                     keyboardAccessory
                 }
             }
-            // While the actions show, the bars run to the screen edge, so the
-            // actions' padding places them inside the home-indicator inset and
-            // their whole frame stays tappable. The keyboard bar keeps the
-            // normal safe area, so it clears the home indicator with any keyboard.
             .ignoresSafeArea(.container, edges: showsBottomActionBar ? .bottom : [])
             .background {
                 PreviousSetsCacheLoader(session: session) {
@@ -216,8 +194,6 @@ struct WorkoutSessionView: View {
             }
         }
         .background {
-            // Ignoring the keyboard keeps this the screen's resting bottom
-            // inset, so the actions don't jump while the keyboard animates away.
             Color.clear
                 .ignoresSafeArea(.keyboard)
                 .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: {
@@ -230,7 +206,6 @@ struct WorkoutSessionView: View {
                 do {
                     try engine.retrySetSave(in: session, context: modelContext)
                 } catch {
-                    // Keep the failed edit pending; dismissal restores the recovery choices.
                 }
             }
             .disabled(!engine.canRetrySetSave(in: session))
@@ -251,8 +226,6 @@ struct WorkoutSessionView: View {
         }
         .onChange(of: showsSetSaveFailure) { _, isPresented in
             guard !isPresented else { return }
-            // Alert actions dismiss after running. Reconcile that dismissal with
-            // the pending edit so another failed Retry cannot hide recovery.
             Task { @MainActor in
                 await Task.yield()
                 guard scenePhase == .active, engine.hasPendingSetSave else { return }
@@ -266,8 +239,6 @@ struct WorkoutSessionView: View {
             updateUIHangWorkoutContext(becameCurrent: true)
             focusTransitionCoordinator.synchronizeFocus(focusedField)
             onMinimizePreparationChanged {
-                // Resigning focus commits leaf-owned drafts before the shell
-                // transitions this session into its minimized presentation.
                 resignFocus()
             }
         }
@@ -307,9 +278,6 @@ struct WorkoutSessionView: View {
         focusedField == nil && timeEntrySet == nil && !isChildPresentationActive
     }
 
-    /// On phones with a home indicator, the actions sit inside its inset at
-    /// about the floating tab bar's height. Phones without one keep a small
-    /// gap above the screen edge.
     private var workoutActionsBottomPadding: CGFloat {
         min(bottomSafeAreaInset + 4, 22)
     }
@@ -343,8 +311,6 @@ struct WorkoutSessionView: View {
 
     private var actionMinHeight: CGFloat { max(50, scaledActionHeight) }
 
-    /// Glass matches the workout's other floating controls and keeps the
-    /// pinned action legible as its own layer over exercise content.
     private var editWorkoutPill: some View {
         Button {
             guard prepareForPresentation() else { return }
@@ -368,8 +334,6 @@ struct WorkoutSessionView: View {
         rpeEnabled && accessorySetID != nil
     }
 
-    /// The set the bar's buttons act on: the one being typed in, or the one
-    /// the time wheels are open on.
     private var accessorySetID: UUID? {
         focusedSetID ?? timeEntry?.setID
     }
@@ -377,8 +341,6 @@ struct WorkoutSessionView: View {
     private var keyboardAccessory: some View {
         HStack(spacing: 8) {
             if rpeEditingSetID != nil {
-                // A thin, even inset keeps the chip capsule the same height as the
-                // RPE/Done buttons it replaces, so the bar doesn't grow.
                 RPEChipRow(selected: editingSet?.rpe, onSelect: selectRPE)
                     .padding(.vertical, 2)
                     .clipShape(Capsule())
@@ -403,12 +365,6 @@ struct WorkoutSessionView: View {
         .buttonStyle(.glass)
         .padding(4)
         .background {
-            // When RPE and Done share the bar, one quiet band joins them and
-            // keeps set text from reading between them. A lone Done floats on
-            // its own, since there is nothing to join. The band ignores
-            // touches, so a row beneath it can still be tapped. It is opaque
-            // and a step off the pills' tone, so the glass buttons read as
-            // buttons; the soft shadow feathers its top edge.
             Capsule()
                 .fill(AppTheme.keyboardBandFill)
                 .shadow(color: AppTheme.keyboardBandShadow, radius: 10, y: -2)
@@ -426,18 +382,14 @@ struct WorkoutSessionView: View {
         guard !engine.hasPendingSetSave else { return }
         var shownTime: Int?
         if let timeEntry, timeEntry.setID == rpeEditingSetID, value != nil {
-            // An RPE completes the set, and zero is not a time to complete it with.
             guard timeEntry.seconds > 0 else { return }
             shownTime = timeEntry.seconds
         }
         if let set = editingSet {
-            // Both of a set's fields share one input registration.
             var preparedValues = setInputRegistry.prepareSetValues(
                 for: .setReps(set.id),
                 completesSet: value != nil
             ) ?? .init(set)
-            // The time on the wheels saves with the RPE, so one Retry
-            // recovers both.
             if let shownTime { preparedValues = preparedValues.settingDuration(shownTime) }
             withAnimation(.easeInOut(duration: 0.2)) {
                 do {
@@ -449,13 +401,10 @@ struct WorkoutSessionView: View {
                         context: modelContext
                     )
                 } catch {
-                    // The engine retains the action and the alert offers recovery.
                 }
             }
         }
         rpeEditingSetID = nil
-        // Choosing an RPE finishes the set, so the keyboard's job is done.
-        // Clear keeps editing the same field.
         if value != nil || engine.hasPendingSetSave {
             resignFocus()
         }
@@ -499,7 +448,6 @@ struct WorkoutSessionView: View {
         activeSet(rpeEditingSetID)
     }
 
-    /// The set the time wheels are open on, while it is still in the workout.
     private var timeEntrySet: LoggedSet? {
         activeSet(timeEntry?.setID)
     }
@@ -516,13 +464,10 @@ struct WorkoutSessionView: View {
         return nil
     }
 
-    /// Opens, follows or closes the time wheels on a set.
     private func editTime(_ set: LoggedSet, _ edit: SetTimeEdit) {
         switch edit {
         case .open(let startingSeconds):
             guard timeEntry?.setID != set.id else { return }
-            // Save what is being typed. The wheels then take the keyboard
-            // straight from that field, with no dismissal in between.
             setInputRegistry.commit(focusedField)
             guard !engine.hasPendingSetSave else { return }
             keepShownTime()
@@ -540,14 +485,11 @@ struct WorkoutSessionView: View {
         }
     }
 
-    /// The set keeps the time on the wheels however they close, even when
-    /// they were never moved, as when they opened on last time's value.
     private func keepShownTime() {
         guard let timeEntry, timeEntry.seconds > 0 else { return }
         saveTime(timeEntry.seconds, forSetID: timeEntry.setID)
     }
 
-    /// Saves the wheels' time as they settle; zero removes it.
     private func saveTime(_ seconds: Int, forSetID setID: UUID) {
         guard !engine.hasPendingSetSave, let set = activeSet(setID) else { return }
         let duration = seconds > 0 ? seconds : nil
@@ -559,7 +501,6 @@ struct WorkoutSessionView: View {
                 context: modelContext
             )
         } catch {
-            // The engine restored the model and owns the attempted values for Retry.
         }
     }
 
@@ -635,7 +576,6 @@ struct WorkoutSessionView: View {
                 swappingLoggedExercise = loggedExercise
             },
             onEditRPE: { set in
-                // A timed set's chips sit above its wheels, which need no keyboard.
                 if timeEntry?.setID != set.id { focusedField = .setReps(set.id) }
                 rpeEditingSetID = set.id
             },
@@ -645,7 +585,6 @@ struct WorkoutSessionView: View {
         .id(loggedExercise.id)
     }
 
-    /// Each link action shows unless that neighbor is already in this exercise's superset.
     private func supersetActions(
         for loggedExercise: LoggedExercise,
         at index: Int,
@@ -698,7 +637,6 @@ struct WorkoutSessionView: View {
 
 private struct LoggedExerciseStructureValue: Hashable {
     let id: UUID
-    // This key also invalidates the rendered exercise-order cache.
     let orderIndex: Int
     let deletedAt: Date?
     let activeSetIDs: Set<UUID>
@@ -764,8 +702,6 @@ struct PreviousSetsCacheSaveChanges {
     let deletedIDs: Set<PersistentIdentifier>
     let invalidatedAllIdentifiers: Bool
 
-    /// Keep unknown entities conservative. Only these two model types are
-    /// bookkeeping that cannot change historical values or route matching.
     var containsOnlySyncBookkeeping: Bool {
         guard !invalidatedAllIdentifiers else { return false }
         let identifiers = insertedIDs.union(updatedIDs).union(deletedIDs)
@@ -846,8 +782,6 @@ final class PreviousSetsCacheLoaderCache {
         lastSyncedAt: Date?,
         onUpdate: ([UUID: [PreviousSetPerformance]]) -> Void
     ) {
-        // Other contexts in this container can change history too. An
-        // unrelated container cannot affect the values shown by this loader.
         if let savedContext = notification.object as? ModelContext,
            savedContext.container !== context.container {
             return
@@ -932,8 +866,6 @@ final class PreviousSetsCacheLoaderCache {
     }
 }
 
-/// Separates the once-per-second duration tick from set aggregation. Set
-/// totals are recomputed only when their value inputs change.
 private struct ActiveWorkoutMetricsHeader: View, @MainActor Equatable {
     let session: WorkoutSession
     let restTimer: RestTimerCoordinator
@@ -960,8 +892,6 @@ private struct ActiveWorkoutMetricsHeader: View, @MainActor Equatable {
     }
 }
 
-/// Owns the title draft so keystrokes re-render only this leaf, never the
-/// whole form. Commits (one model write + save) when focus leaves the field.
 private struct WorkoutTitleDraftField: View {
     let title: String
     var focusedField: FocusState<WorkoutField?>.Binding
@@ -988,8 +918,6 @@ private struct WorkoutTitleDraftField: View {
             }
         }
         .onDisappear {
-            // The view can leave the tree mid-edit (tab switch, active session
-            // replaced); the focus-change commit no longer fires then.
             commitIfNeeded()
         }
     }

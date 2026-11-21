@@ -1,11 +1,6 @@
 import BarosCore
 import SwiftUI
 
-/// One Exercise Performance in the Exercise History log and Quick History:
-/// the workout as a navigable header, then every completed set as a compact
-/// `weight × reps` pill. A record set carries its record's glyph and color,
-/// and the header's subtitle names the record in the same glyph and color, so
-/// the eye pairs them and every pill keeps the same grammar.
 struct ExerciseHistoryPerformanceRow: View {
     let group: ExerciseHistorySessionGroup
     let headingIdentity: ExerciseHistoryDisplayIdentity
@@ -18,7 +13,6 @@ struct ExerciseHistoryPerformanceRow: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    /// Completed sets in this workout that hold a record, in logged order.
     private var recordSets: [(entry: ExerciseHistorySetEntry, kinds: [ExerciseHistoryRecordKind])] {
         guard let records else { return [] }
         return group.setEntries.compactMap { entry in
@@ -27,9 +21,6 @@ struct ExerciseHistoryPerformanceRow: View {
         }
     }
 
-    /// Each record this workout holds, as its glyph and name in its color. The
-    /// matching glyph on the set box shows which set holds it, so the names
-    /// never repeat the set's value.
     private var recordSummary: Text? {
         let kinds = ExerciseHistoryRecordKind.allCases.filter { kind in
             recordSets.contains { $0.kinds.contains(kind) }
@@ -50,7 +41,6 @@ struct ExerciseHistoryPerformanceRow: View {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(group.loggedExerciseEntries) { entry in
                         if entry.id != group.loggedExerciseEntries.first?.id {
-                            // Repeated occurrences of the exercise stay visibly separate.
                             Rectangle()
                                 .fill(AppTheme.subtleBorder)
                                 .frame(height: 1)
@@ -68,7 +58,6 @@ struct ExerciseHistoryPerformanceRow: View {
                             HistoryFlowLayout(
                                 horizontalSpacing: 6,
                                 verticalSpacing: 8,
-                                // One set per line at accessibility sizes.
                                 isSingleColumn: dynamicTypeSize.isAccessibilitySize
                             ) {
                                 ForEach(entry.setEntries) { item in
@@ -89,9 +78,7 @@ struct ExerciseHistoryPerformanceRow: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             // An explicit Rectangle: a bare style would fill the card's
-            // container shape and round every row's corners. The card's clip
-            // rounds only the first and last rows, so the highlight matches
-            // the row it marks.
+            // container shape and round every row's corners.
             .background(
                 AppTheme.brandAccentMuted.opacity(isHighlighted ? 1 : 0),
                 in: Rectangle()
@@ -146,10 +133,6 @@ struct ExerciseHistoryPerformanceRow: View {
         .accessibilityIdentifier("ExercisePerformanceWorkoutButton-\(group.id.uuidString)")
     }
 
-    /// The date the tile can't show, then the records this workout holds. The
-    /// set boxes already show the count, so there is no "N sets" here, and a
-    /// workout with neither has no subtitle. At accessibility sizes the
-    /// records get their own line.
     private var subtitleText: Text? {
         switch (datePrefix, recordSummary) {
         case (nil, nil): nil
@@ -166,8 +149,6 @@ struct ExerciseHistoryPerformanceRow: View {
         return ", holds " + kinds.map { "\($0.title) record" }.joined(separator: " and ")
     }
 
-    /// The date tile carries month and day; the year and accessibility-size
-    /// date move into the subtitle instead.
     private var datePrefix: String? {
         if dynamicTypeSize.isAccessibilitySize {
             return WorkoutFormatters.historyDate(group.startedAt)
@@ -179,10 +160,6 @@ struct ExerciseHistoryPerformanceRow: View {
     }
 }
 
-/// A completed set as one line: `weight × reps` or its time, then RPE only when logged.
-/// A record set leads with its record's glyph and takes a 1pt outline in the
-/// record's color (neutral when it holds both); the name lives in the
-/// workout's subtitle, so the pill never grows a label or a second line.
 struct HistorySetToken: View {
     let set: LoggedSet
     let number: Int
@@ -192,7 +169,6 @@ struct HistorySetToken: View {
 
     private var isRecord: Bool { !recordKinds.isEmpty }
 
-    /// One record's color, or neutral when both glyphs share the box.
     private var outlineColor: Color {
         recordKinds.count == 1 ? recordKinds[0].markerColor : AppTheme.textSecondary
     }
@@ -220,7 +196,6 @@ struct HistorySetToken: View {
         .background(AppTheme.recessedSurface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay {
             if isRecord {
-                // Record colors, not cobalt: records are information, not interaction.
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .strokeBorder(outlineColor, lineWidth: 1)
             }
@@ -233,8 +208,6 @@ struct HistorySetToken: View {
     }
 }
 
-/// Lays subviews out left to right, wrapping to a new line when the next one
-/// would not fit. A subview wider than the line gets the full width.
 struct HistoryFlowLayout: Layout {
     var horizontalSpacing: CGFloat
     var verticalSpacing: CGFloat
@@ -248,8 +221,6 @@ struct HistoryFlowLayout: Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let layout = arrange(subviews, width: bounds.width)
         for (index, frame) in layout.frames.enumerated() {
-            // A subview at its ideal size gets the same unspecified proposal it
-            // was measured with, so rounding never squeezes it into wrapping.
             subviews[index].place(
                 at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
                 proposal: layout.constrained[index] ? ProposedViewSize(width: bounds.width, height: nil) : .unspecified
@@ -268,8 +239,6 @@ struct HistoryFlowLayout: Layout {
                 size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
             }
             constrained.append(isConstrained)
-            // Half a point of tolerance: placement must reproduce the lines
-            // that sizing measured, or wrapped sets overlap the next row.
             if x > 0, isSingleColumn || x + size.width > width + 0.5 {
                 x = 0
                 y += lineHeight + verticalSpacing
@@ -285,8 +254,6 @@ struct HistoryFlowLayout: Layout {
 }
 
 extension ExerciseHistoryRecordKind {
-    /// Paired with the record's name and color wherever a record is marked,
-    /// so the two records stay distinct without color.
     var markerSymbol: String {
         switch self {
         case .heaviestRep: "trophy.fill"

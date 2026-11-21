@@ -1,6 +1,5 @@
 import XCTest
 
-/// Choosing a set's time from the wheels that are a time cell's keyboard, which only the UI can show.
 @MainActor
 final class TimedExerciseUITests: XCTestCase {
     override func setUpWithError() throws {
@@ -19,7 +18,6 @@ final class TimedExerciseUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 8))
 
-        // A timed exercise shows Time where reps would be, with last time's value beside it.
         let time = app.buttons["SetTimeField-0-0"]
         XCTAssertTrue(time.waitToExist(timeout: 3))
         XCTAssertFalse(app.textFields["SetRepsField-0-0"].exists)
@@ -27,8 +25,6 @@ final class TimedExerciseUITests: XCTestCase {
         XCTAssertEqual(app.buttons["SetPreviousValue-1-0"].label, "Previous: 70 × 1:30")
         attachScreenshot("Timed exercises before logging", app: app)
 
-        // The wheels are the cell's keyboard. They open on last time's value
-        // and mark the set they belong to. The time follows them as they settle.
         time.tap()
         XCTAssertTrue(wheel("SetTimeMinutesWheel", in: app).waitToExist(timeout: 3))
         XCTAssertEqual(wheel("SetTimeMinutesWheel", in: app).value as? String, "1")
@@ -45,19 +41,13 @@ final class TimedExerciseUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 3) { app.buttons["SetCompletionButton-0-0"].label == "Mark set incomplete" })
         XCTAssertEqual(time.value as? String, "1 minute, 30 seconds")
 
-        // An empty timed set completes with the time from the set above.
         app.buttons["SetCompletionButton-0-1"].tap()
         XCTAssertTrue(waitForValue(app.buttons["SetTimeField-0-1"], "1 minute, 30 seconds"))
 
-        // Typing a weight and then opening the wheels keeps the weight. The
-        // bar above the wheels offers RPE as the keyboard's does; choosing
-        // one keeps the time shown and completes the set.
         let carry = app.buttons["SetTimeField-1-0"]
         app.revealAboveWorkoutActions(carry)
         app.textFields["SetWeightField-1-0"].tap()
         app.textFields["SetWeightField-1-0"].typeText("80")
-        // Typing settles the list under the keyboard; a tap on a moving list
-        // only stops it.
         var lastFrame = CGRect.null
         XCTAssertTrue(waitUntil(timeout: 3) {
             defer { lastFrame = carry.frame }
@@ -70,14 +60,11 @@ final class TimedExerciseUITests: XCTestCase {
             waitUntil(timeout: 3) { carry.frame.maxY <= app.buttons["DismissKeyboardButton"].frame.minY },
             "The set stays in view above the wheels and their bar"
         )
-        // The wheels are shorter than the number pad they replaced, and the
-        // bar comes down with them.
         let dismiss = app.buttons["DismissKeyboardButton"]
         XCTAssertTrue(
             waitUntil(timeout: 3) { app.pickers["SetTimeWheels"].frame.minY - dismiss.frame.maxY < 24 },
             "The bar rests on the wheels"
         )
-        // Going back to the weight and returning keeps the time and the bar's place.
         app.textFields["SetWeightField-1-0"].tap()
         XCTAssertTrue(app.pickers["SetTimeWheels"].waitToDisappear(timeout: 3))
         XCTAssertEqual(carry.value as? String, "1 minute, 30 seconds")
@@ -113,7 +100,6 @@ final class TimedExerciseUITests: XCTestCase {
         )
         attachScreenshot("Workout history with timed sets", app: app)
 
-        // Editing the finished workout uses the same wheels, opened on the set's time.
         app.buttons["EditWorkoutButton"].tap()
         let edited = app.buttons["HistorySetTimeField-0-0"]
         XCTAssertTrue(edited.waitToExist(timeout: 3))

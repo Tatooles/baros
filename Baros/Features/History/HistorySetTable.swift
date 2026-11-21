@@ -2,7 +2,6 @@ import BarosCore
 import SwiftUI
 import UIKit
 
-/// The shared set ledger for History details and Quick History.
 struct HistorySetTable: View {
     struct Row: Identifiable {
         let set: LoggedSet
@@ -13,8 +12,6 @@ struct HistorySetTable: View {
 
     let rows: [Row]
     let weightUnit: MeasurementUnit
-    /// Sets from sibling tables on the same screen. Their values widen the
-    /// columns and reserve the RPE column so adjacent tables line up.
     var alignedSets: [LoggedSet] = []
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -36,8 +33,6 @@ struct HistorySetTable: View {
     }
 
     private func table(stacked: Bool) -> some View {
-        // Measure once for the whole compact table, then reuse the same widths
-        // for its header and every row. The stacked layout does not need them.
         let widths = (
             weight: stacked ? weightWidth : fittedWidth(measuredSets.map { weightText($0) }, minimum: weightWidth),
             reps: stacked ? repsWidth : fittedWidth(measuredSets.map { measureText($0) }, minimum: repsWidth)
@@ -87,8 +82,6 @@ struct HistorySetTable: View {
                             .foregroundStyle(AppTheme.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .accessibilityHidden(true)
-                        // GridRow forwards accessibility modifiers to every cell.
-                        // Give the result cell the single complete set announcement.
                         result(row, stacked: stacked, widths: widths)
                             .fixedSize(horizontal: true, vertical: true)
                             .accessibilityElement(children: .ignore)
@@ -133,15 +126,12 @@ struct HistorySetTable: View {
         }
     }
 
-    // Header and data use the same columns, including space reserved for record/RPE annotations.
     @ViewBuilder
     private func valueColumns(weight: String, reps: String, stacked: Bool, widths: (weight: Double, reps: Double)) -> some View {
         if stacked, weight.isEmpty {
             Text(reps).frame(maxWidth: .infinity, alignment: .leading)
         } else if stacked {
             let separator = Text(" × ").foregroundColor(AppTheme.textSecondary)
-            // A single text run can wrap between values instead of forcing the
-            // entire weight × reps expression beyond the block's available width.
             Text("\(weight)\(separator)\(reps)")
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -158,7 +148,6 @@ struct HistorySetTable: View {
             Text("×")
                 .foregroundStyle(AppTheme.textSecondary)
                 .frame(width: separatorWidth)
-                // An unweighted timed set keeps the column but shows only its time.
                 .opacity(weight.isEmpty ? 0 : 1)
             Text(reps)
                 .fixedSize()
@@ -166,8 +155,6 @@ struct HistorySetTable: View {
         }
     }
 
-    // Measure the displayed strings in the same scaled, monospaced-digit font
-    // used by the rows. Headers and rows share these widths after unit conversion.
     private func fittedWidth(_ values: [String], minimum: Double) -> Double {
         let font = UIFont.monospacedDigitSystemFont(ofSize: valuePointSize, weight: .regular)
         return max(minimum, values.map { ceil(($0 as NSString).size(withAttributes: [.font: font]).width) }.max() ?? 0)
@@ -177,13 +164,10 @@ struct HistorySetTable: View {
         rows.map(\.set) + alignedSets
     }
 
-    /// "TIME" when the table's exercise was logged by time.
     private var measureHeader: String {
         (rows.first?.set.trackingMethod ?? .reps).fieldLabel
     }
 
-    /// Timed work is often unweighted; its weight header appears only when one
-    /// of this table's own sets has a weight.
     private var showsWeight: Bool {
         rows.contains { !weightText($0.set).isEmpty }
     }
@@ -208,14 +192,11 @@ struct HistorySetTable: View {
         Self.accessibilityLabel(set: row.set, number: row.number, recordKinds: [], unit: weightUnit)
     }
 
-    // Visible values always group thousands, matching Records. A timed set
-    // without weight has no weight text at all, where a rep set shows a dash.
     static func weightText(_ set: LoggedSet, unit: MeasurementUnit) -> String {
         unit.displayWeight(fromCanonicalPounds: WorkoutNumericInputPolicy.validatedWeight(set.weight))
             .map(WorkoutFormatters.groupedNumber) ?? (set.trackingMethod == .duration ? "" : "–")
     }
 
-    /// The set's reps, or its time for a timed exercise.
     static func measureText(_ set: LoggedSet) -> String {
         if set.trackingMethod == .duration {
             return WorkoutNumericInputPolicy.validatedDuration(set.durationSeconds)
@@ -225,22 +206,18 @@ struct HistorySetTable: View {
             .map { WorkoutFormatters.groupedNumber(Double($0)) } ?? "–"
     }
 
-    /// A set as one run of text: "135 × 8", "45 × 1:30", or "1:30".
     static func valueText(_ set: LoggedSet, unit: MeasurementUnit) -> Text {
         let weight = weightText(set, unit: unit)
         guard !weight.isEmpty else { return Text(measureText(set)) }
         return Text("\(weight)\(Text(" × ").foregroundColor(AppTheme.textSecondary))\(measureText(set))")
     }
 
-    /// Names what the bare numbers mean, from the newest set: "lb × reps",
-    /// "lb × time", or "time" when no timed set carries weight.
     static func valueCaption(for sets: [LoggedSet], unit: MeasurementUnit) -> String {
         guard sets.first?.trackingMethod == .duration else { return "\(unit.shortUnitLabel) × reps" }
         let hasWeight = sets.contains { WorkoutNumericInputPolicy.validatedWeight($0.weight) != nil }
         return hasWeight ? "\(unit.shortUnitLabel) × time" : "time"
     }
 
-    /// The complete spoken set, shared by tables and compact set tokens.
     static func accessibilityLabel(
         set: LoggedSet, number: Int, recordKinds: [ExerciseHistoryRecordKind], unit: MeasurementUnit
     ) -> String {
@@ -262,14 +239,12 @@ struct HistorySetTable: View {
     }
 }
 
-/// A shared informational count; the containing view owns any navigation action.
 struct HistorySetCountPill: View {
     let count: Int
 
     var body: some View {
         Text(count == 1 ? "1 set" : "\(count) sets")
             .font(.caption.weight(.medium))
-            // Informational, so neutral: cobalt is reserved for interaction and state.
             .foregroundStyle(AppTheme.textSecondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)

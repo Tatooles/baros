@@ -2,20 +2,14 @@ import BarosCore
 import SwiftUI
 import UIKit
 
-/// System edit-mode lists own the minus, Delete, and reorder
-/// grip along with their motion and accessibility. A superset is one row, so
-/// it moves as a block; its members keep their own minus and Delete.
 struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
     let exercises: [Item]
     let reorder: ([UUID]) -> Void
     let remove: (Set<UUID>) -> Void
     let add: () -> Void
-    /// Takes the exercises' new superset ids, in the order of `exercises`.
     let regroup: ([UUID?]) -> Void
-    /// Rows above the exercises that don't move or delete.
     let header: Header
     @State private var isLinking = false
-    /// Carries card positions and the scroll offset between the regular list and link mode.
     @State private var memory = ReorderListMemory()
     @State private var memberReveal = ReorderMemberReveal()
 
@@ -37,8 +31,6 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
 
     var body: some View {
         let blocks = SupersetGrouping.blocks(exercises, groupID: \.supersetGroupID)
-        // The two lists crossfade because the system animates its edit controls
-        // on its own clock, so changing them in place visibly jumps.
         ZStack {
             if isLinking {
                 ReorderLinkList(
@@ -68,7 +60,6 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         }
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { memory.listFrame = $0 }
         .onChange(of: canLink) { _, canLink in
-            // A workout reloaded by sync can drop below two exercises.
             if !canLink { isLinking = false }
         }
         #if DEBUG
@@ -108,14 +99,12 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                         ReorderSupersetRow(exercises: block.members, memory: memory, reveal: memberReveal, remove: { remove([$0]) })
                     } else {
                         ReorderExerciseRow(exercise: block.members[0], memory: memory)
-                            // Lifts only the card while dragging, not the whole row rectangle.
                             .contentShape(
                                 .dragPreview,
                                 RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous)
                             )
                     }
                 }
-                // Lines the cards up with the superset list's, so they stay put when it swaps in.
                 .listRowInsets(EdgeInsets(top: 6, leading: 7.5, bottom: 6, trailing: 14))
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -159,21 +148,13 @@ extension ReorderExercisesList where Header == EmptyView {
     }
 }
 
-/// What link mode needs from the regular list to keep every card where it was. A
-/// reference, so scrolling and layout don't redraw the list.
 final class ReorderListMemory {
     var listFrame: CGRect = .zero
-    /// Measured, since the system decides how much room its edit controls take.
     var cardFrames: [UUID: CGRect] = [:]
-    /// How far down the exercises are scrolled.
     var offset: CGFloat = 0
-    /// Set on leaving link mode, for the regular list that takes its place.
-    /// Held apart because a new list reports its own starting offset right away.
     var offsetToRestore: CGFloat?
 }
 
-/// SwiftUI's List ignores `scrollPosition`, so this reaches the scroll view around
-/// its row. The row is recreated as it scrolls back into view, hence the one-shot flag.
 private struct ReorderScrollRestorer: UIViewRepresentable {
     let memory: ReorderListMemory
 
@@ -202,7 +183,6 @@ extension View {
     }
 }
 
-/// The list's last row. Link Exercises needs two exercises to link.
 struct ReorderListActions: View {
     let add: () -> Void
     let link: (() -> Void)?
@@ -226,7 +206,6 @@ struct ReorderListActions: View {
         _ title: String, systemImage: String, identifier: String, perform: @escaping () -> Void
     ) -> some View {
         Button(action: perform) {
-            // Fixed width: the row stacks the buttons rather than truncating a title.
             HStack(spacing: 8) {
                 Image(systemName: systemImage)
                 Text(title).lineLimit(1)
@@ -250,8 +229,6 @@ struct ReorderExerciseRow: View {
     @ScaledMetric(relativeTo: .subheadline) private var detailSize = 13
     let exercise: any ReorderListExercise
     var memory: ReorderListMemory?
-    /// Truncates each line of text to the height it had at rest instead of wrapping,
-    /// so the card keeps its height while a Delete narrows it.
     var keepsRestingLines = false
 
     var body: some View {
@@ -261,7 +238,6 @@ struct ReorderExerciseRow: View {
                 .foregroundStyle(AppTheme.textPrimary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 .modifier(RestingHeight(isKept: keepsRestingLines))
-            // The progress shares the detail line so names keep the card's full width.
             if dynamicTypeSize.isAccessibilitySize {
                 if let metadata = exercise.metadata { detail(metadata) }
                 trailing
@@ -309,8 +285,6 @@ struct ReorderExerciseRow: View {
     }
 }
 
-/// Holds text at the height it measured while not kept, so a narrower frame
-/// truncates it instead of adding lines.
 private struct RestingHeight: ViewModifier {
     let isKept: Bool
     @State private var height: CGFloat?
@@ -324,20 +298,12 @@ private struct RestingHeight: ViewModifier {
     }
 }
 
-/// The superset member whose Delete is showing, shared by every row in the list
-/// so a touch on any other row can close it.
 @MainActor @Observable final class ReorderMemberReveal {
     var id: UUID?
 }
 
-/// A superset's members beside the rail. The system has no delete control for
-/// part of a row, so each member gets its own minus button, sized so the cards
-/// line up with single exercises. Like the system minus, it turns and reveals a
-/// Delete beside the card; the next tap anywhere else closes it.
 struct ReorderSupersetRow<Item: ReorderListExercise>: View {
-    /// Scales like the system minus, so members stay in line with single exercises.
     @ScaledMetric(relativeTo: .title2) private var removeColumnWidth = 28
-    /// Capped so large text sizes leave the card room for its name.
     @ScaledMetric(relativeTo: .body) private var deleteWidth = 64
     let exercises: [Item]
     let memory: ReorderListMemory
@@ -393,15 +359,12 @@ struct ReorderSupersetRow<Item: ReorderListExercise>: View {
         }
         .contentShape(.dragPreview, Rectangle())
         .contentShape(.interaction, Rectangle())
-        // Buttons keep their taps; a tap anywhere else in the row closes its Delete.
         .gesture(TapGesture().onEnded { reveal.id = nil }, including: revealedHere ? .all : .subviews)
         .animation(.snappy(duration: 0.3), value: reveal.id)
     }
 }
 
 #if DEBUG
-/// Test-only sampling of native cell model frames, without animating or resizing the list.
-/// A stationary hover must not repeatedly swap a neighboring block between two slots.
 private struct ReorderStabilityProbe: UIViewRepresentable {
     func makeUIView(context: Context) -> UILabel {
         let label = UILabel()

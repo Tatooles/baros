@@ -1,9 +1,5 @@
 import SwiftUI
 
-/// The release sheet shipped for Baros 1.0.
-///
-/// This view deliberately owns its complete layout so future releases can use
-/// entirely different designs without expanding a shared content schema.
 struct WhatsNewVersion1_0View: View {
     let onDismiss: () -> Void
 

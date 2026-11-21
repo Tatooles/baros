@@ -1,18 +1,3 @@
-// Turns raw marketing captures into the App Store screenshot set and the baros.fit images.
-//
-//   pnpm -C SupportSite listing-assets <raw-dir> <app-store-out-dir>
-//
-// <raw-dir> holds <shot>.png for each shot in docs/release/listing.json, as written by the
-// release skill's capture-screens.sh. Writes:
-//   - <app-store-out-dir>/NN-<shot>.png: 1320x2868 framed artwork without alpha, for the
-//     6.9" iPhone slot, in listing order, and their MD5s in docs/release/listing-approved.json,
-//     which `asc.mjs listing` checks before uploading;
-//   - SupportSite/public/assets/<site>: the unframed capture as JPEG, for each shot with a
-//     `site` file, and its SHA-256 in tests/approved-assets.json.
-// Headlines use SF Pro Display, the app's typeface. Apple's license keeps it out of the repo,
-// so the Mac needs it installed (developer.apple.com/fonts); the script stops without it.
-// Layout from the Baros 1.2 generator (PR #214).
-
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -26,6 +11,7 @@ const listing = JSON.parse(await readFile(path.join(repositoryRoot, "docs/releas
 const iconPath = path.join(siteRoot, "public/assets/baros-app-icon.png");
 const approvedAssetsPath = path.join(siteRoot, "tests/approved-assets.json");
 const approvedListingPath = path.join(repositoryRoot, "docs/release/listing-approved.json");
+// Apple's font license keeps SF Pro Display out of the repo.
 const font = "SF Pro Display";
 
 const canvas = { width: 1320, height: 2868 };
@@ -119,7 +105,6 @@ function artworkSvg({ screenshotDataUrl, iconDataUrl, headline, glowX, fadeBotto
 }
 
 await mkdir(outputDirectory, { recursive: true });
-// A reordered or dropped shot would otherwise leave a stale PNG that asc.mjs rejects as unapproved.
 for (const name of (await readdir(outputDirectory)).filter((n) => n.endsWith(".png"))) {
   await rm(path.join(outputDirectory, name));
 }
@@ -130,7 +115,6 @@ const approvedListing = { appStore: {} };
 for (const [index, shot] of listing.shots.entries()) {
   const source = await readFile(path.join(rawDirectory, `${shot.id}.png`));
   const { width, height } = await sharp(source).metadata();
-  // Any current iPhone capture fits the frame; a different shape would crop the UI.
   if (Math.abs(width / height - screen.width / screen.height) > 0.01) {
     throw new Error(`${shot.id}.png is ${width}x${height}; capture on an iPhone 17 Pro.`);
   }

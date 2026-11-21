@@ -67,7 +67,6 @@ struct ExercisePickerView: View {
     @Query private var sessions: [WorkoutSession]
     let mode: ExercisePickerMode
     var showsCancel = true
-    /// Offers Add as Superset beside the add button when set.
     let onSelectAsSuperset: (([Exercise]) -> Void)?
     let onSelect: ([Exercise]) -> Void
     private let sortPreferenceStore: ExercisePickerSortPreferenceStore
@@ -122,8 +121,6 @@ private struct SearchableExercisePicker: View {
             onSelectAsSuperset: onSelectAsSuperset,
             onSelect: onSelect
         )
-        // Automatic puts search in the bottom toolbar on iPhone, under the
-        // thumb; the commit bar stacks above it.
         .searchable(text: $searchText, prompt: "Search exercises")
     }
 }
@@ -133,6 +130,7 @@ private struct ExercisePickerList: View {
     @Environment(\.dismissSearch) private var dismissSearch
     @Environment(\.isSearching) private var isSearching
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let baseRows: [ExercisePickerRowContent]
     let mode: ExercisePickerMode
     var showsCancel = true
@@ -234,9 +232,6 @@ private struct ExercisePickerList: View {
                         .listRowBackground(AppTheme.groupedSurface)
                     }
                 } header: {
-                    // Creating is the exception; selection is the job, so the
-                    // create action shares the sort row instead of taking a
-                    // section of its own above the list.
                     let headerLayout = dynamicTypeSize.isAccessibilitySize
                         ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
                         : AnyLayout(HStackLayout())
@@ -284,6 +279,7 @@ private struct ExercisePickerList: View {
         .scrollContentBackground(.hidden)
         .contentMargins(.top, noMatchesSuggestion == nil ? 8 : nil, for: .scrollContent)
         .contentMargins(.bottom, 24, for: .scrollContent)
+        .scrollEdgeEffectStyle(mode.isAddExercise && !selectedExercises.isEmpty ? .hard : nil, for: .bottom)
         .background(AppTheme.canvasBackground.ignoresSafeArea())
         .navigationTitle(mode.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
@@ -299,11 +295,12 @@ private struct ExercisePickerList: View {
             sortPreferenceStore.sortOrder = newValue
         }
         .safeAreaBar(edge: .bottom, spacing: 0) {
-            if let swapImpact {
-                swapConfirmBar(swapImpact)
-            } else if mode.isAddExercise {
+            if let swapImpact, let swapReplacement {
+                swapConfirmBar(swapImpact, replacement: swapReplacement)
+                    .transition(commitBarTransition)
+            } else if mode.isAddExercise, !selectedExercises.isEmpty {
                 HStack(spacing: 10) {
-                    if let onSelectAsSuperset {
+                    if let onSelectAsSuperset, selectedExercises.count >= 2 {
                         Button {
                             onSelectAsSuperset(selectedExercises)
                         } label: {
@@ -315,7 +312,7 @@ private struct ExercisePickerList: View {
                                 .padding(.vertical, 8)
                         }
                         .buttonStyle(.glass)
-                        .disabled(selectedExercises.count < 2)
+                        .transition(.opacity)
                         .accessibilityIdentifier("ExercisePickerAddAsSupersetButton")
                     }
                     Button {
@@ -335,8 +332,12 @@ private struct ExercisePickerList: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
+                .transition(commitBarTransition)
             }
         }
+        .animation(.smooth(duration: 0.25), value: selectedExercises.isEmpty)
+        .animation(.smooth(duration: 0.25), value: selectedExercises.count >= 2)
+        .animation(.smooth(duration: 0.25), value: swapReplacement == nil)
         .toolbar {
             if showsCancel {
                 ToolbarItem(placement: .topBarLeading) {
@@ -369,20 +370,26 @@ private struct ExercisePickerList: View {
         return impact
     }
 
-    /// Shown only while search is empty, and listed once: the full list below leaves them out.
     private var similarRows: [ExercisePickerRowContent] {
         guard searchText.isEmpty else { return [] }
         return swapImpact?.similarRows(in: baseRows) ?? []
     }
 
-    /// Swap picks one replacement, then commits from the bar, which says what the swap removes.
-    private func swapConfirmBar(_ impact: SwapExerciseImpact) -> some View {
-        let replacement = baseRows.first { $0.id == swapSelectionID }?.exercise
-        return VStack(spacing: 8) {
+    private var commitBarTransition: AnyTransition {
+        reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
+    }
+
+    private var swapReplacement: Exercise? {
+        guard let swapSelectionID else { return nil }
+        return baseRows.first { $0.id == swapSelectionID }?.exercise
+    }
+
+    private func swapConfirmBar(_ impact: SwapExerciseImpact, replacement: Exercise) -> some View {
+        VStack(spacing: 8) {
             Group {
                 if impact.losesWork {
                     Label(impact.lossMessage, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(replacement == nil ? AppTheme.textSecondary : AppTheme.destructiveForeground)
+                        .foregroundStyle(AppTheme.destructiveForeground)
                 } else {
                     Text(impact.lossMessage)
                         .foregroundStyle(AppTheme.textSecondary)
@@ -393,11 +400,10 @@ private struct ExercisePickerList: View {
             .accessibilityIdentifier("ExercisePickerSwapImpactText")
 
             Button {
-                if let replacement { onSelect([replacement]) }
+                onSelect([replacement])
             } label: {
-                Text(replacement.map(impact.confirmTitle(for:)) ?? "Choose a Replacement")
+                Text(impact.confirmTitle(for: replacement))
                     .font(.headline)
-                    // Wraps rather than truncating, so the equipment of a same-name variant stays readable.
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
@@ -407,7 +413,7 @@ private struct ExercisePickerList: View {
             // A value, not a hint, so VoiceOver reads the loss even with hints turned off.
             .accessibilityValue(impact.losesWork ? impact.lossMessage : "")
             .tint(impact.losesWork ? AppTheme.destructiveFill : AppTheme.brandAccentFill)
-            .disabled(replacement == nil)
+            .modifier(IgnoresTapsWhileAppearing(trigger: replacement.id))
             .accessibilityIdentifier("ExercisePickerConfirmSwapButton")
         }
         .padding(.horizontal, 20)
@@ -423,7 +429,6 @@ private struct ExercisePickerList: View {
                 toggleSelection(row.exercise)
             } else {
                 swapSelectionID = row.exercise.id
-                // The choice is made; lower the keyboard to show the rest of the list.
                 UIApplication.shared.sendAction(
                     #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
                 )
@@ -527,5 +532,33 @@ private extension ExercisePickerMode {
     var isAddExercise: Bool {
         if case .add = self { return true }
         return false
+    }
+}
+
+private struct IgnoresTapsWhileAppearing<Trigger: Equatable>: ViewModifier {
+    let trigger: Trigger
+    @State private var isArmed = false
+
+    func body(content: Content) -> some View {
+        content
+            .allowsHitTesting(isArmed)
+            .overlay {
+                if !isArmed {
+                    // Catches the tap so it doesn't reach the row underneath and change the pick.
+                    Color.clear
+                        .contentShape(.rect)
+                        .onTapGesture {}
+                        .accessibilityHidden(true)
+                }
+            }
+            .task(id: trigger) {
+                isArmed = false
+                do {
+                    try await Task.sleep(for: .milliseconds(700))
+                } catch {
+                    return
+                }
+                isArmed = true
+            }
     }
 }

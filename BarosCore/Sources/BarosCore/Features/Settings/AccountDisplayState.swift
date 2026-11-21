@@ -6,7 +6,6 @@ public struct AccountDisplayState: Equatable, Sendable {
     public let actionTitle: String
     public let isSignedIn: Bool
 
-    /// The row reads as one button, so it carries the visible title and subtitle together.
     public var accessibilityLabel: String {
         "\(title), \(subtitle)"
     }

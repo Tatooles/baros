@@ -102,9 +102,6 @@ jobs:
       - name: Show Swift toolchain
         run: swift --version
 
-      # BarosCore holds the app's non-UI logic and its tests. It builds and
-      # tests on macOS with no simulator, so a failure is almost always real:
-      # unlike the iOS gates, this job does not retry failed tests.
       - name: Run BarosCore package tests
         run: |
           set -o pipefail

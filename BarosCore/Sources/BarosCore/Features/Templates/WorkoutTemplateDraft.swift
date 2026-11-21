@@ -1,6 +1,5 @@
 import Foundation
 
-/// The template editor's unsaved name and exercises.
 public struct WorkoutTemplateDraft: Equatable {
     public var name: String
     public var entries: [WorkoutTemplateEntry]
@@ -41,13 +40,10 @@ public struct WorkoutTemplateDraft: Equatable {
         entries += exercises.map { WorkoutTemplateEntry(exercise: $0, supersetGroupID: group) }
     }
 
-    /// Replaces the superset ids, given in the order of `entries`.
     public mutating func regroup(_ groupIDs: [UUID?]) {
         for (index, group) in zip(entries.indices, groupIDs) { entries[index].supersetGroupID = group }
     }
 
-    /// Entries with their snapshots refreshed from the library, so a renamed
-    /// exercise saves under its current name.
     public func refreshedEntries(exercisesByID: [UUID: Exercise]) -> [WorkoutTemplateEntry] {
         entries.map { entry in
             guard let exercise = entry.exerciseID.flatMap({ exercisesByID[$0] }) else { return entry }
@@ -58,8 +54,6 @@ public struct WorkoutTemplateDraft: Equatable {
     }
 }
 
-/// One template exercise as the list rows show it. The library exercise wins
-/// over the entry's snapshot while it exists.
 public struct TemplateExerciseItem: ReorderListExercise {
     public let id: UUID
     public let name: String
@@ -94,7 +88,6 @@ public struct TemplateExerciseItem: ReorderListExercise {
 }
 
 extension Array where Element == Exercise {
-    /// The owner's exercises by id, for resolving template entries.
     public func visibleByID(to ownerTokenIdentifier: String?) -> [UUID: Exercise] {
         Dictionary(
             filter { !$0.isDeleted && $0.isVisible(to: ownerTokenIdentifier) }.map { ($0.id, $0) },
@@ -104,15 +97,12 @@ extension Array where Element == Exercise {
 }
 
 extension Array where Element == WorkoutTemplate {
-    /// The owner's templates by name, numbers in natural order.
     public func visible(to ownerTokenIdentifier: String?) -> [WorkoutTemplate] {
         filter { !$0.isDeleted && $0.isVisible(to: ownerTokenIdentifier) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 }
 
-/// History's Save as Template: a new template named after the workout, to
-/// rename before saving.
 public struct NewTemplateFromWorkout: Identifiable {
     public let id = UUID()
     public let draft: WorkoutTemplateDraft
@@ -122,13 +112,9 @@ public struct NewTemplateFromWorkout: Identifiable {
     }
 }
 
-/// What the Finish sheet offers for keeping the workout as a template.
 public enum FinishTemplateOffer: Equatable {
-    /// No exercises, or a template workout that still matches its template.
     case none
-    /// The Save as Template switch.
     case saveAsNew
-    /// The Template menu: update the workout's template, or save a new one.
     case updateOrSaveAsNew(WorkoutTemplate)
 
     public init(session: WorkoutSession, templates: [WorkoutTemplate], ownerTokenIdentifier: String?) {
@@ -136,8 +122,6 @@ public enum FinishTemplateOffer: Equatable {
             self = .none
             return
         }
-        // Blank and past-workout starts, template workouts from before the
-        // link, and ones whose template has since been deleted.
         guard session.source == .template,
               let sourceTemplateID = session.sourceTemplateID,
               let template = templates.first(where: {
@@ -155,8 +139,6 @@ public enum FinishTemplateOffer: Equatable {
 }
 
 extension WorkoutTemplateEntry {
-    /// Whether two lists hold the same exercises in the same order and
-    /// supersets. Entry and group ids don't count; copies get fresh ones.
     static func haveSameExercises(_ lhs: [Self], _ rhs: [Self]) -> Bool {
         guard lhs.count == rhs.count else { return false }
         let lhsGroups = lhs.map(\.supersetGroupID)
@@ -168,8 +150,6 @@ extension WorkoutTemplateEntry {
         }
     }
 
-    /// By library id when both have one; by name when an exercise was
-    /// deleted from the library and only its name is left.
     private func isSameExercise(as other: Self) -> Bool {
         if let exerciseID, let otherID = other.exerciseID {
             return exerciseID == otherID
