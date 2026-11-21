@@ -65,6 +65,17 @@ public final class WorkoutAccountTransition {
         } catch { fail(error) }
     }
 
+    /// Applies a choice from a button tap. The choice's checks and save run before this
+    /// returns, so a `cancel()` right after — such as the presenter disappearing for a
+    /// moment as the choice alert closes — can't drop it. Only the account action awaits.
+    /// The task returns the choice's error, captured before such a `cancel()` can clear it.
+    public func startResolving(_ resolution: Resolution) -> Task<String?, Never> {
+        Task.immediate {
+            await resolve(resolution)
+            return errorMessage
+        }
+    }
+
     public func resolve(_ resolution: Resolution) async {
         guard !isRunning, !engine.isAccountTransitionInProgress else { return }
         guard needsResolution else {
