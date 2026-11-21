@@ -18,8 +18,8 @@
 
 CI labels each PR by what it touches, not how much (`HIGH_RISK_AREAS` in `scripts/pr-checks.mjs`):
 
-- **`risk:high`** changes code in an area where a mistake can lose a user's workouts or reaches production on merge: stored data models, sync, code that edits saved data (the mutation services and any app file that queues uploads), sign-out, local-data reset, account deletion, workout recovery, or Convex functions, schema, and what the deploy installs (`package.json`, `pnpm-lock.yaml`, `convex-ci.yml`).
-- **`risk:low`** changes only docs, tests, or comments in Swift files.
+- **`risk:high`** changes code in an area where a mistake can lose a user's workouts or reaches production on merge: stored data models (any `@Model`, and the enums they store by raw value), sync, code that edits saved data (the mutation services and any app file that queues uploads), sign-out, local-data reset, account deletion, workout recovery, or anything the Convex deploy ships or installs (`convex/` files it bundles, `package.json`, `pnpm-lock.yaml`, `convex-ci.yml`).
+- **`risk:low`** changes only docs, tests, or comments in Swift files, and removes no tests.
 - **`risk:medium`** is everything else.
 
 A Swift file whose code is unchanged once comments are removed doesn't count, so a large comment cleanup can be low and a one-line merge change is high. Comment edits in other languages still count. A `risk:high` PR shows this proof under Tests, for each area the label's PR comment names:

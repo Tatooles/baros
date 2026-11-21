@@ -13,6 +13,7 @@ import {
   measureTestDelta,
   parseDiff,
   prComment,
+  RISK_LABELS,
   swiftCodeView,
   untrackedFile,
 } from "./pr-checks.mjs";
@@ -525,4 +526,57 @@ test("SeedDataService counts as ownership code", () => {
   assert.deepEqual(riskOf(diffFor(path, { added: ["claim()"], removed: ["keep()"] })).areas, [
     { name: "sign-out, local-data reset, account deletion, or workout recovery", paths: [path] },
   ]);
+});
+
+test("stored enums, @Model files anywhere, and every deployed Convex file are high", () => {
+  const oneLine = { added: ['    case discarded = "gone"'], removed: ['    case discarded = "discarded"'] };
+  const status = "BarosCore/Sources/BarosCore/Domain/WorkoutSessionStatus.swift";
+  assert.deepEqual(riskOf(diffFor(status, oneLine)).areas, [{ name: "stored data models", paths: [status] }]);
+
+  const model = "BarosCore/Sources/BarosCore/Features/Notes/Note.swift";
+  assert.deepEqual(riskOfEdit(model, null, "@Model\nfinal class Note {}").areas, [
+    { name: "stored data models", paths: [model] },
+  ]);
+
+  const convex = (path) => riskOf(diffFor(path, { added: ["export const x = 1"] })).label;
+  assert.equal(convex("convex/syncSim/helpers.ts"), "risk:high", "Convex deploys single-dot files anywhere in convex/");
+  assert.equal(convex("convex/auth.config.ts"), "risk:high");
+  assert.equal(convex("convex/syncSim/fleet.sim.ts"), "risk:low", "Convex skips names with several dots");
+  assert.equal(convex("convex/env.d.ts"), "risk:medium");
+});
+
+test("a tests-only PR that removes tests is medium, and moving one is still low", () => {
+  const removed = riskOf(diffFor("BarosCore/Tests/BarosCoreTests/SyncCoordinatorTests.swift", { removed: ["    func testMerges() {"] }));
+  assert.deepEqual(removed, { label: "risk:medium", areas: [], removesTests: true });
+  const moved = riskOf(
+    diffFor("BarosTests/A.swift", { removed: ["    func testA() {"] }),
+    diffFor("BarosTests/B.swift", { added: ["    func testA() {"] }),
+  );
+  assert.equal(moved.label, "risk:low");
+});
+
+test("every stored model and stored enum in BarosCore is in the stored-models area", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const root = new URL("../", import.meta.url);
+  const sources = "BarosCore/Sources/BarosCore";
+  const files = readdirSync(new URL(sources, root), { recursive: true })
+    .filter((path) => path.endsWith(".swift"))
+    .map((path) => ({ path: `${sources}/${path}`, text: readFileSync(new URL(`${sources}/${path}`, root), "utf8") }));
+  const high = (path) =>
+    classifyRisk([{ path, oldPath: null, added: [{ line: 1, text: "x()" }], removedText: [] }]).label === "risk:high";
+
+  const models = files.filter((file) => /^\s*@Model\b/m.test(file.text));
+  assert.ok(models.length >= 10);
+  const enums = new Set(models.flatMap((file) => [...file.text.matchAll(/\b([A-Z]\w+)\((?:stored)?[rR]awValue:/g)].map((match) => match[1])));
+  const enumFiles = files.filter((file) => [...enums].some((name) => new RegExp(`\\benum ${name}\\b`).test(file.text)));
+  assert.ok(enumFiles.length >= 10);
+  for (const file of [...models, ...enumFiles]) assert.ok(high(file.path), `${file.path} must match a high-risk area by path`);
+});
+
+test("the label job allows exactly the labels, colors, and marker the script reports", async () => {
+  const { readFileSync } = await import("node:fs");
+  const workflow = readFileSync(new URL("../.github/workflows/pr-checks.yml", import.meta.url), "utf8");
+  const allowed = [...workflow.matchAll(/^\s+(risk:\w+)\) color=(\w+) ;;$/gm)].map((match) => ({ name: match[1], color: match[2] }));
+  assert.deepEqual(allowed, RISK_LABELS);
+  assert.match(workflow, new RegExp(`marker='${COMMENT_MARKER}'`));
 });

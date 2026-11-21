@@ -27,15 +27,18 @@ export const RISK_LABELS = [
 // Where a mistake can lose or overwrite a user's workouts, or reaches production on merge.
 // A file counts toward the first area it matches. Keep in step with AGENTS.md → "PR risk".
 const APP_SOURCES = "(?:BarosCore/Sources/BarosCore|Baros/Core)";
+const STORED_MODELS = "stored data models";
 const SAVED_DATA_EDITS = "edits to saved data";
 export const HIGH_RISK_AREAS = [
   {
-    name: "stored data models",
-    path: /^BarosCore\/Sources\/BarosCore\/(?:Models\/|Persistence\/(?:BarosSchema|ModelContainerFactory)\.swift$|Sync\/(?:SyncOutboxEntry|SyncCursorState)\.swift$)/,
+    // Also any app file that declares an @Model; see CONTENT_AREAS. The Domain enums are stored
+    // by raw value, so renaming a case changes what saved records read back as.
+    name: STORED_MODELS,
+    path: /^BarosCore\/Sources\/BarosCore\/(?:Models\/|Persistence\/(?:BarosSchema|ModelContainerFactory)\.swift$|Sync\/(?:SyncOutboxEntry|SyncCursorState)\.swift$|Domain\/(?:ExerciseCategory|ExerciseEquipment|ExerciseMuscleGroup|ExerciseTrackingMethod|HealthSyncStatus|MeasurementUnit|SetKind|WorkoutSessionStatus|WorkoutSource)\.swift$)/,
   },
   { name: "sync", path: new RegExp(`^${APP_SOURCES}/Sync/`) },
   {
-    // Also any app file that queues changes for upload; see recordsSyncChanges.
+    // Also any app file that queues changes for upload; see CONTENT_AREAS.
     name: SAVED_DATA_EDITS,
     path: /^BarosCore\/Sources\/BarosCore\/Domain\/\w+MutationService\.swift$/,
   },
@@ -47,9 +50,11 @@ export const HIGH_RISK_AREAS = [
     ),
   },
   {
+    // Convex deploys every convex/ source file whose name has one dot, plus auth.config.ts and
+    // convex.config.ts; it skips other names with several dots, such as *.test.ts and *.sim.ts.
     // The deploy job installs from the root manifest and lockfile.
     name: "Convex functions, schema, or deploy setup, which ship on merge",
-    path: /^convex\/(?!_generated\/|syncSim\/|README\.md$|tsconfig\.json$|env\.d\.ts$)(?!.*\.test\.[cm]?[jt]s$)|^(?:package\.json|pnpm-lock\.yaml|\.github\/workflows\/convex-ci\.yml)$/,
+    path: /^convex\/(?!_generated\/)(?:(?:.*\/)?(?:auth|convex)\.config\.[jt]s|(?:[^/]+\/)*[^/.]+\.[cm]?[jt]sx?)$|^(?:package\.json|pnpm-lock\.yaml|\.github\/workflows\/convex-ci\.yml)$/,
   },
 ];
 
@@ -396,15 +401,20 @@ function onlyCommentsChange(file, readFile) {
   return view !== null && view === swiftCodeView(after);
 }
 
-const OUTBOX_WRITER = /\b(?:SyncOutboxRecorder|outboxRecorder)\b/;
 const APP_SWIFT_SOURCE = /^(?:BarosCore\/Sources|Baros)\/.*\.swift$/;
 
-/** App code outside the listed paths that queues changes for upload, such as ActiveWorkoutEngine. */
-function recordsSyncChanges(file, readFile) {
-  if (!APP_SWIFT_SOURCE.test(file.path)) return false;
-  return [readFile("after", file.path), readFile("before", file.oldPath ?? file.path)].some(
-    (text) => text != null && OUTBOX_WRITER.test(text),
-  );
+// App code outside the listed paths that still belongs to an area, found by what it contains.
+const CONTENT_AREAS = [
+  { name: STORED_MODELS, pattern: /^\s*@Model\b/m },
+  // Queues changes for upload, as ActiveWorkoutEngine does.
+  { name: SAVED_DATA_EDITS, pattern: /\b(?:SyncOutboxRecorder|outboxRecorder)\b/ },
+];
+
+function contentArea(file, readFile) {
+  if (!APP_SWIFT_SOURCE.test(file.path)) return undefined;
+  const texts = [readFile("after", file.path), readFile("before", file.oldPath ?? file.path)];
+  const match = CONTENT_AREAS.find(({ pattern }) => texts.some((text) => text != null && pattern.test(text)));
+  return match && HIGH_RISK_AREAS.find((area) => area.name === match.name);
 }
 
 /**
@@ -419,9 +429,9 @@ export function classifyRisk(files, readFile = () => null) {
     const paths = [...new Set([file.path, file.oldPath].filter(Boolean))];
     let path = paths.find((candidate) => HIGH_RISK_AREAS.some((area) => area.path.test(candidate)));
     let area = path && HIGH_RISK_AREAS.find((candidate) => candidate.path.test(path));
-    if (!area && recordsSyncChanges(file, readFile)) {
+    if (!area) {
       path = file.path;
-      area = HIGH_RISK_AREAS.find((candidate) => candidate.name === SAVED_DATA_EDITS);
+      area = contentArea(file, readFile);
     }
     if (!area) continue;
     let entry = areas.find((existing) => existing.name === area.name);
@@ -433,6 +443,8 @@ export function classifyRisk(files, readFile = () => null) {
     (file) =>
       DOC_PATH.test(file.path) || TEST_PATH.test(file.path) || onlyCommentsChange(file, readFile),
   );
+  // Deleting tests weakens what CI checks, so it never counts as low.
+  if (low && measureTestDelta(files).net < 0) return { label: "risk:medium", areas, removesTests: true };
   return { label: low ? "risk:low" : "risk:medium", areas };
 }
 
@@ -616,7 +628,9 @@ function main(argv) {
       ? `: ${risk.areas.map((area) => area.name).join("; ")}`
       : risk.label === "risk:low"
         ? ": only docs, tests, or comments"
-        : "";
+        : risk.removesTests
+          ? ": removes tests"
+          : "";
     console.log(`PR risk: ${risk.label}${why} (see AGENTS.md → "PR risk")`);
     console.log(`Test delta: ${describeDelta(delta)}`);
     if (delta.kinds.ui > 0) console.log(comment.split("\n").at(-1));
@@ -624,8 +638,7 @@ function main(argv) {
   }
 
   if (options.command === "report") {
-    const { color } = RISK_LABELS.find((entry) => entry.name === risk.label);
-    console.log(JSON.stringify({ ...risk, color, delta, comment, marker: COMMENT_MARKER }));
+    console.log(JSON.stringify({ ...risk, delta, comment }));
     return 0;
   }
 
