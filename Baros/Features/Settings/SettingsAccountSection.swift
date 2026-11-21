@@ -20,7 +20,8 @@ struct SettingsAccountSection: View {
             lastFailureMessage: syncScheduler.lastFailure?.message,
             lastFailureReason: syncScheduler.lastFailure?.reason,
             pendingCount: entries.filter { $0.status == .pending || $0.status == .inFlight }.count,
-            failedCount: entries.filter { $0.status == .failed }.count
+            failedCount: entries.filter { $0.status == .failed }.count,
+            blockedEntityKinds: entries.filter { $0.status == .blocked }.compactMap(\.entityKind)
         )
     }
 

@@ -8,6 +8,9 @@ public struct UserSettingsSyncPayload: Codable, Equatable, Sendable {
     public let weightUnitRaw: String
     public let defaultRestTimerSeconds: Int
     public let hasCompletedOnboarding: Bool
+    /// The server version this edit started from (`syncBaseUpdatedAt`), or
+    /// nil for a record never synced. Always sent, as null when nil.
+    public var baseUpdatedAt: Double? = nil
 }
 
 public struct ExerciseSyncPayload: Codable, Equatable, Sendable {
@@ -25,6 +28,9 @@ public struct ExerciseSyncPayload: Codable, Equatable, Sendable {
     public let isArchived: Bool
     public let isSeeded: Bool
     public var trackingMethodRaw: String? = nil
+    /// The server version this edit started from (`syncBaseUpdatedAt`), or
+    /// nil for a record never synced. Always sent, as null when nil.
+    public var baseUpdatedAt: Double? = nil
 }
 
 public struct WorkoutSessionSyncPayload: Codable, Equatable, Sendable {
@@ -43,6 +49,9 @@ public struct WorkoutSessionSyncPayload: Codable, Equatable, Sendable {
     public let sourceSessionID: String?
     public let healthLinkID: String?
     public var sourceTemplateID: String? = nil
+    /// The server version this edit started from (`syncBaseUpdatedAt`), or
+    /// nil for a record never synced. Always sent, as null when nil.
+    public var baseUpdatedAt: Double? = nil
 }
 
 public struct LoggedExerciseSyncPayload: Codable, Equatable, Sendable {
@@ -63,6 +72,9 @@ public struct LoggedExerciseSyncPayload: Codable, Equatable, Sendable {
     public var supersetGroupID: String? = nil
     public var sendsSupersetGroupID = false
     public var trackingMethodRaw: String? = nil
+    /// The server version this edit started from (`syncBaseUpdatedAt`), or
+    /// nil for a record never synced. Always sent, as null when nil.
+    public var baseUpdatedAt: Double? = nil
 }
 
 public struct LoggedSetSyncPayload: Codable, Equatable, Sendable {
@@ -83,6 +95,9 @@ public struct LoggedSetSyncPayload: Codable, Equatable, Sendable {
     public let sourceLoggedSetID: String?
     public var durationSeconds: Int? = nil
     public var sendsDurationSeconds = false
+    /// The server version this edit started from (`syncBaseUpdatedAt`), or
+    /// nil for a record never synced. Always sent, as null when nil.
+    public var baseUpdatedAt: Double? = nil
 }
 
 public struct WorkoutTemplateEntrySyncPayload: Codable, Equatable, Sendable {
@@ -101,6 +116,9 @@ public struct WorkoutTemplateSyncPayload: Codable, Equatable, Sendable {
     public let deletedAt: Double?
     public let name: String
     public let entries: [WorkoutTemplateEntrySyncPayload]
+    /// The server version this edit started from (`syncBaseUpdatedAt`), or
+    /// nil for a record never synced. Always sent, as null when nil.
+    public var baseUpdatedAt: Double? = nil
 }
 
 enum SyncPayloadMapper {
@@ -112,7 +130,8 @@ enum SyncPayloadMapper {
             deletedAt: settings.deletedAt?.timeIntervalSince1970,
             weightUnitRaw: settings.weightUnitRaw,
             defaultRestTimerSeconds: settings.defaultRestTimerSeconds,
-            hasCompletedOnboarding: settings.hasCompletedOnboarding
+            hasCompletedOnboarding: settings.hasCompletedOnboarding,
+            baseUpdatedAt: settings.syncBaseUpdatedAt
         )
     }
 
@@ -131,7 +150,8 @@ enum SyncPayloadMapper {
             notes: exercise.notes,
             isArchived: exercise.isArchived,
             isSeeded: exercise.isSeeded,
-            trackingMethodRaw: exercise.trackingMethodRaw
+            trackingMethodRaw: exercise.trackingMethodRaw,
+            baseUpdatedAt: exercise.syncBaseUpdatedAt
         )
     }
 
@@ -151,7 +171,8 @@ enum SyncPayloadMapper {
             sourceRaw: session.sourceRaw,
             sourceSessionID: session.sourceSessionID?.uuidString.lowercased(),
             healthLinkID: session.healthLinkID?.uuidString.lowercased(),
-            sourceTemplateID: session.sourceTemplateID?.uuidString.lowercased()
+            sourceTemplateID: session.sourceTemplateID?.uuidString.lowercased(),
+            baseUpdatedAt: session.syncBaseUpdatedAt
         )
     }
 
@@ -173,7 +194,8 @@ enum SyncPayloadMapper {
             sourceLoggedExerciseID: loggedExercise.sourceLoggedExerciseID?.uuidString.lowercased(),
             supersetGroupID: loggedExercise.supersetGroupID?.uuidString.lowercased(),
             sendsSupersetGroupID: loggedExercise.supersetGroupID != nil || loggedExercise.hasLocalSupersetChange,
-            trackingMethodRaw: loggedExercise.trackingMethodRaw
+            trackingMethodRaw: loggedExercise.trackingMethodRaw,
+            baseUpdatedAt: loggedExercise.syncBaseUpdatedAt
         )
     }
 
@@ -193,7 +215,8 @@ enum SyncPayloadMapper {
                     exerciseSnapshotPrimaryMuscleGroupRaw: entry.exerciseSnapshotPrimaryMuscleGroupRaw,
                     supersetGroupID: entry.supersetGroupID?.uuidString.lowercased()
                 )
-            }
+            },
+            baseUpdatedAt: template.syncBaseUpdatedAt
         )
     }
 
@@ -217,7 +240,8 @@ enum SyncPayloadMapper {
             sourceLoggedSetID: set.sourceLoggedSetID?.uuidString.lowercased(),
             durationSeconds: duration,
             sendsDurationSeconds: duration != nil
-                || (set.knowsDuration == true && set.loggedExercise?.trackingMethodRaw != nil)
+                || (set.knowsDuration == true && set.loggedExercise?.trackingMethodRaw != nil),
+            baseUpdatedAt: set.syncBaseUpdatedAt
         )
     }
 }
@@ -352,6 +376,9 @@ public struct SyncFetchChangesResponse: Codable, Equatable {
 public struct SyncMutationResult: Codable, Equatable {
     let status: String
     let serverUpdatedAt: Double?
+    /// The stored version after an upsert, the base of the next edit. Absent
+    /// from tombstone results and from servers older than `baseUpdatedAt`.
+    var updatedAt: Double? = nil
 }
 
 public struct AccountDataDeletionCounts: Codable, Equatable {

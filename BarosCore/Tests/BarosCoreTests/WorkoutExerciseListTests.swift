@@ -31,13 +31,13 @@ final class WorkoutExerciseListTests: XCTestCase {
         let exercises = session.sortedLoggedExercises
         let removed = exercises[1]
         let oldSet = removed.sortedSets[0]
-        let oldDate = Date(timeIntervalSince1970: 10)
+        let oldDate = afterFixtureCreation(10)
         oldSet.markDeleted(now: oldDate)
         try context.save()
         let baseline = WorkoutExerciseListSnapshot(session: session)
         let engine = ActiveWorkoutEngine()
         var saves = 0
-        let now = Date(timeIntervalSince1970: 200)
+        let now = afterFixtureCreation(200)
         try engine.applyExerciseListChanges(
             in: session, orderedIDs: [exercises[2].id, exercises[0].id], baseline: baseline,
             context: context, now: now, save: { saves += 1; try $0.save() }

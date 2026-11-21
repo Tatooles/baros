@@ -10,6 +10,11 @@ public final class WorkoutTemplate: Identifiable {
     var createdAt: Date
     var updatedAt: Date
     var deletedAt: Date?
+    /// The server's `updatedAt` for the version this copy descends from: set
+    /// when a pull applies the server's version or an upload is stored, and
+    /// sent as `baseUpdatedAt`. Nil for a record never synced, and on rows
+    /// saved before the field existed.
+    var syncBaseUpdatedAt: Double?
 
     init(
         id: UUID = UUID(),
@@ -99,3 +104,5 @@ public struct WorkoutTemplateEntry: Codable, Hashable, Identifiable {
         }
     }
 }
+
+extension WorkoutTemplate: SyncEditStamped {}

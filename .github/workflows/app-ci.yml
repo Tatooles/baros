@@ -16,6 +16,7 @@ on:
       - "LiftingLog.xcodeproj/**"
       - "ci_scripts/**"
       - "convex/auth.config.ts"
+      - "convex/syncSim/merge-vectors.json"
       - "project.yml"
 
 concurrency:
@@ -80,6 +81,7 @@ jobs:
             'LiftingLog.xcodeproj/**' \
             'ci_scripts/**' \
             convex/auth.config.ts \
+            convex/syncSim/merge-vectors.json \
             project.yml; then
             echo "changed=false" >> "${GITHUB_OUTPUT}"
           else

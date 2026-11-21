@@ -4,6 +4,31 @@ import XCTest
 @testable import BarosCore
 
 final class ConvexSyncArgumentMapperTests: XCTestCase {
+    /// Current servers read a missing base as an installed build, so every
+    /// upload sends the key, null for a record never synced.
+    func testEveryRecordSendsItsBaseAndNullWhenNeverSynced() throws {
+        var settings = UserSettingsSyncPayload(
+            clientId: "settings-1", createdAt: 1, updatedAt: 2, deletedAt: nil,
+            weightUnitRaw: "pounds", defaultRestTimerSeconds: 90, hasCompletedOnboarding: true
+        )
+        var template = WorkoutTemplateSyncPayload(
+            clientId: "template-1", createdAt: 1, updatedAt: 2, deletedAt: nil, name: "Push", entries: []
+        )
+        let unsynced: [[String: ConvexEncodable?]] = [
+            ConvexSyncArgumentMapper.userSettingsRecord(settings),
+            ConvexSyncArgumentMapper.workoutTemplateRecord(template),
+        ]
+        for record in unsynced {
+            XCTAssertTrue(record.keys.contains("baseUpdatedAt"))
+            XCTAssertNil(try XCTUnwrap(record["baseUpdatedAt"]))
+        }
+
+        settings.baseUpdatedAt = 1_800_000_000.5
+        template.baseUpdatedAt = 1_800_000_001.5
+        XCTAssertEqual(ConvexSyncArgumentMapper.userSettingsRecord(settings)["baseUpdatedAt"] as? Double, 1_800_000_000.5)
+        XCTAssertEqual(ConvexSyncArgumentMapper.workoutTemplateRecord(template)["baseUpdatedAt"] as? Double, 1_800_000_001.5)
+    }
+
     func testUserSettingsArgsEncodeRestTimerAsDouble() throws {
         let payload = UserSettingsSyncPayload(
             clientId: "settings-1",

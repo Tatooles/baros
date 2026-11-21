@@ -3,6 +3,13 @@ import SwiftData
 
 @MainActor
 struct SyncOutboxRecorder {
+    /// The device clock, for the outbox's own bookkeeping times.
+    let clock: () -> Date
+
+    init(clock: @escaping () -> Date = { .now }) {
+        self.clock = clock
+    }
+
     struct CreateRecord {
         let entityKind: SyncEntityKind
         let entityID: UUID
@@ -221,6 +228,58 @@ struct SyncOutboxRecorder {
         entry.status = .failed
         entry.lastErrorMessage = message
         entry.updatedAt = now
+    }
+
+    /// Records a server rejection: backs the entry off, and dead-letters it
+    /// once it has been rejected often enough over a long enough time.
+    func markRejected(_ entry: SyncOutboxEntry, code: String?, message: String, now: Date) {
+        // A clock moved backwards must not hold off the dead-letter forever,
+        // nor make it come early.
+        if let firstRejectedAt = entry.firstRejectedAt, firstRejectedAt > now {
+            entry.firstRejectedAt = now
+        }
+        entry.rejectionCount += 1
+        entry.firstRejectedAt = entry.firstRejectedAt ?? now
+        entry.lastRejectionCode = code
+        entry.lastErrorMessage = message
+        entry.updatedAt = now
+        entry.nextAttemptAt = now.addingTimeInterval(SyncRejectionPolicy.backoff(afterRejections: entry.rejectionCount))
+        entry.status = SyncRejectionPolicy.shouldBlock(
+            rejectionCount: entry.rejectionCount,
+            firstRejectedAt: entry.firstRejectedAt,
+            now: now
+        ) ? .blocked : .failed
+    }
+
+    /// A failure on this device: retried after a short wait, never counted.
+    func markLocalFailure(_ entry: SyncOutboxEntry, message: String, now: Date) {
+        entry.status = .failed
+        entry.lastErrorMessage = message
+        entry.updatedAt = now
+        entry.nextAttemptAt = now.addingTimeInterval(SyncRejectionPolicy.firstBackoff)
+    }
+
+    /// The person's Retry: sends blocked and backed-off entries again now,
+    /// with a fresh rejection count. Returns how many entries it re-queued.
+    @discardableResult
+    func retryRejectedEntries(ownerTokenIdentifier: String, context: ModelContext) throws -> Int {
+        let blockedStatus = SyncOutboxStatus.blocked.rawValue
+        let failedStatus = SyncOutboxStatus.failed.rawValue
+        let entries = try context.fetch(FetchDescriptor<SyncOutboxEntry>(
+            predicate: #Predicate { entry in
+                (entry.statusRaw == blockedStatus || entry.statusRaw == failedStatus)
+                    && entry.ownerTokenIdentifier == ownerTokenIdentifier
+            }
+        ))
+        let now = clock()
+        for entry in entries {
+            entry.resetRejections()
+            if entry.status == .blocked {
+                entry.status = .pending
+                entry.updatedAt = now
+            }
+        }
+        return entries.count
     }
 
     func removeCompleted(_ entry: SyncOutboxEntry, context: ModelContext) {

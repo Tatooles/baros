@@ -199,7 +199,18 @@ public final class SyncScheduler {
         requestSync()
     }
 
+    /// The manual Retry. Also sends blocked and backed-off changes again,
+    /// with a fresh rejection count.
     func retrySync() {
+        if let currentOwnerTokenIdentifier, let modelContext {
+            let requeued = (try? SyncOutboxRecorder().retryRejectedEntries(
+                ownerTokenIdentifier: currentOwnerTokenIdentifier,
+                context: modelContext
+            )) ?? 0
+            if requeued > 0 {
+                try? modelContext.save()
+            }
+        }
         requestSync(isRetry: true)
     }
 

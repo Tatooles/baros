@@ -50,7 +50,8 @@ struct AppShellView: View {
             lastFailureMessage: syncScheduler.lastFailure?.message,
             lastFailureReason: syncScheduler.lastFailure?.reason,
             pendingCount: activeEntries.filter { $0.status == .pending || $0.status == .inFlight }.count,
-            failedCount: activeEntries.filter { $0.status == .failed }.count
+            failedCount: activeEntries.filter { $0.status == .failed }.count,
+            blockedEntityKinds: activeEntries.filter { $0.status == .blocked }.compactMap(\.entityKind)
         )
     }
 
@@ -60,7 +61,7 @@ struct AppShellView: View {
             components.append("scheduler:\(lastFailure.occurredAt.timeIntervalSince1970):\(lastFailure.reason):\(lastFailure.message)")
         }
         let failedEntries = activeV1OutboxEntries
-            .filter { $0.status == .failed }
+            .filter { $0.status == .failed || $0.status == .blocked }
             .sorted { lhs, rhs in lhs.id.uuidString < rhs.id.uuidString }
         for entry in failedEntries {
             components.append(
