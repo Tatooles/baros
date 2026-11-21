@@ -200,15 +200,46 @@ test("SwiftUI's .disabled in an enabled test's body isn't a skip, and a comment 
   assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [[11, "skip-needs-reason"]]);
 });
 
-test("re-indenting an existing multi-line .disabled trait is an edit, not a new skip", () => {
-  const lines = ["@Suite struct Wrapped {", "    @Test(", '        .disabled("flaky")', "    )", "    func a() {}", "}"];
+test("re-indenting an existing .disabled trait is an edit, not a new skip", () => {
+  const lines = [
+    "@Suite struct Wrapped {",
+    "    @Test(",
+    '        .disabled("flaky")',
+    "    )",
+    "    func a() {}",
+    '    @Test(.disabled("flaky")) func b() {}',
+    "}",
+  ];
   const files = parseDiff(
     diffFor("BarosCore/Tests/BarosCoreTests/A.swift", {
-      removed: ["@Test(", '    .disabled("flaky")', ")", "func a() {}"],
+      removed: ["@Test(", '    .disabled("flaky")', ")", "func a() {}", '@Test(.disabled("flaky")) func b() {}'],
       added: lines,
     }),
   );
   assert.deepEqual(checkHygiene(files, () => lines), []);
+});
+
+test("a removed SwiftUI .disabled( line can't excuse a new trait, and a block comment can't hide one", () => {
+  const lines = [
+    "@Test(",
+    "    .disabled(",
+    '        "flaky"',
+    "    )",
+    ") func a() {}",
+    "@Test(/* https://example.com */ .disabled()) func b() {}",
+    '@Test(/* :) */ .disabled("x")) func c() {}',
+  ];
+  const files = parseDiff(
+    diffFor("BarosCore/Tests/BarosCoreTests/A.swift", {
+      removed: ["    .disabled("],
+      added: lines,
+    }),
+  );
+  assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [
+    [2, "skip-needs-reason"],
+    [6, "skip-needs-reason"],
+    [7, "skip-needs-reason"],
+  ]);
 });
 
 test("a parenthesis inside a string doesn't end a skip's arguments early", () => {

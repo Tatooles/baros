@@ -135,11 +135,13 @@ const MAX_CALL_LINES = 8;
 const isComment = (text) => /^\s*\/\//.test(text);
 const codeOf = (text) => text.replace(/\s*\/\/.*$/, "").replace(/\s+/g, " ").trim();
 
-/** The line with string contents and `//` comments blanked out, keeping every column in place. */
+/** The line with string contents and comments blanked out, keeping every column in place. */
 function maskCode(text) {
+  const blank = (span) => " ".repeat(span.length);
   return text
-    .replace(/"(?:[^"\\]|\\.)*"/g, (literal) => `"${" ".repeat(literal.length - 2)}"`)
-    .replace(/\/\/.*$/, (comment) => " ".repeat(comment.length));
+    .replace(/"(?:[^"\\]|\\.)*"/g, (literal) => `"${blank(literal.slice(2))}"`)
+    .replace(/\/\*.*?\*\//g, blank)
+    .replace(/\/\/.*$/, blank);
 }
 
 /** Open minus closed parentheses, not counting any inside strings or comments. */
@@ -202,7 +204,12 @@ export function checkHygiene(files, readLines) {
   for (const file of files) {
     if (!SWIFT_TEST_DIR.test(file.path) || !file.path.endsWith(".swift")) continue;
     const unchanged = file.removedText
-      .filter((text) => !isComment(text) && (SLEEP.test(text) || SKIP.test(text) || DISABLED.test(text)))
+      // A bare `.disabled(` opener could be SwiftUI's modifier, so it can't excuse a new trait.
+      .filter(
+        (text) =>
+          !isComment(text) &&
+          (SLEEP.test(text) || SKIP.test(text) || (DISABLED.test(text) && !/\.disabled\s*\(\s*$/.test(codeOf(text)))),
+      )
       .map(codeOf);
     let lines = null;
     for (const { line, text } of file.added) {
