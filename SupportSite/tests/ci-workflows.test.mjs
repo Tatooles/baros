@@ -483,3 +483,26 @@ test("failed UI test names fall back to the log when the result bundle is unread
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("PR checks never use pull_request_target, and only same-repo PRs get the labelling token", async () => {
+  const workflow = await readWorkflow("pr-checks.yml");
+
+  assert.deepEqual(Object.keys(workflow.on), ["pull_request"]);
+  assert.deepEqual(workflow.permissions, { contents: "read" });
+  assert.equal(workflow.jobs["test-hygiene"].permissions, undefined);
+
+  const size = workflow.jobs["pr-size"];
+  assert.deepEqual(size.permissions, {
+    contents: "read",
+    issues: "write",
+    "pull-requests": "write",
+  });
+  assert.equal(
+    size.if,
+    "github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'",
+  );
+  assert.ok(
+    size.steps.every((step) => !/\b(pnpm|npm|yarn)\b/.test(step.run ?? "")),
+    "the job holding a write token must not install dependencies",
+  );
+});

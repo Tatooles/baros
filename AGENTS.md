@@ -6,14 +6,24 @@
 
 ## Pull requests
 
+- Write the description in the layout of `.github/pull_request_template.md`. `gh pr create --body-file` skips the template, so start from that file.
 - UI or visual changes need before/after screenshots in the PR description. For new UI, include screenshots of the new screen or state.
 - Changes to motion, timing, gestures, navigation, or other interactions need a short screen recording showing the changed behavior.
 - Capture evidence from the running app after the final relevant changes. State the device or simulator and iOS version. Build and test success do not substitute for visual evidence.
 - Upload PR evidence directly to GitHub and verify that it renders in the PR. Never commit PR-only screenshots or recordings, including directories such as `.github/pr-assets/`.
 - If presentation-related files change without affecting visible UI or interactions, explain why in the PR description under "No visual impact."
 
+## PR size
+
+CI labels each PR from `size:XS` (under 10 changed lines) to `size:XXL` (1,000 or more). Generated files never count, and tests count only when the PR changes nothing else. Larger PRs need more proof:
+
+- `size:L` and up that touch `Baros/` or `BarosUITests/`: run all of hosted `BarosTests`, not only the affected classes.
+- `size:XL` and up: also run the full UI suite on the branch with `gh workflow run ios-ui-nightly.yml --ref <branch>`, and link the run under Tests.
+
 ## Testing
 
+- Before you push, run `scripts/check-changed.sh`. It runs the CI checks for the paths the branch changed, builds the app and test targets, checks test hygiene, and prints the PR's size. Hosted `BarosTests` and `BarosUITests` need a simulator, so run the affected ones yourself.
+- Tests wait on events, not time. A new sleep in a test target needs `// allow-sleep: <why>` on or above it. A new skip names its tracking issue (`#403`) or carries `// allow-skip: <why>`. CI's `test-hygiene` check enforces both on added lines.
 - Logic lives in the `BarosCore` package. Test it on macOS with `swift test --package-path BarosCore`; that is the default loop for any change outside SwiftUI views and app wiring.
 - New logic and its tests go in `BarosCore` when they need only Foundation, SwiftData, or other cross-platform frameworks. Code that imports SwiftUI, UIKit, ActivityKit, StoreKit, Clerk, Sentry, or ConvexMobile stays in `Baros/`; when package code needs it, define a protocol in the package and keep the adapter in the app, as `CurrentOwnerAdapters` and `ConvexClientFactory` do. Mark only what the app uses `public`.
 - Name test `UserDefaults` suites `"<TestType>.\(UUID().uuidString)"`. Every `swift test` process on the Mac shares one preferences store, so a fixed suite name collides with other worktrees' runs.
@@ -34,6 +44,13 @@ A full `BarosUITests` run takes close to an hour, so the suite covers only behav
 - Add assertions to an existing flow test that already passes through the screen before writing a new test.
 - Build on the shared helpers in `BarosUITests/BarosUITests.swift`: launch with `makeApp`, seed state with `--uitest-*` launch arguments (`UITestFixtureSeeder`), and wait with `waitToExist`, `waitToDisappear`, or `waitUntil`, not sleeps. XCTest's own waiters add about 1 s per call; the `waitUntil` doc comment explains why, and names the one case where `waitForExistence` still fits.
 - The four `ios-ui-smoke` tests and CI's `totalTestCount == 4` check change only on purpose, with the README "CI" section and `.github/workflows/app-ci.yml` updated in the same PR.
+
+## Review guidelines
+
+- Treat as P1 any change that can lose or overwrite a user's logged workouts: sync merges, SwiftData model changes, sign-out, local-data reset, and account deletion.
+- Flag a change to a public Convex function's arguments or return shape, or to `convex/schema.ts`, that installed builds can't handle (README → "Production deploys").
+- Flag logic tested through `BarosUITests` or hosted `BarosTests` that `BarosCore` could test, and new UI tests outside the list in "UI tests".
+- Flag a visible UI change whose description has neither screenshots nor a "No visual impact" section.
 
 ## Simulator storage
 

@@ -1,0 +1,100 @@
+name: PR Checks
+
+# Reads only the PR's diff, so it needs no macOS runner and no path filter.
+# scripts/pr-checks.mjs holds the rules; scripts/check-changed.sh runs the same ones locally.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-hygiene:
+    name: test-hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.12.0
+
+      - name: Test the PR check rules
+        run: node --test scripts/*.test.mjs
+
+      - name: Check added test lines
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/pr-checks.mjs hygiene --base "${BASE_SHA}" --head "${HEAD_SHA}"
+
+  pr-size:
+    name: pr-size
+    # Fork and Dependabot PRs get a read-only token, so they go unlabelled.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.12.0
+
+      - name: Label size and report test delta
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          report="$(node scripts/pr-checks.mjs report --base "${BASE_SHA}" --head "${HEAD_SHA}")"
+          label="$(jq -r '.label' <<<"${report}")"
+          lines="$(jq -r '.lines' <<<"${report}")"
+          echo "PR size: ${label} (${lines} changed lines)" >> "${GITHUB_STEP_SUMMARY}"
+
+          color="$(jq -r '.color' <<<"${report}")"
+          gh label create "${label}" --repo "${REPO}" --color "${color}" \
+            --description "Changed lines, not counting tests or generated files. See AGENTS.md → PR size." --force
+
+          for current in $(gh api "repos/${REPO}/issues/${PR}/labels" --jq '.[].name | select(startswith("size:"))'); do
+            if [[ "${current}" != "${label}" ]]; then
+              gh api -X DELETE "repos/${REPO}/issues/${PR}/labels/${current}" --silent
+            fi
+          done
+          gh api -X POST "repos/${REPO}/issues/${PR}/labels" -f "labels[]=${label}" --silent
+
+          marker="$(jq -r '.marker' <<<"${report}")"
+          comment="$(jq -r '.comment // empty' <<<"${report}")"
+          existing="$(gh api --paginate "repos/${REPO}/issues/${PR}/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"${marker}\"))) | .id")"
+          existing="${existing%%$'\n'*}"
+
+          if [[ -n "${comment}" && -n "${existing}" ]]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${existing}" -f "body=${comment}" --silent
+          elif [[ -n "${comment}" ]]; then
+            gh api -X POST "repos/${REPO}/issues/${PR}/comments" -f "body=${comment}" --silent
+          elif [[ -n "${existing}" ]]; then
+            gh api -X DELETE "repos/${REPO}/issues/comments/${existing}" --silent
+          fi

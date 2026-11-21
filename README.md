@@ -11,6 +11,7 @@ Native SwiftUI workout tracker for iPhone with a SwiftData-backed offline workou
 ## Commands
 
 - Generate project: `xcodegen generate`
+- Check what the branch changed before pushing: `scripts/check-changed.sh` (runs the matching CI checks, builds the app and test targets, and prints the PR size)
 - Run logic tests (macOS, no simulator): `swift test --package-path BarosCore`
 - Build simulator app: `xcodebuild build -project Baros.xcodeproj -scheme Baros -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/codex-ios-app-derived-data`
 - Run hosted unit and UI tests (pair with the logic tests above for full coverage): `xcodebuild test -project Baros.xcodeproj -scheme Baros -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
@@ -44,6 +45,8 @@ Actions checks. Pushes to `main` use the same path boundaries. The checks are:
 - `ios-ui-smoke`: runs four deterministic UI tests covering completed workout logging, workout/tab navigation, a settings-triggered sync request, and signed-out local-data reset.
 - `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
 - `support-site-checks`: builds, checks, and tests the Astro support site, including any tracked release-asset contracts.
+- `test-hygiene`: runs on every PR and fails when an added line in a Swift test target sleeps without an `allow-sleep:` reason, or skips a test without naming an issue or an `allow-skip:` reason. Rules live in `scripts/pr-checks.mjs`.
+- `pr-size`: labels same-repo, non-Dependabot PRs `size:XS`–`size:XXL` and keeps one comment up to date when a PR adds `BarosUITests` cases or grows the suite by 20 or more. It reports only and never fails. AGENTS.md → "PR size" says what each size requires.
 
 The three app jobs report as skipped on support-site-only or unrelated pull
 requests, which preserves their required-check results without reserving a
