@@ -13,6 +13,7 @@ import {
   measureTestDelta,
   parseDiff,
   prComment,
+  swiftCodeView,
   untrackedFile,
 } from "./pr-checks.mjs";
 
@@ -297,18 +298,33 @@ test("moving an existing sleep or dropping its comment passes; changing its dura
 
 const riskOf = (...diffs) => classifyRisk(parseDiff(diffs.join("\n")));
 
-test("risk is high for a one-line change to a data-safety area or a deployed Convex file", () => {
+/** Classifies one file changed from `before` to `after`, reading whole files as the CLI does. */
+function riskOfEdit(path, before, after) {
+  const files = parseDiff(
+    diffFor(path, { removed: before?.split("\n") ?? [], added: after?.split("\n") ?? [], isNew: before === null }),
+  );
+  const texts = { before: { [path]: before }, after: { [path]: after } };
+  return classifyRisk(files, (side, file) => texts[side][file] ?? null);
+}
+
+const CONVEX_AREA = "Convex functions, schema, or deploy setup, which ship on merge";
+
+test("risk is high for a one-line change to a data-safety area or what deploys Convex", () => {
   const oneLine = { added: ["let merged = local"], removed: ["let merged = remote"] };
+  const recovery = "sign-out, local-data reset, account deletion, or workout recovery";
   const cases = [
     ["BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift", "sync"],
     ["Baros/Core/Sync/ConvexSyncClient.swift", "sync"],
     ["BarosCore/Sources/BarosCore/Sync/SyncOutboxEntry.swift", "stored data models"],
     ["BarosCore/Sources/BarosCore/Models/LoggedSet.swift", "stored data models"],
     ["BarosCore/Sources/BarosCore/Domain/WorkoutHistoryMutationService.swift", "edits to saved data"],
-    ["BarosCore/Sources/BarosCore/Persistence/LocalDataResetService.swift", "sign-out, local-data reset, account deletion, or workout recovery"],
-    ["Baros/Core/AccountDeletion/AccountDeletionService.swift", "sign-out, local-data reset, account deletion, or workout recovery"],
-    ["convex/schema.ts", "Convex functions or schema, which deploy on merge"],
-    ["convex/sync/merge.ts", "Convex functions or schema, which deploy on merge"],
+    ["BarosCore/Sources/BarosCore/Persistence/LocalDataResetService.swift", recovery],
+    ["Baros/Core/AccountDeletion/AccountDeletionService.swift", recovery],
+    ["convex/schema.ts", CONVEX_AREA],
+    ["convex/sync/merge.ts", CONVEX_AREA],
+    ["package.json", CONVEX_AREA],
+    ["pnpm-lock.yaml", CONVEX_AREA],
+    [".github/workflows/convex-ci.yml", CONVEX_AREA],
   ];
   for (const [path, area] of cases) {
     assert.deepEqual(riskOf(diffFor(path, oneLine)), { label: "risk:high", areas: [{ name: area, paths: [path] }] }, path);
@@ -324,13 +340,33 @@ test("risk is high for a one-line change to a data-safety area or a deployed Con
   assert.equal(classifyRisk(moved).label, "risk:high", "moving a file out of an area still touches it");
 });
 
-test("risk is low for docs, tests, and comment-only changes, however large", () => {
-  const comments = Array.from({ length: 2000 }, (_, index) => `    // note ${index}`);
+test("app code that queues uploads is a saved-data edit wherever it lives", () => {
+  const engine = "BarosCore/Sources/BarosCore/Features/Workout/ActiveWorkoutEngine.swift";
+  assert.deepEqual(
+    riskOfEdit(engine, "session.finish()\ntry outboxRecorder.recordUpsert(session)", "session.finish()"),
+    { label: "risk:high", areas: [{ name: "edits to saved data", paths: [engine] }] },
+  );
+  assert.equal(riskOfEdit(engine, "let a = 1", "let a = 2").label, "risk:medium");
+});
+
+test("risk is low for docs, tests, and Swift comment-only changes, however large", () => {
+  const sync = "BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift";
+  const comments = Array.from({ length: 2000 }, (_, index) => `    // note ${index}`).join("\n");
+  const lowEdits = [
+    [`${comments}\nfunc a() {}`, "func a() {}"],
+    ["    detailText: nil, // One line, like .syncing above.", "detailText: nil,"],
+    ["/** Doc.\n * More doc.\n */\nfunc a() {}", "func a() {}"],
+    ["/* outer /* nested */ still a comment */\nfunc a() {}", "func a() {}"],
+    ['let url = "https://baros.fit" // old', 'let url = "https://baros.fit" // new, it\'s "*/" here'],
+    ['let s = "a \\(f("x")) b" // old', 'let s = "a \\(f("x")) b"'],
+    ["apply()", "apply() /* why */ // note"],
+  ];
+  for (const [before, after] of lowEdits) {
+    assert.deepEqual(riskOfEdit(sync, before, after), { label: "risk:low", areas: [] }, after);
+  }
+
   assert.deepEqual(
     riskOf(
-      diffFor("BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift", { removed: comments }),
-      diffFor("convex/sync.ts", { added: ["/** One line of docs. */", " * a doc line", ""] }),
-      diffFor("Baros/Views/A.swift", { added: ["    save() "], removed: ["  save() // stale note"] }),
       diffFor("AGENTS.md", { added: ["Some rule."] }),
       diffFor("convex/sync.test.ts", { added: ['test("x", () => {})'] }),
       diffFor("convex/syncSim/merge-vectors.json", { added: ["{}"] }),
@@ -341,18 +377,44 @@ test("risk is low for docs, tests, and comment-only changes, however large", () 
   assert.equal(classifyRisk([]).label, "risk:low");
 });
 
-test("a comment edit can't hide a code change, and anything else is medium", () => {
-  const medium = (path, change) => assert.equal(riskOf(diffFor(path, change)).label, "risk:medium", JSON.stringify(change));
-  medium("Baros/Views/A.swift", { added: ['Text("Saved")'], removed: ['Text("Save")'] });
-  medium("Baros/Views/A.swift", { added: ["/*"], removed: [] });
-  medium("Baros/Views/A.swift", { added: ["b()", "a()"], removed: ["a()", "b()"] });
-  medium("SupportSite/index.html", { added: ["<!-- note -->"] });
-  medium(".github/workflows/app-ci.yml", { added: ["# note"] });
-  medium("pnpm-lock.yaml", { added: ["x: 1"] });
+test("a comment edit can't hide a code change", () => {
+  const sync = "BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift";
+  const view = "Baros/Features/Workout/WorkoutView.swift";
+  const changed = [
+    [view, 'Text("Save")', 'Text("Saved")'],
+    [view, "let x = a\n    * 1", "let x = a\n    * 0"],
+    [view, "a()\nb()", "/*\na()\n*/\nb()"],
+    [view, 'let s = """\n// one\n"""', 'let s = """\n// two\n"""'],
+    [view, 'let s = "a \\(f("x")) b"', 'let s = "a \\(f("y")) b"'],
+    [view, 'let s = "abc', 'let s = "abc // x'],
+    [view, null, "// a new file of comments"],
+    [view, "let r = #/a/#\n// x", "let r = #/a/#\n// y"],
+    ["SupportSite/src/page.js", "const s = `\n// one\n`", "const s = `\n// two\n`"],
+  ];
+  for (const [path, before, after] of changed) {
+    assert.equal(riskOfEdit(path, before, after).label, "risk:medium", `${before} → ${after}`);
+  }
   assert.equal(
-    riskOf(diffFor("BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift", { added: ["apply() /* */ // note"], removed: ["apply()"] })).label,
-    "risk:low",
+    riskOfEdit(sync, "delete(record)\nguard ok else { return }", "guard ok else { return }\ndelete(record)").label,
+    "risk:high",
+    "moving a call past an unchanged guard changes behavior",
   );
+  assert.equal(
+    riskOfEdit("convex/sync.ts", "// a\nexport const x = 1", "// b\nexport const x = 1").label,
+    "risk:high",
+    "only Swift files can be comment-only",
+  );
+  for (const path of ["SupportSite/index.html", ".github/workflows/app-ci.yml", "SupportSite/pnpm-lock.yaml"]) {
+    assert.equal(riskOf(diffFor(path, { added: ["# note"] })).label, "risk:medium", path);
+  }
+});
+
+test("swiftCodeView keeps strings, drops comments, and gives up when unsure", () => {
+  assert.equal(swiftCodeView('  let a = "x // y" // z\n\n  /* c */ b()'), 'let a = "x // y"\nb()');
+  assert.equal(swiftCodeView('let a = #"raw \\(x) "# + ##"two"##'), 'let a = #"raw \\(x) "# + ##"two"##');
+  assert.equal(swiftCodeView("/* unterminated"), null);
+  assert.equal(swiftCodeView('let a = "unterminated\nb()'), null);
+  assert.equal(swiftCodeView('let a = "\\(f(")"'), null);
 });
 
 test("test delta counts declarations per target, and a moved test nets zero", () => {
@@ -416,5 +478,22 @@ test("an untracked file counts as wholly added", () => {
   assert.deepEqual(file.added, [
     { line: 1, text: "func testA() {" },
     { line: 2, text: "}" },
+  ]);
+});
+
+test("a stray */ inside a line comment can't hide a sleep before it", () => {
+  const files = parseDiff(
+    diffFor("BarosTests/ATests.swift", {
+      added: [
+        "        Thread.sleep(forTimeInterval: 1) // unmatched */ in a line comment",
+        '        let s = "*/"; Thread.sleep(forTimeInterval: 1)',
+        "        still a comment */ Thread.sleep(forTimeInterval: 1)",
+      ],
+    }),
+  );
+  assert.deepEqual(rulesOf(checkHygiene(files, noFile)), [
+    [1, "no-new-sleep"],
+    [2, "no-new-sleep"],
+    [3, "no-new-sleep"],
   ]);
 });

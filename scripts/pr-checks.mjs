@@ -17,7 +17,6 @@ const SWIFT_TEST_DIR = /^(BarosTests|BarosUITests|BarosCore\/Tests)\//;
 const TEST_PATH =
   /^(BarosTests|BarosUITests|BarosCore\/Tests|SupportSite\/tests|convex\/syncSim)\/|\.test\.[cm]?[jt]s$/;
 const DOC_PATH = /\.md$|^docs\//;
-const CODE_PATH = /\.(swift|[cm]?[jt]sx?)$/;
 
 export const RISK_LABELS = [
   { name: "risk:high", color: "b60205" },
@@ -28,6 +27,7 @@ export const RISK_LABELS = [
 // Where a mistake can lose or overwrite a user's workouts, or reaches production on merge.
 // A file counts toward the first area it matches. Keep in step with AGENTS.md → "PR risk".
 const APP_SOURCES = "(?:BarosCore/Sources/BarosCore|Baros/Core)";
+const SAVED_DATA_EDITS = "edits to saved data";
 export const HIGH_RISK_AREAS = [
   {
     name: "stored data models",
@@ -35,7 +35,8 @@ export const HIGH_RISK_AREAS = [
   },
   { name: "sync", path: new RegExp(`^${APP_SOURCES}/Sync/`) },
   {
-    name: "edits to saved data",
+    // Also any app file that queues changes for upload; see recordsSyncChanges.
+    name: SAVED_DATA_EDITS,
     path: /^BarosCore\/Sources\/BarosCore\/Domain\/\w+MutationService\.swift$/,
   },
   {
@@ -45,8 +46,9 @@ export const HIGH_RISK_AREAS = [
     ),
   },
   {
-    name: "Convex functions or schema, which deploy on merge",
-    path: /^convex\/(?!_generated\/|syncSim\/|README\.md$|tsconfig\.json$|env\.d\.ts$)(?!.*\.test\.[cm]?[jt]s$)/,
+    // The deploy job installs from the root manifest and lockfile.
+    name: "Convex functions, schema, or deploy setup, which ship on merge",
+    path: /^convex\/(?!_generated\/|syncSim\/|README\.md$|tsconfig\.json$|env\.d\.ts$)(?!.*\.test\.[cm]?[jt]s$)|^(?:package\.json|pnpm-lock\.yaml|\.github\/workflows\/convex-ci\.yml)$/,
   },
 ];
 
@@ -162,12 +164,18 @@ function maskCode(text) {
   const blank = (span) => " ".repeat(span.length);
   // A line inside a multi-line block comment conventionally starts with `*`.
   if (/^\s*\*(?:\s|\/|$)/.test(text)) return blank(text);
-  return text
-    .replace(/"(?:[^"\\]|\\.)*"/g, (literal) => `"${blank(literal.slice(2))}"`)
-    .replace(/\/\*.*?\*\//g, blank)
-    .replace(/\/\*.*$/, blank)
-    .replace(/^.*?\*\//, blank)
-    .replace(/\/\/.*$/, blank);
+  // A `*/` before any string or comment opens closes a block comment from an earlier line.
+  const close = text.indexOf("*/");
+  const lead = close >= 0 && !/"|\/\/|\/\*/.test(text.slice(0, close)) ? close + 2 : 0;
+  // One pass in source order, so a `*/` or `"` inside a `//` comment has no effect.
+  return (
+    blank(text.slice(0, lead)) +
+    text
+      .slice(lead)
+      .replace(/"(?:[^"\\]|\\.)*"|\/\*.*?\*\/|\/\*.*$|\/\/.*$/g, (match) =>
+        match[0] === '"' ? `"${blank(match.slice(2))}"` : blank(match),
+      )
+  );
 }
 
 /** Open minus closed parentheses, not counting any inside strings or comments. */
@@ -273,51 +281,149 @@ const MESSAGES = {
     "Name the tracking issue (`#403`) in the skip's message, at the end of the line, or in a comment on the line directly above. For a skip that depends on the environment, add `// allow-skip: <why>` there instead.",
 };
 
-// A line that opens or closes a block comment on its own can comment out code it doesn't touch.
-const opensOrClosesBlockComment = (text) => /\/\*|\*\//.test(text.replace(/\/\*.*?\*\//g, ""));
+class Unreadable extends Error {}
 
-/** The line's code with comments removed and strings kept, so a changed string still counts. */
-function codeWithoutComments(text) {
-  if (/^\s*\*(?:\s|\/|$)/.test(text)) return "";
-  return text
-    .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\*.*?\*\/|\/\/.*$/g, (match) =>
-      /^["'`]/.test(match) ? match : "",
-    )
-    .trim();
+/**
+ * A whole Swift file with its comments removed and its strings kept, one trimmed line per
+ * non-blank line, or null when the lexer can't be sure where code ends (an unterminated string
+ * or comment, or a regex literal). Comparing two of these tells whether only comments changed.
+ */
+export function swiftCodeView(source) {
+  if (/#\//.test(source)) return null;
+  let out = "";
+  const at = (index, text) => source.startsWith(text, index);
+
+  // Scans code from `index`. Inside an interpolation it stops after the matching `)`.
+  function code(index, interpolation) {
+    let depth = 0;
+    while (index < source.length) {
+      const char = source[index];
+      if (at(index, "//")) {
+        while (index < source.length && source[index] !== "\n") index += 1;
+      } else if (at(index, "/*")) {
+        index = blockComment(index);
+      } else if (char === '"' || (char === "#" && /^#+"/.test(source.slice(index, index + 16)))) {
+        index = string(index);
+      } else {
+        if (interpolation && char === "(") depth += 1;
+        if (interpolation && char === ")" && depth-- === 0) {
+          out += char;
+          return index + 1;
+        }
+        out += char;
+        index += 1;
+      }
+    }
+    if (interpolation) throw new Unreadable();
+    return index;
+  }
+
+  function blockComment(index) {
+    let depth = 0;
+    do {
+      if (index >= source.length) throw new Unreadable();
+      if (at(index, "/*")) {
+        depth += 1;
+        index += 2;
+      } else if (at(index, "*/")) {
+        depth -= 1;
+        index += 2;
+      } else {
+        if (source[index] === "\n") out += "\n";
+        index += 1;
+      }
+    } while (depth > 0);
+    return index;
+  }
+
+  function string(index) {
+    const hashes = source.slice(index).match(/^#*/)[0];
+    index += hashes.length;
+    const multiline = at(index, '"""');
+    const open = multiline ? '"""' : '"';
+    const close = open + hashes;
+    out += hashes + open;
+    index += open.length;
+    for (;;) {
+      if (index >= source.length || (!multiline && source[index] === "\n")) throw new Unreadable();
+      if (at(index, close)) {
+        out += close;
+        return index + close.length;
+      }
+      if (source[index] === "\\" && at(index + 1, hashes)) {
+        const after = index + 1 + hashes.length;
+        out += source.slice(index, after + 1);
+        index = source[after] === "(" ? code(after + 1, true) : after + 1;
+      } else {
+        out += source[index];
+        index += 1;
+      }
+    }
+  }
+
+  try {
+    code(0, false);
+  } catch (error) {
+    if (error instanceof Unreadable) return null;
+    throw error;
+  }
+  return out
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n");
 }
 
-/** True when a code file's changes only add, remove, or re-indent comments and blank lines. */
-function onlyCommentsChange(file) {
-  // A rename is never only comments: Convex names each function after its file.
-  if (!CODE_PATH.test(file.path) || (file.oldPath && file.oldPath !== file.path)) return false;
-  const added = file.added.map((entry) => entry.text);
-  if ([...added, ...file.removedText].some(opensOrClosesBlockComment)) return false;
-  const code = (lines) => lines.map(codeWithoutComments).filter(Boolean);
-  const before = code(file.removedText);
-  const after = code(added);
-  return before.length === after.length && before.every((line, index) => line === after[index]);
+/**
+ * True when a Swift file's code is the same before and after, so only comments, blank lines,
+ * or indentation changed. Other languages never qualify: a JavaScript regex or template literal
+ * can hold `//`, and a rename can change behavior on its own (Convex names functions after files).
+ */
+function onlyCommentsChange(file, readFile) {
+  if (!file.path.endsWith(".swift") || (file.oldPath && file.oldPath !== file.path)) return false;
+  const before = readFile("before", file.path);
+  const after = readFile("after", file.path);
+  if (before == null || after == null) return false;
+  const view = swiftCodeView(before);
+  return view !== null && view === swiftCodeView(after);
+}
+
+const OUTBOX_WRITER = /\b(?:SyncOutboxRecorder|outboxRecorder)\b/;
+const APP_SWIFT_SOURCE = /^(?:BarosCore\/Sources|Baros)\/.*\.swift$/;
+
+/** App code outside the listed paths that queues changes for upload, such as ActiveWorkoutEngine. */
+function recordsSyncChanges(file, readFile) {
+  if (!APP_SWIFT_SOURCE.test(file.path)) return false;
+  return [readFile("after", file.path), readFile("before", file.oldPath ?? file.path)].some(
+    (text) => text != null && OUTBOX_WRITER.test(text),
+  );
 }
 
 /**
  * The PR's risk from what it touches, not how much: high when it reaches a data-safety area or
  * production, low when it changes only docs, tests, or comments, and medium otherwise.
+ * `readFile(side, path)` returns a file's text on the "before" or "after" side, or null.
  */
-export function classifyRisk(files) {
+export function classifyRisk(files, readFile = () => null) {
   const areas = [];
   for (const file of files) {
-    if (onlyCommentsChange(file)) continue;
-    for (const path of new Set([file.path, file.oldPath].filter(Boolean))) {
-      const area = HIGH_RISK_AREAS.find((candidate) => candidate.path.test(path));
-      if (!area) continue;
-      let entry = areas.find((existing) => existing.name === area.name);
-      if (!entry) areas.push((entry = { name: area.name, paths: [] }));
-      if (!entry.paths.includes(path)) entry.paths.push(path);
-      break;
+    if (onlyCommentsChange(file, readFile)) continue;
+    const paths = [...new Set([file.path, file.oldPath].filter(Boolean))];
+    let path = paths.find((candidate) => HIGH_RISK_AREAS.some((area) => area.path.test(candidate)));
+    let area = path && HIGH_RISK_AREAS.find((candidate) => candidate.path.test(path));
+    if (!area && recordsSyncChanges(file, readFile)) {
+      path = file.path;
+      area = HIGH_RISK_AREAS.find((candidate) => candidate.name === SAVED_DATA_EDITS);
     }
+    if (!area) continue;
+    let entry = areas.find((existing) => existing.name === area.name);
+    if (!entry) areas.push((entry = { name: area.name, paths: [] }));
+    if (!entry.paths.includes(path)) entry.paths.push(path);
   }
   if (areas.length) return { label: "risk:high", areas };
   const low = files.every(
-    (file) => DOC_PATH.test(file.path) || TEST_PATH.test(file.path) || onlyCommentsChange(file),
+    (file) =>
+      DOC_PATH.test(file.path) || TEST_PATH.test(file.path) || onlyCommentsChange(file, readFile),
   );
   return { label: low ? "risk:low" : "risk:medium", areas };
 }
@@ -442,7 +548,20 @@ function loadFiles({ base, head }) {
   }
   const readLines = (path) =>
     (head ? git(["show", `${head}:${path}`]) : readFileSync(path, "utf8")).split("\n");
-  return { files, readLines };
+  // A file's whole text on either side of the diff, or null when it doesn't exist there.
+  const readFile = (side, path) => {
+    try {
+      if (side === "after" && !head) return readFileSync(path, "utf8");
+      return execFileSync("git", ["show", `${side === "before" ? base : head}:${path}`], {
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    } catch {
+      return null;
+    }
+  };
+  return { files, readLines, readFile };
 }
 
 function parseArgs(argv) {
@@ -461,7 +580,7 @@ function parseArgs(argv) {
 function main(argv) {
   process.chdir(git(["rev-parse", "--show-toplevel"]).trim());
   const options = parseArgs(argv);
-  const { files, readLines } = loadFiles(options);
+  const { files, readLines, readFile } = loadFiles(options);
 
   if (options.command === "hygiene") {
     const findings = checkHygiene(files, readLines);
@@ -480,7 +599,7 @@ function main(argv) {
     return findings.length ? 1 : 0;
   }
 
-  const risk = classifyRisk(files);
+  const risk = classifyRisk(files, readFile);
   const delta = measureTestDelta(files);
   const comment = prComment(risk, delta);
 

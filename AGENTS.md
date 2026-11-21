@@ -18,11 +18,11 @@
 
 CI labels each PR by what it touches, not how much (`HIGH_RISK_AREAS` in `scripts/pr-checks.mjs`):
 
-- **`risk:high`** changes code in an area where a mistake can lose a user's workouts or reaches production on merge: stored data models, sync, the mutation services that edit saved data, sign-out, local-data reset, account deletion, workout recovery, or Convex functions and schema.
-- **`risk:low`** changes only docs, tests, or comments.
+- **`risk:high`** changes code in an area where a mistake can lose a user's workouts or reaches production on merge: stored data models, sync, code that edits saved data (the mutation services and any app file that queues uploads), sign-out, local-data reset, account deletion, workout recovery, or Convex functions, schema, and what the deploy installs (`package.json`, `pnpm-lock.yaml`, `convex-ci.yml`).
+- **`risk:low`** changes only docs, tests, or comments in Swift files.
 - **`risk:medium`** is everything else.
 
-A comment-only edit in a high-risk file doesn't count, so a large comment cleanup can be low and a one-line merge change is high. A `risk:high` PR shows this proof under Tests, for each area the label's PR comment names:
+A Swift file whose code is unchanged once comments are removed doesn't count, so a large comment cleanup can be low and a one-line merge change is high. Comment edits in other languages still count. A `risk:high` PR shows this proof under Tests, for each area the label's PR comment names:
 
 - **Stored data models:** new fields are optional or defaulted, and a `BarosCore` test opens a store written with the shipped models and checks every row survives the migration.
 - **Sync, or edits to saved data:** a test that fails without the change for each behavior it changes, and the existing sync tests pass.
