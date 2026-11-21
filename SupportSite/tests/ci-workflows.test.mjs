@@ -490,15 +490,15 @@ test("PR checks run repository code only without a write token", async () => {
   assert.deepEqual(Object.keys(workflow.on), ["pull_request"]);
   assert.deepEqual(workflow.permissions, { contents: "read" });
   assert.equal(workflow.jobs["test-hygiene"].permissions, undefined);
-  assert.equal(workflow.jobs["pr-size"].permissions, undefined);
+  assert.equal(workflow.jobs["pr-risk"].permissions, undefined);
 
-  for (const name of ["test-hygiene", "pr-size"]) {
+  for (const name of ["test-hygiene", "pr-risk"]) {
     const checkout = workflow.jobs[name].steps.find((step) => step.uses?.startsWith("actions/checkout@"));
     assert.equal(checkout.with["persist-credentials"], false, `${name} must not keep the checkout token`);
   }
 
-  const writer = workflow.jobs["pr-size-label"];
-  assert.equal(writer.needs, "pr-size");
+  const writer = workflow.jobs["pr-risk-label"];
+  assert.equal(writer.needs, "pr-risk");
   assert.deepEqual(writer.permissions, { issues: "write", "pull-requests": "write" });
   assert.equal(
     writer.if,

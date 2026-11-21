@@ -14,16 +14,24 @@
 - If presentation-related files change without affecting visible UI or interactions, explain why in the PR description under "No visual impact."
 - The merged PR is the record. Plans, QA notes, and evidence go in the PR or its issue; only durable decisions go in the repo, in `docs/adr/`.
 
-## PR size
+## PR risk
 
-CI labels each PR from `size:XS` (under 10 changed lines) to `size:XXL` (1,000 or more), not counting generated files, or tests when the PR also changes other files. The label is an estimate for the reviewer. What a PR touches decides its extra proof: run the full UI suite on the branch with `gh workflow run ios-ui-nightly.yml --ref <branch>`, and link the run under Tests, when the PR
+CI labels each PR by what it touches, not how much (`HIGH_RISK_AREAS` in `scripts/pr-checks.mjs`):
 
-- is `size:XL` or larger and changes `Baros/`, `BarosCore/`, `BarosLiveActivity/`, `BarosUITests/`, or `project.yml`; or
-- changes a SwiftData model, sign-out, local-data reset, or account deletion, at any size.
+- **`risk:high`** changes code in an area where a mistake can lose a user's workouts or reaches production on merge: stored data models, sync, the mutation services that edit saved data, sign-out, local-data reset, account deletion, workout recovery, or Convex functions and schema.
+- **`risk:low`** changes only docs, tests, or comments.
+- **`risk:medium`** is everything else.
+
+A comment-only edit in a high-risk file doesn't count, so a large comment cleanup can be low and a one-line merge change is high. A `risk:high` PR shows this proof under Tests, for each area the label's PR comment names:
+
+- **Stored data models:** new fields are optional or defaulted, and a `BarosCore` test opens a store written with the shipped models and checks every row survives the migration.
+- **Sync, or edits to saved data:** a test that fails without the change for each behavior it changes, and the existing sync tests pass.
+- **Sign-out, local-data reset, account deletion, or workout recovery:** run that flow's `BarosUITests` on a pool simulator with `-only-testing:BarosUITests/<Class>/<test>`, and name the tests. Don't run the whole suite for this; the nightly run covers it on `main`.
+- **Convex:** a "Production deploy compatibility" section that says how installed builds keep working (README → "Production deploys").
 
 ## Testing
 
-- Before you push, run `scripts/check-changed.sh`. It runs the CI checks for the paths the branch changed, builds the app and test targets, checks test hygiene, and prints the PR's size. Hosted `BarosTests` and `BarosUITests` need a simulator, so run the affected ones yourself; CI's `ios-unit-tests` runs all of `BarosTests`.
+- Before you push, run `scripts/check-changed.sh`. It runs the CI checks for the paths the branch changed, builds the app and test targets, checks test hygiene, and prints the PR's risk. Hosted `BarosTests` and `BarosUITests` need a simulator, so run the affected ones yourself; CI's `ios-unit-tests` runs all of `BarosTests`.
 - Tests wait on events, not time. A new sleep in a test target needs `// allow-sleep: <why>` at the end of its line or as a comment on the line directly above. A new skip names its tracking issue (`#403`) or carries `// allow-skip: <why>` in the same places. CI's `test-hygiene` check enforces both on added lines; it catches the common calls, and the rule covers every way of waiting on time.
 - Logic lives in the `BarosCore` package. Test it on macOS with `swift test --package-path BarosCore`; that is the default loop for any change outside SwiftUI views and app wiring.
 - New logic and its tests go in `BarosCore` when they need only Foundation, SwiftData, or other cross-platform frameworks. Code that imports SwiftUI, UIKit, ActivityKit, StoreKit, Clerk, Sentry, or ConvexMobile stays in `Baros/`; when package code needs it, define a protocol in the package and keep the adapter in the app, as `CurrentOwnerAdapters` and `ConvexClientFactory` do. Mark only what the app uses `public`.
@@ -32,7 +40,7 @@ CI labels each PR from `size:XS` (under 10 changed lines) to `size:XXL` (1,000 o
 
 ## UI tests
 
-A full `BarosUITests` run takes close to an hour, so the suite covers only behavior that lives in the UI layer.
+A full `BarosUITests` run takes about two hours in CI, so the suite covers only behavior that lives in the UI layer.
 
 - Cover a bug fix or feature with a unit test by default: in `BarosCore/Tests` for package logic, or `BarosTests/` for app-layer code (see Testing). That includes values, formatting, sorting, sync and auth decisions, and save-failure handling.
 - Add or extend a UI test only for:
@@ -49,6 +57,7 @@ A full `BarosUITests` run takes close to an hour, so the suite covers only behav
 ## Review guidelines
 
 - Treat as P0 any change that can lose or overwrite a user's logged workouts: sync merges, SwiftData model changes, sign-out, local-data reset, and account deletion.
+- Flag a PR that carries more risk than its `risk:` label, such as a change to code that sync or a data-safety flow calls from outside the paths the label checks.
 - Flag a change to a public Convex function's arguments or return shape, or to `convex/schema.ts`, that installed builds can't handle (README → "Production deploys").
 - Flag logic tested through `BarosUITests` or hosted `BarosTests` that `BarosCore` could test, and new UI tests outside the list in "UI tests".
 - Flag new tests that repeat a case an existing test covers, or check what the types already guarantee.

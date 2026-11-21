@@ -2,8 +2,8 @@
 Title: a conventional commit in plain language that says what changes for the user,
 such as "fix(workout): rest timer keeps counting while the phone is locked".
 A reader who stops after the opening paragraph should still know what changed and why.
-Delete each comment once its section is filled. For a size:XS or size:S PR, the opening
-paragraph and Tests are often enough.
+Delete each comment once its section is filled. For a small risk:low or risk:medium PR, the
+opening paragraph and Tests are often enough.
 -->
 
 <!-- The problem in a sentence or two, then how this fixes it. No heading. -->
@@ -30,7 +30,7 @@ Upload to GitHub. Never commit evidence.
 <!--
 For a bug fix: how it reproduces on main, then the test that fails without the fix and passes with it.
 Then the commands you ran and their results, starting with scripts/check-changed.sh.
-Link the full UI suite run when AGENTS.md → "PR size" asks for one.
+For a risk:high PR, add the proof AGENTS.md → "PR risk" lists for each area the PR comment names.
 -->
 
 ## Not in this change

@@ -7,11 +7,12 @@ import { test } from "node:test";
 
 import {
   checkHygiene,
+  classifyRisk,
+  COMMENT_MARKER,
   decodeGitPath,
-  deltaComment,
-  measureSize,
   measureTestDelta,
   parseDiff,
+  prComment,
   untrackedFile,
 } from "./pr-checks.mjs";
 
@@ -294,22 +295,64 @@ test("moving an existing sleep or dropping its comment passes; changing its dura
   assert.deepEqual(rulesOf(checkHygiene(files, () => [])), [[2, "no-new-sleep"]]);
 });
 
-test("size counts code, not tests or generated files, unless the PR is only tests", () => {
-  const code = Array.from({ length: 40 }, (_, index) => `let v${index} = ${index}`);
-  const mixed = parseDiff(
+const riskOf = (...diffs) => classifyRisk(parseDiff(diffs.join("\n")));
+
+test("risk is high for a one-line change to a data-safety area or a deployed Convex file", () => {
+  const oneLine = { added: ["let merged = local"], removed: ["let merged = remote"] };
+  const cases = [
+    ["BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift", "sync"],
+    ["Baros/Core/Sync/ConvexSyncClient.swift", "sync"],
+    ["BarosCore/Sources/BarosCore/Sync/SyncOutboxEntry.swift", "stored data models"],
+    ["BarosCore/Sources/BarosCore/Models/LoggedSet.swift", "stored data models"],
+    ["BarosCore/Sources/BarosCore/Domain/WorkoutHistoryMutationService.swift", "edits to saved data"],
+    ["BarosCore/Sources/BarosCore/Persistence/LocalDataResetService.swift", "sign-out, local-data reset, account deletion, or workout recovery"],
+    ["Baros/Core/AccountDeletion/AccountDeletionService.swift", "sign-out, local-data reset, account deletion, or workout recovery"],
+    ["convex/schema.ts", "Convex functions or schema, which deploy on merge"],
+    ["convex/sync/merge.ts", "Convex functions or schema, which deploy on merge"],
+  ];
+  for (const [path, area] of cases) {
+    assert.deepEqual(riskOf(diffFor(path, oneLine)), { label: "risk:high", areas: [{ name: area, paths: [path] }] }, path);
+  }
+
+  const moved = parseDiff(
     [
-      diffFor("Baros/Views/A.swift", { added: code.slice(0, 20), removed: code.slice(20, 25) }),
-      diffFor("BarosCore/Tests/BarosCoreTests/ATests.swift", { added: code }),
-      diffFor("pnpm-lock.yaml", { added: code }),
-      diffFor("Baros.xcodeproj/project.pbxproj", { added: code }),
+      "diff --git a/BarosCore/Sources/BarosCore/Sync/Old.swift b/BarosCore/Sources/BarosCore/Other/New.swift",
+      "rename from BarosCore/Sources/BarosCore/Sync/Old.swift",
+      "rename to BarosCore/Sources/BarosCore/Other/New.swift",
     ].join("\n"),
   );
-  assert.deepEqual(measureSize(mixed), { lines: 25, label: "size:S", testsExcluded: true });
+  assert.equal(classifyRisk(moved).label, "risk:high", "moving a file out of an area still touches it");
+});
 
-  const testsOnly = parseDiff(diffFor("BarosTests/ATests.swift", { added: code }));
-  assert.deepEqual(measureSize(testsOnly), { lines: 40, label: "size:M", testsExcluded: false });
+test("risk is low for docs, tests, and comment-only changes, however large", () => {
+  const comments = Array.from({ length: 2000 }, (_, index) => `    // note ${index}`);
+  assert.deepEqual(
+    riskOf(
+      diffFor("BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift", { removed: comments }),
+      diffFor("convex/sync.ts", { added: ["/** One line of docs. */", " * a doc line", ""] }),
+      diffFor("Baros/Views/A.swift", { added: ["    save() "], removed: ["  save() // stale note"] }),
+      diffFor("AGENTS.md", { added: ["Some rule."] }),
+      diffFor("convex/sync.test.ts", { added: ['test("x", () => {})'] }),
+      diffFor("convex/syncSim/merge-vectors.json", { added: ["{}"] }),
+      diffFor("BarosUITests/BarosUITests.swift", { added: ["    func testA() {}"] }),
+    ),
+    { label: "risk:low", areas: [] },
+  );
+  assert.equal(classifyRisk([]).label, "risk:low");
+});
 
-  assert.equal(measureSize([]).label, "size:XS");
+test("a comment edit can't hide a code change, and anything else is medium", () => {
+  const medium = (path, change) => assert.equal(riskOf(diffFor(path, change)).label, "risk:medium", JSON.stringify(change));
+  medium("Baros/Views/A.swift", { added: ['Text("Saved")'], removed: ['Text("Save")'] });
+  medium("Baros/Views/A.swift", { added: ["/*"], removed: [] });
+  medium("Baros/Views/A.swift", { added: ["b()", "a()"], removed: ["a()", "b()"] });
+  medium("SupportSite/index.html", { added: ["<!-- note -->"] });
+  medium(".github/workflows/app-ci.yml", { added: ["# note"] });
+  medium("pnpm-lock.yaml", { added: ["x: 1"] });
+  assert.equal(
+    riskOf(diffFor("BarosCore/Sources/BarosCore/Sync/SyncCoordinator.swift", { added: ["apply() /* */ // note"], removed: ["apply()"] })).label,
+    "risk:low",
+  );
 });
 
 test("test delta counts declarations per target, and a moved test nets zero", () => {
@@ -348,13 +391,24 @@ test("test delta counts declarations per target, and a moved test nets zero", ()
   });
 });
 
-test("the delta comment appears only when the UI suite grows", () => {
+test("the PR comment appears only for high risk or a growing UI suite", () => {
   const unitOnly = { kinds: { core: 25, hosted: 0, ui: 0, convex: 0, tooling: 0 }, net: 25 };
-  assert.equal(deltaComment(unitOnly), null);
-
   const ui = { kinds: { core: 0, hosted: 1, ui: 1, convex: 0, tooling: 0 }, net: 2 };
-  assert.match(deltaComment(ui), /\*\*Test delta:\*\* \+1 BarosTests, \+1 BarosUITests \(net \+2\)/);
-  assert.match(deltaComment(ui), /adds 1 `BarosUITests` case,/);
+  const medium = { label: "risk:medium", areas: [] };
+  assert.equal(prComment(medium, unitOnly), null);
+
+  const delta = prComment(medium, ui);
+  assert.ok(delta.startsWith(COMMENT_MARKER));
+  assert.match(delta, /\*\*Test delta:\*\* \+1 BarosTests, \+1 BarosUITests \(net \+2\)/);
+  assert.match(delta, /adds 1 `BarosUITests` case,/);
+  assert.doesNotMatch(delta, /Risk: high/);
+
+  const paths = ["a.swift", "b.swift", "c.swift", "d.swift", "e.swift"].map((name) => `BarosCore/Sources/BarosCore/Sync/${name}`);
+  const high = prComment({ label: "risk:high", areas: [{ name: "sync", paths }] }, unitOnly);
+  assert.ok(high.startsWith(COMMENT_MARKER));
+  assert.match(high, /\*\*Risk: high\.\*\*/);
+  assert.match(high, /- \*\*sync:\*\* `BarosCore\/Sources\/BarosCore\/Sync\/a\.swift`, `[^`]+`, `[^`]+` and 2 more/);
+  assert.doesNotMatch(high, /Test delta/);
 });
 
 test("an untracked file counts as wholly added", () => {

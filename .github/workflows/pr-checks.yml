@@ -40,12 +40,12 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node scripts/pr-checks.mjs hygiene --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
-  pr-size:
-    name: pr-size
+  pr-risk:
+    name: pr-risk
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      report: ${{ steps.measure.outputs.report }}
+      report: ${{ steps.classify.outputs.report }}
 
     steps:
       - name: Check out repository history
@@ -59,21 +59,22 @@ jobs:
         with:
           node-version: 22.12.0
 
-      - name: Measure size and test delta
-        id: measure
+      - name: Classify risk and count the test delta
+        id: classify
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           report="$(node scripts/pr-checks.mjs report --base "${BASE_SHA}" --head "${HEAD_SHA}")"
           echo "report=${report}" >> "${GITHUB_OUTPUT}"
-          jq -r '"PR size: \(.label) (\(.lines) changed lines)"' <<<"${report}" >> "${GITHUB_STEP_SUMMARY}"
+          jq -r '"PR risk: \(.label)" + (if (.areas | length) > 0 then " (\(.areas | map(.name) | join("; ")))" else "" end)' \
+            <<<"${report}" >> "${GITHUB_STEP_SUMMARY}"
 
   # Holds the write token, so it checks nothing out and runs no repository code. It treats the
   # report as untrusted data and accepts only a known label and a comment that starts with the marker.
-  pr-size-label:
-    name: pr-size-label
-    needs: pr-size
+  pr-risk-label:
+    name: pr-risk-label
+    needs: pr-risk
     # Fork and Dependabot PRs get a read-only token.
     if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
@@ -83,34 +84,32 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: Apply size label and test delta comment
+      - name: Apply risk label and PR comment
         env:
-          REPORT: ${{ needs.pr-size.outputs.report }}
+          REPORT: ${{ needs.pr-risk.outputs.report }}
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
-          marker='<!-- pr-checks:test-delta -->'
+          marker='<!-- pr-checks -->'
           label="$(jq -r '.label' <<<"${REPORT}")"
           case "${label}" in
-            size:XS) color=0e8a16 ;;
-            size:S) color=5ebd3e ;;
-            size:M) color=fbca04 ;;
-            size:L) color=fe7d37 ;;
-            size:XL) color=d93f0b ;;
-            size:XXL) color=b60205 ;;
-            *) echo "::error::Unexpected size label in report: ${label}"; exit 1 ;;
+            risk:high) color=b60205 ;;
+            risk:medium) color=fbca04 ;;
+            risk:low) color=0e8a16 ;;
+            *) echo "::error::Unexpected risk label in report: ${label}"; exit 1 ;;
           esac
           comment="$(jq -r '.comment // empty' <<<"${REPORT}")"
           if [[ -n "${comment}" && "${comment}" != "${marker}"* ]]; then
-            echo "::error::The test delta comment doesn't start with its marker."
+            echo "::error::The PR comment doesn't start with its marker."
             exit 1
           fi
 
           gh label create "${label}" --repo "${REPO}" --color "${color}" \
-            --description "Changed lines, not counting tests or generated files. See AGENTS.md → PR size." --force
+            --description "From the paths the PR changes, not its size. See AGENTS.md → PR risk." --force
 
-          for current in $(gh api "repos/${REPO}/issues/${PR}/labels" --jq '.[].name | select(startswith("size:"))'); do
+          # size: labels came from the earlier version of this check.
+          for current in $(gh api "repos/${REPO}/issues/${PR}/labels" --jq '.[].name | select(startswith("risk:") or startswith("size:"))'); do
             if [[ "${current}" != "${label}" ]]; then
               gh api -X DELETE "repos/${REPO}/issues/${PR}/labels/${current}" --silent
             fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Reads a branch's diff and reports test hygiene, PR size, and test delta.
+// Reads a branch's diff and reports test hygiene, PR risk, and test delta.
 // `scripts/check-changed.sh` runs it locally; `.github/workflows/pr-checks.yml` runs it in CI.
 //
 //   node scripts/pr-checks.mjs hygiene [--base <ref>] [--head <ref>]
@@ -15,20 +15,42 @@ import { pathToFileURL } from "node:url";
 
 const SWIFT_TEST_DIR = /^(BarosTests|BarosUITests|BarosCore\/Tests)\//;
 const TEST_PATH =
-  /^(BarosTests|BarosUITests|BarosCore\/Tests|SupportSite\/tests)\/|\.test\.[cm]?[jt]s$/;
-const GENERATED_PATH =
-  /(^|\/)(pnpm-lock\.yaml|Package\.resolved)$|^Baros\.xcodeproj\/|^convex\/_generated\//;
+  /^(BarosTests|BarosUITests|BarosCore\/Tests|SupportSite\/tests|convex\/syncSim)\/|\.test\.[cm]?[jt]s$/;
+const DOC_PATH = /\.md$|^docs\//;
+const CODE_PATH = /\.(swift|[cm]?[jt]sx?)$/;
 
-export const SIZE_LABELS = [
-  { name: "size:XS", below: 10, color: "0e8a16" },
-  { name: "size:S", below: 30, color: "5ebd3e" },
-  { name: "size:M", below: 100, color: "fbca04" },
-  { name: "size:L", below: 500, color: "fe7d37" },
-  { name: "size:XL", below: 1000, color: "d93f0b" },
-  { name: "size:XXL", below: Infinity, color: "b60205" },
+export const RISK_LABELS = [
+  { name: "risk:high", color: "b60205" },
+  { name: "risk:medium", color: "fbca04" },
+  { name: "risk:low", color: "0e8a16" },
 ];
 
-export const DELTA_MARKER = "<!-- pr-checks:test-delta -->";
+// Where a mistake can lose or overwrite a user's workouts, or reaches production on merge.
+// A file counts toward the first area it matches. Keep in step with AGENTS.md → "PR risk".
+const APP_SOURCES = "(?:BarosCore/Sources/BarosCore|Baros/Core)";
+export const HIGH_RISK_AREAS = [
+  {
+    name: "stored data models",
+    path: /^BarosCore\/Sources\/BarosCore\/(?:Models\/|Persistence\/(?:BarosSchema|ModelContainerFactory)\.swift$|Sync\/(?:SyncOutboxEntry|SyncCursorState)\.swift$)/,
+  },
+  { name: "sync", path: new RegExp(`^${APP_SOURCES}/Sync/`) },
+  {
+    name: "edits to saved data",
+    path: /^BarosCore\/Sources\/BarosCore\/Domain\/\w+MutationService\.swift$/,
+  },
+  {
+    name: "sign-out, local-data reset, account deletion, or workout recovery",
+    path: new RegExp(
+      `^${APP_SOURCES}/(?:AccountDeletion|AccountTransition|Ownership)/|^BarosCore/Sources/BarosCore/Persistence/LocalDataResetService\\.swift$`,
+    ),
+  },
+  {
+    name: "Convex functions or schema, which deploy on merge",
+    path: /^convex\/(?!_generated\/|syncSim\/|README\.md$|tsconfig\.json$|env\.d\.ts$)(?!.*\.test\.[cm]?[jt]s$)/,
+  },
+];
+
+export const COMMENT_MARKER = "<!-- pr-checks -->";
 
 const KIND_NAMES = {
   core: "BarosCore",
@@ -251,17 +273,53 @@ const MESSAGES = {
     "Name the tracking issue (`#403`) in the skip's message, at the end of the line, or in a comment on the line directly above. For a skip that depends on the environment, add `// allow-skip: <why>` there instead.",
 };
 
-/** Changed lines that measure review effort: generated files never count, and tests count only in a tests-only PR. */
-export function measureSize(files) {
-  const counted = files.filter((file) => !GENERATED_PATH.test(file.path));
-  const nonTest = counted.filter((file) => !TEST_PATH.test(file.path));
-  const measured = nonTest.length > 0 ? nonTest : counted;
-  const lines = measured.reduce(
-    (total, file) => total + file.added.length + file.removedText.length,
-    0,
+// A line that opens or closes a block comment on its own can comment out code it doesn't touch.
+const opensOrClosesBlockComment = (text) => /\/\*|\*\//.test(text.replace(/\/\*.*?\*\//g, ""));
+
+/** The line's code with comments removed and strings kept, so a changed string still counts. */
+function codeWithoutComments(text) {
+  if (/^\s*\*(?:\s|\/|$)/.test(text)) return "";
+  return text
+    .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\*.*?\*\/|\/\/.*$/g, (match) =>
+      /^["'`]/.test(match) ? match : "",
+    )
+    .trim();
+}
+
+/** True when a code file's changes only add, remove, or re-indent comments and blank lines. */
+function onlyCommentsChange(file) {
+  // A rename is never only comments: Convex names each function after its file.
+  if (!CODE_PATH.test(file.path) || (file.oldPath && file.oldPath !== file.path)) return false;
+  const added = file.added.map((entry) => entry.text);
+  if ([...added, ...file.removedText].some(opensOrClosesBlockComment)) return false;
+  const code = (lines) => lines.map(codeWithoutComments).filter(Boolean);
+  const before = code(file.removedText);
+  const after = code(added);
+  return before.length === after.length && before.every((line, index) => line === after[index]);
+}
+
+/**
+ * The PR's risk from what it touches, not how much: high when it reaches a data-safety area or
+ * production, low when it changes only docs, tests, or comments, and medium otherwise.
+ */
+export function classifyRisk(files) {
+  const areas = [];
+  for (const file of files) {
+    if (onlyCommentsChange(file)) continue;
+    for (const path of new Set([file.path, file.oldPath].filter(Boolean))) {
+      const area = HIGH_RISK_AREAS.find((candidate) => candidate.path.test(path));
+      if (!area) continue;
+      let entry = areas.find((existing) => existing.name === area.name);
+      if (!entry) areas.push((entry = { name: area.name, paths: [] }));
+      if (!entry.paths.includes(path)) entry.paths.push(path);
+      break;
+    }
+  }
+  if (areas.length) return { label: "risk:high", areas };
+  const low = files.every(
+    (file) => DOC_PATH.test(file.path) || TEST_PATH.test(file.path) || onlyCommentsChange(file),
   );
-  const label = SIZE_LABELS.find((entry) => lines < entry.below).name;
-  return { lines, label, testsExcluded: nonTest.length > 0 && nonTest.length < counted.length };
+  return { label: low ? "risk:low" : "risk:medium", areas };
 }
 
 function kindOf(path) {
@@ -319,16 +377,33 @@ export function describeDelta(delta) {
   return parts.length ? `${parts.join(", ")} (net ${signed(delta.net)})` : "no change";
 }
 
-/** The sticky PR comment, or null when the PR doesn't grow the UI suite, the one that costs an hour. */
-export function deltaComment(delta) {
+const MAX_LISTED_PATHS = 3;
+
+/** The sticky PR comment, or null when the PR isn't high risk and doesn't grow the UI suite. */
+export function prComment(risk, delta) {
+  const sections = [];
+  if (risk.label === "risk:high") {
+    const lines = risk.areas.map((area) => {
+      const listed = area.paths.slice(0, MAX_LISTED_PATHS).map((path) => `\`${path}\``);
+      const more = area.paths.length - listed.length;
+      return `- **${area.name}:** ${listed.join(", ")}${more > 0 ? ` and ${more} more` : ""}`;
+    });
+    sections.push(
+      [
+        "**Risk: high.** This PR changes:",
+        ...lines,
+        "",
+        'AGENTS.md → "PR risk" lists the proof each area needs under Tests.',
+      ].join("\n"),
+    );
+  }
   const added = delta.kinds.ui;
-  if (added <= 0) return null;
-  return [
-    DELTA_MARKER,
-    `**Test delta:** ${describeDelta(delta)}`,
-    "",
-    `This PR adds ${added} \`BarosUITests\` case${added === 1 ? "" : "s"}, and the full UI suite already takes about an hour. Check each one against AGENTS.md → "UI tests", and say in the description which allowed case it covers, or move it to a unit test.`,
-  ].join("\n");
+  if (added > 0) {
+    sections.push(
+      `**Test delta:** ${describeDelta(delta)}\n\nThis PR adds ${added} \`BarosUITests\` case${added === 1 ? "" : "s"}, and the full UI suite already takes about two hours in CI. Check each one against AGENTS.md → "UI tests", and say in the description which allowed case it covers, or move it to a unit test.`,
+    );
+  }
+  return sections.length ? [COMMENT_MARKER, ...sections].join("\n\n") : null;
 }
 
 function git(args) {
@@ -405,23 +480,25 @@ function main(argv) {
     return findings.length ? 1 : 0;
   }
 
-  const size = measureSize(files);
+  const risk = classifyRisk(files);
   const delta = measureTestDelta(files);
+  const comment = prComment(risk, delta);
 
   if (options.command === "summary") {
-    const note = size.testsExcluded ? ", not counting tests" : "";
-    console.log(`PR size: ${size.label} (${size.lines} changed lines${note}; see AGENTS.md → "PR size")`);
+    const why = risk.areas.length
+      ? `: ${risk.areas.map((area) => area.name).join("; ")}`
+      : risk.label === "risk:low"
+        ? ": only docs, tests, or comments"
+        : "";
+    console.log(`PR risk: ${risk.label}${why} (see AGENTS.md → "PR risk")`);
     console.log(`Test delta: ${describeDelta(delta)}`);
-    const comment = deltaComment(delta);
-    if (comment) console.log(comment.split("\n").at(-1));
+    if (delta.kinds.ui > 0) console.log(comment.split("\n").at(-1));
     return 0;
   }
 
   if (options.command === "report") {
-    const { color } = SIZE_LABELS.find((entry) => entry.name === size.label);
-    console.log(
-      JSON.stringify({ ...size, color, delta, comment: deltaComment(delta), marker: DELTA_MARKER }),
-    );
+    const { color } = RISK_LABELS.find((entry) => entry.name === risk.label);
+    console.log(JSON.stringify({ ...risk, color, delta, comment, marker: COMMENT_MARKER }));
     return 0;
   }
 

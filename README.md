@@ -11,7 +11,7 @@ Native SwiftUI workout tracker for iPhone with a SwiftData-backed offline workou
 ## Commands
 
 - Generate project: `xcodegen generate`
-- Check what the branch changed before pushing: `scripts/check-changed.sh` (runs the matching CI checks, builds the app and test targets, and prints the PR size)
+- Check what the branch changed before pushing: `scripts/check-changed.sh` (runs the matching CI checks, builds the app and test targets, and prints the PR risk)
 - Run logic tests (macOS, no simulator): `swift test --package-path BarosCore`
 - Build simulator app: `xcodebuild build -project Baros.xcodeproj -scheme Baros -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/codex-ios-app-derived-data`
 - Run hosted unit and UI tests (pair with the logic tests above for full coverage): `xcodebuild test -project Baros.xcodeproj -scheme Baros -destination platform=iOS\ Simulator,name=iPhone\ 17,OS=26.0 -derivedDataPath /private/tmp/codex-ios-app-derived-data`
@@ -46,7 +46,7 @@ Actions checks. Pushes to `main` use the same path boundaries. The checks are:
 - `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
 - `support-site-checks`: builds, checks, and tests the Astro support site, including any tracked release-asset contracts.
 - `test-hygiene`: runs on every PR and fails when an added line in a Swift test target sleeps without an `allow-sleep:` reason, or skips a test without naming an issue or an `allow-skip:` reason. Rules live in `scripts/pr-checks.mjs`.
-- `pr-size`: measures the PR (`size:XS`–`size:XXL`) and its test delta without a write token, and reports only. `pr-size-label` then applies the label and keeps one comment up to date when the PR adds `BarosUITests` cases. It checks out no code, and it skips fork and Dependabot PRs, which get a read-only token. AGENTS.md → "PR size" says when a PR needs the full UI suite.
+- `pr-risk`: labels the PR `risk:high`, `risk:medium`, or `risk:low` from the paths it changes, and counts its test delta, without a write token. It reports only. `pr-risk-label` then applies the label and keeps one comment up to date when the PR is high risk or adds `BarosUITests` cases. It checks out no code, and it skips fork and Dependabot PRs, which get a read-only token. AGENTS.md → "PR risk" says what proof a high-risk PR needs.
 
 The three app jobs report as skipped on support-site-only or unrelated pull
 requests, which preserves their required-check results without reserving a
