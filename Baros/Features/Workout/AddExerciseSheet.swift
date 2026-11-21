@@ -15,11 +15,12 @@ struct AddExerciseSheet: View {
         NavigationStack {
             ExercisePickerView(
                 mode: .add(existingExerciseIDs: Set(session.sortedLoggedExercises.compactMap { $0.exercise?.id }))
-            ) { exercises in
+            ) { exercises, asSuperset in
                 do {
                     let loggedExercises = try engine.addExercises(
                         exercises,
                         to: session,
+                        asSuperset: asSuperset,
                         ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
                         context: modelContext
                     )
@@ -71,7 +72,7 @@ struct SwapExerciseSheet: View {
 
     var body: some View {
         NavigationStack {
-            ExercisePickerView(mode: .swap(impactAtOpen)) { exercises in
+            ExercisePickerView(mode: .swap(impactAtOpen)) { exercises, _ in
                 if let replacement = exercises.first {
                     swap(with: replacement)
                 }

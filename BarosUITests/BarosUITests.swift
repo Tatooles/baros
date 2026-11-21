@@ -2156,6 +2156,8 @@ final class BarosUITests: XCTestCase {
         app.buttons["Most performed"].tap()
         XCTAssertTrue(bench.isSelected)
         XCTAssertEqual(add.label, "Add 2 Exercises")
+        let addAsSuperset = app.buttons["ExercisePickerAddAsSupersetButton"]
+        XCTAssertTrue(addAsSuperset.exists, "Top-level Add offers Add as Superset like Edit Workout")
         let selectionScreenshot = XCTAttachment(screenshot: app.screenshot())
         selectionScreenshot.name = "Multi-select picker"
         selectionScreenshot.lifetime = .keepAlways
@@ -2174,7 +2176,8 @@ final class BarosUITests: XCTestCase {
         searchScreenshot.lifetime = .keepAlways
         self.add(searchScreenshot)
         XCTAssertLessThanOrEqual(add.frame.maxY, app.keyboards.firstMatch.frame.minY)
-        add.tap()
+        XCTAssertLessThanOrEqual(addAsSuperset.frame.maxY, app.keyboards.firstMatch.frame.minY)
+        addAsSuperset.tap()
         XCTAssertTrue(app.buttons["ExerciseHeader-0"].waitToExist(timeout: 3))
         XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
         let addedScreenshot = XCTAttachment(screenshot: app.screenshot())
@@ -2182,6 +2185,10 @@ final class BarosUITests: XCTestCase {
         addedScreenshot.lifetime = .keepAlways
         self.add(addedScreenshot)
         assertActiveWorkoutExerciseOrder(["Back Squat", "Bench Press", "Overhead Press"], in: app)
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "SupersetLabel").firstMatch.label,
+            "Superset of 3 exercises"
+        )
     }
 
     @MainActor

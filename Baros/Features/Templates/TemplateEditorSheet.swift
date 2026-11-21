@@ -66,16 +66,11 @@ struct TemplateEditorSheet: View {
             .navigationDestination(isPresented: $showsPicker) {
                 ExercisePickerView(
                     mode: .add(existingExerciseIDs: draft.exerciseIDs),
-                    showsCancel: false,
-                    onSelectAsSuperset: { exercises in
-                        edit { draft.append(exercises, asSuperset: true) }
-                        showsPicker = false
-                    },
-                    onSelect: { exercises in
-                        edit { draft.append(exercises) }
-                        showsPicker = false
-                    }
-                )
+                    showsCancel: false
+                ) { exercises, asSuperset in
+                    edit { draft.append(exercises, asSuperset: asSuperset) }
+                    showsPicker = false
+                }
             }
             .navigationTitle(template == nil ? "New Template" : "Edit Template")
             .navigationBarTitleDisplayMode(.inline)

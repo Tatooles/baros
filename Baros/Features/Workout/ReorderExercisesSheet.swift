@@ -59,8 +59,7 @@ struct ReorderExercisesSheet: View {
                 ExercisePickerView(
                     mode: .add(existingExerciseIDs: existingExerciseIDs),
                     showsCancel: false,
-                    onSelectAsSuperset: { append($0, asSuperset: true) },
-                    onSelect: { append($0, asSuperset: false) }
+                    onSelect: append
                 )
             }
             .navigationTitle("Edit Workout")
