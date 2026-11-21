@@ -8,6 +8,10 @@ const syncPayloadFields = {
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: nullableNumber,
+  // Current builds only: the stored updatedAt of the version this edit
+  // started from, or null for a record never synced. Installed builds omit
+  // it. Not stored.
+  baseUpdatedAt: v.optional(nullableNumber),
 };
 
 export const entityKindValidator = v.union(

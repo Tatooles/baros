@@ -7,10 +7,14 @@ const nullableNumber = v.union(v.number(), v.null());
 const syncFields = {
   ownerTokenIdentifier: v.string(),
   clientId: v.string(),
+  // 0 marks a placeholder tombstone: the server got the record's delete
+  // before the record itself (sync.ts, tombstoneSyncedRecord).
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: nullableNumber,
   serverUpdatedAt: v.number(),
+  // Conflict-ordering time (sync/merge.ts). Absent on rows written before it.
+  syncOrder: v.optional(v.number()),
 };
 
 export default defineSchema({
