@@ -27,8 +27,6 @@ public struct SettingsMutationService {
         )
     }
 
-    /// Records the unit as the person's choice even when it matches the current
-    /// value, so it wins over the unit a later sign-in would otherwise restore.
     func chooseWeightUnit(
         _ newUnit: MeasurementUnit,
         settings: UserSettings,

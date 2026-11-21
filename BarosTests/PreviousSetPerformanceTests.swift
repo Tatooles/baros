@@ -101,7 +101,7 @@ final class PreviousSetPerformanceTests: XCTestCase {
         XCTAssertEqual(previous[activeExercise.id]?.first?.weight, 135)
 
         let mixedSave = try captureSave(in: context) {
-            historicalSet.weight = 155 // Remote reconciliation does not touch the parent timestamp.
+            historicalSet.weight = 155
             context.insert(SyncCursorState(ownerTokenIdentifier: "owner"))
         }
         XCTAssertFalse(PreviousSetsCacheSaveChanges(notification: mixedSave).containsOnlySyncBookkeeping)
@@ -109,7 +109,6 @@ final class PreviousSetPerformanceTests: XCTestCase {
                              lastSyncedAt: nil, onUpdate: { previous = $0 })
         XCTAssertEqual(fetchCount, 2)
         XCTAssertEqual(historical.updatedAt, parentUpdatedAt)
-        // Sync completion remains the explicit invalidation for child-only remote edits.
         cache.reload(session: active, context: context, ownerTokenIdentifier: nil,
                      lastSyncedAt: Date(timeIntervalSince1970: 300), onUpdate: { previous = $0 })
         XCTAssertEqual(previous[activeExercise.id]?.first?.weight, 155)

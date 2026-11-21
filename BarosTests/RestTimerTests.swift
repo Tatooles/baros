@@ -33,7 +33,6 @@ final class RestTimerTests: XCTestCase {
         XCTAssertEqual(RestTimerScenePhase(.background), .background)
         let h = Harness()
         h.timer.start(sessionID: UUID(), setID: UUID(), duration: 90)
-        // Control Center, Notification Center, or the permission prompt.
         h.timer.setScenePhase(RestTimerScenePhase(.inactive))
         h.now = h.now.addingTimeInterval(90)
         h.timer.expireIfNeeded()
@@ -46,9 +45,6 @@ final class RestTimerTests: XCTestCase {
     }
 
     func testExpiryDuringFirstAuthorizationPromptAlertsOnceAndWithdrawsTheRequest() {
-        // The prompt is requested by start() and keeps the scene inactive. The
-        // removal supersedes the request still awaiting authorization, so the
-        // OS can't deliver a second, late alert after the prompt closes.
         let h = Harness()
         h.timer.start(sessionID: UUID(), setID: UUID(), duration: 90)
         XCTAssertEqual(h.notifications.authorizationRequests, [true])
@@ -132,7 +128,6 @@ final class RestTimerTests: XCTestCase {
         try engine.toggleSetCompletion(exercise.sortedSets[0], context: context)
         XCTAssertNotNil(defaults.data(forKey: "active-workout-rest-v1"))
 
-        // A rest saved before timers were turned off elsewhere must not come back.
         defaults.set(false, forKey: "rest-timers-enabled-v1")
         let disabledLaunch = RestTimerCoordinator.live(defaults: defaults, notifications: notifications)
         XCTAssertFalse(disabledLaunch.isEnabled)

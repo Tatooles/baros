@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// The release sheet shipped for Baros 1.4, using the same shared page
-/// layout and single Continue action as the 1.3 sheet.
 struct WhatsNewVersion1_4View: View {
     let onDismiss: () -> Void
 

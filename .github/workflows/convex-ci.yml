@@ -20,7 +20,6 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Superseded PR runs are safe to cancel; a main run may be mid-deploy.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -84,7 +83,6 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
 
-      # A preview or dev key would silently deploy somewhere other than production.
       - name: Require a production deploy key
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}

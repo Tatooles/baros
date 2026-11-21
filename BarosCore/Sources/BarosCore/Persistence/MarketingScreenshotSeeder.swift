@@ -2,12 +2,8 @@ import Foundation
 import SwiftData
 
 #if DEBUG
-/// Data and display state for the App Store and baros.fit screenshots that
-/// `MarketingScreenshotTests` captures. See the release skill's LISTING.md.
 public enum MarketingScreenshotSeeder {
-    /// Seeds about a year of progressive training plus the matching templates.
     static let seedArgument = "--uitest-seed-marketing"
-    /// Hides debug-only chrome, such as the DEV badge, that a shipped build never shows.
     static let captureArgument = "--uitest-marketing-capture"
 
     public static var isCapturing: Bool {
@@ -21,19 +17,15 @@ public enum MarketingScreenshotSeeder {
         let reps: Int
         let sets: Int
         let ratesLastSet: Bool
-        /// Neighboring lifts with the same group are logged as a superset.
         var superset: Int? = nil
     }
 
     private struct Plan {
         let title: String
-        /// Days before today in the most recent week; each earlier week repeats 7 days back.
         let daysBack: Int
         let lifts: [Lift]
     }
 
-    /// Each library exercise belongs to one plan, so an exercise's "previous" values always
-    /// come from the plan the screenshot shows.
     private static let plans: [Plan] = [
         Plan(title: "Push Day", daysBack: 6, lifts: [
             Lift(seed: "bench-press", start: 165, end: 205, reps: 5, sets: 4, ratesLastSet: true),
@@ -54,7 +46,6 @@ public enum MarketingScreenshotSeeder {
             Lift(seed: "leg-curl", start: 80, end: 105, reps: 12, sets: 3, ratesLastSet: false, superset: 1),
             Lift(seed: "calf-raise", start: 135, end: 180, reps: 12, sets: 3, ratesLastSet: false, superset: 1),
         ]),
-        // Opens with its superset, so the superset shot needs no scrolling.
         Plan(title: "Full Body", daysBack: 1, lifts: [
             Lift(seed: "incline-dumbbell-press", start: 55, end: 75, reps: 10, sets: 3, ratesLastSet: false, superset: 1),
             Lift(seed: "dumbbell-row", start: 55, end: 75, reps: 10, sets: 3, ratesLastSet: false, superset: 1),
@@ -63,10 +54,6 @@ public enum MarketingScreenshotSeeder {
         ]),
     ]
 
-    /// Four sessions a week for 48 weeks, counted back from today so every run produces the
-    /// same history: two vacation weeks, occasional skipped sessions, a deload every fourth
-    /// week, and a few notes. The three most recent weeks are complete and at full weight,
-    /// because they feed the "previous" values and the Start-from pills.
     static func seed(ownerTokenIdentifier: String?, context: ModelContext, now: Date = .now,
                      calendar: Calendar = .current) throws {
         let library = Exercise.visibleActiveExercises(
@@ -142,7 +129,6 @@ public enum MarketingScreenshotSeeder {
                 if slot == 0 { latestPushDay = session }
             }
         }
-        // The workout-detail shot opens the latest Push Day, so it carries a note.
         latestPushDay?.notes = notes[0]
         try context.save()
     }

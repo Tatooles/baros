@@ -1,19 +1,14 @@
 import SwiftUI
 
-/// A superset's members under a "SUPERSET · N" label, with a thin accent rail
-/// in the page margin beside them. The members keep their own look and width.
 struct SupersetRail<Content: View>: View {
     static var railWidth: CGFloat { 4 }
     static var railSpacing: CGFloat { 6 }
-    /// How far the rail reaches into the leading margin.
     static var marginWidth: CGFloat { railWidth + railSpacing }
     static var labelSpacing: CGFloat { 6 }
 
     let count: Int
     var spacing: CGFloat = 8
-    /// Off where the leading margin holds other controls, such as edit-mode lists.
     var reachesIntoMargin = true
-    /// Equal label space below keeps native row controls centered on the members.
     var balancesLabel = false
     @ViewBuilder let content: Content
 

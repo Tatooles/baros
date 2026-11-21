@@ -4,7 +4,6 @@ import SwiftUI
 
 struct WorkoutHistoryDestinationView: View {
     let sessionID: UUID
-    /// Only History's navigation stack can push Exercise History routes.
     var linksExercises = false
 
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
@@ -258,8 +257,6 @@ struct WorkoutHistoryDetailView: View {
 
     private func workoutExerciseSection(_ loggedExercise: LoggedExercise) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Title and equipment read as one identity; the pill rides the
-            // title's baseline instead of setting the row height.
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     exerciseTitle(loggedExercise)
@@ -290,12 +287,10 @@ struct WorkoutHistoryDetailView: View {
 }
 
 extension WorkoutHistoryDetailView {
-    /// Every set in the workout, so each exercise's table shares one column grid.
     fileprivate var allSets: [LoggedSet] {
         session.sortedLoggedExercises.flatMap(\.sortedSets)
     }
 
-    /// In History, the exercise name opens that exercise's history.
     @ViewBuilder
     fileprivate func exerciseTitle(_ loggedExercise: LoggedExercise) -> some View {
         let title = Text(loggedExercise.exerciseSnapshotName)

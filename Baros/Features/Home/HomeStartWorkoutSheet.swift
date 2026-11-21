@@ -107,8 +107,6 @@ struct HomeStartWorkoutSheet: View {
     }
 
     private var choices: some View {
-        // Scrolls so large text keeps each choice at its natural height
-        // instead of squeezing the rows into the medium detent.
         ScrollView {
             choiceRows
         }
@@ -253,14 +251,11 @@ struct HomeStartWorkoutSheet: View {
     }
 }
 
-/// Review-and-start sheet for a Home quick-start card.
 struct HomeQuickStartReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
-    /// Nil when the workout is no longer visible to the Current Owner.
     let session: WorkoutSession?
-    /// The Current Owner's completed workouts.
     let history: [WorkoutSession]
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
     let onWorkoutStarted: (WorkoutSession) -> Void

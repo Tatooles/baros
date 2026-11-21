@@ -109,7 +109,6 @@ targets:
         script: |
           set -euo pipefail
 
-          # A normal Release build does not require upload credentials. Archives do.
           if [ "${CONFIGURATION}" != "Release" ] || [ "${ACTION}" != "install" ]; then
             exit 0
           fi
@@ -132,7 +131,6 @@ targets:
         # The Write Build Source Metadata script reads .git and writes into the
         # app bundle, neither of which user script sandboxing permits.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
-        # dSYMs in Debug too, so Instruments can symbolicate profiling traces.
         DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
         PRODUCT_NAME: Baros
         PRODUCT_BUNDLE_IDENTIFIER: com.kevintatooles.LiftingLog.dev

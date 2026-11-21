@@ -51,7 +51,6 @@ extension EnvironmentValues {
 }
 
 #if DEBUG
-// All operations are local stand-ins; this fixture never calls Clerk or Convex.
 private final class CloudDeletionUITestClient: SyncClient, @unchecked Sendable {
     private let lock = NSLock()
     private var hasFailed = false
@@ -85,15 +84,11 @@ private final class CloudDeletionUITestClient: SyncClient, @unchecked Sendable {
     func fetchChanges(cursors: SyncChangeCursors, limit: Int) async throws -> SyncFetchChangesResponse { throw FixtureError.unexpectedSync }
 }
 
-/// With `--uitest-hold-cloud-deletion`, the fixture's cloud request stays pending until
-/// the test taps `UITestReleaseCloudDeletionButton`. A fixed delay races slow CI runners
-/// when a test checks that nothing happens while the request is still running.
 @MainActor
 @Observable
 final class CloudDeletionUITestGate {
     static let shared = CloudDeletionUITestGate()
     private static let isEnabled = ProcessInfo.processInfo.arguments.contains("--uitest-hold-cloud-deletion")
-    /// True only while a request is parked, so the release control proves one is pending.
     private(set) var isHoldingRequest = false
     private var isReleased = false
     private var waiters: [CheckedContinuation<Void, Never>] = []

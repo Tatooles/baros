@@ -1,7 +1,6 @@
 import Foundation
 
 public enum ActiveWorkoutSetSuggestions {
-    /// One exercise's ordered actual values in, display-only suggestions out.
     public static func resolve(
         for orderedValues: [ActiveWorkoutSetInput.Values]
     ) -> [ActiveWorkoutSetInput.Values] {
@@ -18,7 +17,6 @@ public enum ActiveWorkoutSetSuggestions {
 }
 
 public struct ActiveWorkoutSetInput {
-    /// A row edits weight and one measure: reps, or duration for a timed exercise.
     public enum Field {
         case weight
         case reps
@@ -40,15 +38,12 @@ public struct ActiveWorkoutSetInput {
             self.init(weight: set.weight, reps: set.reps, durationSeconds: set.durationSeconds)
         }
 
-        /// These values with the time a picker chose; nil clears it.
         public func settingDuration(_ seconds: Int?) -> Values {
             var values = validated
             values.durationSeconds = WorkoutNumericInputPolicy.validatedDuration(seconds)
             return values
         }
 
-        /// Where a time picker starts: this set's time, else the time
-        /// completing the set would fill in, else zero.
         public func timePickerStart(suggestions: Values, previous: PreviousSetPerformance?) -> Int {
             WorkoutNumericInputPolicy.validatedDuration(durationSeconds)
                 ?? WorkoutNumericInputPolicy.validatedDuration(suggestions.durationSeconds)
@@ -67,7 +62,6 @@ public struct ActiveWorkoutSetInput {
         func write(to set: LoggedSet) {
             set.weight = weight
             set.reps = reps
-            // A time entered here is this device's own, so a later clear uploads.
             if durationSeconds != nil, set.durationSeconds != durationSeconds { set.knowsDuration = true }
             set.durationSeconds = durationSeconds
         }
@@ -92,7 +86,6 @@ public struct ActiveWorkoutSetInput {
         case .reps:
             repsInput.updateDraft(text, isFocused: isFocused)
         case .duration:
-            // A time is chosen in a picker and saved at once, so it has no draft.
             break
         }
     }
@@ -138,7 +131,6 @@ public struct ActiveWorkoutSetInput {
         }
     }
 
-    /// Resolve a copy so previews share commit parsing without consuming the editor's drafts.
     public func previewValues(current: Values, weightUnit: MeasurementUnit) -> Values? {
         guard hasDraft else { return nil }
         var preview = self
@@ -181,7 +173,6 @@ public struct ActiveWorkoutSetInput {
         return Commit(values: values, shouldPersist: values != storedValues)
     }
 
-    /// Unmounted rows have no drafts or rejections and use the same fallback policy.
     func preparedLinkedValues(current: Values, previous: PreviousSetPerformance?, suggestions: Values) -> Values {
         var input = self
         return input.preparedValuesForSetAction(current: current, weightUnit: .pounds,
@@ -323,8 +314,6 @@ public final class ActiveSetInputRegistry {
         prepareForRPESelection: ((Bool) -> ActiveWorkoutSetInput.Values)?,
         prepareLinked: LinkedPreparation? = nil
     ) {
-        // Live suggestions refresh this on every changed row. Lookup by ID
-        // keeps that work independent of the number of fields in the workout.
         guard var registration = registrations[id] else { return }
         registration.prepareLinked = prepareLinked
         registration.commit = commit

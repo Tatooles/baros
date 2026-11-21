@@ -47,8 +47,6 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertNil(restored.current, "Restoration also rejects a removed participant")
     }
 
-    // MARK: Sync
-
     func testUploadsSendGroupsAndOnlyThisDevicesRemovals() throws {
         let (context, session) = try makeWorkout(names: ["A", "B", "C"], groups: [0, 0, nil])
         let exercises = session.sortedLoggedExercises
@@ -57,13 +55,11 @@ final class SupersetWorkoutTests: XCTestCase {
         let groupedArgs = ConvexSyncArgumentMapper.loggedExerciseRecord(grouped)
         XCTAssertEqual(groupedArgs["supersetGroupID"] as? String, grouped.supersetGroupID)
 
-        // Never grouped here: omitted, like an older build, so the server keeps its value.
         let untouchedArgs = ConvexSyncArgumentMapper.loggedExerciseRecord(
             SyncPayloadMapper.loggedExercisePayload(from: exercises[2])
         )
         XCTAssertFalse(untouchedArgs.keys.contains("supersetGroupID"))
 
-        // Ungrouped here: present and nil, which encodes as null and clears the server's group.
         try ActiveWorkoutEngine().changeSuperset(.remove, for: exercises[1], context: context)
         let removedArgs = ConvexSyncArgumentMapper.loggedExerciseRecord(
             SyncPayloadMapper.loggedExercisePayload(from: exercises[1])
@@ -72,8 +68,6 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertNil(removedArgs["supersetGroupID"] ?? nil)
     }
 
-    /// An older build pulled a grouped workout without the field. After upgrading,
-    /// editing that completed workout must not clear the server's grouping.
     func testUpgradedDeviceEditingAnUnseenGroupKeepsTheServerGrouping() async throws {
         let owner = "issuer|owner"
         let (context, session) = try makeWorkout(names: ["A", "B"], status: .completed, owner: owner)
@@ -98,8 +92,6 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertEqual(upload.notes, "Edited after upgrading")
         XCTAssertFalse(ConvexSyncArgumentMapper.loggedExerciseRecord(upload).keys.contains("supersetGroupID"))
     }
-
-    // MARK: Helpers
 
     private func grouped(_ session: WorkoutSession, _ positions: [Int]) -> Bool {
         let ids = session.sortedLoggedExercises.map(\.supersetGroupID)

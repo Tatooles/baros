@@ -1,6 +1,5 @@
 import Foundation
 
-/// A small, shared matcher. Every query word must occur in a searchable field.
 public struct ExerciseSearch {
     private let words: [String]
 
@@ -8,8 +7,6 @@ public struct ExerciseSearch {
         words = query.split(whereSeparator: { $0.isWhitespace }).map(String.init)
     }
 
-    /// Name-only matches stay ahead of matches that need equipment or target area.
-    /// Empty queries match everything, preserving the caller's normal sort order.
     public func rank(for exercise: Exercise) -> Int? {
         if words.allSatisfy({ exercise.name.localizedCaseInsensitiveContains($0) }) {
             return 0

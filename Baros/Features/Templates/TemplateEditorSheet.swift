@@ -2,14 +2,12 @@ import BarosCore
 import SwiftData
 import SwiftUI
 
-/// The Edit Workout sheet with a name field. Nothing saves until Save.
 struct TemplateEditorSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
     @Query private var exercises: [Exercise]
-    /// Nil for a new template.
     let template: WorkoutTemplate?
     private let original: WorkoutTemplateDraft
     @State private var draft: WorkoutTemplateDraft
@@ -21,7 +19,6 @@ struct TemplateEditorSheet: View {
         self.init(template: template, draft: WorkoutTemplateDraft(template: template))
     }
 
-    /// A new template that starts filled in, such as from a past workout.
     init(newDraft: WorkoutTemplateDraft) {
         self.init(template: nil, draft: newDraft)
     }

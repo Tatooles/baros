@@ -14,7 +14,6 @@ struct ReorderExercisesSheet: View {
     @State private var detent: PresentationDetent = .large
     @State private var alert: SaveAlert?
     @State private var removalConfirmation: RemovalConfirmation?
-    /// Shown once the removal confirmation has finished dismissing.
     @State private var alertAfterConfirmation: SaveAlert?
 
     private enum SaveAlert: String, Identifiable {
@@ -22,7 +21,6 @@ struct ReorderExercisesSheet: View {
         var id: Self { self }
     }
 
-    /// Carries its exercises so a reloaded draft cannot change it while it dismisses.
     private struct RemovalConfirmation: Identifiable {
         let id = UUID()
         let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
@@ -131,14 +129,11 @@ struct ReorderExercisesSheet: View {
     }
 
     private func confirmRemoval() {
-        // Success dismisses this sheet with its confirmation; otherwise the alert follows it.
         alertAfterConfirmation = saveChanges()
         if alertAfterConfirmation != nil { removalConfirmation = nil }
     }
 
-    /// Returns the alert to show when the draft could not be saved.
     private func saveChanges() -> SaveAlert? {
-        // Revalidate after the confirmation as sync can arrive while it is open.
         guard draft.baseline == WorkoutExerciseListSnapshot(session: session) else {
             draft = WorkoutExerciseListDraft(session: session)
             return .conflict
@@ -161,7 +156,6 @@ struct ReorderExercisesSheet: View {
     }
 }
 
-/// Lists each removed exercise on its own row so long names stay readable.
 private struct ReorderRemovalConfirmation: View {
     let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
     let confirm: () -> Void

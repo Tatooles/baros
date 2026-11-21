@@ -1,8 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Only the app shell decides idle eligibility. The anchor additionally checks UIKit's
-/// actual presentation tree so nested feature/SDK modals need no new global state.
 struct AppUpdatePrompt: ViewModifier {
     let isIdle: Bool
     @Environment(\.scenePhase) private var scenePhase
@@ -28,8 +26,6 @@ struct AppUpdatePrompt: ViewModifier {
             }
             .task(id: canOffer) {
                 guard canOffer else { return }
-                // Give launch/navigation/dismissal transitions time to settle. Poll only
-                // while a deferred offer exists; all state is rechecked after suspension.
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(1)) } catch { return }
                     guard canOffer, let offer = service.offer else { return }

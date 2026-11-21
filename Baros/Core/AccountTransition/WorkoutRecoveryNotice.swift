@@ -4,8 +4,6 @@ import ClerkKitUI
 import SwiftData
 import SwiftUI
 
-/// Recovery is derived from durable workouts, so it also works after relaunch
-/// and with legacy records. No recovery flags or new workout states are saved.
 struct WorkoutRecoveryNotice: View {
     @Environment(\.modelContext) private var context
     @Environment(\.accountSignOutAction) private var signOut
@@ -92,7 +90,6 @@ struct WorkoutRecoveryNotice: View {
     }
 }
 
-/// A real seam for the live Clerk action and deterministic session-event tests.
 struct AccountSignOutAction {
     let perform: @MainActor () async throws -> Void
     static let live = AccountSignOutAction {

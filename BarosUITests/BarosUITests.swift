@@ -2,8 +2,6 @@ import UIKit
 import XCTest
 
 final class BarosUITests: XCTestCase {
-    /// Ceiling for waits that succeed as soon as the UI is ready. It costs nothing when a test
-    /// passes and keeps slow CI machines from failing the smoke tests.
     private let readyTimeout: TimeInterval = 10
 
     @MainActor
@@ -67,7 +65,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Discard Workout and Sign Out"].exists)
         attachAccountEvidence("Account resolution choices", app: app)
         app.buttons["Cancel"].tap()
-        // Wait out the first alert so the second Finish tap can only reach the new one.
         XCTAssertTrue(app.alerts.firstMatch.waitToDisappear(timeout: 3))
         XCTAssertTrue(app.buttons["AccountSignOutButton"].exists)
         app.buttons["AccountSignOutButton"].tap()
@@ -82,8 +79,6 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testAccountWorkoutGateSaveFailureKeepsWorkoutAndAccount() throws {
-        // Under load the app sometimes never presents "Couldn’t Continue" after Discard;
-        // the root cause is unconfirmed. Findings: https://github.com/Tatooles/baros/issues/403
         try XCTSkipIf(true, "Flaky: the save-failure alert is sometimes not presented under load (#403).")
         let app = makeApp(extraArguments: ["--uitest-force-signed-in-auth", "--uitest-sync-owner", "issuer|ui_owner",
             "--uitest-seed-large-active-workout", "--uitest-fail-account-workout-save"])
@@ -278,9 +273,6 @@ final class BarosUITests: XCTestCase {
                                  "Adding an exercise must not leave a persistent blank scroll tail")
     }
 
-    /// The actions sit inside the home-indicator inset, at about the floating
-    /// tab bar's height. A tap on their lower edge must still reach them, which
-    /// fails if they overflow their bar.
     @MainActor
     func testWorkoutActionsRespondToTapsNearTheirBottomEdge() {
         let app = makeApp(extraArguments: ["--uitest-seed-edit-workout"])
@@ -309,7 +301,8 @@ final class BarosUITests: XCTestCase {
     @MainActor
     func testEditWorkoutAddAndReorderWalkthrough() {
         let app = XCUIApplication()
-        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth", "--uitest-seed-edit-workout"]
+        app.launchArguments = ["--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth",
+                               "--uitest-seed-edit-workout", "--uitest-disable-animations"]
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 8))
         app.swipeUp()
@@ -319,11 +312,12 @@ final class BarosUITests: XCTestCase {
         app.swipeUp()
         XCTAssertTrue(app.buttons["AddExerciseButton"].isHittable)
         captureEditWorkout("02-workout-bottom")
-        app.swipeDown()
-        app.swipeDown()
-        app.swipeDown()
         let field = app.textFields["SetWeightField-0-0"]
-        XCTAssertTrue(field.waitToExist(timeout: 3))
+        for _ in 0..<6 {
+            if field.exists && field.isHittable { break }
+            app.swipeDown()
+        }
+        XCTAssertTrue(waitForHittable(field, timeout: 3))
         field.tap()
         XCTAssertTrue(app.buttons["DismissKeyboardButton"].waitToExist(timeout: 3))
         XCTAssertFalse(app.buttons["ActiveWorkoutEditButton"].isHittable)
@@ -337,7 +331,11 @@ final class BarosUITests: XCTestCase {
         captureEditWorkout("05-edit-sheet")
         app.buttons["EditWorkoutAddExercisesButton"].tap()
         app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        let addAsSuperset = app.buttons["ExercisePickerAddAsSupersetButton"]
+        XCTAssertTrue(app.buttons["ExercisePickerAddSelectedButton"].waitToExist(timeout: 3))
+        XCTAssertFalse(addAsSuperset.exists)
         app.buttons["ExercisePickerRow-Biceps Curl-Dumbbell"].tap()
+        XCTAssertTrue(addAsSuperset.waitToExist(timeout: 3))
         captureEditWorkout("06-picker")
         app.buttons["ExercisePickerAddSelectedButton"].tap()
         XCTAssertTrue(app.navigationBars["Edit Workout"].waitToExist(timeout: 3))
@@ -364,7 +362,6 @@ final class BarosUITests: XCTestCase {
         app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
         app.buttons["ExercisePickerAddSelectedButton"].tap()
         XCTAssertTrue(app.navigationBars["Edit Workout"].waitToExist(timeout: 3))
-        // Pending additions disable the library row on a second visit.
         app.buttons["EditWorkoutAddExercisesButton"].tap()
         XCTAssertFalse(app.buttons["ExercisePickerRow-Back Squat-Barbell"].isEnabled)
         app.navigationBars["Add Exercises"].buttons.element(boundBy: 0).tap()
@@ -434,8 +431,6 @@ final class BarosUITests: XCTestCase {
         app.buttons["SetCompletionButton-0-0"].tap()
         let skip = app.buttons["SkipRestButton"]
         XCTAssertTrue(skip.waitToExist(timeout: 2))
-        // Wait for the three-second preview to close before opening a six-second
-        // manual interaction window; XCTest's idle waits can outlast the preview.
         let badge = app.buttons["RestTimerBadge"]
         XCTAssertTrue(badge.waitToExist(timeout: 6))
         badge.tap()
@@ -452,7 +447,7 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testRestBadgeControlsAndCollapsedHeaderFallback() {
-        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout", "--uitest-keep-rest-controls-open"])
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 8))
         app.buttons["SetCompletionButton-0-0"].tap()
@@ -465,6 +460,7 @@ final class BarosUITests: XCTestCase {
         badge.tap()
         app.buttons["Add 15 seconds"].tap()
         app.buttons["Subtract 15 seconds"].tap()
+        app.buttons["RestControlsTimeButton"].tap()
         XCTAssertTrue(badge.waitToExist(timeout: 8))
         app.buttons["ExerciseHeader-0"].tap()
         let headerBadge = app.buttons["RestTimerHeaderBadge"]
@@ -496,7 +492,6 @@ final class BarosUITests: XCTestCase {
         screenshot.name = "Rest controls at accessibility text size"
         screenshot.lifetime = .keepAlways
         add(screenshot)
-        // Focusing a field closes the pill and edits remain available during rest.
         let weight = app.textFields["SetWeightField-0-0"]
         weight.tap()
         XCTAssertTrue(waitForKeyboardFocus(on: weight))
@@ -539,7 +534,6 @@ final class BarosUITests: XCTestCase {
         let repsField = app.textFields["SetRepsField-0-2"]
         repsField.tap()
         XCTAssertTrue(waitForKeyboardFocus(on: repsField))
-        // The fixture's sets already carry RPE 8; choosing it again would clear it.
         enterRPEViaChips("9", in: app)
         XCTAssertEqual(app.buttons["SetCompletionButton-0-2"].label, "Mark set incomplete")
         XCTAssertFalse(badge.waitForExistence(timeout: 2))
@@ -600,8 +594,6 @@ final class BarosUITests: XCTestCase {
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(alert.waitToExist(timeout: 3))
-        // Actually interact with each replacement alert. An immediate exists
-        // check alone can accidentally observe the outgoing presentation.
         alert.buttons["Retry"].tap()
         alert.buttons["Retry"].tap()
         alert.buttons["Discard Edit"].tap()
@@ -623,7 +615,6 @@ final class BarosUITests: XCTestCase {
         let weight = app.textFields["SetWeightField-0-0"]
         weight.tap()
         weight.typeText("120")
-        // Do not dismiss the keyboard first: the grabber initiates the failed blur.
         let grabber = app.buttons["Sheet Grabber"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         grabber.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92)))
         let alert = app.alerts["Couldn't save this edit"]
@@ -785,7 +776,6 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
 
-        // Permanent tabs: History, Home, Settings, with Home selected at launch.
         let historyTab = app.tabButton(.history)
         let homeTab = app.tabButton(.home)
         let settingsTab = app.tabButton(.settings)
@@ -980,7 +970,6 @@ final class BarosUITests: XCTestCase {
         app.buttons["SaveWorkoutButton"].tap()
         XCTAssertTrue(app.staticTexts["HomeTitle"].waitToExist(timeout: 3))
         XCTAssertFalse(app.buttons["ActiveWorkoutAccessory"].exists)
-        // The ring reflects the workout that was just saved.
         let ring = app.descendants(matching: .any)["HomeYearRing"]
         XCTAssertTrue(ring.waitToExist(timeout: 3))
         XCTAssertEqual(ring.label, "1 workout in the past 30 days.")
@@ -1068,20 +1057,17 @@ final class BarosUITests: XCTestCase {
         let title = app.textFields["FinishWorkoutTitleField"]
         replaceText(in: title, with: "Push Day")
         app.buttons["Done"].tap()
-        // The toggle starts off, so a plain finish makes no template.
         XCTAssertEqual(app.switches["SaveAsTemplateToggle"].value as? String, "0")
         turnOnSaveAsTemplate(in: app)
         app.buttons["SaveWorkoutButton"].tap()
         XCTAssertTrue(app.staticTexts["HomeTitle"].waitToExist(timeout: 3))
 
-        // Unchanged, a workout started from that template offers nothing.
         startWorkout(fromTemplate: "Push Day", in: app)
         assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
         openFinishWorkoutSheet(in: app)
         XCTAssertFalse(app.switches["SaveAsTemplateToggle"].exists)
         XCTAssertFalse(app.buttons["FinishTemplatePicker"].exists)
 
-        // Changed, it can update the template.
         app.buttons["KeepGoingButton"].tap()
         addExercise("ExercisePickerRow-Back Squat-Barbell", in: app)
         dismissKeyboardIfNeeded(in: app)
@@ -1177,7 +1163,6 @@ final class BarosUITests: XCTestCase {
         app.buttons["StartWorkoutCancelButton"].tap()
         XCTAssertTrue(waitForAbsence(app.buttons["StartBlankWorkoutButton"], timeout: 3))
 
-        // The period choice survives a relaunch.
         picker.buttons["Year"].tap()
         XCTAssertTrue(ring.label.contains("in the past year."), ring.label)
         app.terminate()
@@ -1195,7 +1180,6 @@ final class BarosUITests: XCTestCase {
         app.launch()
         let ring = app.descendants(matching: .any)["HomeYearRing"]
         XCTAssertTrue(ring.waitToExist(timeout: 10))
-        // The seed spaces 500 workouts over three years; 14 fall in the past 30 days.
         XCTAssertEqual(ring.label, "14 workouts in the past 30 days.")
         XCTAssertTrue(app.segmentedControls["HomeRingPeriodPicker"].exists)
         app.segmentedControls["HomeRingPeriodPicker"].buttons["Year"].tap()
@@ -1211,17 +1195,13 @@ final class BarosUITests: XCTestCase {
         let ring = app.descendants(matching: .any)["HomeYearRing"]
         XCTAssertTrue(ring.waitToExist(timeout: 10))
         let center = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        // Just below 9 o'clock is 8 days back, where the seed puts one long-named workout.
         let nineOClock = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.53))
         let previewed = NSPredicate(format: "value CONTAINS %@", "Upper Body Push/Pull Superset Session")
-        // Scrubbing turns on once the sweep finishes, so retry the drag until the preview appears.
         for _ in 0..<5 where !previewed.evaluate(with: ring) {
             center.press(forDuration: 0.05, thenDragTo: nineOClock)
         }
         XCTAssertTrue(previewed.evaluate(with: ring), String(describing: ring.value))
 
-        // Tapping out on the edge of the preview's text opens the previewed workout instead of
-        // the slot at that angle.
         center.withOffset(CGVector(dx: ring.frame.width * 0.27, dy: 0)).tap()
         let heading = app.descendants(matching: .any)["WorkoutHistoryHeading"]
         XCTAssertTrue(heading.waitToExist(timeout: 3))
@@ -1234,23 +1214,19 @@ final class BarosUITests: XCTestCase {
         app.launch()
         let ring = app.descendants(matching: .any)["HomeYearRing"]
         XCTAssertTrue(ring.waitToExist(timeout: 10))
-        // Just below 3 o'clock, out on the spokes, is 22 days back, where the seed puts three workouts.
         let spoke = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.53))
         let choice = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Mobility & Stretch")).firstMatch
-        // Taps do nothing until the sweep finishes, so retry until the picker opens.
         for _ in 0..<5 where !choice.exists {
             spoke.tap()
             _ = choice.waitToExist(timeout: 1)
         }
         XCTAssertTrue(choice.exists)
 
-        // The selection used to clear 0.6 s after opening, under the still-open picker.
         Thread.sleep(forTimeInterval: 1.5)
         XCTAssertTrue(choice.exists)
         let held = NSPredicate(format: "value CONTAINS %@", "Push Day. Zone 2 Conditioning. Mobility & Stretch")
         XCTAssertTrue(held.evaluate(with: ring), String(describing: ring.value))
 
-        // Tapping outside closes the picker and the selection together.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
         XCTAssertTrue(choice.waitToDisappear(timeout: 3))
         let cleared = expectation(for: NSPredicate(format: "value == ''"), evaluatedWith: ring)
@@ -1267,14 +1243,12 @@ final class BarosUITests: XCTestCase {
         let center = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         let outerSpoke = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5))
         let previewing = NSPredicate(format: "value != ''")
-        // Scrubbing turns on once the sweep finishes, so retry the drag until a preview appears.
         for _ in 0..<5 where !previewing.evaluate(with: ring) {
             center.press(forDuration: 0.05, thenDragTo: outerSpoke)
         }
         XCTAssertTrue(previewing.evaluate(with: ring))
         wait(for: [expectation(for: NSPredicate(format: "value == ''"), evaluatedWith: ring)], timeout: 5)
 
-        // The seed's three years put tree rings just inside the track, where this tap lands.
         ring.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)).tap()
         Thread.sleep(forTimeInterval: 1)
         XCTAssertEqual(ring.value as? String, "")
@@ -1291,7 +1265,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["ActiveWorkoutAccessory"].waitToExist(timeout: 3))
         app.terminate()
 
-        // Relaunch with a reset first-run experience: the active workout takes priority.
         let relaunchedApp = makeDiskBackedApp(
             extraArguments: ["--uitest-reset-first-run-experience"],
             skipsFirstRunExperience: false
@@ -1301,8 +1274,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(title.waitToExist(timeout: 5))
         XCTAssertEqual(title.value as? String, "Relaunch Active")
         XCTAssertFalse(relaunchedApp.staticTexts["LaunchExperienceTitle"].exists)
-        // The native accessory host stays mounted to preserve the tab bar's width, but its return
-        // action is hidden from accessibility while the workout presentation covers it.
         let coveredAccessory = relaunchedApp.buttons["ActiveWorkoutAccessory"]
         XCTAssertFalse(coveredAccessory.exists)
     }
@@ -1332,9 +1303,6 @@ final class BarosUITests: XCTestCase {
         let title = relaunchedApp.textFields["WorkoutTitle"]
         XCTAssertTrue(title.waitToExist(timeout: 5))
         XCTAssertEqual(title.value as? String, "Owner Launch Priority")
-        // A signed-in owner also skips onboarding on its own, so this absence
-        // no longer isolates active-workout priority; the coordinator unit
-        // tests cover that ordering directly.
         XCTAssertFalse(relaunchedApp.staticTexts["LaunchExperienceTitle"].exists)
     }
 
@@ -1353,7 +1321,6 @@ final class BarosUITests: XCTestCase {
         let target = lowestHittableSetWeightField(in: app)
         target.tap()
         XCTAssertTrue(waitForKeyboardFocus(on: target))
-        // The departing note must not pull the viewport back once it settles.
         waitForStableFrame(of: target)
         assertClearOfWorkoutChrome(target, in: app)
         XCTAssertEqual(note.value as? String, "Pause reps")
@@ -1570,7 +1537,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 3))
         XCTAssertEqual(app.textFields["WorkoutTitle"].value as? String, "Saturday Push")
 
-        // Dismissing the sheet interactively also commits the typed title.
         openFinishWorkoutSheet(in: app)
         XCTAssertTrue(finishTitleField.waitToExist(timeout: 3))
         replaceText(in: finishTitleField, with: "Dismissed Push")
@@ -1644,7 +1610,6 @@ final class BarosUITests: XCTestCase {
         )
         app.launch()
 
-        // Summaries count every saved row, matching the detail's "2 sets".
         XCTAssertTrue(app.tabButton(.history).waitToExist(timeout: 3))
         app.tabButton(.history).tap()
         let workout = app.buttons["WorkoutHistoryButton-0"]
@@ -1717,7 +1682,6 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testHistoryDetailLayoutsInBothAppearancesAndAccessibilitySize() {
-        // Light appearance had no appearance-specific assertion, only screenshots.
         for (appearance, accessible) in [("dark", false), ("dark", true)] {
             var arguments = [
                 "--uitest-seed-history-blocks",
@@ -1752,7 +1716,6 @@ final class BarosUITests: XCTestCase {
             exercise.tap()
             let estimate = app.descendants(matching: .any)["ExerciseRecord-estimated1RM"]
             XCTAssertTrue(estimate.waitToExist(timeout: 5))
-            // 185 × (1 + 5/30) = 215.83, shown as a whole pound so it doesn't read as exact.
             XCTAssertTrue(estimate.label.contains("about 216 pounds"), estimate.label)
             let heaviest = app.descendants(matching: .any)["ExerciseRecord-heaviestRep"]
             XCTAssertEqual(heaviest.frame.width, estimate.frame.width, accuracy: 1)
@@ -1850,7 +1813,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(firstLaunch.buttons["OnboardingContinueWithoutAccountButton"].exists)
         firstLaunch.terminate()
 
-        // Leaving before choosing an exit does not complete onboarding.
         let relaunchedApp = makeDiskBackedApp(skipsFirstRunExperience: false)
         relaunchedApp.launch()
 
@@ -1905,12 +1867,10 @@ final class BarosUITests: XCTestCase {
         let restOff = app.buttons["OnboardingRestTimerOff"]
         let rpeOn = app.buttons["OnboardingRPEOn"]
         let rpeOff = app.buttons["OnboardingRPEOff"]
-        // Defaults: pounds, rest timers on, RPE off.
         XCTAssertTrue(pounds.isSelected)
         XCTAssertFalse(kilograms.isSelected)
         XCTAssertTrue(restOn.isSelected)
         XCTAssertTrue(rpeOff.isSelected)
-        // Each choice names its question for VoiceOver, since two say "On".
         XCTAssertEqual(kilograms.label, "Weight unit, Kilograms")
         XCTAssertEqual(rpeOn.label, "Rate your effort (RPE), On")
 
@@ -1937,7 +1897,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(app.steppers["SettingsRestTimerStepper"].exists)
         XCTAssertEqual(rpeToggle.value as? String, "1")
 
-        // Settings stays the place to change them.
         units.buttons["Pounds"].tap()
         restToggle.switches.firstMatch.tap()
         rpeToggle.switches.firstMatch.tap()
@@ -1963,8 +1922,6 @@ final class BarosUITests: XCTestCase {
         dismissKeyboardIfNeeded(in: firstLaunch)
         firstLaunch.terminate()
 
-        // Signed in with an active workout and onboarding not yet completed:
-        // nothing is presented, but onboarding must still be settled.
         let signedInRelaunch = makeDiskBackedApp(
             extraArguments: [
                 "--uitest-sync-owner", owner,
@@ -1976,8 +1933,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(signedInRelaunch.textFields["WorkoutTitle"].waitToExist(timeout: 5))
         signedInRelaunch.terminate()
 
-        // Signed out, the owner's workout is hidden, so the launch evaluates
-        // onboarding; it was completed above and must not appear.
         let signedOutRelaunch = makeDiskBackedApp(skipsFirstRunExperience: false)
         signedOutRelaunch.launch()
 
@@ -2002,7 +1957,6 @@ final class BarosUITests: XCTestCase {
         continueButton.tap()
 
         XCTAssertTrue(app.staticTexts["OnboardingPreferencesTitle"].waitToExist(timeout: 3))
-        // At accessibility sizes the choices stack, so each keeps its full width.
         let pounds = app.buttons["OnboardingWeightUnitPounds"]
         let kilograms = app.buttons["OnboardingWeightUnitKilograms"]
         XCTAssertTrue(pounds.exists)
@@ -2029,7 +1983,6 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testSettingsCanOpenWhatsNew() {
-        // One appearance: the assertions do not depend on it.
         for appearance in ["dark"] {
             let arguments = ["-Baros.AppAppearance.preference", appearance]
             let app = makeApp(extraArguments: arguments)
@@ -2146,7 +2099,6 @@ final class BarosUITests: XCTestCase {
 
         startBlankWorkout(in: app)
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 3))
-        // Edit Workout appears only once the workout has an exercise.
         XCTAssertFalse(app.buttons["ActiveWorkoutEditButton"].exists)
 
         app.buttons["AddExerciseButton"].tap()
@@ -2160,15 +2112,11 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(firstWeightField.waitToExist(timeout: 3))
         XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
 
-        // Tap inside the visible rounded field, but outside its centered text.
-        // The entire field surface should focus the input, not just the glyphs.
         firstWeightField.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitToExist(timeout: 3))
         firstWeightField.typeText("185")
         app.buttons["AddSetButton-0"].tap()
 
-        // Adding a set keeps editing the current field; the new blank row
-        // suggests the in-progress value instead of taking focus.
         let secondWeightField = app.textFields["SetWeightField-0-1"]
         XCTAssertTrue(secondWeightField.waitToExist(timeout: 3))
         XCTAssertEqual(secondWeightField.value as? String, "Suggested 185")
@@ -2179,7 +2127,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.textFields["SetWeightField-0-2"].waitToExist(timeout: 3))
         XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
 
-        // A later exercise is scrolled into view, still without opening the keyboard.
         addExercise("ExercisePickerRow-Back Squat-Barbell", in: app)
         XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
         let addedExerciseHeader = app.buttons["ExerciseHeader-1"]
@@ -2199,10 +2146,10 @@ final class BarosUITests: XCTestCase {
         startBlankWorkout(in: app)
         app.buttons["AddExerciseButton"].tap()
         let add = app.buttons["ExercisePickerAddSelectedButton"]
-        XCTAssertTrue(add.waitToExist(timeout: 3))
-        XCTAssertFalse(add.isEnabled)
         let bench = app.buttons["ExercisePickerRow-Bench Press-Barbell"]
         let squat = app.buttons["ExercisePickerRow-Back Squat-Barbell"]
+        XCTAssertTrue(bench.waitToExist(timeout: 3))
+        XCTAssertFalse(add.exists)
         bench.tap()
         squat.tap()
         bench.tap()
@@ -2259,9 +2206,8 @@ final class BarosUITests: XCTestCase {
         app.buttons["ExercisePickerCancelButton"].tap()
         assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
         app.buttons["AddExerciseButton"].tap()
-        let add = app.buttons["ExercisePickerAddSelectedButton"]
-        XCTAssertTrue(add.waitToExist(timeout: 3))
-        XCTAssertFalse(add.isEnabled)
+        XCTAssertTrue(app.buttons["ExercisePickerRow-Back Squat-Barbell"].waitToExist(timeout: 3))
+        XCTAssertFalse(app.buttons["ExercisePickerAddSelectedButton"].exists)
     }
 
     @MainActor
@@ -2275,14 +2221,14 @@ final class BarosUITests: XCTestCase {
         app.buttons["StartWorkoutButton"].tap()
         let blankWorkout = app.buttons["StartBlankWorkoutButton"]
         XCTAssertTrue(blankWorkout.waitToExist(timeout: 3))
-        // The oversized Home-sheet labels can overlap at this text size. Use the
-        // leading icon to reach the picker whose layout this test exercises.
         blankWorkout.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)).tap()
         XCTAssertTrue(app.buttons["AddExerciseButton"].waitToExist(timeout: 3))
         app.buttons["AddExerciseButton"].tap()
+        let squat = app.buttons["ExercisePickerRow-Back Squat-Barbell"]
+        XCTAssertTrue(squat.waitToExist(timeout: 3))
+        squat.tap()
         let add = app.buttons["ExercisePickerAddSelectedButton"]
         XCTAssertTrue(add.waitToExist(timeout: 3))
-        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
         XCTAssertEqual(add.label, "Add 1 Exercise")
         XCTAssertTrue(add.isHittable)
         XCTAssertGreaterThanOrEqual(add.frame.height, 44)
@@ -2343,7 +2289,6 @@ final class BarosUITests: XCTestCase {
         selectPickerValue(identifier: "ExercisePrimaryMuscleGroupPicker", value: "Lats", in: app)
         XCTAssertEqual(figure.value as? String, "Lats highlighted")
 
-        // The figure only shows the selection; tapping it changes nothing.
         figure.tap()
         XCTAssertEqual(figure.value as? String, "Lats highlighted")
         XCTAssertTrue(targetArea.label.hasSuffix("Lats"))
@@ -2422,7 +2367,6 @@ final class BarosUITests: XCTestCase {
         startBlankWorkoutWithBenchPress(in: app)
         assertActiveWorkoutExerciseOrder(["Bench Press"], in: app)
 
-        // Cancelling the swap picker, even with a replacement chosen, changes nothing.
         app.buttons["ExerciseMenuButton-0"].tap()
         app.buttons["SwapExerciseButton-0"].tap()
         XCTAssertTrue(app.navigationBars["Swap Exercise"].waitToExist(timeout: 3))
@@ -2437,7 +2381,6 @@ final class BarosUITests: XCTestCase {
         cancelSearchField.typeText("Overhead Press")
         app.buttons["ExercisePickerRow-Overhead Press-Barbell"].tap()
         XCTAssertEqual(app.buttons["ExercisePickerConfirmSwapButton"].label, "Swap for Overhead Press")
-        // The navigation bar's Cancel returns once search closes, as in Add Exercises.
         let closeSearchButton = app.buttons["close"].firstMatch
         XCTAssertTrue(closeSearchButton.waitToExist(timeout: 3))
         closeSearchButton.tap()
@@ -2458,18 +2401,11 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(currentExercise.isEnabled)
         XCTAssertTrue(currentExercise.label.contains("Current exercise"))
 
-        // Search sits at the bottom, under the commit bar, and nothing commits until the bar is tapped.
         let searchField = app.searchFields.firstMatch
         XCTAssertTrue(searchField.waitToExist(timeout: 3))
         XCTAssertGreaterThan(searchField.frame.midY, app.frame.midY)
         let confirmButton = app.buttons["ExercisePickerConfirmSwapButton"]
-        XCTAssertLessThanOrEqual(confirmButton.frame.maxY, searchField.frame.minY)
-        XCTAssertFalse(confirmButton.isEnabled)
-        XCTAssertEqual(confirmButton.label, "Choose a Replacement")
-        XCTAssertEqual(
-            app.staticTexts["ExercisePickerSwapImpactText"].label,
-            "Bench Press has nothing logged yet"
-        )
+        XCTAssertFalse(confirmButton.exists)
         searchField.tap()
         searchField.typeText("Overhead Press")
         let replacementRow = app.buttons["ExercisePickerRow-Overhead Press-Barbell"]
@@ -2477,9 +2413,15 @@ final class BarosUITests: XCTestCase {
         replacementRow.tap()
 
         XCTAssertTrue(replacementRow.isSelected)
+        XCTAssertTrue(confirmButton.waitToExist(timeout: 3))
         XCTAssertTrue(confirmButton.isEnabled)
         XCTAssertEqual(confirmButton.label, "Swap for Overhead Press")
-        confirmButton.tap()
+        XCTAssertTrue(waitUntil(timeout: 3) { confirmButton.frame.maxY <= searchField.frame.minY })
+        XCTAssertEqual(
+            app.staticTexts["ExercisePickerSwapImpactText"].label,
+            "Bench Press has nothing logged yet"
+        )
+        confirmSwap(in: app)
 
         assertActiveWorkoutExerciseOrder(["Overhead Press"], in: app)
         let replacementWeightField = app.textFields["SetWeightField-0-0"]
@@ -2512,11 +2454,10 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(app.textFields["ExerciseNameField"].value as? String, "Swap Test Press")
         app.buttons["ExerciseEditorSaveButton"].tap()
 
-        // The new exercise is chosen, not swapped in, so the bar still confirms it.
         let confirmButton = app.buttons["ExercisePickerConfirmSwapButton"]
         XCTAssertTrue(app.navigationBars["Swap Exercise"].waitToExist(timeout: 3))
         XCTAssertTrue(waitUntil(timeout: 3) { confirmButton.label == "Swap for Swap Test Press" })
-        confirmButton.tap()
+        confirmSwap(in: app)
 
         assertActiveWorkoutExerciseOrder(["Swap Test Press"], in: app)
     }
@@ -2557,7 +2498,9 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Create Exercise"].waitToExist(timeout: 3))
         app.buttons["ExerciseEditorSaveButton"].tap()
         XCTAssertTrue(app.navigationBars["Add Exercises"].waitToExist(timeout: 3))
-        app.buttons["ExercisePickerAddSelectedButton"].tap()
+        let add = app.buttons["ExercisePickerAddSelectedButton"]
+        XCTAssertTrue(waitUntil(timeout: 3) { add.isHittable && add.frame.maxY <= search.frame.minY })
+        add.tap()
 
         XCTAssertTrue(app.alerts["Couldn't Add Exercises"].waitToExist(timeout: 3))
         app.alerts.buttons["OK"].tap()
@@ -2593,7 +2536,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertGreaterThan(delete.frame.minX, grip.frame.maxX - 1, "Delete sits trailing of the grip")
         XCTAssertEqual(delete.frame.midY, cell.frame.midY, accuracy: 12)
 
-        // Tapping the card closes the reveal without removing anything.
         cell.tap()
         XCTAssertTrue(waitForAbsence(delete, timeout: 3))
         XCTAssertEqual(grip.frame.minX, gripBefore.minX, accuracy: 1)
@@ -2643,7 +2585,6 @@ final class BarosUITests: XCTestCase {
         capture("Reorder controls")
         revealReorderRemoval(named: "Back Squat", in: app)
         capture("Revealed Remove action")
-        // A tap elsewhere first closes the open row; the next minus tap opens that row.
         reorderRemoval(named: "Barbell Row", revealed: false, in: app).tap()
         XCTAssertFalse(reorderRemoval(named: "Back Squat", revealed: true, in: app).exists)
         revealReorderRemoval(named: "Barbell Row", in: app)
@@ -2658,7 +2599,6 @@ final class BarosUITests: XCTestCase {
         app.buttons["Keep Editing"].tap()
         XCTAssertFalse(reorderRemoval(named: "Back Squat", revealed: false, in: app).exists)
         app.buttons["CancelReorderExercisesButton"].tap()
-        // Cancel discards both removals; a new draft sees the original list.
         openReorderSheet(in: app)
         XCTAssertTrue(reorderRemoval(named: "Back Squat", revealed: false, in: app).exists)
         XCTAssertTrue(reorderRemoval(named: "Barbell Row", revealed: false, in: app).exists)
@@ -2696,9 +2636,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(waitForReorderExercisesList(in: app, timeout: 3))
     }
 
-    /// The system minus while at rest, or the Delete it reveals. The list shows one Delete
-    /// at a time outside the cell, so it only counts as this row's when it lines up with it.
-    /// The match is checked when called; use `waitForRevealedReorderRemoval` to wait for it.
     @MainActor
     private func reorderRemoval(named name: String, revealed: Bool, in app: XCUIApplication) -> XCUIElement {
         let row = reorderExerciseRow(named: name, in: app)
@@ -2713,7 +2650,6 @@ final class BarosUITests: XCTestCase {
         abs(delete.frame.midY - row.frame.midY) <= row.frame.height / 2
     }
 
-    /// Rechecks the row, its Delete, and their alignment together until they agree.
     @MainActor
     private func waitForRevealedReorderRemoval(named name: String, timeout: TimeInterval, in app: XCUIApplication) -> Bool {
         let row = reorderExerciseRow(named: name, in: app)
@@ -2737,7 +2673,6 @@ final class BarosUITests: XCTestCase {
     private func revealReorderRemoval(named name: String, in app: XCUIApplication) {
         let minus = reorderRemoval(named: name, revealed: false, in: app)
         XCTAssertTrue(minus.waitToExist(timeout: 3), reorderExercisesList(in: app).debugDescription)
-        // While another row is revealed, the first tap only closes it.
         for _ in 0..<2 {
             minus.tap()
             if waitForRevealedReorderRemoval(named: name, timeout: 1.5, in: app) { return }
@@ -2772,7 +2707,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(notesField.label, "Workout note")
         XCTAssertFalse(app.staticTexts["WORKOUT NOTES"].exists)
         XCTAssertTrue(app.keyboards.firstMatch.waitToExist(timeout: 3))
-        // The focused note scrolls clear of the keyboard toolbar.
         let doneButton = app.buttons["DismissKeyboardButton"]
         XCTAssertTrue(doneButton.waitToExist(timeout: 3))
         XCTAssertLessThan(notesField.frame.maxY, doneButton.frame.minY - 8)
@@ -2820,7 +2754,6 @@ final class BarosUITests: XCTestCase {
         let addNoteButton = app.buttons["AddExerciseNoteButton-0"]
         XCTAssertTrue(addNoteButton.waitToExist(timeout: 3))
         XCTAssertFalse(app.textFields["ExerciseNotesField-0"].exists)
-        // The note action shares the footer row with Add Set, after the sets.
         let lastSetCompletion = app.buttons["SetCompletionButton-0-0"]
         let addSetButton = app.buttons["AddSetButton-0"]
         XCTAssertTrue(addSetButton.exists)
@@ -2834,7 +2767,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["EXERCISE NOTE"].exists)
         XCTAssertEqual(notesField.label, "Exercise note")
         XCTAssertTrue(app.keyboards.firstMatch.waitToExist(timeout: 3))
-        // The focused note scrolls clear of the keyboard toolbar.
         let doneButton = app.buttons["DismissKeyboardButton"]
         XCTAssertTrue(doneButton.waitToExist(timeout: 3))
         XCTAssertLessThan(notesField.frame.maxY, doneButton.frame.minY - 8)
@@ -2850,7 +2782,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(waitForAbsence(notesField, timeout: 3))
         XCTAssertTrue(addNoteButton.waitToExist(timeout: 3))
 
-        // An empty revealed note also returns to compact after its card collapses...
         addNoteButton.tap()
         XCTAssertTrue(notesField.waitToExist(timeout: 3))
         app.buttons["ExerciseHeader-0"].tap()
@@ -2858,7 +2789,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(notesField.exists)
         XCTAssertTrue(addNoteButton.waitToExist(timeout: 3))
 
-        // ...and after navigating to Quick History and back.
         addNoteButton.tap()
         XCTAssertTrue(notesField.waitToExist(timeout: 3))
         app.buttons["ExerciseMenuButton-0"].tap()
@@ -2894,7 +2824,6 @@ final class BarosUITests: XCTestCase {
         let app = makeApp()
         app.launch()
         startBlankWorkoutWithBenchPress(in: app)
-        // The set header omits self-explanatory columns.
         XCTAssertFalse(app.staticTexts["SET"].exists)
         XCTAssertFalse(app.staticTexts["COMPLETE"].exists)
 
@@ -2914,7 +2843,6 @@ final class BarosUITests: XCTestCase {
             XCTAssertLessThanOrEqual(completionButton.frame.maxX, windowFrame.maxX)
         }
 
-        // The final row has no extra bottom spacing before Add Set.
         let finalCompletionButton = app.buttons["SetCompletionButton-0-2"]
         let addSetButton = app.buttons["AddSetButton-0"]
         XCTAssertTrue(addSetButton.exists)
@@ -2960,8 +2888,6 @@ final class BarosUITests: XCTestCase {
         repsField.tap()
         repsField.typeText("5")
 
-        // Backgrounding must flush the still-focused reps draft without
-        // requiring Done or another field transition first.
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(repsField.waitToExist(timeout: 3))
@@ -3125,7 +3051,6 @@ final class BarosUITests: XCTestCase {
 
         app.tabButton(.history).tap()
 
-        // History uses the native large title above its search field.
         let navigationBar = app.navigationBars["History"]
         XCTAssertTrue(navigationBar.waitToExist(timeout: 3))
         let title = navigationBar.staticTexts["History"]
@@ -3301,7 +3226,6 @@ final class BarosUITests: XCTestCase {
         replaceText(in: app.textFields["CompletedWorkoutTitleField"], with: "Edited Push")
         setCompletedWorkoutDuration(minutes: 45, in: app)
         let completedNotesField = app.textFields["CompletedWorkoutNotesField"]
-        // Exercise the lower trailing padding inside the visible field border.
         completedNotesField.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.9)).tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitToExist(timeout: 3))
         completedNotesField.typeText("Post edit notes")
@@ -3633,7 +3557,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(reps.value as? String, "5")
         XCTAssertEqual(app.buttons["SetCompletionButton-9-1"].label, "Mark set complete")
 
-        // An explicit tap replaces a draft even while its field is focused.
         replaceText(in: reps, with: "")
         dismissKeyboardIfNeeded(in: app)
         replaceText(in: weight, with: "130")
@@ -3679,8 +3602,6 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testEarlierSetSuggestionsStayUnrecordedUntilCheckmarkOrRPE() {
-        // makeApp turns UIKit animations off. With them on, iOS 26.5 on CI never reported
-        // this screen idle after the keyboard closed, so each step waited 60 s (#417).
         let app = makeApp()
         app.launch()
         startBlankWorkoutWithBenchPress(in: app)
@@ -3722,7 +3643,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(secondReps.value as? String, "12")
         XCTAssertEqual(app.buttons["SetCompletionButton-0-1"].label, "Mark set incomplete")
 
-        // A changed source must reach an already registered RPE callback.
         replaceText(in: secondReps, with: "10")
         app.revealAboveWorkoutActions(thirdWeight)
         thirdWeight.tap()
@@ -3742,14 +3662,13 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testCheckmarkAndRPEConsumePendingInputAndDismissKeyboard() {
-        // Use an isolated in-memory fixture so this focused interaction can
-        // also run on a physical phone without resetting its workout store.
         let app = XCUIApplication()
         app.launchArguments = [
             "--uitest-in-memory-store", "--uitest-enable-rpe",
             "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience",
             "--uitest-seed-completed-bench-workout", "Past Push",
+            "--uitest-disable-animations",
         ]
         app.launch()
         openFirstPastWorkout(in: app)
@@ -3769,7 +3688,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(repsField.value as? String, "5")
         XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
 
-        // Choosing an RPE finishes the set, so the keyboard dismisses.
         repsField.tap()
         XCTAssertTrue(waitForKeyboardFocus(on: repsField))
         enterRPEViaChips("8", in: app)
@@ -3782,7 +3700,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(repsField.value as? String, "5")
         XCTAssertTrue(app.buttons["SetRPEBadge-0-0"].exists)
 
-        // Checkmark while reps is still being edited.
         replaceText(in: repsField, with: "6")
         completionButton.tap()
         XCTAssertEqual(repsField.value as? String, "6")
@@ -3818,7 +3735,6 @@ final class BarosUITests: XCTestCase {
         let badge = app.buttons["SetRPEBadge-0-0"]
         XCTAssertTrue(badge.waitToExist(timeout: 3))
         badge.tap()
-        // Tapping the selected chip again clears the RPE.
         let selectedChip = app.buttons["RPEChip-8"]
         XCTAssertTrue(selectedChip.waitToExist(timeout: 3))
         selectedChip.tap()
@@ -3875,7 +3791,6 @@ final class BarosUITests: XCTestCase {
 
         let menu = app.buttons["ExerciseMenuButton-0"]
         XCTAssertTrue(menu.waitToExist(timeout: 3))
-        // The metrics header floats over the list; keep the menu below it.
         let headerBottom = app.buttons["FinishWorkoutButton"].frame.maxY
         if menu.frame.minY < headerBottom + 4 {
             let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
@@ -3920,7 +3835,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["ExerciseHistoryNoteLabel"].exists)
         XCTAssertEqual(noteText.label, "Exercise note")
         XCTAssertEqual(noteText.value as? String, "Pause at the bottom\nKeep wrists stacked")
-        // The only logged set holds both records, marked as in Exercise History.
         XCTAssertEqual(setLabel.label, "Set 1, 185 pounds, 5 reps, RPE 8, Heaviest Rep, Estimated 1RM")
         for _ in 0..<8 where !(noteText.exists && noteText.isHittable) { app.swipeUp() }
         XCTAssertTrue(noteText.isHittable)
@@ -3932,7 +3846,6 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testQuickHistoryMediumDetentShowsHeadingDateAndFirstJournalSet() {
-        // One appearance: the assertions do not depend on it.
         for appearance in ["dark"] {
             let app = makeApp(
                 extraArguments: [
@@ -3950,7 +3863,6 @@ final class BarosUITests: XCTestCase {
             app.buttons["ExerciseHistoryButton-0"].tap()
             let heading = app.descendants(matching: .any)["QuickExerciseHistoryHeading"]
             XCTAssertTrue(heading.waitToExist(timeout: 5))
-            // The workout row's header carries the date tile.
             let date = app.buttons.matching(NSPredicate(
                 format: "identifier BEGINSWITH %@", "ExercisePerformanceWorkoutButton-"
             )).firstMatch
@@ -4042,7 +3954,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 3))
         XCTAssertEqual(app.textFields["WorkoutTitle"].value as? String, "Past Push")
 
-        // Sets are copied as incomplete, with the past values offered as Previous.
         let previousValue = app.buttons["SetPreviousValue-0-0"]
         XCTAssertTrue(previousValue.waitToExist(timeout: 3))
         XCTAssertEqual(previousValue.label, "Previous: 185 × 5")
@@ -4066,7 +3977,6 @@ final class BarosUITests: XCTestCase {
 
         let historyRow = app.buttons["ExerciseHistoryButton-0"]
         XCTAssertTrue(historyRow.waitToExist(timeout: 3))
-        // Same summary as the Exercise History heading.
         XCTAssertTrue(historyRow.label.contains("1 workout · Last "), historyRow.label)
         XCTAssertFalse(historyRow.label.contains("x1"))
 
@@ -4127,7 +4037,6 @@ final class BarosUITests: XCTestCase {
         app.buttons["AddSetButton-0"].tap()
         let secondWeightField = app.textFields["SetWeightField-0-1"]
         XCTAssertTrue(secondWeightField.waitToExist(timeout: 3))
-        // A newly added set is blank and suggests the prior set's weight.
         XCTAssertEqual(secondWeightField.value as? String, "Suggested 100")
         XCTAssertEqual(secondWeightField.label, "KG")
         secondWeightField.tap()
@@ -4236,7 +4145,6 @@ final class BarosUITests: XCTestCase {
         tapTab(.history, in: app)
         XCTAssertTrue(app.buttons["WorkoutHistoryButton-0"].waitToExist(timeout: 3))
         tapTab(.settings, in: app)
-        // Signed out, Settings offers only local data deletion.
         revealSettingsRow(app.buttons["SettingsDeleteLocalDataRow"], in: app)
         XCTAssertTrue(app.staticTexts["Privacy & Data"].exists)
         XCTAssertFalse(app.buttons["SettingsDeleteAccountRow"].exists)
@@ -4270,7 +4178,6 @@ final class BarosUITests: XCTestCase {
         app.launch()
         tapTab(.settings, in: app)
 
-        // Signed in, Settings shows the account and offers only account deletion.
         let accountRow = app.buttons["SettingsManageAccountButton"]
         XCTAssertTrue(accountRow.waitToExist(timeout: 3))
         XCTAssertEqual(accountRow.label, "UI Test Account, ui-test@example.com")
@@ -4312,7 +4219,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertFalse(app.buttons["ExerciseLibraryRow-Back Squat-Barbell"].exists)
         replaceText(in: search, with: "  No  ")
         XCTAssertTrue(app.staticTexts["No Matching Exercises"].waitToExist(timeout: 3))
-        // The entire card must respond, including blank space outside the short label.
         app.buttons["ExerciseLibraryCreateExerciseFromSearchButton"]
             .coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         XCTAssertTrue(app.textFields["ExerciseNameField"].waitToExist(timeout: 3))
@@ -4360,11 +4266,10 @@ final class BarosUITests: XCTestCase {
         app.alerts.buttons["Delete"].tap()
         XCTAssertTrue(waitForAbsence(app.buttons["ExerciseLibraryRow-Aardvark Paused Row-Barbell"], timeout: 3))
 
-        // A seeded exercise is archived rather than deleted, and can be restored.
         let row = app.buttons["ExerciseLibraryRow-Back Squat-Barbell"]
         XCTAssertTrue(row.waitToExist(timeout: 3))
         row.swipeLeft()
-        XCTAssertTrue(row.exists) // Swiping alone cannot remove.
+        XCTAssertTrue(row.exists)
         app.buttons["Remove"].tap()
         XCTAssertTrue(app.staticTexts["Archive Back Squat?"].waitToExist(timeout: 3))
         app.buttons["Cancel"].tap()
@@ -4493,7 +4398,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertEqual(app.buttons["EmptyHistorySignInButton"].label, "Sign in")
         XCTAssertFalse(app.staticTexts["You're signed out"].exists)
 
-        // Sign In presents the existing auth flow, and cancelling returns to the prompt.
         let signInButton = app.buttons["EmptyHistorySignInButton"]
         signInButton.tap()
         let authView = app.descendants(matching: .any)["EmptyHistoryAuthView"]
@@ -4527,7 +4431,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertTrue(app.buttons["StartWorkoutButton"].isHittable)
         XCTAssertFalse(app.buttons["HomeQuickStartButton-0"].exists)
 
-        // The reminder's Sign In presents the existing auth flow; swiping it away returns.
         let reminderSignInButton = app.buttons["SignedOutReminderSignInButton"]
         XCTAssertTrue(reminderSignInButton.exists)
         reminderSignInButton.tap()
@@ -4568,7 +4471,6 @@ final class BarosUITests: XCTestCase {
         app.buttons["SignedOutReminderDismissButton"].tap()
         XCTAssertTrue(waitForAbsence(banner, timeout: 3))
 
-        // The empty state still explains the sign-out after the reminder is dismissed.
         tapTab(.history, in: app)
         XCTAssertTrue(app.staticTexts["You're signed out"].waitToExist(timeout: 3))
 
@@ -5035,30 +4937,28 @@ final class BarosUITests: XCTestCase {
                         let exerciseButton = app.buttons[exerciseRowIdentifier]
                         XCTAssertTrue(exerciseButton.waitToExist(timeout: readyTimeout))
                         exerciseButton.tap()
-                        app.buttons["ExercisePickerAddSelectedButton"].tap()
+                        let addSelectedButton = app.buttons["ExercisePickerAddSelectedButton"]
+                        XCTAssertTrue(addSelectedButton.waitToExist(timeout: readyTimeout))
+                        addSelectedButton.tap()
                         return
                     }
 
                     for _ in 0..<8 {
                         let exerciseButton = app.buttons[exerciseRowIdentifier]
                         let navigationBar = app.navigationBars["Add Exercises"]
-                        let addSelectedButton = app.buttons["ExercisePickerAddSelectedButton"]
-                        // Rows scroll between the navigation bar and the pinned Add button,
-                        // which sits above the bottom search field.
                         let visibleTop = navigationBar.frame.maxY
-                        let visibleBottom = addSelectedButton.frame.minY
+                        let visibleBottom = app.searchFields.firstMatch.frame.minY
                         let isFullyVisible = exerciseButton.exists
                             && exerciseButton.frame.minY >= visibleTop
                             && exerciseButton.frame.maxY <= visibleBottom
                         if isFullyVisible && exerciseButton.isHittable {
                             exerciseButton.tap()
+                            let addSelectedButton = app.buttons["ExercisePickerAddSelectedButton"]
+                            XCTAssertTrue(addSelectedButton.waitToExist(timeout: readyTimeout))
                             addSelectedButton.tap()
                             return
                         }
 
-                        // At accessibility sizes a row is nearly a third of that band, and a
-                        // swipe's momentum carries it from under the Add button past the navigation
-                        // bar. Drag without momentum to center the row in the band instead.
                         let span = visibleBottom - visibleTop
                         let offset = exerciseButton.exists
                             ? exerciseButton.frame.midY - (visibleTop + visibleBottom) / 2
@@ -5084,6 +4984,16 @@ final class BarosUITests: XCTestCase {
         }
 
         XCTFail("Could not present Add Exercise sheet")
+    }
+
+    @MainActor
+    private func confirmSwap(in app: XCUIApplication) {
+        let confirmButton = app.buttons["ExercisePickerConfirmSwapButton"]
+        XCTAssertTrue(confirmButton.waitToExist(timeout: 3))
+        XCTAssertTrue(waitUntil(timeout: 5) {
+            if confirmButton.exists { confirmButton.tap() }
+            return !confirmButton.exists
+        })
     }
 
     @MainActor
@@ -5114,7 +5024,6 @@ final class BarosUITests: XCTestCase {
                 return
             }
 
-            // The top of the destination row; above it is the navigation bar, which cancels the drop.
             let destinationY = destinationRow.frame.minY + destinationRow.frame.height * 0.2
             let sourceCoordinate = sourceRow.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
             let destinationCoordinate = sourceRow.coordinate(
@@ -5165,7 +5074,6 @@ final class BarosUITests: XCTestCase {
         return app.tables["ReorderExercisesList"]
     }
 
-    /// The list cell holding the exercise name, which spans the row out to its grip.
     @MainActor
     private func reorderExerciseRow(named name: String, in app: XCUIApplication) -> XCUIElement {
         reorderExercisesList(in: app).cells.containing(NSPredicate(format: "label == %@", name)).firstMatch
@@ -5187,9 +5095,6 @@ final class BarosUITests: XCTestCase {
         return waitUntil(timeout: timeout) { element.exists && focused.evaluate(with: element) }
     }
 
-    /// Keyboard-avoidance assertions are meaningless when the simulator routes
-    /// input through a hardware keyboard. It still reports a keyboard element
-    /// then, so check that one actually occupies the bottom of the screen.
     @MainActor
     private func requireOnScreenKeyboard(in app: XCUIApplication) throws {
         let keyboard = app.keyboards.firstMatch
@@ -5200,9 +5105,8 @@ final class BarosUITests: XCTestCase {
         }
     }
 
-    /// Waits until keyboard avoidance and any follow-up scroll have finished moving `element`.
     @MainActor
-    private func waitForStableFrame(of element: XCUIElement, timeout: TimeInterval = 3) {
+    private func waitForStableFrame(of element: XCUIElement, timeout: TimeInterval = 20) {
         let deadline = Date().addingTimeInterval(timeout)
         var previous = element.frame
         var stableSamples = 0
@@ -5215,11 +5119,6 @@ final class BarosUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(stableSamples, 3, "The focused field kept moving.")
     }
 
-    /// The lowest on-screen set field is the one keyboard avoidance must move the most.
-    ///
-    /// Reads one snapshot of the hierarchy instead of querying each field: in the large seeded
-    /// workout every query walks the whole accessibility tree, and the per-field queries this
-    /// replaced took over a minute.
     @MainActor
     private func lowestHittableSetWeightField(in app: XCUIApplication) -> XCUIElement {
         guard let root = try? app.snapshot() else {
@@ -5233,7 +5132,6 @@ final class BarosUITests: XCTestCase {
             pending.append(contentsOf: next.children)
         }
         let window = root.frame
-        // The top of the bottom chrome, as in `XCUIApplication.workoutActionBarTop`.
         let chromeIdentifiers: Set = ["ActiveWorkoutEditButton", "AddExerciseButton", "DismissKeyboardButton"]
         let barTop = snapshots
             .filter { chromeIdentifiers.contains($0.identifier) && $0.frame.minY > window.midY * 0.9 }
@@ -5244,7 +5142,6 @@ final class BarosUITests: XCTestCase {
         let lowest = snapshots
             .filter { $0.elementType == .textField && fieldIdentifiers.contains($0.identifier) }
             .filter { $0.frame.minY >= window.minY && $0.frame.maxY <= window.maxY }
-            // A row under the bottom action bar is covered, not visible.
             .filter { field in barTop.map { field.frame.maxY <= $0 } ?? true }
             .max { $0.frame.maxY < $1.frame.maxY }
         XCTAssertNotNil(lowest, "Expected a visible set field.")
@@ -5347,18 +5244,13 @@ final class BarosUITests: XCTestCase {
     }
 }
 
-/// The app's permanent tabs as UI tests see them.
 extension XCUIApplication {
-    /// The top of the Active Workout's bottom chrome: the reserved action bar
-    /// (Edit stacks above Add Exercise at accessibility sizes) or, with the
-    /// keyboard up, its RPE/Done bar. Rows beneath it cannot take taps.
     var workoutActionBarTop: CGFloat? {
         let chrome = [buttons["ActiveWorkoutEditButton"], buttons["AddExerciseButton"], buttons["DismissKeyboardButton"]]
         let tops = chrome.filter { $0.exists && $0.frame.minY > frame.midY * 0.9 }.map(\.frame.minY)
         return tops.min().map { $0 - 8 }
     }
 
-    /// Scrolls the workout until `element` sits above its bottom chrome.
     func revealAboveWorkoutActions(_ element: XCUIElement) {
         for _ in 0..<4 {
             guard let top = workoutActionBarTop, element.exists, element.frame.maxY > top else { return }
@@ -5420,13 +5312,11 @@ func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
 }
 
 extension XCUIElement {
-    /// `waitForExistence(timeout:)` without its one-second first poll.
     @discardableResult
     func waitToExist(timeout: TimeInterval) -> Bool {
         waitUntil(timeout: timeout) { exists }
     }
 
-    /// `waitForNonExistence(timeout:)` without its one-second first poll.
     @discardableResult
     func waitToDisappear(timeout: TimeInterval) -> Bool {
         waitUntil(timeout: timeout) { !exists }

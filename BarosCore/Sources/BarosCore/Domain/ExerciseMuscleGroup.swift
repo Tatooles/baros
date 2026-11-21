@@ -60,8 +60,6 @@ public enum ExerciseMuscleGroup: String, CaseIterable, Codable, Identifiable, Se
         public var id: String { title }
     }
 
-    /// Every group exactly once. Upper holds everything Upper Body highlights,
-    /// Lower everything Lower Body highlights, each ordered top to bottom.
     public static let pickerSections: [PickerSection] = [
         PickerSection(
             title: "Upper",

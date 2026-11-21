@@ -1,8 +1,6 @@
 import Foundation
 @testable import BarosCore
 
-// Copy of `FakeSyncClient` from BarosCore/Tests/BarosCoreTests/SyncCoordinatorTests.swift.
-// Hosted tests cannot import the package test target, so keep the two in sync.
 final class FakeSyncClient: SyncClient, @unchecked Sendable {
     var upsertedSettings: [UserSettingsSyncPayload] = []
     var upsertedExercises: [ExerciseSyncPayload] = []

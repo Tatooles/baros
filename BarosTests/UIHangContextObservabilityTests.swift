@@ -162,7 +162,6 @@ final class UIHangContextObservabilityTests: XCTestCase {
         XCTAssertEqual(sink.snapshots.last?.surface, .exercisePicker)
         XCTAssertNil(sink.snapshots.last?.focusedField)
         context.shellChanged(screen: .settings, presentation: .whatsNew)
-        // Late callbacks from the dismissed workout must not replace What's New.
         context.addExerciseDismissed()
         context.activeWorkoutStructureChanged(exerciseCount: 30, setCount: 100)
         context.activeWorkoutCeasedBeingCurrent()
@@ -311,7 +310,6 @@ final class UIHangContextObservabilityTests: XCTestCase {
                         "focused_field": "set_reps",
                     ]
                     context[key] = invalidValue
-                    // Both failed casts used to look like absent, optional picker buckets.
                     if key != "focused_field" {
                         context["exercise_count_bucket"] = invalidValue
                         context["set_count_bucket"] = invalidValue

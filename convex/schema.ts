@@ -87,7 +87,6 @@ export default defineSchema({
     notes: v.string(),
     isArchived: v.boolean(),
     isSeeded: v.boolean(),
-    // "reps" or "duration". Missing means reps.
     trackingMethodRaw: v.optional(v.string()),
   })
     .index("by_ownerTokenIdentifier_and_clientId", [
@@ -107,7 +106,6 @@ export default defineSchema({
     durationSeconds: v.number(),
     notes: v.string(),
     referenceNotes: nullableString,
-    // Active sessions stay local-only for v1 and are intentionally excluded from Convex sync.
     statusRaw: v.union(v.literal("completed"), v.literal("discarded")),
     sourceRaw: v.union(
       v.literal("blank"),
@@ -140,7 +138,6 @@ export default defineSchema({
     referenceNotes: nullableString,
     sourceLoggedExerciseID: v.optional(nullableString),
     supersetGroupID: v.optional(nullableString),
-    // The exercise's tracking method when it was logged. Missing means reps.
     trackingMethodRaw: v.optional(v.string()),
   })
     .index("by_ownerTokenIdentifier_and_clientId", [
