@@ -46,7 +46,7 @@ Actions checks. Pushes to `main` use the same path boundaries. The checks are:
 - `convex-checks`: runs Convex Vitest coverage and Convex typecheck.
 - `support-site-checks`: builds, checks, and tests the Astro support site, including any tracked release-asset contracts.
 - `test-hygiene`: runs on every PR and fails when an added line in a Swift test target sleeps without an `allow-sleep:` reason, or skips a test without naming an issue or an `allow-skip:` reason. Rules live in `scripts/pr-checks.mjs`.
-- `pr-size`: labels same-repo, non-Dependabot PRs `size:XS`–`size:XXL` and keeps one comment up to date when a PR adds `BarosUITests` cases or grows the suite by 20 or more. It reports only and never fails. AGENTS.md → "PR size" says what each size requires.
+- `pr-size`: measures the PR (`size:XS`–`size:XXL`) and its test delta without a write token, and reports only. `pr-size-label` then applies the label and keeps one comment up to date when the PR adds `BarosUITests` cases. It checks out no code, and it skips fork and Dependabot PRs, which get a read-only token. AGENTS.md → "PR size" says when a PR needs the full UI suite.
 
 The three app jobs report as skipped on support-site-only or unrelated pull
 requests, which preserves their required-check results without reserving a

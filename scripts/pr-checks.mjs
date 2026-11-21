@@ -29,7 +29,6 @@ export const SIZE_LABELS = [
 ];
 
 export const DELTA_MARKER = "<!-- pr-checks:test-delta -->";
-const NET_CASES_TO_REPORT = 20;
 
 const KIND_NAMES = {
   core: "BarosCore",
@@ -54,9 +53,9 @@ export function parseDiff(diff) {
     }
     if (!file) continue;
     if (line.startsWith("new file mode")) file.isNew = true;
-    else if (!inHunk && line.startsWith("--- ")) file.oldPath = stripPrefix(line.slice(4), "a/");
+    else if (!inHunk && line.startsWith("--- ")) file.oldPath = headerPath(line.slice(4), "a/");
     else if (!inHunk && line.startsWith("+++ ")) {
-      const target = stripPrefix(line.slice(4), "b/");
+      const target = headerPath(line.slice(4), "b/");
       file.path = target ?? file.oldPath;
     } else if (line.startsWith("@@")) {
       inHunk = true;
@@ -67,17 +66,44 @@ export function parseDiff(diff) {
     } else if (line.startsWith("-")) {
       file.removedText.push(line.slice(1));
     } else if (!inHunk && line.startsWith("rename from ")) {
-      file.oldPath = line.slice("rename from ".length);
+      file.oldPath = decodeGitPath(line.slice("rename from ".length));
     } else if (!inHunk && line.startsWith("rename to ")) {
-      file.path = line.slice("rename to ".length);
+      file.path = decodeGitPath(line.slice("rename to ".length));
     }
   }
   return files.filter((entry) => entry.path);
 }
 
-function stripPrefix(path, prefix) {
+function headerPath(raw, prefix) {
+  // Git ends a ---/+++ path that contains a space with a tab.
+  const path = decodeGitPath(raw.replace(/\t$/, ""));
   if (path === "/dev/null") return null;
   return path.startsWith(prefix) ? path.slice(prefix.length) : path;
+}
+
+const C_ESCAPES = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13, '"': 34, "\\": 92 };
+
+/** Decodes a path Git wrote in C-quoted form, such as "BarosUITests/S\303\251ance.swift". */
+export function decodeGitPath(raw) {
+  if (!(raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2)) return raw;
+  const bytes = [];
+  const body = raw.slice(1, -1);
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index];
+    if (char !== "\\") {
+      bytes.push(...Buffer.from(char, "utf8"));
+      continue;
+    }
+    const octal = body.slice(index + 1, index + 4);
+    if (/^[0-7]{3}$/.test(octal)) {
+      bytes.push(Number.parseInt(octal, 8));
+      index += 3;
+    } else {
+      bytes.push(C_ESCAPES[body[index + 1]] ?? body.charCodeAt(index + 1));
+      index += 1;
+    }
+  }
+  return Buffer.from(bytes).toString("utf8");
 }
 
 /** Treats an untracked file as wholly added. */
@@ -93,45 +119,63 @@ export function untrackedFile(path, contents) {
   };
 }
 
-const SLEEP = /(?:\bThread\.sleep|\bTask\.sleep|(?<![.\w])u?sleep)\s*\(/;
-const SKIP = /\bXCTSkip(?:If|Unless)?\b|\bXCTExpectFailure\b|\.disabled\s*\(/;
+const SLEEP =
+  /(?:\bThread\.sleep|\bTask\.sleep|(?<![.\w]|\bfunc\s)u?sleep)\s*\(|\bRunLoop\.\w+\.run\s*\(\s*until:|\.asyncAfter\s*\(/;
+// `.disabled(` counts only as a Swift Testing trait, never the SwiftUI modifier.
+const SKIP = /\bXCTSkip(?:If|Unless)?\b|\bXCTExpectFailure\b|@(?:Test|Suite)\s*\([^)]*\.disabled\s*\(/;
 const ALLOW_SLEEP = /allow-sleep:\s*\S/;
-const ALLOW_SKIP = /allow-skip:\s*\S|#\d+/;
+const ALLOW_SKIP = /allow-skip:\s*\S|#\d{2,}/;
 
-const isCode = (text) => !/^\s*\/\//.test(text);
+const MAX_CALL_LINES = 8;
+
+const isComment = (text) => /^\s*\/\//.test(text);
+const codeOf = (text) => text.replace(/\s*\/\/.*$/, "").replace(/\s+/g, " ").trim();
+
+/** The call's own line plus the lines that finish its arguments. */
+function callText(lines, line, text) {
+  const parts = [text];
+  let depth = (text.match(/\(/g) ?? []).length - (text.match(/\)/g) ?? []).length;
+  for (let index = line; depth > 0 && index < Math.min(lines.length, line - 1 + MAX_CALL_LINES); index += 1) {
+    parts.push(lines[index]);
+    depth += (lines[index].match(/\(/g) ?? []).length - (lines[index].match(/\)/g) ?? []).length;
+  }
+  return parts.join("\n");
+}
 
 /**
  * Flags new sleeps and unexplained skips on added lines of Swift test files.
- * A file may keep as many as its diff removes, so editing or moving an
- * existing one is not new. `readLines(path)` returns the file after the
- * change, so a reason on an unchanged line above an added line counts.
+ * A reason counts on the line itself, in a comment on the line above, or, for
+ * a skip, anywhere in the call's arguments. A line whose code the same file's
+ * diff removes is an edit or move, not a new one. `readLines(path)` returns
+ * the file after the change.
  */
 export function checkHygiene(files, readLines) {
   const findings = [];
   for (const file of files) {
     if (!SWIFT_TEST_DIR.test(file.path) || !file.path.endsWith(".swift")) continue;
-    const removed = file.removedText.filter(isCode);
-    const budget = {
-      "no-new-sleep": removed.filter((text) => SLEEP.test(text)).length,
-      "skip-needs-reason": removed.filter((text) => SKIP.test(text)).length,
-    };
+    const unchanged = file.removedText
+      .filter((text) => !isComment(text) && (SLEEP.test(text) || SKIP.test(text)))
+      .map(codeOf);
     let lines = null;
     for (const { line, text } of file.added) {
-      if (!isCode(text)) continue;
-      const rules = [];
-      if (SLEEP.test(text)) rules.push(["no-new-sleep", ALLOW_SLEEP]);
-      if (SKIP.test(text)) rules.push(["skip-needs-reason", ALLOW_SKIP]);
-      if (rules.length === 0) continue;
+      if (isComment(text)) continue;
+      const isSleep = SLEEP.test(text);
+      const isSkip = SKIP.test(text);
+      if (!isSleep && !isSkip) continue;
       lines ??= readLines(file.path);
-      const nearby = `${lines[line - 2] ?? ""}\n${text}`;
-      for (const [rule, allow] of rules) {
-        if (allow.test(nearby)) continue;
-        if (budget[rule] > 0) {
-          budget[rule] -= 1;
-          continue;
-        }
-        findings.push({ path: file.path, line, rule, message: MESSAGES[rule] });
+      const above = isComment(lines[line - 2] ?? "") ? lines[line - 2] : "";
+      const missing = [];
+      if (isSleep && !ALLOW_SLEEP.test(`${above}\n${text}`)) missing.push("no-new-sleep");
+      if (isSkip && !ALLOW_SKIP.test(`${above}\n${callText(lines, line, text)}`)) {
+        missing.push("skip-needs-reason");
       }
+      if (missing.length === 0) continue;
+      const kept = unchanged.indexOf(codeOf(text));
+      if (kept !== -1) {
+        unchanged.splice(kept, 1);
+        continue;
+      }
+      for (const rule of missing) findings.push({ path: file.path, line, rule, message: MESSAGES[rule] });
     }
   }
   return findings;
@@ -139,9 +183,9 @@ export function checkHygiene(files, readLines) {
 
 const MESSAGES = {
   "no-new-sleep":
-    "Wait on the event, not on time (waitUntil, a continuation, or an injected clock). If a sleep is the only option, add `// allow-sleep: <why>` on or above this line.",
+    "Wait on the event, not on time (waitUntil, a continuation, or an injected clock). If waiting on time is the only option, add `// allow-sleep: <why>` at the end of this line or as a comment on the line directly above.",
   "skip-needs-reason":
-    "Name the tracking issue in the skip message or a comment above it (`#403`). For a skip that depends on the environment, add `// allow-skip: <why>`.",
+    "Name the tracking issue (`#403`) in the skip's message, at the end of the line, or in a comment on the line directly above. For a skip that depends on the environment, add `// allow-skip: <why>` there instead.",
 };
 
 /** Changed lines that measure review effort: generated files never count, and tests count only in a tests-only PR. */
@@ -166,13 +210,26 @@ function kindOf(path) {
   return null;
 }
 
-const SWIFT_CASE =
-  /^\s*(?:(?:@\w+|override|private|fileprivate|public|internal|final|static|nonisolated)\s+)*func\s+test\w*\s*\(|^\s*@Test\b/;
+// XCTest runs only non-private test methods, so private helpers named test… don't count.
+const SWIFT_TEST_FUNC =
+  /^\s*(?:(?:@\w+|override|public|internal|final|nonisolated)\s+)*func\s+test\w*\s*\(/;
+const SWIFT_TEST_ATTRIBUTE = /^\s*(?:@\w+\s+)*@Test\b/;
 const JS_CASE = /^\s*(?:it|test)(?:\.\w+)*\s*\(/;
 
 function countCases(lines, path) {
-  const pattern = path.endsWith(".swift") ? SWIFT_CASE : JS_CASE;
-  return lines.filter((text) => pattern.test(text)).length;
+  if (!path.endsWith(".swift")) return lines.filter((text) => JS_CASE.test(text)).length;
+  let count = 0;
+  let afterAttribute = false;
+  for (const text of lines) {
+    if (SWIFT_TEST_ATTRIBUTE.test(text)) {
+      count += 1;
+      afterAttribute = !/\bfunc\b/.test(text);
+    } else if (SWIFT_TEST_FUNC.test(text)) {
+      if (!afterAttribute) count += 1;
+      afterAttribute = false;
+    }
+  }
+  return count;
 }
 
 /** Net test cases added per kind, counted from declarations so the number is deterministic. */
@@ -199,17 +256,16 @@ export function describeDelta(delta) {
   return parts.length ? `${parts.join(", ")} (net ${signed(delta.net)})` : "no change";
 }
 
-/** The sticky PR comment, or null when the change doesn't grow the suite enough to mention. */
+/** The sticky PR comment, or null when the PR doesn't grow the UI suite, the one that costs an hour. */
 export function deltaComment(delta) {
-  if (delta.kinds.ui <= 0 && delta.net < NET_CASES_TO_REPORT) return null;
-  const lines = [DELTA_MARKER, `**Test delta:** ${describeDelta(delta)}`];
-  if (delta.kinds.ui > 0) {
-    lines.push(
-      "",
-      `This PR adds ${delta.kinds.ui} \`BarosUITests\` case${delta.kinds.ui === 1 ? "" : "s"}, and the full UI suite already takes about an hour. Check each one against AGENTS.md → "UI tests", and say in the description which allowed case it covers, or move it to a unit test.`,
-    );
-  }
-  return lines.join("\n");
+  const added = delta.kinds.ui;
+  if (added <= 0) return null;
+  return [
+    DELTA_MARKER,
+    `**Test delta:** ${describeDelta(delta)}`,
+    "",
+    `This PR adds ${added} \`BarosUITests\` case${added === 1 ? "" : "s"}, and the full UI suite already takes about an hour. Check each one against AGENTS.md → "UI tests", and say in the description which allowed case it covers, or move it to a unit test.`,
+  ].join("\n");
 }
 
 function git(args) {
@@ -218,14 +274,29 @@ function git(args) {
 
 function loadFiles({ base, head }) {
   const range = head ? [`${base}...${head}`] : [base];
-  const files = parseDiff(git(["diff", "-U0", "--no-color", "--no-ext-diff", "-M", ...range]));
+  const files = parseDiff(
+    git([
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "-U0",
+      "--no-color",
+      "--no-ext-diff",
+      "--src-prefix=a/",
+      "--dst-prefix=b/",
+      "-M",
+      ...range,
+    ]),
+  );
   if (!head) {
     const untracked = git(["ls-files", "--others", "--exclude-standard", "-z"])
       .split("\0")
       .filter(Boolean);
     for (const path of untracked) {
       try {
-        files.push(untrackedFile(path, readFileSync(path, "utf8")));
+        const contents = readFileSync(path, "utf8");
+        // Binary files, such as screenshots left for a PR, aren't changed lines.
+        if (!contents.includes("\0")) files.push(untrackedFile(path, contents));
       } catch {
         // Unreadable or binary; it can't hold a test case or a sleep.
       }
@@ -243,11 +314,14 @@ function parseArgs(argv) {
     if (flag !== "--base" && flag !== "--head") throw new Error(`Unknown option ${flag}`);
     options[flag.slice(2)] = argv[index + 1];
   }
-  options.base ??= git(["merge-base", "origin/main", "HEAD"]).trim();
+  // Compare with the merge base, so commits that landed on the base since the branch started
+  // don't read as removals.
+  options.base = git(["merge-base", options.base ?? "origin/main", options.head ?? "HEAD"]).trim();
   return options;
 }
 
 function main(argv) {
+  process.chdir(git(["rev-parse", "--show-toplevel"]).trim());
   const options = parseArgs(argv);
   const { files, readLines } = loadFiles(options);
 

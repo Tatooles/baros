@@ -12,18 +12,19 @@
 - Capture evidence from the running app after the final relevant changes. State the device or simulator and iOS version. Build and test success do not substitute for visual evidence.
 - Upload PR evidence directly to GitHub and verify that it renders in the PR. Never commit PR-only screenshots or recordings, including directories such as `.github/pr-assets/`.
 - If presentation-related files change without affecting visible UI or interactions, explain why in the PR description under "No visual impact."
+- The merged PR is the record. Plans, QA notes, and evidence go in the PR or its issue; only durable decisions go in the repo, in `docs/adr/`.
 
 ## PR size
 
-CI labels each PR from `size:XS` (under 10 changed lines) to `size:XXL` (1,000 or more). Generated files never count, and tests count only when the PR changes nothing else. Larger PRs need more proof:
+CI labels each PR from `size:XS` (under 10 changed lines) to `size:XXL` (1,000 or more), not counting generated files, or tests when the PR also changes other files. The label is an estimate for the reviewer. What a PR touches decides its extra proof: run the full UI suite on the branch with `gh workflow run ios-ui-nightly.yml --ref <branch>`, and link the run under Tests, when the PR
 
-- `size:L` and up that touch `Baros/` or `BarosUITests/`: run all of hosted `BarosTests`, not only the affected classes.
-- `size:XL` and up: also run the full UI suite on the branch with `gh workflow run ios-ui-nightly.yml --ref <branch>`, and link the run under Tests.
+- is `size:XL` or larger and changes `Baros/`, `BarosCore/`, `BarosLiveActivity/`, `BarosUITests/`, or `project.yml`; or
+- changes a SwiftData model, sign-out, local-data reset, or account deletion, at any size.
 
 ## Testing
 
-- Before you push, run `scripts/check-changed.sh`. It runs the CI checks for the paths the branch changed, builds the app and test targets, checks test hygiene, and prints the PR's size. Hosted `BarosTests` and `BarosUITests` need a simulator, so run the affected ones yourself.
-- Tests wait on events, not time. A new sleep in a test target needs `// allow-sleep: <why>` on or above it. A new skip names its tracking issue (`#403`) or carries `// allow-skip: <why>`. CI's `test-hygiene` check enforces both on added lines.
+- Before you push, run `scripts/check-changed.sh`. It runs the CI checks for the paths the branch changed, builds the app and test targets, checks test hygiene, and prints the PR's size. Hosted `BarosTests` and `BarosUITests` need a simulator, so run the affected ones yourself; CI's `ios-unit-tests` runs all of `BarosTests`.
+- Tests wait on events, not time. A new sleep in a test target needs `// allow-sleep: <why>` at the end of its line or as a comment on the line directly above. A new skip names its tracking issue (`#403`) or carries `// allow-skip: <why>` in the same places. CI's `test-hygiene` check enforces both on added lines; it catches the common calls, and the rule covers every way of waiting on time.
 - Logic lives in the `BarosCore` package. Test it on macOS with `swift test --package-path BarosCore`; that is the default loop for any change outside SwiftUI views and app wiring.
 - New logic and its tests go in `BarosCore` when they need only Foundation, SwiftData, or other cross-platform frameworks. Code that imports SwiftUI, UIKit, ActivityKit, StoreKit, Clerk, Sentry, or ConvexMobile stays in `Baros/`; when package code needs it, define a protocol in the package and keep the adapter in the app, as `CurrentOwnerAdapters` and `ConvexClientFactory` do. Mark only what the app uses `public`.
 - Name test `UserDefaults` suites `"<TestType>.\(UUID().uuidString)"`. Every `swift test` process on the Mac shares one preferences store, so a fixed suite name collides with other worktrees' runs.
@@ -47,10 +48,12 @@ A full `BarosUITests` run takes close to an hour, so the suite covers only behav
 
 ## Review guidelines
 
-- Treat as P1 any change that can lose or overwrite a user's logged workouts: sync merges, SwiftData model changes, sign-out, local-data reset, and account deletion.
+- Treat as P0 any change that can lose or overwrite a user's logged workouts: sync merges, SwiftData model changes, sign-out, local-data reset, and account deletion.
 - Flag a change to a public Convex function's arguments or return shape, or to `convex/schema.ts`, that installed builds can't handle (README → "Production deploys").
 - Flag logic tested through `BarosUITests` or hosted `BarosTests` that `BarosCore` could test, and new UI tests outside the list in "UI tests".
-- Flag a visible UI change whose description has neither screenshots nor a "No visual impact" section.
+- Flag new tests that repeat a case an existing test covers, or check what the types already guarantee.
+- Flag each new `allow-sleep:` or `allow-skip:` whose reason doesn't hold up.
+- Flag a visible UI change without before/after screenshots, and a "No visual impact" section the diff contradicts.
 
 ## Simulator storage
 

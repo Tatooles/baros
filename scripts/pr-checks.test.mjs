@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import {
   checkHygiene,
+  decodeGitPath,
   deltaComment,
   measureSize,
   measureTestDelta,
@@ -23,6 +28,7 @@ function diffFor(path, { added = [], removed = [], start = 1, isNew = false } = 
 }
 
 const noFile = () => [];
+const rulesOf = (findings) => findings.map((finding) => [finding.line, finding.rule]);
 
 test("parseDiff numbers added lines in the new file and keeps renames' old paths", () => {
   const diff = [
@@ -49,7 +55,40 @@ test("parseDiff reads added content that looks like a file header as content", (
   assert.deepEqual(file.removedText, ["-- gone"]);
 });
 
-test("a new sleep in a test target fails unless a reason sits on or above it", () => {
+test("decodeGitPath reads C-quoted paths and leaves plain ones alone", () => {
+  assert.equal(decodeGitPath('"BarosUITests/S\\303\\251ance.swift"'), "BarosUITests/Séance.swift");
+  assert.equal(decodeGitPath('"a/Say \\"hi\\".swift"'), 'a/Say "hi".swift');
+  assert.equal(decodeGitPath("BarosTests/A.swift"), "BarosTests/A.swift");
+});
+
+test("paths with spaces or non-ASCII letters in real git output are still checked", () => {
+  const repo = mkdtempSync(join(tmpdir(), "pr-checks-"));
+  try {
+    const run = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8" });
+    run("init", "-q");
+    run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "base");
+    mkdirSync(join(repo, "BarosUITests"));
+    const body = "func testA() {\n    Thread.sleep(forTimeInterval: 1)\n}\n";
+    writeFileSync(join(repo, "BarosUITests", "Sleep Test.swift"), body);
+    writeFileSync(join(repo, "BarosUITests", "Séance.swift"), body);
+    run("add", ".");
+    run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "head");
+
+    for (const quotePath of ["true", "false"]) {
+      const files = parseDiff(run("-c", `core.quotePath=${quotePath}`, "diff", "-U0", "HEAD~1", "HEAD"));
+      assert.deepEqual(files.map((file) => file.path).sort(), [
+        "BarosUITests/Sleep Test.swift",
+        "BarosUITests/Séance.swift",
+      ]);
+      assert.equal(checkHygiene(files, () => body.split("\n")).length, 2);
+      assert.equal(measureTestDelta(files).kinds.ui, 2);
+    }
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test("a new sleep in a test target fails unless a reason sits on the line or in a comment above", () => {
   const lines = [
     "func testA() async throws {",
     "    // allow-sleep: the system clock is the thing under test",
@@ -57,20 +96,21 @@ test("a new sleep in a test target fails unless a reason sits on or above it", (
     "    Thread.sleep(forTimeInterval: 1)",
     "    usleep(100)",
     "    try await clock.sleep(for: .seconds(1))",
+    "    RunLoop.current.run(until: Date().addingTimeInterval(1))",
+    "    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { done.fulfill() }",
+    "    Thread.sleep(forTimeInterval: 2) // allow-sleep: measures real elapsed time",
     "}",
   ];
   const files = parseDiff(
-    diffFor("BarosCore/Tests/BarosCoreTests/ATests.swift", { added: lines.slice(2, 6), start: 3 }),
+    diffFor("BarosCore/Tests/BarosCoreTests/ATests.swift", { added: lines.slice(2, 9), start: 3 }),
   );
 
-  const findings = checkHygiene(files, () => lines);
-  assert.deepEqual(
-    findings.map((finding) => [finding.line, finding.rule]),
-    [
-      [4, "no-new-sleep"],
-      [5, "no-new-sleep"],
-    ],
-  );
+  assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [
+    [4, "no-new-sleep"],
+    [5, "no-new-sleep"],
+    [7, "no-new-sleep"],
+    [8, "no-new-sleep"],
+  ]);
 });
 
 test("sleeps outside test targets and in comments are not test hygiene findings", () => {
@@ -90,17 +130,54 @@ test("a new skip needs a tracking issue or an environment reason", () => {
     'throw XCTSkip("Requires the software keyboard.")',
     'try XCTSkipUnless(ProcessInfo.processInfo.environment["X"] != nil)',
     '@Test(.disabled("broken")) func parses() {}',
+    'throw XCTSkip("Set #1 fails")',
+    "Button(\"Save\") {}.disabled(isSaving)",
+    "func sleep(until deadline: Instant) async throws {}",
   ];
   const files = parseDiff(diffFor("BarosUITests/A.swift", { added: lines, isNew: true }));
 
-  const findings = checkHygiene(files, () => lines);
-  assert.deepEqual(
-    findings.map((finding) => [finding.line, finding.rule]),
-    [
-      [4, "skip-needs-reason"],
-      [5, "skip-needs-reason"],
-    ],
+  assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [
+    [4, "skip-needs-reason"],
+    [5, "skip-needs-reason"],
+    [6, "skip-needs-reason"],
+  ]);
+});
+
+test("a multi-line skip may name its issue in a later argument line", () => {
+  const lines = [
+    "try XCTSkipUnless(",
+    '    ProcessInfo.processInfo.environment["RUN"] != nil,',
+    '    "Parked on #403."',
+    ")",
+    "try XCTSkipIf(",
+    "    true,",
+    '    "No reason given."',
+    ")",
+    'let note = "see #99"',
+  ];
+  const files = parseDiff(diffFor("BarosUITests/A.swift", { added: lines, isNew: true }));
+  assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [[5, "skip-needs-reason"]]);
+});
+
+test("an issue number in code above a skip doesn't explain it; a comment does", () => {
+  const lines = [
+    'let ticket = "#403"',
+    'throw XCTSkip("later")',
+    "// #403",
+    'throw XCTSkip("later")',
+  ];
+  const files = parseDiff(diffFor("BarosUITests/A.swift", { added: lines, isNew: true }));
+  assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [[2, "skip-needs-reason"]]);
+});
+
+test("moving an existing sleep or dropping its comment passes; changing its duration doesn't", () => {
+  const files = parseDiff(
+    diffFor("BarosTests/A.swift", {
+      removed: ["        Thread.sleep(forTimeInterval: 1) // settle", "    Thread.sleep(forTimeInterval: 0.005)"],
+      added: ["    Thread.sleep(forTimeInterval: 1)", "    Thread.sleep(forTimeInterval: 60)"],
+    }),
   );
+  assert.deepEqual(rulesOf(checkHygiene(files, () => [])), [[2, "no-new-sleep"]]);
 });
 
 test("size counts code, not tests or generated files, unless the PR is only tests", () => {
@@ -129,7 +206,15 @@ test("test delta counts declarations per target, and a moved test nets zero", ()
         removed: ["    func testOldFlow() {"],
       }),
       diffFor("BarosCore/Tests/BarosCoreTests/ATests.swift", {
-        added: ["    func testParses() {", "    @Test func rounds() {", "    func helper() {"],
+        added: [
+          "    func testParses() {",
+          "    @Test func rounds() {",
+          "    func helper() {",
+          "    @Test",
+          "    func testBoth() {",
+          "    @MainActor @Test func isolated() {",
+          "    private func testHelper() {",
+        ],
       }),
       diffFor("convex/workouts.test.ts", { added: ['  test("saves", async () => {', '  it.each([1])("x", () => {'] }),
       "diff --git a/BarosTests/Old.swift b/BarosTests/New.swift",
@@ -144,24 +229,18 @@ test("test delta counts declarations per target, and a moved test nets zero", ()
   );
 
   assert.deepEqual(measureTestDelta(files), {
-    kinds: { core: 2, hosted: 0, ui: 1, convex: 2, tooling: 0 },
-    net: 5,
+    kinds: { core: 4, hosted: 0, ui: 1, convex: 2, tooling: 0 },
+    net: 7,
   });
 });
 
-test("the delta comment appears for net new UI tests or a large suite increase", () => {
-  const quiet = { kinds: { core: 5, hosted: 0, ui: 0, convex: 0, tooling: 0 }, net: 5 };
-  assert.equal(deltaComment(quiet), null);
-
-  const swapped = { kinds: { core: 0, hosted: 0, ui: 0, convex: 0, tooling: 0 }, net: 0 };
-  assert.equal(deltaComment(swapped), null);
+test("the delta comment appears only when the UI suite grows", () => {
+  const unitOnly = { kinds: { core: 25, hosted: 0, ui: 0, convex: 0, tooling: 0 }, net: 25 };
+  assert.equal(deltaComment(unitOnly), null);
 
   const ui = { kinds: { core: 0, hosted: 1, ui: 1, convex: 0, tooling: 0 }, net: 2 };
   assert.match(deltaComment(ui), /\*\*Test delta:\*\* \+1 BarosTests, \+1 BarosUITests \(net \+2\)/);
   assert.match(deltaComment(ui), /adds 1 `BarosUITests` case,/);
-
-  const large = { kinds: { core: 25, hosted: 0, ui: 0, convex: 0, tooling: 0 }, net: 25 };
-  assert.doesNotMatch(deltaComment(large), /UI tests/);
 });
 
 test("an untracked file counts as wholly added", () => {
@@ -170,15 +249,4 @@ test("an untracked file counts as wholly added", () => {
     { line: 1, text: "func testA() {" },
     { line: 2, text: "}" },
   ]);
-});
-
-test("editing or moving an existing sleep within a file is not a new one", () => {
-  const files = parseDiff(
-    diffFor("BarosTests/A.swift", {
-      removed: ["        Thread.sleep(forTimeInterval: 1) // settle"],
-      added: ["        Thread.sleep(forTimeInterval: 1)", "        Thread.sleep(forTimeInterval: 2)"],
-    }),
-  );
-  const findings = checkHygiene(files, () => []);
-  assert.deepEqual(findings.map((finding) => [finding.line, finding.rule]), [[2, "no-new-sleep"]]);
 });

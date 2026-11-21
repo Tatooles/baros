@@ -484,25 +484,53 @@ test("failed UI test names fall back to the log when the result bundle is unread
   }
 });
 
-test("PR checks never use pull_request_target, and only same-repo PRs get the labelling token", async () => {
+test("PR checks run repository code only without a write token", async () => {
   const workflow = await readWorkflow("pr-checks.yml");
 
   assert.deepEqual(Object.keys(workflow.on), ["pull_request"]);
   assert.deepEqual(workflow.permissions, { contents: "read" });
   assert.equal(workflow.jobs["test-hygiene"].permissions, undefined);
+  assert.equal(workflow.jobs["pr-size"].permissions, undefined);
 
-  const size = workflow.jobs["pr-size"];
-  assert.deepEqual(size.permissions, {
-    contents: "read",
-    issues: "write",
-    "pull-requests": "write",
-  });
+  for (const name of ["test-hygiene", "pr-size"]) {
+    const checkout = workflow.jobs[name].steps.find((step) => step.uses?.startsWith("actions/checkout@"));
+    assert.equal(checkout.with["persist-credentials"], false, `${name} must not keep the checkout token`);
+  }
+
+  const writer = workflow.jobs["pr-size-label"];
+  assert.equal(writer.needs, "pr-size");
+  assert.deepEqual(writer.permissions, { issues: "write", "pull-requests": "write" });
   assert.equal(
-    size.if,
+    writer.if,
     "github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'",
   );
   assert.ok(
-    size.steps.every((step) => !/\b(pnpm|npm|yarn)\b/.test(step.run ?? "")),
-    "the job holding a write token must not install dependencies",
+    writer.steps.every((step) => step.uses === undefined),
+    "the job holding a write token must not check out or run actions",
   );
+  assert.ok(
+    writer.steps.every((step) => !/\b(node|pnpm|npm|yarn|bash \S|sh \S|\.\/)/.test(step.run ?? "")),
+    "the job holding a write token must not run repository code",
+  );
+});
+
+test("check-changed.sh selects the same paths as the CI workflows", async () => {
+  const script = await readFile(new URL("scripts/check-changed.sh", repositoryRoot), "utf8");
+  const pattern = (name) => {
+    const match = script.match(new RegExp(`^${name}='([^']+)'$`, "m"));
+    assert.notEqual(match, null, `check-changed.sh must define ${name}`);
+    return new RegExp(match[1]);
+  };
+  const sample = (glob) => glob.replace(/\/\*\*$/, "/Example.swift");
+
+  for (const [name, paths] of [
+    ["app_paths", appPaths],
+    ["convex_paths", convexPaths],
+    ["support_paths", supportSitePaths],
+  ]) {
+    const selects = pattern(name);
+    for (const path of paths) {
+      assert.match(sample(path), selects, `${name} misses ${path}`);
+    }
+  }
 });
