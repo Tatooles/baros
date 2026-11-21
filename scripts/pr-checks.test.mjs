@@ -113,11 +113,18 @@ test("a new sleep in a test target fails unless a reason sits on the line or in 
   ]);
 });
 
-test("sleeps outside test targets and in comments are not test hygiene findings", () => {
+test("sleeps outside test targets, in comments, or in strings are not test hygiene findings", () => {
   const files = parseDiff(
     [
       diffFor("Baros/App.swift", { added: ["Thread.sleep(forTimeInterval: 1)"] }),
-      diffFor("BarosTests/A.swift", { added: ["// Thread.sleep(forTimeInterval: 1) was flaky"] }),
+      diffFor("BarosTests/A.swift", {
+        added: [
+          "// Thread.sleep(forTimeInterval: 1) was flaky",
+          "let x = 1 // was Thread.sleep(forTimeInterval: 1)",
+          'XCTAssertEqual(log, "called Task.sleep(for:) then XCTSkip")',
+          "let y = 2 /* usleep(5) */",
+        ],
+      }),
     ].join("\n"),
   );
   assert.deepEqual(checkHygiene(files, noFile), []);

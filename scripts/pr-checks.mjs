@@ -203,20 +203,20 @@ export function checkHygiene(files, readLines) {
   const findings = [];
   for (const file of files) {
     if (!SWIFT_TEST_DIR.test(file.path) || !file.path.endsWith(".swift")) continue;
+    // Patterns match masked code, so a mention inside a string or comment isn't a call.
     const unchanged = file.removedText
       // A bare `.disabled(` opener could be SwiftUI's modifier, so it can't excuse a new trait.
-      .filter(
-        (text) =>
-          !isComment(text) &&
-          (SLEEP.test(text) || SKIP.test(text) || (DISABLED.test(text) && !/\.disabled\s*\(\s*$/.test(codeOf(text)))),
-      )
+      .filter((text) => {
+        const code = maskCode(text);
+        return SLEEP.test(code) || SKIP.test(code) || (DISABLED.test(code) && !/\.disabled\s*\(\s*$/.test(code));
+      })
       .map(codeOf);
     let lines = null;
     for (const { line, text } of file.added) {
-      if (isComment(text)) continue;
-      const isSleep = SLEEP.test(text);
-      let isSkip = SKIP.test(text);
-      if (!isSkip && DISABLED.test(text)) {
+      const code = maskCode(text);
+      const isSleep = SLEEP.test(code);
+      let isSkip = SKIP.test(code);
+      if (!isSkip && DISABLED.test(code)) {
         lines ??= readLines(file.path);
         isSkip = disablesTest(lines, line);
       }
