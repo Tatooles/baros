@@ -23,7 +23,7 @@ Each PR gets a `risk:high`, `risk:medium`, or `risk:low` label: the higher of a 
 
 A `risk:high` PR shows this proof under Tests, for each area it touches:
 
-- **Stored data models:** new fields are optional or defaulted, and a `BarosCore` test opens a store written with the shipped models and checks every row survives the migration.
+- **Stored data models:** new fields are optional or defaulted, and a `BarosCore` test opens a store written with the shipped models and checks every row survives the migration, as `SyncSchemaMigrationTests` does.
 - **Sync or edits to saved data:** a test that fails without the change for each behavior it changes, and the existing sync tests pass.
 - **Sign-out, local-data reset, account deletion, or workout recovery:** run that flow's `BarosUITests` on a pool simulator with `-only-testing:BarosUITests/<Class>/<test>`, and name the tests. Don't run the whole suite for this; the nightly run covers it on `main`.
 - **Convex:** a "Production deploy compatibility" section that says how installed builds keep working (README → "Production deploys").

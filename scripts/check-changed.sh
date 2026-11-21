@@ -95,7 +95,7 @@ app_build() {
 }
 
 # Keep these in step with the path filters in .github/workflows; ci-workflows.test.mjs checks them.
-app_paths='^(Baros|BarosCore|BarosLiveActivity|BarosTests|BarosUITests|Baros\.xcodeproj|LiftingLog\.xcodeproj|ci_scripts)/|^(project\.yml|convex/auth\.config\.ts|\.github/workflows/app-ci\.yml)$'
+app_paths='^(Baros|BarosCore|BarosLiveActivity|BarosTests|BarosUITests|Baros\.xcodeproj|LiftingLog\.xcodeproj|ci_scripts)/|^(project\.yml|convex/auth\.config\.ts|convex/syncSim/merge-vectors\.json|\.github/workflows/app-ci\.yml)$'
 core_paths='^BarosCore/|^\.github/workflows/app-ci\.yml$'
 convex_paths='^convex/|^(package\.json|pnpm-lock\.yaml|vitest\.config\.ts|\.github/workflows/convex-ci\.yml)$'
 support_paths='^SupportSite/|^docs/release/app-store/|^(docs/release/app-store-submission-pack\.md|docs/release/listing\.json|docs/release/listing-approved\.json|BarosUITests/MarketingScreenshotTests\.swift|\.github/workflows/support-site-ci\.yml)$'
