@@ -203,6 +203,17 @@ function parenDepth(text) {
   return (code.match(/\(/g) ?? []).length - (code.match(/\)/g) ?? []).length;
 }
 
+/** The line of a sleep call whose arguments are still open at `line`, or 0. */
+function enclosingSleep(lines, line) {
+  for (let start = line - 1; start >= Math.max(1, line - MAX_CALL_LINES + 1); start -= 1) {
+    if (!SLEEP.test(maskCode(lines[start - 1] ?? ""))) continue;
+    let depth = 0;
+    for (let index = start; index < line; index += 1) depth += parenDepth(lines[index - 1]);
+    return depth > 0 ? start : 0;
+  }
+  return 0;
+}
+
 /** The call's own line plus the lines that finish its arguments. */
 function callText(lines, line, text) {
   const parts = [text];
@@ -265,6 +276,8 @@ export function checkHygiene(files, readLines) {
       })
       .map(codeOf);
     let lines = null;
+    const addedLines = new Set(file.added.map((entry) => entry.line));
+    const removedCode = file.removedText.map(codeOf);
     for (const { line, text } of file.added) {
       const code = maskCode(text);
       const isSleep = SLEEP.test(code);
@@ -273,7 +286,21 @@ export function checkHygiene(files, readLines) {
         lines ??= readLines(file.path);
         isSkip = disablesTest(lines, line);
       }
-      if (!isSleep && !isSkip) continue;
+      if (!isSleep && !isSkip) {
+        // An edited argument of a sleep call whose opener didn't change, such as a longer duration.
+        lines ??= readLines(file.path);
+        const opener = enclosingSleep(lines, line);
+        if (!opener || addedLines.has(opener)) continue;
+        const above = isComment(lines[opener - 2] ?? "") ? lines[opener - 2] : "";
+        if (ALLOW_SLEEP.test(`${above}\n${callText(lines, opener, lines[opener - 1])}`)) continue;
+        const kept = removedCode.indexOf(codeOf(text));
+        if (kept !== -1) {
+          removedCode.splice(kept, 1);
+          continue;
+        }
+        findings.push({ path: file.path, line, rule: "no-new-sleep", message: MESSAGES["no-new-sleep"] });
+        continue;
+      }
       lines ??= readLines(file.path);
       const above = isComment(lines[line - 2] ?? "") ? lines[line - 2] : "";
       const missing = [];
@@ -378,8 +405,9 @@ export function swiftCodeView(source) {
     out += hashes + open;
     index += open.length;
     // Indentation, blank lines, and trailing spaces inside a multi-line string are part of its
-    // value, so its newlines stay visible and the final per-line trim can't touch its content.
-    const keep = (text) => (multiline ? text.replace(/\n/g, "\\n") : text);
+    // value, so its newlines become NUL, which neither the final per-line trim nor the text `\n`
+    // in a raw string can be confused with.
+    const keep = (text) => (multiline ? text.replace(/\n/g, "\0") : text);
     for (;;) {
       if (index >= source.length || (!multiline && source[index] === "\n")) throw new Unreadable();
       if (at(index, close)) {

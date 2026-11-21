@@ -677,3 +677,29 @@ test("UI that starts sign-out, reset, deletion, or recovery is high", () => {
   ]);
   assert.equal(riskOfEdit("Baros/Features/Settings/AboutView.swift", 'Text("a")', 'Text("b")').label, "risk:medium");
 });
+
+test("a raw multi-line string's newline differs from the text \\n", () => {
+  const sync = "Baros/Core/Sync/X.swift";
+  const before = 'let s = #"""\na\nb\n"""#';
+  const after = 'let s = #"""\na\\nb\n"""#';
+  assert.equal(riskOfEdit(sync, before, after).label, "risk:high");
+});
+
+test("lengthening a multi-line sleep's argument is a new sleep; re-indenting it isn't", () => {
+  const lines = ["    func testA() {", "        Thread.sleep(", "            forTimeInterval: 60", "        )", "    }"];
+  const readLines = () => lines;
+  const edit = (added, removed) =>
+    rulesOf(checkHygiene(parseDiff(diffFor("BarosTests/ATests.swift", { start: 3, added: [added], removed: [removed] })), readLines));
+  assert.deepEqual(edit("            forTimeInterval: 60", "            forTimeInterval: 1"), [[3, "no-new-sleep"]]);
+  assert.deepEqual(edit("            forTimeInterval: 60", "        forTimeInterval: 60"), []);
+
+  const allowed = ["        // allow-sleep: waits out the system's 1 s debounce", ...lines.slice(1)];
+  const withReason = rulesOf(
+    checkHygiene(parseDiff(diffFor("BarosTests/ATests.swift", { start: 4, added: [allowed[2]], removed: ["x"] })), () => ["    func testA() {", ...allowed]),
+  );
+  assert.deepEqual(withReason, []);
+  const noReason = rulesOf(
+    checkHygiene(parseDiff(diffFor("BarosTests/ATests.swift", { start: 4, added: [allowed[2]], removed: ["x"] })), () => ["    func testA() {", "", ...lines.slice(1)]),
+  );
+  assert.deepEqual(noReason, [[4, "no-new-sleep"]]);
+});
