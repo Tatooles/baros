@@ -121,10 +121,11 @@ export function untrackedFile(path, contents) {
 
 const SLEEP =
   /(?:\bThread\.sleep|\bTask\.sleep|(?<![.\w]|\bfunc\s)u?sleep)\s*\(|\bRunLoop\.\w+\.run\s*\(\s*until:|\.asyncAfter\s*\(/;
-// `.disabled(` counts only as a Swift Testing trait, never the SwiftUI modifier.
-const SKIP = /\bXCTSkip(?:If|Unless)?\b|\bXCTExpectFailure\b|@(?:Test|Suite)\s*\(.*\.disabled\s*\(/;
+const SKIP = /\bXCTSkip(?:If|Unless)?\b|\bXCTExpectFailure\b/;
+// `.disabled(` is a skip only as a Swift Testing trait, never as the SwiftUI modifier.
 const DISABLED = /\.disabled\s*\(/;
-const TEST_ATTRIBUTE = /@(?:Test|Suite)\s*\(/;
+const DISABLED_ALL = /\.disabled\s*\(/g;
+const TEST_ATTRIBUTE_ALL = /@(?:Test|Suite)\s*\(/g;
 // [ \t] rather than \s, so a bare marker on the line above can't borrow the next line as its reason.
 const ALLOW_SLEEP = /allow-sleep:[ \t]*\S/;
 const ALLOW_SKIP = /allow-skip:[ \t]*\S|#\d{2,}/;
@@ -134,9 +135,16 @@ const MAX_CALL_LINES = 8;
 const isComment = (text) => /^\s*\/\//.test(text);
 const codeOf = (text) => text.replace(/\s*\/\/.*$/, "").replace(/\s+/g, " ").trim();
 
-/** Open minus closed parentheses, not counting any inside string literals. */
+/** The line with string contents and `//` comments blanked out, keeping every column in place. */
+function maskCode(text) {
+  return text
+    .replace(/"(?:[^"\\]|\\.)*"/g, (literal) => `"${" ".repeat(literal.length - 2)}"`)
+    .replace(/\/\/.*$/, (comment) => " ".repeat(comment.length));
+}
+
+/** Open minus closed parentheses, not counting any inside strings or comments. */
 function parenDepth(text) {
-  const code = text.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+  const code = maskCode(text);
   return (code.match(/\(/g) ?? []).length - (code.match(/\)/g) ?? []).length;
 }
 
@@ -151,14 +159,33 @@ function callText(lines, line, text) {
   return parts.join("\n");
 }
 
-/** Whether 1-based `line` sits inside the arguments of a multi-line `@Test(` or `@Suite(`. */
-function insideTestAttribute(lines, line) {
-  for (let start = line - 2; start >= Math.max(0, line - 1 - MAX_CALL_LINES); start -= 1) {
-    const match = lines[start].match(TEST_ATTRIBUTE);
-    if (!match) continue;
-    let depth = parenDepth(lines[start].slice(match.index));
-    for (let index = start + 1; index < line - 1; index += 1) depth += parenDepth(lines[index]);
-    return depth > 0;
+/** Where an attribute's argument list closes: [row, column] of its matching `)`, or null if still open at `lastRow`. */
+function closingParen(masked, row, column, lastRow) {
+  let depth = 0;
+  for (; row <= lastRow; row += 1, column = 0) {
+    const text = masked(row);
+    for (; column < text.length; column += 1) {
+      if (text[column] === "(") depth += 1;
+      else if (text[column] === ")" && --depth === 0) return [row, column];
+    }
+  }
+  return null;
+}
+
+/** Whether a `.disabled(` on 1-based `line` sits between an `@Test(` or `@Suite(` and its matching `)`. */
+function disablesTest(lines, line) {
+  const at = line - 1;
+  const masked = (row) => maskCode(lines[row] ?? "");
+  const targets = [...masked(at).matchAll(DISABLED_ALL)].map((match) => match.index);
+  for (let start = at; start >= Math.max(0, at - MAX_CALL_LINES); start -= 1) {
+    for (const attribute of masked(start).matchAll(TEST_ATTRIBUTE_ALL)) {
+      const open = attribute.index + attribute[0].length - 1;
+      const close = closingParen(masked, start, open, at);
+      const inside = (column) =>
+        (start < at || column > open) &&
+        (close === null || close[0] > at || (close[0] === at && column < close[1]));
+      if (targets.some(inside)) return true;
+    }
   }
   return false;
 }
@@ -175,7 +202,7 @@ export function checkHygiene(files, readLines) {
   for (const file of files) {
     if (!SWIFT_TEST_DIR.test(file.path) || !file.path.endsWith(".swift")) continue;
     const unchanged = file.removedText
-      .filter((text) => !isComment(text) && (SLEEP.test(text) || SKIP.test(text)))
+      .filter((text) => !isComment(text) && (SLEEP.test(text) || SKIP.test(text) || DISABLED.test(text)))
       .map(codeOf);
     let lines = null;
     for (const { line, text } of file.added) {
@@ -184,7 +211,7 @@ export function checkHygiene(files, readLines) {
       let isSkip = SKIP.test(text);
       if (!isSkip && DISABLED.test(text)) {
         lines ??= readLines(file.path);
-        isSkip = insideTestAttribute(lines, line);
+        isSkip = disablesTest(lines, line);
       }
       if (!isSleep && !isSkip) continue;
       lines ??= readLines(file.path);

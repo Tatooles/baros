@@ -180,6 +180,37 @@ test("a Swift Testing disable needs a reason in any layout, and SwiftUI's .disab
   ]);
 });
 
+test("SwiftUI's .disabled in an enabled test's body isn't a skip, and a comment can't hide a real one", () => {
+  const lines = [
+    "@Test(.tags(.slow))",
+    "func renders() {",
+    "    let host = UIHostingController(",
+    '        rootView: Button("Save") {}',
+    "            .disabled(isSaving)",
+    "    )",
+    "}",
+    '@Test("x") func inline() { let v = Text("a").disabled(true) }',
+    "@Test(",
+    "    .tags(.slow), // closes ) early?",
+    '    .disabled("flaky")',
+    ")",
+    "func hidden() {}",
+  ];
+  const files = parseDiff(diffFor("BarosCore/Tests/BarosCoreTests/A.swift", { added: lines, isNew: true }));
+  assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [[11, "skip-needs-reason"]]);
+});
+
+test("re-indenting an existing multi-line .disabled trait is an edit, not a new skip", () => {
+  const lines = ["@Suite struct Wrapped {", "    @Test(", '        .disabled("flaky")', "    )", "    func a() {}", "}"];
+  const files = parseDiff(
+    diffFor("BarosCore/Tests/BarosCoreTests/A.swift", {
+      removed: ["@Test(", '    .disabled("flaky")', ")", "func a() {}"],
+      added: lines,
+    }),
+  );
+  assert.deepEqual(checkHygiene(files, () => lines), []);
+});
+
 test("a parenthesis inside a string doesn't end a skip's arguments early", () => {
   const lines = ["try XCTSkipIf(", '    value == ")",', '    "Parked on #403."', ")"];
   const files = parseDiff(diffFor("BarosUITests/A.swift", { added: lines, isNew: true }));
