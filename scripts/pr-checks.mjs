@@ -29,6 +29,7 @@ export const RISK_LABELS = [
 const APP_SOURCES = "(?:BarosCore/Sources/BarosCore|Baros/Core)";
 const STORED_MODELS = "stored data models";
 const SAVED_DATA_EDITS = "edits to saved data";
+const DATA_SAFETY_FLOWS = "sign-out, local-data reset, account deletion, or workout recovery";
 export const HIGH_RISK_AREAS = [
   {
     // Also any app file that declares an @Model; see CONTENT_AREAS. The Domain enums are stored
@@ -44,7 +45,7 @@ export const HIGH_RISK_AREAS = [
   },
   {
     // SeedDataService hands records with no owner to the account that signs in.
-    name: "sign-out, local-data reset, account deletion, or workout recovery",
+    name: DATA_SAFETY_FLOWS,
     path: new RegExp(
       `^${APP_SOURCES}/(?:AccountDeletion|AccountTransition|Ownership)/|^BarosCore/Sources/BarosCore/Persistence/(?:LocalDataResetService|SeedDataService)\\.swift$`,
     ),
@@ -429,6 +430,11 @@ const CONTENT_AREAS = [
   { name: STORED_MODELS, pattern: /@Model\b/ },
   // Queues changes for upload, as ActiveWorkoutEngine does.
   { name: SAVED_DATA_EDITS, pattern: /\b(?:SyncOutboxRecorder|outboxRecorder)\b/ },
+  // Starts sign-out, reset, deletion, or recovery from the UI, as the Settings account rows do.
+  {
+    name: DATA_SAFETY_FLOWS,
+    pattern: /\b(?:AccountDeletionCoordinator|AccountSignOutAction|accountSignOutAction|AccountTransitionButton|LocalDataResetService|WorkoutRecovery)\b/,
+  },
 ];
 
 function contentArea(file, readFile) {

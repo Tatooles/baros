@@ -662,3 +662,13 @@ test("long raw-string delimiters lex, and moving app code into tests isn't low",
   );
   assert.equal(classifyRisk(moved).label, "risk:medium");
 });
+
+test("UI that starts sign-out, reset, deletion, or recovery is high", () => {
+  const view = "Baros/Features/Settings/DeleteDataConfirmationView.swift";
+  const before = "Button { await coordinator.deleteAccount() }\n@StateObject var coordinator: AccountDeletionCoordinator";
+  const after = "Button { }\n@StateObject var coordinator: AccountDeletionCoordinator";
+  assert.deepEqual(riskOfEdit(view, before, after).areas, [
+    { name: "sign-out, local-data reset, account deletion, or workout recovery", paths: [view] },
+  ]);
+  assert.equal(riskOfEdit("Baros/Features/Settings/AboutView.swift", 'Text("a")', 'Text("b")').label, "risk:medium");
+});
