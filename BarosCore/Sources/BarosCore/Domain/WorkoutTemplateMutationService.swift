@@ -57,7 +57,7 @@ public struct WorkoutTemplateMutationService {
         template.syncOwnerTokenIdentifier = effectiveOwner ?? template.syncOwnerTokenIdentifier
         template.name = name
         template.entries = entries
-        template.updatedAt = now
+        template.stampEdit(now: now)
         try recorder.recordUpdate(
             entityKind: .workoutTemplate,
             entityID: template.id,
@@ -82,8 +82,7 @@ public struct WorkoutTemplateMutationService {
             requestedOwner: ownerTokenIdentifier ?? syncScheduler?.currentOwnerTokenIdentifier
         )
         template.syncOwnerTokenIdentifier = effectiveOwner ?? template.syncOwnerTokenIdentifier
-        template.deletedAt = now
-        template.updatedAt = now
+        template.deletedAt = template.stampEdit(now: now)
         try recorder.recordDelete(
             entityKind: .workoutTemplate,
             entityID: template.id,

@@ -14,6 +14,15 @@ public final class SyncOutboxEntry: Identifiable {
     var lastAttemptAt: Date?
     public var attemptCount: Int
     public var lastErrorMessage: String?
+    /// Server rejections since the entry was last retried by hand. Separate
+    /// from `attemptCount`, which older builds grew without bound on entries
+    /// that never sent.
+    var rejectionCount: Int = 0
+    var firstRejectedAt: Date?
+    /// Earliest time the entry is sent again after a rejection.
+    var nextAttemptAt: Date?
+    /// The server's error code for the last rejection, or nil when uncoded.
+    var lastRejectionCode: String?
 
     init(
         id: UUID = UUID(),
@@ -82,12 +91,34 @@ public final class SyncOutboxEntry: Identifiable {
     }
 
     var hasBeenAttempted: Bool {
-        attemptCount > 0 || lastAttemptAt != nil || status == .inFlight || status == .failed
+        attemptCount > 0 || lastAttemptAt != nil || status == .inFlight || status == .failed || status == .blocked
     }
 
+    /// A new local edit sends the entry now, even one that was blocked.
     func refreshPending(now: Date) {
         status = .pending
         updatedAt = now
         lastErrorMessage = nil
+        nextAttemptAt = nil
+    }
+
+    /// Clears the rejection history so the entry is sent again as new.
+    func resetRejections() {
+        rejectionCount = 0
+        firstRejectedAt = nil
+        nextAttemptAt = nil
+        lastRejectionCode = nil
+    }
+}
+
+/// Identifies the record an outbox entry is for.
+struct SyncOutboxKey: Hashable {
+    let kind: SyncEntityKind
+    let id: UUID
+}
+
+extension SyncOutboxEntry {
+    var outboxKey: SyncOutboxKey? {
+        entityKind.map { SyncOutboxKey(kind: $0, id: entityID) }
     }
 }

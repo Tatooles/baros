@@ -7,19 +7,31 @@ public final class SyncCoordinator {
     private let maxPendingPushEntriesPerRun: Int
     private let observability: any SyncObserving
     private let rpeDefaults: UserDefaults
-    private let recorder = SyncOutboxRecorder()
+    private let recorder: SyncOutboxRecorder
+    /// The device clock. Injected so tests can move time, including backwards.
+    private let clock: () -> Date
     private var isRunning = false
+    /// The lowest change-feed position per kind that a pull in this run
+    /// skipped because local intent was waiting. Rewound after the push.
+    private var keptLocalFloors: [SyncEntityKind: Double] = [:]
+    /// Local intent per record, read again for every pulled page, because a
+    /// local edit can land while a fetch is in flight.
+    private var pullLocalIntents: [SyncOutboxKey: SyncLocalIntent] = [:]
+    private var pullBootstrapState = PullBootstrapState()
 
     public init(
         client: any SyncClient & Sendable,
         maxPendingPushEntriesPerRun: Int = 50,
         observability: any SyncObserving = DisabledSyncObservability.shared,
-        rpeDefaults: UserDefaults = .standard
+        rpeDefaults: UserDefaults = .standard,
+        clock: @escaping () -> Date = { .now }
     ) {
         self.client = client
         self.maxPendingPushEntriesPerRun = maxPendingPushEntriesPerRun
         self.observability = observability
         self.rpeDefaults = rpeDefaults
+        self.clock = clock
+        self.recorder = SyncOutboxRecorder(clock: clock)
     }
 
     @discardableResult
@@ -27,10 +39,18 @@ public final class SyncCoordinator {
         guard let ownerTokenIdentifier else { return SyncRunResult() }
         guard !isRunning else { return SyncRunResult() }
         isRunning = true
-        defer { isRunning = false }
+        keptLocalFloors = [:]
+        defer {
+            // Covers a pull that ends the run early, and a pull after the
+            // push that kept a record edited while the run was in flight.
+            try? rewindPastKeptLocalRecords(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            isRunning = false
+            pullLocalIntents = [:]
+        }
         try Task.checkCancellation()
 
         let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
+        let wasFullyBootstrapped = state.hasBootstrappedSettingsExercises && state.hasBootstrappedWorkoutGraph
         let pullSummary: SyncPullSummary
         do {
             pullSummary = try await pullChanges(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
@@ -72,8 +92,18 @@ public final class SyncCoordinator {
             includeOwnerlessCompletedWorkouts: includeOwnerlessCompletedWorkouts,
             completeWorkoutGraphBootstrap: completeWorkoutGraphBootstrap
         )
+        try runConvergenceUpgradeIfNeeded(
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            wasFullyBootstrapped: wasFullyBootstrapped,
+            context: context
+        )
         try Task.checkCancellation()
-        let pushResult = try await pushPendingEntries(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        let pushResult: SyncPushResult
+        pushResult = try await pushPendingEntries(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        try rewindPastKeptLocalRecords(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        if let code = pushResult.accountWideRejectionCode {
+            throw SyncCoordinatorError.accountUnavailable(code: code)
+        }
         guard pushResult.didComplete else {
             return SyncRunResult(
                 didPush: pushResult.didPush,
@@ -113,6 +143,146 @@ public final class SyncCoordinator {
             }
         }
         return SyncRunResult(didPush: pushResult.didPush, hasIncompleteRemotePull: hasIncompleteRemotePull)
+    }
+
+    /// Pulls a record again after its push, when a pull kept the local copy
+    /// for a waiting entry. If that push ends without a verdict from the
+    /// server, the server's version is still pulled once the entry completes.
+    private func rewindPastKeptLocalRecords(ownerTokenIdentifier: String, context: ModelContext) throws {
+        guard !keptLocalFloors.isEmpty else { return }
+        let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
+        for (kind, floor) in keptLocalFloors {
+            state.rewind(kind, toBefore: floor)
+        }
+        keptLocalFloors = [:]
+        try context.save()
+    }
+
+    /// The one-time step a device runs after updating to this build.
+    ///
+    /// - Every local delete of an exercise, a template, or a completed
+    ///   workout or anything in it is sent again, so the server applies the
+    ///   ones an older server rejected or later undid (#97, #98). Only the
+    ///   topmost deleted record of a workout is sent; the server deletes what
+    ///   is under it. Active and discarded workouts never synced, and user
+    ///   settings are left out. A set or exercise removed during a workout
+    ///   never reached the server, so its delete leaves a placeholder
+    ///   tombstone there. That is the price of healing: no stored time tells
+    ///   it apart from a delete an older server bounced, since that time can
+    ///   come from another device's clock.
+    /// - Records already synced take their current version as their sync
+    ///   base, so the next edit outranks the version this device holds. A
+    ///   record with a waiting entry keeps no base: its edit may not have
+    ///   reached the server.
+    ///
+    /// A device that has not finished its first bootstrap has nothing an older
+    /// build synced, so it only marks the step done.
+    private func runConvergenceUpgradeIfNeeded(
+        ownerTokenIdentifier: String,
+        wasFullyBootstrapped: Bool,
+        context: ModelContext
+    ) throws {
+        let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
+        guard !state.hasRunConvergenceUpgrade else { return }
+        if wasFullyBootstrapped {
+            try adoptSyncBasesForSyncedRecords(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+            try reassertLocalDeletes(ownerTokenIdentifier: ownerTokenIdentifier, context: context)
+        }
+        if state.hasBootstrappedSettingsExercises && state.hasBootstrappedWorkoutGraph {
+            state.hasRunConvergenceUpgrade = true
+        }
+        try context.save()
+    }
+
+    private func adoptSyncBasesForSyncedRecords(ownerTokenIdentifier: String, context: ModelContext) throws {
+        let active = try activeOutboxKeys(context: context)
+        func adopt(_ record: some SyncEditStamped, kind: SyncEntityKind, id: UUID) {
+            guard record.syncBaseUpdatedAt == nil,
+                  !active.contains(SyncOutboxKey(kind: kind, id: id)) else { return }
+            record.syncBaseUpdatedAt = record.updatedAt.timeIntervalSince1970
+        }
+        for settings in try context.fetch(FetchDescriptor<UserSettings>())
+        where settings.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+            adopt(settings, kind: .userSettings, id: settings.id)
+        }
+        for exercise in try context.fetch(FetchDescriptor<Exercise>())
+        where exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+            adopt(exercise, kind: .exercise, id: exercise.id)
+        }
+        for template in try context.fetch(FetchDescriptor<WorkoutTemplate>())
+        where template.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+            adopt(template, kind: .workoutTemplate, id: template.id)
+        }
+        for session in try context.fetch(FetchDescriptor<WorkoutSession>())
+        where session.syncOwnerTokenIdentifier == ownerTokenIdentifier && session.status != .active {
+            adopt(session, kind: .workoutSession, id: session.id)
+            for loggedExercise in session.loggedExercises {
+                adopt(loggedExercise, kind: .loggedExercise, id: loggedExercise.id)
+                for set in loggedExercise.sets {
+                    adopt(set, kind: .loggedSet, id: set.id)
+                }
+            }
+        }
+    }
+
+    private func reassertLocalDeletes(ownerTokenIdentifier: String, context: ModelContext) throws {
+        var active = try activeOutboxKeys(context: context)
+        let now = clock()
+        func reassert(kind: SyncEntityKind, id: UUID) throws {
+            let key = SyncOutboxKey(kind: kind, id: id)
+            guard !active.contains(key) else { return }
+            try recorder.recordDelete(
+                entityKind: kind,
+                entityID: id,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: now
+            )
+            active.insert(key)
+        }
+        for exercise in try context.fetch(FetchDescriptor<Exercise>())
+        where exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier && exercise.isDeleted {
+            try reassert(kind: .exercise, id: exercise.id)
+        }
+        for template in try context.fetch(FetchDescriptor<WorkoutTemplate>())
+        where template.syncOwnerTokenIdentifier == ownerTokenIdentifier && template.isDeleted {
+            try reassert(kind: .workoutTemplate, id: template.id)
+        }
+        for session in try context.fetch(FetchDescriptor<WorkoutSession>())
+        where session.syncOwnerTokenIdentifier == ownerTokenIdentifier && session.status == .completed {
+            if session.isDeleted {
+                try reassert(kind: .workoutSession, id: session.id)
+                continue
+            }
+            // Every deleted child is sent, including one removed during the
+            // workout that never reached the server: that only leaves a
+            // placeholder tombstone. Its times cannot tell it apart from a
+            // delete an older server bounced, because they can come from
+            // another device's clock (#98).
+            for loggedExercise in session.loggedExercises {
+                if loggedExercise.isDeleted {
+                    try reassert(kind: .loggedExercise, id: loggedExercise.id)
+                    continue
+                }
+                for set in loggedExercise.sets where set.isDeleted {
+                    try reassert(kind: .loggedSet, id: set.id)
+                }
+            }
+        }
+    }
+
+    private func activeOutboxKeys(context: ModelContext) throws -> Set<SyncOutboxKey> {
+        Set(try activeOutboxEntries(context: context).compactMap(\.outboxKey))
+    }
+
+    private func activeOutboxEntries(context: ModelContext) throws -> [SyncOutboxEntry] {
+        let completedStatus = SyncOutboxStatus.completed.rawValue
+        return try context.fetch(FetchDescriptor<SyncOutboxEntry>(
+            predicate: #Predicate { entry in
+                entry.statusRaw != completedStatus && entry.operationRaw != ""
+            }
+        ))
+        .filter { $0.isActive && $0.operation != nil }
     }
 
     func prepareForSync(
@@ -185,7 +355,7 @@ public final class SyncCoordinator {
                 )
             }
             if entry.ownerTokenIdentifier == ownerTokenIdentifier, entry.status == .inFlight {
-                recorder.markPendingForRetry(entry, now: .now)
+                recorder.markPendingForRetry(entry, now: clock())
             }
         }
 
@@ -194,7 +364,7 @@ public final class SyncCoordinator {
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 candidates: bootstrapCandidates,
                 context: context,
-                now: .now
+                now: clock()
             )
             state.hasBootstrappedSettingsExercises = true
         }
@@ -203,7 +373,7 @@ public final class SyncCoordinator {
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 includeOwnerlessCompletedWorkouts: includeOwnerlessCompletedWorkouts,
                 context: context,
-                now: .now
+                now: clock()
             )
             if didCompleteWorkoutGraphBootstrap {
                 state.hasBootstrappedWorkoutGraph = true
@@ -217,7 +387,7 @@ public final class SyncCoordinator {
             try backfillOwnedCompletedLoggedSetsForSync(
                 ownerTokenIdentifier: ownerTokenIdentifier,
                 context: context,
-                now: .now
+                now: clock()
             )
             if try hasActiveOutboxEntries(entityKind: .loggedSet, ownerTokenIdentifier: ownerTokenIdentifier, context: context) {
                 state.loggedSetsCursor = 1
@@ -486,12 +656,23 @@ public final class SyncCoordinator {
         return true
     }
 
+    /// Sends due outbox entries, parents before children.
+    ///
+    /// One rejected record does not stop the rest (#96). A rejection is
+    /// counted on the entry, which backs off and is dead-lettered after
+    /// enough rejections over a long enough time. Entries under a rejected
+    /// parent wait for it. The run stops on a network error, after repeated
+    /// account-wide rejections, and after a streak of uncoded rejections that
+    /// looks like a server problem rather than a bad record.
     private func pushPendingEntries(ownerTokenIdentifier: String, context: ModelContext) async throws -> SyncPushResult {
+        let runStartedAt = clock()
         let fetchedEntries = try recorder.entriesForPush(
             ownerTokenIdentifier: ownerTokenIdentifier,
             context: context
         )
-        let hasMorePendingEntries = fetchedEntries.count > maxPendingPushEntriesPerRun
+        .filter { SyncRejectionPolicy.isDue(nextAttemptAt: $0.nextAttemptAt, now: runStartedAt) }
+        // Entries that wait for a rejected parent are passed over without using
+        // up the batch, so a large rejected workout cannot starve the queue.
         let entries = fetchedEntries
             .sorted { lhs, rhs in
                 let lhsRank = syncPushRank(for: lhs)
@@ -504,21 +685,62 @@ public final class SyncCoordinator {
                 if lhsIsDurableRetry != rhsIsDurableRetry {
                     return !lhsIsDurableRetry
                 }
-                if lhs.updatedAt == rhs.updatedAt {
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt < rhs.updatedAt
+                }
+                if lhs.createdAt != rhs.createdAt {
                     return lhs.createdAt < rhs.createdAt
                 }
-                return lhs.updatedAt < rhs.updatedAt
+                // Records changed together share their times; keep their order stable.
+                return lhs.entityID.uuidString < rhs.entityID.uuidString
             }
-            .prefix(maxPendingPushEntriesPerRun)
+        var attemptedCount = 0
+        var hasMorePendingEntries = false
 
+        var activeEntriesByKey: [SyncOutboxKey: [SyncOutboxEntry]] = [:]
+        for entry in try activeOutboxEntries(context: context) {
+            if let key = entry.outboxKey {
+                activeEntriesByKey[key, default: []].append(entry)
+            }
+        }
+        var rejectedThisRun = Set<SyncOutboxKey>()
+        // Entries passed over this run because something they depend on is
+        // failing; their own dependents wait with them.
+        var heldBackThisRun = Set<SyncOutboxKey>()
+        var accountWideRejections = 0
+        var lastAccountWideCode: String?
+        var uncodedRejectionStreak = 0
         var needsSave = false
         var completedSinceLastSave = 0
+        func saveEvery25() throws {
+            needsSave = true
+            completedSinceLastSave += 1
+            if completedSinceLastSave >= 25 {
+                try context.save()
+                needsSave = false
+                completedSinceLastSave = 0
+            }
+        }
+
         for entry in entries {
             try Task.checkCancellation()
+            guard entry.status == .pending || entry.status == .failed else {
+                // A local edit, or the parent requeue below, changed it during the run.
+                continue
+            }
+            if try dependsOnRejectedParent(entry, rejectedThisRun: rejectedThisRun.union(heldBackThisRun), activeEntriesByKey: activeEntriesByKey, context: context) {
+                if let key = entry.outboxKey { heldBackThisRun.insert(key) }
+                continue
+            }
+            guard attemptedCount < maxPendingPushEntriesPerRun else {
+                hasMorePendingEntries = true
+                break
+            }
+            attemptedCount += 1
             let logicalUpdatedAt = logicalFallbackTimestamp(for: entry)
             let previousDurableFailureMessage = entry.status == .failed ? entry.lastErrorMessage : nil
             let wasDurableFailure = entry.status == .failed
-            recorder.markInFlight(entry, now: .now)
+            recorder.markInFlight(entry, now: clock())
             needsSave = true
 
             do {
@@ -529,6 +751,7 @@ public final class SyncCoordinator {
                     fallbackTimestamp: logicalUpdatedAt,
                     context: context
                 )
+                try recordSyncBase(from: result, entry: entry, context: context)
                 try rewindCursorForIgnoredStaleResult(
                     result,
                     entry: entry,
@@ -536,18 +759,13 @@ public final class SyncCoordinator {
                     context: context
                 )
                 recorder.removeCompleted(entry, context: context)
-                needsSave = true
-                completedSinceLastSave += 1
-                if completedSinceLastSave >= 25 {
-                    try context.save()
-                    needsSave = false
-                    completedSinceLastSave = 0
-                }
+                uncodedRejectionStreak = 0
+                try saveEvery25()
             } catch is CancellationError {
                 if wasDurableFailure {
-                    recorder.restoreFailed(entry, message: previousDurableFailureMessage, now: .now)
+                    recorder.restoreFailed(entry, message: previousDurableFailureMessage, now: clock())
                 } else {
-                    recorder.markPendingForRetry(entry, now: .now)
+                    recorder.markPendingForRetry(entry, now: clock())
                 }
                 try context.save()
                 throw CancellationError()
@@ -565,47 +783,226 @@ public final class SyncCoordinator {
                         )
                     )))
                     context.delete(entry)
-                    needsSave = true
-                    completedSinceLastSave += 1
-                    if completedSinceLastSave >= 25 {
+                    try saveEvery25()
+                    continue
+                }
+
+                let failure = SyncPushFailureClassifier.classify(error)
+                func restoreUncounted() {
+                    guard entry.status == .inFlight else { return }
+                    if wasDurableFailure {
+                        recorder.restoreFailed(entry, message: previousDurableFailureMessage, now: clock())
+                    } else {
+                        recorder.markPendingForRetry(entry, now: clock())
+                    }
+                }
+                switch failure {
+                case let .transient(condition):
+                    restoreUncounted()
+                    try context.save()
+                    return SyncPushResult(
+                        didComplete: false,
+                        didPush: true,
+                        transientCondition: condition,
+                        accountWideRejectionCode: lastAccountWideCode
+                    )
+                case let .accountWide(code):
+                    // Nothing will succeed for this account right now; the
+                    // record is fine, so the rejection is not counted.
+                    restoreUncounted()
+                    accountWideRejections += 1
+                    lastAccountWideCode = code
+                    if accountWideRejections >= SyncRejectionPolicy.accountWideRejectionsBeforeStopping {
                         try context.save()
-                        needsSave = false
-                        completedSinceLastSave = 0
+                        return SyncPushResult(didComplete: false, didPush: true, accountWideRejectionCode: code)
+                    }
+                    needsSave = true
+                    continue
+                case .local:
+                    // Not the server's verdict, so it does not count toward
+                    // dead-lettering. Retry after a short wait.
+                    if let key = entry.outboxKey {
+                        rejectedThisRun.insert(key)
+                    }
+                    if entry.status == .inFlight {
+                        recorder.markLocalFailure(entry, message: error.localizedDescription, now: clock())
+                    }
+                    needsSave = true
+                    // A failure on every entry is this device, not the records.
+                    uncodedRejectionStreak += 1
+                    if uncodedRejectionStreak >= SyncRejectionPolicy.uncodedRejectionStreakBeforeStopping {
+                        try context.save()
+                        return SyncPushResult(didComplete: false, didPush: true, accountWideRejectionCode: lastAccountWideCode)
+                    }
+                    continue
+                case .record, .unknown:
+                    if let key = entry.outboxKey {
+                        rejectedThisRun.insert(key)
+                    }
+                    // An entry a local edit re-queued while it was in flight
+                    // is sent as the new edit; this rejection was for the old one.
+                    if entry.status == .inFlight {
+                        recorder.markRejected(entry, code: failure.code, message: error.localizedDescription, now: clock())
+                        if entry.status == .blocked {
+                            observability.record(.durableFailure(DurableSyncFailure(
+                                phase: .push,
+                                entityKind: entry.entityKind,
+                                operation: entry.operation,
+                                category: .outbox,
+                                errorCode: .blockedOutboxEntry,
+                                counts: SyncObservationCounts(
+                                    attempt: entry.rejectionCount,
+                                    pending: fetchedEntries.count
+                                )
+                            )))
+                        }
+                    }
+                    if case let .record(code) = failure {
+                        try requeueMissingReference(
+                            code: code,
+                            entry: entry,
+                            ownerTokenIdentifier: ownerTokenIdentifier,
+                            context: context
+                        )
+                        uncodedRejectionStreak = 0
+                    } else {
+                        uncodedRejectionStreak += 1
+                    }
+                    needsSave = true
+                    if uncodedRejectionStreak >= SyncRejectionPolicy.uncodedRejectionStreakBeforeStopping {
+                        try context.save()
+                        return SyncPushResult(didComplete: false, didPush: true, accountWideRejectionCode: lastAccountWideCode)
                     }
                     continue
                 }
-                let transientCondition = TransientSyncConditionClassifier.errorCode(for: error)
-                if entry.status == .inFlight {
-                    if transientCondition != nil {
-                        if wasDurableFailure {
-                            recorder.restoreFailed(entry, message: previousDurableFailureMessage, now: .now)
-                        } else {
-                            recorder.markPendingForRetry(entry, now: .now)
-                        }
-                    } else {
-                        recorder.markFailed(entry, message: error.localizedDescription, now: .now)
-                    }
-                    needsSave = true
-                }
-                if needsSave {
-                    try context.save()
-                }
-                return SyncPushResult(
-                    didComplete: false,
-                    didPush: true,
-                    transientCondition: transientCondition
-                )
             }
         }
 
         if needsSave {
             try context.save()
         }
+        if let lastAccountWideCode {
+            // Even one refused write means the run did not sync.
+            return SyncPushResult(didComplete: false, didPush: true, accountWideRejectionCode: lastAccountWideCode)
+        }
         return SyncPushResult(
             didComplete: true,
-            didPush: !entries.isEmpty,
+            didPush: attemptedCount > 0,
             hasMorePendingEntries: hasMorePendingEntries
         )
+    }
+
+    /// Whether a record upload must wait for a record it depends on: its
+    /// workout, its logged exercise, or the exercise a logged exercise names.
+    /// It waits while that record's own upload was rejected or held back this
+    /// run, or while its upload keeps failing and the server may not have it:
+    /// a create, or a record no server version was ever confirmed for. A
+    /// failing edit of a record the server holds does not hold back the rest.
+    /// A delete never waits: the server stores it even before its record.
+    private func dependsOnRejectedParent(
+        _ entry: SyncOutboxEntry,
+        rejectedThisRun: Set<SyncOutboxKey>,
+        activeEntriesByKey: [SyncOutboxKey: [SyncOutboxEntry]],
+        context: ModelContext
+    ) throws -> Bool {
+        guard entry.operation != .delete else { return false }
+        var dependencies: [(key: SyncOutboxKey, record: any SyncEditStamped)] = []
+        switch entry.entityKind {
+        case .some(.loggedExercise):
+            let loggedExercise = try findLoggedExercise(id: entry.entityID, context: context)
+            if let session = loggedExercise?.session {
+                dependencies.append((SyncOutboxKey(kind: .workoutSession, id: session.id), session))
+            }
+            if let exercise = loggedExercise?.exercise {
+                dependencies.append((SyncOutboxKey(kind: .exercise, id: exercise.id), exercise))
+            }
+        case .some(.loggedSet):
+            if let loggedExercise = try findLoggedSet(id: entry.entityID, context: context)?.loggedExercise {
+                dependencies.append((SyncOutboxKey(kind: .loggedExercise, id: loggedExercise.id), loggedExercise))
+                if let session = loggedExercise.session {
+                    dependencies.append((SyncOutboxKey(kind: .workoutSession, id: session.id), session))
+                }
+            }
+        default:
+            return false
+        }
+        return dependencies.contains { dependency in
+            if rejectedThisRun.contains(dependency.key) { return true }
+            let serverMayLackIt = dependency.record.syncBaseUpdatedAt == nil
+            return (activeEntriesByKey[dependency.key] ?? []).contains { dependencyEntry in
+                (dependencyEntry.status == .failed || dependencyEntry.status == .blocked)
+                    && (dependencyEntry.operation == .create || serverMayLackIt)
+            }
+        }
+    }
+
+    /// A rejected upload names a parent or exercise the server never got.
+    /// Upload it again if this device still has it and nothing is queued for it.
+    private func requeueMissingReference(
+        code: String,
+        entry: SyncOutboxEntry,
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws {
+        let target: SyncOutboxKey?
+        switch (code, entry.entityKind) {
+        case ("missingParent", .some(.loggedExercise)):
+            target = try findLoggedExercise(id: entry.entityID, context: context)?.session
+                .map { SyncOutboxKey(kind: .workoutSession, id: $0.id) }
+        case ("missingParent", .some(.loggedSet)):
+            target = try findLoggedSet(id: entry.entityID, context: context)?.loggedExercise
+                .map { SyncOutboxKey(kind: .loggedExercise, id: $0.id) }
+        case ("missingExerciseReference", .some(.loggedExercise)):
+            let exercise = try findLoggedExercise(id: entry.entityID, context: context)?.exercise
+            target = exercise.flatMap { exercise in
+                exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier
+                    ? SyncOutboxKey(kind: .exercise, id: exercise.id)
+                    : nil
+            }
+        default:
+            target = nil
+        }
+        guard let target,
+              try !hasActiveOutboxEntry(entityKind: target.kind, entityID: target.id, context: context) else {
+            return
+        }
+        // An update, so deleting the record later still sends its tombstone.
+        try recorder.recordUpdate(
+            entityKind: target.kind,
+            entityID: target.id,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context,
+            now: clock()
+        )
+    }
+
+    /// The local copy, edited since the upload or not, now descends from the
+    /// version the server stored.
+    private func recordSyncBase(from result: SyncMutationResult?, entry: SyncOutboxEntry, context: ModelContext) throws {
+        guard let result,
+              result.status == "inserted" || result.status == "updated",
+              let updatedAt = result.updatedAt else {
+            return
+        }
+        guard let record = try syncedRecord(kind: entry.entityKind, id: entry.entityID, context: context) else { return }
+        record.syncBaseUpdatedAt = updatedAt
+        // An edit made while the upload was in flight must still outrank the
+        // version the server stored, which can sit above the uploaded stamp.
+        if entry.status == .pending, record.updatedAt.timeIntervalSince1970 <= updatedAt {
+            record.stampEdit(now: record.updatedAt)
+        }
+    }
+
+    private func syncedRecord(kind: SyncEntityKind?, id: UUID, context: ModelContext) throws -> (any SyncEditStamped)? {
+        switch kind {
+        case .some(.userSettings): try findUserSettings(id: id, context: context)
+        case .some(.exercise): try findExercise(id: id, context: context)
+        case .some(.workoutSession): try findWorkoutSession(id: id, context: context)
+        case .some(.loggedExercise): try findLoggedExercise(id: id, context: context)
+        case .some(.loggedSet): try findLoggedSet(id: id, context: context)
+        case .some(.workoutTemplate): try findWorkoutTemplate(id: id, context: context)
+        default: nil
+        }
     }
 
     private func syncPushRank(for entry: SyncOutboxEntry) -> Int {
@@ -760,24 +1157,8 @@ public final class SyncCoordinator {
             return
         }
 
-        let state = try SyncCursorState.state(for: ownerTokenIdentifier, context: context)
-        let refetchCursor = max(0, serverUpdatedAt - 1)
-        switch entry.entityKind {
-        case .some(.userSettings):
-            state.userSettingsCursor = min(state.userSettingsCursor, refetchCursor)
-        case .some(.exercise):
-            state.exercisesCursor = min(state.exercisesCursor, refetchCursor)
-        case .some(.workoutSession):
-            state.workoutSessionsCursor = min(state.workoutSessionsCursor, refetchCursor)
-        case .some(.loggedExercise):
-            state.loggedExercisesCursor = min(state.loggedExercisesCursor, refetchCursor)
-        case .some(.loggedSet):
-            state.loggedSetsCursor = min(state.loggedSetsCursor, refetchCursor)
-        case .some(.workoutTemplate):
-            state.workoutTemplatesCursor = min(state.workoutTemplatesCursor, refetchCursor)
-        default:
-            break
-        }
+        guard let kind = entry.entityKind else { return }
+        try SyncCursorState.state(for: ownerTokenIdentifier, context: context).rewind(kind, toBefore: serverUpdatedAt)
     }
 
     private func findUserSettings(id: UUID, context: ModelContext) throws -> UserSettings? {
@@ -836,6 +1217,10 @@ public final class SyncCoordinator {
         var loggedSetsCursorBlocked = false
         var pulledRemoteExerciseIDs = Set<UUID>()
         let allowsOwnerScopedSeedAdoption = !state.hasBootstrappedSettingsExercises
+        pullBootstrapState = PullBootstrapState(
+            isBootstrappingSettingsExercises: !state.hasBootstrappedSettingsExercises,
+            isBootstrappingWorkoutGraph: !state.hasBootstrappedWorkoutGraph
+        )
         var fetchCursors = SyncChangeCursors(
             userSettings: state.userSettingsCursor,
             exercises: state.exercisesCursor,
@@ -850,6 +1235,8 @@ public final class SyncCoordinator {
                 cursors: fetchCursors,
                 limit: 100
             )
+            // Read after the fetch: a local edit can land while it is in flight.
+            pullLocalIntents = try loadLocalIntents(context: context)
 
             summary.record(response)
             try apply(userSettingsRecords: response.userSettings, ownerTokenIdentifier: ownerTokenIdentifier, context: context)
@@ -957,13 +1344,17 @@ public final class SyncCoordinator {
                 guard settings.syncOwnerTokenIdentifier == nil || settings.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
                     continue
                 }
-                guard SyncConflictResolver.decision(
-                    localUpdatedAt: settings.updatedAt,
-                    localDeletedAt: settings.deletedAt,
-                    incomingUpdatedAt: incomingUpdatedAt,
-                    incomingDeletedAt: incomingDeletedAt,
-                    allowsIncomingRestore: false
-                ) == .applyIncoming else {
+                guard try shouldApplyIncoming(
+                    kind: .userSettings,
+                    local: settings,
+                    incomingUpdatedAt: record.updatedAt,
+                    incomingDeletedAt: record.deletedAt,
+                    incomingCreatedAt: record.createdAt,
+                    serverUpdatedAt: record.serverUpdatedAt,
+                    isOwnedByCurrentOwner: settings.syncOwnerTokenIdentifier == ownerTokenIdentifier,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context
+                ) else {
                     continue
                 }
                 apply(record, to: settings, ownerTokenIdentifier: ownerTokenIdentifier)
@@ -986,8 +1377,14 @@ public final class SyncCoordinator {
                     )
                     if !hasLocalIntent {
                         apply(record, to: settings, ownerTokenIdentifier: ownerTokenIdentifier)
-                    } else if settings.defaultRestTimerSeconds == UserSettings.seededRestTimerSeconds {
-                        settings.defaultRestTimerSeconds = record.defaultRestTimerSeconds
+                    } else {
+                        noteKeptLocal(.userSettings, serverUpdatedAt: record.serverUpdatedAt)
+                        if settings.defaultRestTimerSeconds == UserSettings.seededRestTimerSeconds {
+                            // The pending change is a choice made before sign-in, such
+                            // as the onboarding weight unit. A rest duration still at
+                            // its seed was never chosen, so keep the account's.
+                            settings.defaultRestTimerSeconds = record.defaultRestTimerSeconds
+                        }
                     }
                     continue
                 }
@@ -1003,6 +1400,7 @@ public final class SyncCoordinator {
                     deletedAt: nil
                 )
                 settings.weightUnitRaw = record.weightUnitRaw
+                settings.syncBaseUpdatedAt = record.updatedAt
                 context.insert(settings)
             }
         }
@@ -1020,6 +1418,7 @@ public final class SyncCoordinator {
         settings.createdAt = Date(timeIntervalSince1970: record.createdAt)
         settings.updatedAt = Date(timeIntervalSince1970: record.updatedAt)
         settings.deletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))
+        settings.syncBaseUpdatedAt = record.updatedAt
     }
 
     private func apply(
@@ -1039,13 +1438,17 @@ public final class SyncCoordinator {
                 guard exercise.syncOwnerTokenIdentifier == nil || exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
                     continue
                 }
-                guard SyncConflictResolver.decision(
-                    localUpdatedAt: exercise.updatedAt,
-                    localDeletedAt: exercise.deletedAt,
-                    incomingUpdatedAt: incomingUpdatedAt,
-                    incomingDeletedAt: incomingDeletedAt,
-                    allowsIncomingRestore: false
-                ) == .applyIncoming else {
+                guard try shouldApplyIncoming(
+                    kind: .exercise,
+                    local: exercise,
+                    incomingUpdatedAt: record.updatedAt,
+                    incomingDeletedAt: record.deletedAt,
+                    incomingCreatedAt: record.createdAt,
+                    serverUpdatedAt: record.serverUpdatedAt,
+                    isOwnedByCurrentOwner: exercise.syncOwnerTokenIdentifier == ownerTokenIdentifier,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context
+                ) else {
                     continue
                 }
                 apply(record, to: exercise, ownerTokenIdentifier: ownerTokenIdentifier)
@@ -1074,8 +1477,11 @@ public final class SyncCoordinator {
                         ownerTokenIdentifier: ownerTokenIdentifier,
                         context: context
                     )
-                    if !hasLocalIntent {
+                    // Deletes win, even over a waiting local edit.
+                    if !hasLocalIntent || record.deletedAt != nil {
                         apply(record, to: exercise, ownerTokenIdentifier: ownerTokenIdentifier)
+                    } else {
+                        noteKeptLocal(.exercise, serverUpdatedAt: record.serverUpdatedAt)
                     }
                     continue
                 }
@@ -1100,6 +1506,7 @@ public final class SyncCoordinator {
                 exercise.primaryMuscleRaw = record.primaryMuscleRaw
                 exercise.primaryMuscleGroupRaw = record.primaryMuscleGroupRaw
                 exercise.trackingMethodRaw = record.trackingMethodRaw
+                exercise.syncBaseUpdatedAt = record.updatedAt
                 context.insert(exercise)
             }
         }
@@ -1124,6 +1531,7 @@ public final class SyncCoordinator {
         exercise.createdAt = Date(timeIntervalSince1970: record.createdAt)
         exercise.updatedAt = Date(timeIntervalSince1970: record.updatedAt)
         exercise.deletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))
+        exercise.syncBaseUpdatedAt = record.updatedAt
     }
 
     private func apply(
@@ -1140,13 +1548,17 @@ public final class SyncCoordinator {
                 guard template.syncOwnerTokenIdentifier == nil || template.syncOwnerTokenIdentifier == ownerTokenIdentifier else {
                     continue
                 }
-                guard SyncConflictResolver.decision(
-                    localUpdatedAt: template.updatedAt,
-                    localDeletedAt: template.deletedAt,
-                    incomingUpdatedAt: incomingUpdatedAt,
-                    incomingDeletedAt: incomingDeletedAt,
-                    allowsIncomingRestore: false
-                ) == .applyIncoming else {
+                guard try shouldApplyIncoming(
+                    kind: .workoutTemplate,
+                    local: template,
+                    incomingUpdatedAt: record.updatedAt,
+                    incomingDeletedAt: record.deletedAt,
+                    incomingCreatedAt: record.createdAt,
+                    serverUpdatedAt: record.serverUpdatedAt,
+                    isOwnedByCurrentOwner: template.syncOwnerTokenIdentifier == ownerTokenIdentifier,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context
+                ) else {
                     continue
                 }
                 template.syncOwnerTokenIdentifier = ownerTokenIdentifier
@@ -1155,8 +1567,9 @@ public final class SyncCoordinator {
                 template.createdAt = Date(timeIntervalSince1970: record.createdAt)
                 template.updatedAt = incomingUpdatedAt
                 template.deletedAt = incomingDeletedAt
+                template.syncBaseUpdatedAt = record.updatedAt
             } else {
-                context.insert(WorkoutTemplate(
+                let template = WorkoutTemplate(
                     id: id,
                     name: record.name,
                     entries: Self.templateEntries(from: record),
@@ -1164,7 +1577,9 @@ public final class SyncCoordinator {
                     createdAt: Date(timeIntervalSince1970: record.createdAt),
                     updatedAt: incomingUpdatedAt,
                     deletedAt: incomingDeletedAt
-                ))
+                )
+                template.syncBaseUpdatedAt = record.updatedAt
+                context.insert(template)
             }
         }
     }
@@ -1184,10 +1599,10 @@ public final class SyncCoordinator {
     }
 
     private func repointTemplateEntries(from oldExerciseID: UUID, to newExerciseID: UUID, context: ModelContext) throws {
-        let now = Date.now
+        let now = clock()
         for template in try context.fetch(FetchDescriptor<WorkoutTemplate>())
         where template.repointEntries(from: oldExerciseID, to: newExerciseID) {
-            template.updatedAt = max(now, template.updatedAt)
+            template.stampEdit(now: now)
             try recorder.recordUpdate(
                 entityKind: .workoutTemplate,
                 entityID: template.id,
@@ -1195,6 +1610,8 @@ public final class SyncCoordinator {
                 context: context,
                 now: now
             )
+            // The same pulled page may carry this template; keep the repoint.
+            pullLocalIntents[SyncOutboxKey(kind: .workoutTemplate, id: template.id)] = .pending
         }
     }
 
@@ -1218,17 +1635,21 @@ public final class SyncCoordinator {
                     maxAppliedServerUpdatedAt = max(maxAppliedServerUpdatedAt ?? 0, record.serverUpdatedAt)
                     continue
                 }
-                guard SyncConflictResolver.decision(
-                    localUpdatedAt: session.updatedAt,
-                    localDeletedAt: session.deletedAt,
-                    incomingUpdatedAt: incomingUpdatedAt,
-                    incomingDeletedAt: incomingDeletedAt,
-                    allowsIncomingRestore: false
-                ) == .applyIncoming else {
+                guard try shouldApplyIncoming(
+                    kind: .workoutSession,
+                    local: session,
+                    incomingUpdatedAt: record.updatedAt,
+                    incomingDeletedAt: record.deletedAt,
+                    incomingCreatedAt: record.createdAt,
+                    serverUpdatedAt: record.serverUpdatedAt,
+                    isOwnedByCurrentOwner: session.syncOwnerTokenIdentifier == ownerTokenIdentifier,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context
+                ) else {
                     maxAppliedServerUpdatedAt = max(maxAppliedServerUpdatedAt ?? 0, record.serverUpdatedAt)
                     continue
                 }
-                apply(record, to: session, ownerTokenIdentifier: ownerTokenIdentifier)
+                try apply(record, to: session, ownerTokenIdentifier: ownerTokenIdentifier)
                 didApplyLocalGraphRecord = true
             } else {
                 guard incomingDeletedAt == nil else {
@@ -1253,6 +1674,7 @@ public final class SyncCoordinator {
                     healthLinkID: record.healthLinkID.flatMap(UUID.init(uuidString:)),
                     syncOwnerTokenIdentifier: ownerTokenIdentifier
                 )
+                session.syncBaseUpdatedAt = record.updatedAt
                 context.insert(session)
                 didApplyLocalGraphRecord = true
             }
@@ -1264,7 +1686,7 @@ public final class SyncCoordinator {
         )
     }
 
-    private func apply(_ record: WorkoutSessionSyncRecord, to session: WorkoutSession, ownerTokenIdentifier: String) {
+    private func apply(_ record: WorkoutSessionSyncRecord, to session: WorkoutSession, ownerTokenIdentifier: String) throws {
         session.syncOwnerTokenIdentifier = ownerTokenIdentifier
         session.title = record.title
         session.startedAt = Date(timeIntervalSince1970: record.startedAt)
@@ -1280,13 +1702,19 @@ public final class SyncCoordinator {
         session.updatedAt = Date(timeIntervalSince1970: record.updatedAt)
         session.deletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))
         session.healthLinkID = record.healthLinkID.flatMap(UUID.init(uuidString:))
+        session.syncBaseUpdatedAt = record.updatedAt
         if let deletedAt = session.deletedAt {
-            cascadeRemoteWorkoutSessionDeletion(session, deletedAt: deletedAt)
+            try cascadeRemoteWorkoutSessionDeletion(session, deletedAt: deletedAt)
         }
     }
 
-    private func cascadeRemoteWorkoutSessionDeletion(_ session: WorkoutSession, deletedAt: Date) {
+    private func cascadeRemoteWorkoutSessionDeletion(_ session: WorkoutSession, deletedAt: Date) throws {
         for loggedExercise in session.loggedExercises {
+            // A child whose create was turned down never reached the server,
+            // so no tombstone of its own will arrive to retire its entry.
+            if let context = session.modelContext {
+                try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedExercise, id: loggedExercise.id), context: context)
+            }
             if loggedExercise.deletedAt == nil {
                 loggedExercise.deletedAt = deletedAt
             }
@@ -1295,6 +1723,9 @@ public final class SyncCoordinator {
             }
 
             for set in loggedExercise.sets {
+                if let context = session.modelContext {
+                    try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedSet, id: set.id), context: context)
+                }
                 if set.deletedAt == nil {
                     set.deletedAt = deletedAt
                 }
@@ -1328,6 +1759,13 @@ public final class SyncCoordinator {
             guard let sessionID = UUID(uuidString: record.sessionClientId),
                   let session = try findWorkoutSession(id: sessionID, context: context) else {
                 if record.deletedAt != nil {
+                    // A placeholder tombstone names no workout. Apply it to a
+                    // copy this device holds.
+                    if let held = try findLoggedExercise(id: id, context: context),
+                       held.session?.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+                        try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedExercise, id: id), context: context)
+                        try applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
+                    }
                     recordAppliedCursor(record.serverUpdatedAt)
                     continue
                 }
@@ -1349,6 +1787,12 @@ public final class SyncCoordinator {
                let exerciseID = UUID(uuidString: exerciseClientId) {
                 guard let resolvedExercise = try findExercise(id: exerciseID, context: context) else {
                     guard incomingDeletedAt == nil else {
+                        // Deletes win: apply it to a copy this device holds,
+                        // even though the exercise it names is not here.
+                        if let held = try findLoggedExercise(id: id, context: context) {
+                            try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedExercise, id: id), context: context)
+                            try applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
+                        }
                         recordAppliedCursor(record.serverUpdatedAt)
                         continue
                     }
@@ -1365,13 +1809,17 @@ public final class SyncCoordinator {
             }
 
             if let loggedExercise = try findLoggedExercise(id: id, context: context) {
-                guard SyncConflictResolver.decision(
-                    localUpdatedAt: loggedExercise.updatedAt,
-                    localDeletedAt: loggedExercise.deletedAt,
-                    incomingUpdatedAt: incomingUpdatedAt,
-                    incomingDeletedAt: incomingDeletedAt,
-                    allowsIncomingRestore: false
-                ) == .applyIncoming else {
+                guard try shouldApplyIncoming(
+                    kind: .loggedExercise,
+                    local: loggedExercise,
+                    incomingUpdatedAt: record.updatedAt,
+                    incomingDeletedAt: record.deletedAt,
+                    incomingCreatedAt: record.createdAt,
+                    serverUpdatedAt: record.serverUpdatedAt,
+                    isOwnedByCurrentOwner: true,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context
+                ) else {
                     recordAppliedCursor(record.serverUpdatedAt)
                     continue
                 }
@@ -1399,6 +1847,7 @@ public final class SyncCoordinator {
                 )
                 loggedExercise.hasSnapshotMetadata = record.hasSnapshotMetadata
                 loggedExercise.trackingMethodRaw = record.trackingMethodRaw
+                loggedExercise.syncBaseUpdatedAt = record.updatedAt
                 loggedExercise.session = session
                 session.loggedExercises.append(loggedExercise)
                 context.insert(loggedExercise)
@@ -1433,6 +1882,7 @@ public final class SyncCoordinator {
         loggedExercise.createdAt = Date(timeIntervalSince1970: record.createdAt)
         loggedExercise.updatedAt = Date(timeIntervalSince1970: record.updatedAt)
         loggedExercise.deletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))
+        loggedExercise.syncBaseUpdatedAt = record.updatedAt
         loggedExercise.session = session
         if !session.loggedExercises.contains(where: { $0.id == loggedExercise.id }) {
             session.loggedExercises.append(loggedExercise)
@@ -1465,6 +1915,13 @@ public final class SyncCoordinator {
             guard let loggedExerciseID = UUID(uuidString: record.loggedExerciseClientId),
                   let loggedExercise = try findLoggedExercise(id: loggedExerciseID, context: context) else {
                 if record.deletedAt != nil {
+                    // A placeholder tombstone names no logged exercise. Apply
+                    // it to a copy this device holds.
+                    if let held = try findLoggedSet(id: id, context: context),
+                       held.loggedExercise?.session?.syncOwnerTokenIdentifier == ownerTokenIdentifier {
+                        try retireBlockedEntries(for: SyncOutboxKey(kind: .loggedSet, id: id), context: context)
+                        try applyDeletion(of: record.updatedAt, deletedAt: record.deletedAt, to: held)
+                    }
                     recordAppliedCursor(record.serverUpdatedAt)
                     continue
                 }
@@ -1483,13 +1940,17 @@ public final class SyncCoordinator {
             let incomingDeletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))
 
             if let set = try findLoggedSet(id: id, context: context) {
-                guard SyncConflictResolver.decision(
-                    localUpdatedAt: set.updatedAt,
-                    localDeletedAt: set.deletedAt,
-                    incomingUpdatedAt: incomingUpdatedAt,
-                    incomingDeletedAt: incomingDeletedAt,
-                    allowsIncomingRestore: false
-                ) == .applyIncoming else {
+                guard try shouldApplyIncoming(
+                    kind: .loggedSet,
+                    local: set,
+                    incomingUpdatedAt: record.updatedAt,
+                    incomingDeletedAt: record.deletedAt,
+                    incomingCreatedAt: record.createdAt,
+                    serverUpdatedAt: record.serverUpdatedAt,
+                    isOwnedByCurrentOwner: true,
+                    ownerTokenIdentifier: ownerTokenIdentifier,
+                    context: context
+                ) else {
                     recordAppliedCursor(record.serverUpdatedAt)
                     continue
                 }
@@ -1517,6 +1978,7 @@ public final class SyncCoordinator {
                     healthLinkID: record.healthLinkID.flatMap(UUID.init(uuidString:)),
                     sourceLoggedSetID: record.sourceLoggedSetID.flatMap(UUID.init(uuidString:))
                 )
+                set.syncBaseUpdatedAt = record.updatedAt
                 set.loggedExercise = loggedExercise
                 loggedExercise.sets.append(set)
                 context.insert(set)
@@ -1547,10 +2009,112 @@ public final class SyncCoordinator {
         set.deletedAt = record.deletedAt.map(Date.init(timeIntervalSince1970:))
         set.healthLinkID = record.healthLinkID.flatMap(UUID.init(uuidString:))
         set.sourceLoggedSetID = record.sourceLoggedSetID.flatMap(UUID.init(uuidString:))
+        set.syncBaseUpdatedAt = record.updatedAt
         set.loggedExercise = loggedExercise
         if !loggedExercise.sets.contains(where: { $0.id == set.id }) {
             loggedExercise.sets.append(set)
         }
+    }
+
+    /// The pull rule for one record this device holds (`SyncPullRule`).
+    /// Returns whether to copy the server's version. A placeholder tombstone,
+    /// which carries no content, deletes the local copy here and returns false.
+    private func shouldApplyIncoming(
+        kind: SyncEntityKind,
+        local: some SyncEditStamped,
+        incomingUpdatedAt: Double,
+        incomingDeletedAt: Double?,
+        incomingCreatedAt: Double,
+        serverUpdatedAt: Double,
+        isOwnedByCurrentOwner: Bool,
+        ownerTokenIdentifier: String,
+        context: ModelContext
+    ) throws -> Bool {
+        let key = SyncOutboxKey(kind: kind, id: local.id)
+        let decision = SyncPullRule.decide(
+            localUpdatedAt: local.updatedAt,
+            localIsDeleted: local.deletedAt != nil,
+            incomingUpdatedAt: Date(timeIntervalSince1970: incomingUpdatedAt),
+            incomingIsDeleted: incomingDeletedAt != nil,
+            localIntent: pullLocalIntents[key] ?? .none,
+            isBootstrapping: pullBootstrapState.isBootstrapping(kind),
+            reassertsLocalDeletes: kind != .userSettings && isOwnedByCurrentOwner
+        )
+        switch decision {
+        case .applyIncoming:
+            if incomingDeletedAt != nil {
+                try retireBlockedEntries(for: key, context: context)
+            }
+            // Zero createdAt marks a placeholder: the server got the delete
+            // before the record, so it has no content to copy.
+            if incomingCreatedAt == 0, incomingDeletedAt != nil {
+                try applyDeletion(of: incomingUpdatedAt, deletedAt: incomingDeletedAt, to: local)
+                return false
+            }
+            return true
+        case let .keepLocal(rewindCursor):
+            if rewindCursor {
+                noteKeptLocal(kind, serverUpdatedAt: serverUpdatedAt)
+            }
+            return false
+        case .reassertLocalDelete:
+            try recorder.recordDelete(
+                entityKind: kind,
+                entityID: key.id,
+                ownerTokenIdentifier: ownerTokenIdentifier,
+                context: context,
+                now: clock()
+            )
+            pullLocalIntents[key] = .pending
+            return false
+        }
+    }
+
+    /// A server tombstone replaced this record, so a dead-lettered upload or
+    /// delete of it has nothing left to do: drop it, so it is not shown as
+    /// waiting for Retry.
+    private func retireBlockedEntries(for key: SyncOutboxKey, context: ModelContext) throws {
+        guard pullLocalIntents[key] == .blocked else { return }
+        let kindRaw = key.kind.rawValue
+        let entityID = key.id
+        let blockedStatus = SyncOutboxStatus.blocked.rawValue
+        for entry in try context.fetch(FetchDescriptor<SyncOutboxEntry>(
+            predicate: #Predicate { entry in
+                entry.entityKindRaw == kindRaw && entry.entityID == entityID && entry.statusRaw == blockedStatus
+            }
+        )) {
+            context.delete(entry)
+        }
+        pullLocalIntents[key] = nil
+    }
+
+    /// Pull this record again after the push (`rewindPastKeptLocalRecords`).
+    private func noteKeptLocal(_ kind: SyncEntityKind, serverUpdatedAt: Double) {
+        keptLocalFloors[kind] = min(keptLocalFloors[kind] ?? serverUpdatedAt, serverUpdatedAt)
+    }
+
+    /// Applies only the deletion of a server version, keeping local content.
+    private func applyDeletion(of incomingUpdatedAt: Double, deletedAt incomingDeletedAt: Double?, to local: some SyncEditStamped) throws {
+        guard let incomingDeletedAt else { return }
+        let deletedAt = local.deletedAt ?? Date(timeIntervalSince1970: incomingDeletedAt)
+        local.deletedAt = deletedAt
+        local.updatedAt = Date(timeIntervalSince1970: incomingUpdatedAt)
+        local.syncBaseUpdatedAt = incomingUpdatedAt
+        if let session = local as? WorkoutSession {
+            try cascadeRemoteWorkoutSessionDeletion(session, deletedAt: deletedAt)
+        }
+    }
+
+    private func loadLocalIntents(context: ModelContext) throws -> [SyncOutboxKey: SyncLocalIntent] {
+        var intents: [SyncOutboxKey: SyncLocalIntent] = [:]
+        for entry in try activeOutboxEntries(context: context) {
+            guard let key = entry.outboxKey else { continue }
+            let intent: SyncLocalIntent = entry.status == .blocked ? .blocked : .pending
+            if intents[key] != .pending {
+                intents[key] = intent
+            }
+        }
+        return intents
     }
 
     private func canClaimUnownedRecord(
@@ -1631,7 +2195,7 @@ public final class SyncCoordinator {
             canonical.trackingMethodRaw = duplicate.trackingMethodRaw ?? canonical.trackingMethodRaw
             canonical.notes = duplicate.notes
             canonical.isArchived = duplicate.isArchived
-            canonical.updatedAt = duplicate.updatedAt
+            canonical.stampEdit(now: max(clock(), duplicate.updatedAt))
         }
 
         for loggedExercise in try context.fetch(FetchDescriptor<LoggedExercise>())
@@ -1695,17 +2259,18 @@ public final class SyncCoordinator {
     ) throws -> Bool {
         let entityKindRaw = entityKind.rawValue
         let failedStatus = SyncOutboxStatus.failed.rawValue
+        let blockedStatus = SyncOutboxStatus.blocked.rawValue
         return try context.fetch(FetchDescriptor<SyncOutboxEntry>(
             predicate: #Predicate { entry in
                 entry.entityKindRaw == entityKindRaw
                     && entry.entityID == entityID
                     && entry.ownerTokenIdentifier == ownerTokenIdentifier
-                    && entry.statusRaw == failedStatus
+                    && (entry.statusRaw == failedStatus || entry.statusRaw == blockedStatus)
                     && entry.operationRaw != ""
             }
         ))
             .contains { entry in
-                guard entry.status == .failed, let operation = entry.operation else {
+                guard entry.status == .failed || entry.status == .blocked, let operation = entry.operation else {
                     return false
                 }
                 return isDeleted ? operation == .delete : operation == .create || operation == .update
@@ -1760,9 +2325,15 @@ public final class SyncCoordinator {
 enum SyncCoordinatorError: LocalizedError {
     case remotePullFailed(Error)
     case ownerMismatch(entityKind: SyncEntityKind, entityID: UUID)
+    /// The server refused writes for the whole account, such as while it is
+    /// being deleted or after sign-in lapsed. Nothing was counted against the
+    /// queued records.
+    case accountUnavailable(code: String)
 
     var errorDescription: String? {
         switch self {
+        case let .accountUnavailable(code):
+            "Cloud sync is unavailable for this account right now (\(code))."
         case let .remotePullFailed(error):
             error.localizedDescription
         case let .ownerMismatch(entityKind, entityID):
@@ -1824,6 +2395,24 @@ private struct SyncPushResult {
     var didPush: Bool
     var hasMorePendingEntries = false
     var transientCondition: SyncStableErrorCode?
+    /// Set when the run stopped after repeated account-wide rejections.
+    var accountWideRejectionCode: String?
+}
+
+/// Which record groups are still in their first-run bootstrap, read once at
+/// the start of a pull.
+private struct PullBootstrapState {
+    var isBootstrappingSettingsExercises = false
+    var isBootstrappingWorkoutGraph = false
+
+    func isBootstrapping(_ kind: SyncEntityKind) -> Bool {
+        switch kind {
+        case .workoutSession, .loggedExercise, .loggedSet:
+            isBootstrappingWorkoutGraph
+        default:
+            isBootstrappingSettingsExercises
+        }
+    }
 }
 
 private struct WorkoutGraphApplyResult {
