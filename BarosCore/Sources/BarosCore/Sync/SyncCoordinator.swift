@@ -302,9 +302,6 @@ public final class SyncCoordinator {
                 context: context
             )
 
-        // Collapse signed-out duplicate seeds before claiming, while they are still
-        // ownerless — once the claim loop below stamps an edited duplicate with the owner
-        // it would be indistinguishable from the canonical seed and slip through.
         try mergeOwnerlessDuplicateSeedExercises(
             ownerTokenIdentifier: ownerTokenIdentifier,
             context: context
@@ -1601,8 +1598,6 @@ public final class SyncCoordinator {
         }
     }
 
-    /// Keeps template entries on an exercise whose id sync replaced or merged,
-    /// and uploads the change so other devices follow.
     private func repointTemplateEntries(from oldExerciseID: UUID, to newExerciseID: UUID, context: ModelContext) throws {
         let now = clock()
         for template in try context.fetch(FetchDescriptor<WorkoutTemplate>())
@@ -2143,16 +2138,6 @@ public final class SyncCoordinator {
             }
     }
 
-    /// Collapses ownerless duplicate seeded exercises into the matching owner-scoped seed.
-    ///
-    /// Signed-out mode re-seeds default exercises as ownerless rows because it cannot see
-    /// the owner-scoped library, so after a sign-in / sign-out / sign-in cycle a seed can
-    /// exist twice: once owner-scoped (already synced) and once ownerless. A workout logged
-    /// while signed out references the ownerless copy, whose `exerciseClientId` does not
-    /// exist remotely for the owner, so the server rejects the logged exercise. Repoint
-    /// those references onto the canonical owner-scoped seed and drop the stranded
-    /// duplicate. Only runs when an owner-scoped seed already exists for the identifier, so
-    /// it never interferes with first-time bootstrap of a purely ownerless library.
     private func mergeOwnerlessDuplicateSeedExercises(
         ownerTokenIdentifier: String,
         context: ModelContext
@@ -2196,12 +2181,6 @@ public final class SyncCoordinator {
     ) throws {
         let duplicateID = duplicate.id
 
-        // Last-write-wins, but only for a duplicate the user actually edited while signed
-        // out. A freshly re-seeded duplicate gets a current `updatedAt` purely from being
-        // created, so a timestamp comparison alone would let an unedited default overwrite
-        // the canonical seed's previously-synced custom fields. Require an active exercise
-        // outbox entry (real local intent) before copying. The retargeted outbox entry then
-        // pushes the merged values under the canonical id.
         let duplicateHasLocalEdit = try hasActiveOutboxEntry(
             entityKind: .exercise,
             entityID: duplicateID,

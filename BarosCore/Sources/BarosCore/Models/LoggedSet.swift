@@ -7,10 +7,7 @@ public final class LoggedSet: Identifiable {
     public var orderIndex: Int
     public var weight: Double?
     public var reps: Int?
-    /// A timed set's length. Rep-based sets leave it nil; time is never stored as reps.
     public var durationSeconds: Int?
-    /// Whether this device has seen the set's duration. Nil on rows saved
-    /// before sets had one, so their missing time is never uploaded as a clear.
     var knowsDuration: Bool?
     public var rpe: Double?
     var kindRaw: String
@@ -87,7 +84,6 @@ public final class LoggedSet: Identifiable {
         deletedAt != nil
     }
 
-    /// Whether this set records reps or time, as its exercise was logged.
     public var trackingMethod: ExerciseTrackingMethod {
         loggedExercise?.trackingMethod ?? .reps
     }
@@ -97,8 +93,6 @@ public final class LoggedSet: Identifiable {
         loggedExercise?.touch(now: now)
     }
 
-    /// Marks a value-only edit in an Active Workout. Field commits are local
-    /// checkpoints, so parent timestamps deliberately remain unchanged.
     func touchActiveDraft(now: Date = .now) {
         stampEdit(now: now)
     }

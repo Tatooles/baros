@@ -242,8 +242,6 @@ final class SeedDataServiceTests: XCTestCase {
             Set(activeSession.sortedLoggedExercises.flatMap(\.sortedSets).map(\.id)).count
         )
 
-        // Counted in the store instead of walking the relationships of all 100 workouts:
-        // 10 exercises x 5 sets for the active workout and for each completed one.
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<LoggedExercise>()), 1_010)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<LoggedSet>()), 5_050)
         let sampleCompletedSession = try XCTUnwrap(completedSessions.first)

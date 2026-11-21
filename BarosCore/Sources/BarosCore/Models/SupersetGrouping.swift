@@ -1,9 +1,5 @@
 import Foundation
 
-/// A superset is a run of two or more neighboring exercises that share a
-/// group id. Readers only trust runs: a lone exercise with an id, or a group
-/// split by a reorder elsewhere, displays as ungrouped or as separate runs.
-/// Writers keep stored ids in that shape with `normalized(_:)`.
 public enum SupersetGrouping {
     public struct Block<Member: Identifiable>: Identifiable where Member.ID == UUID {
         public let members: [Member]
@@ -12,7 +8,6 @@ public enum SupersetGrouping {
         public var isSuperset: Bool { members.count > 1 }
     }
 
-    /// Splits exercises, in display order, into supersets and single exercises.
     public static func blocks<Member: Identifiable>(
         _ members: [Member],
         groupID: (Member) -> UUID?
@@ -20,7 +15,6 @@ public enum SupersetGrouping {
         runRanges(members.map(groupID)).map { Block(members: Array(members[$0])) }
     }
 
-    /// Whether the exercises at two neighboring positions are in one superset.
     public static func areGrouped(_ groupIDs: [UUID?], _ index: Int, _ neighbor: Int) -> Bool {
         guard groupIDs.indices.contains(index), groupIDs.indices.contains(neighbor),
               abs(index - neighbor) == 1, let group = groupIDs[index] else { return false }
@@ -31,8 +25,6 @@ public enum SupersetGrouping {
         areGrouped(groupIDs, index, index - 1) || areGrouped(groupIDs, index, index + 1)
     }
 
-    /// Clears ids that no run of two or more shares, and gives each later run
-    /// of a repeated id its own fresh id.
     static func normalized(_ groupIDs: [UUID?], makeID: () -> UUID = UUID.init) -> [UUID?] {
         var result = groupIDs
         var seen: Set<UUID> = []
@@ -48,9 +40,6 @@ public enum SupersetGrouping {
         return result
     }
 
-    /// Links an exercise with the one above or below it. It pairs two single
-    /// exercises, adds one to its neighbor's superset, or merges two supersets.
-    /// The upper superset keeps its id, so its members don't change.
     static func linking(
         _ groupIDs: [UUID?],
         _ index: Int,
@@ -69,9 +58,6 @@ public enum SupersetGrouping {
         return result
     }
 
-    /// Flips the link between the exercises at `upper` and `upper + 1`: joins
-    /// them as `linking` does, or cuts their superset in two. The upper side
-    /// keeps its id, and a side left with one exercise is ungrouped.
     public static func togglingLink(
         _ groupIDs: [UUID?],
         below upper: Int,
@@ -88,8 +74,6 @@ public enum SupersetGrouping {
         return normalized(result, makeID: makeID)
     }
 
-    /// Ungroups one exercise. A side left with one exercise is ungrouped too,
-    /// and removing a middle exercise leaves the two sides as separate supersets.
     static func removing(_ groupIDs: [UUID?], at index: Int, makeID: () -> UUID = UUID.init) -> [UUID?] {
         guard groupIDs.indices.contains(index) else { return groupIDs }
         var result = normalized(groupIDs, makeID: makeID)
@@ -97,7 +81,6 @@ public enum SupersetGrouping {
         return normalized(result, makeID: makeID)
     }
 
-    /// Fresh ids for a copied workout, so it never shares a group with its source.
     static func copied(_ groupIDs: [UUID?], makeID: () -> UUID = UUID.init) -> [UUID?] {
         var fresh: [UUID: UUID] = [:]
         return normalized(groupIDs, makeID: makeID).map { group in
@@ -110,7 +93,6 @@ public enum SupersetGrouping {
         }
     }
 
-    /// Ranges of contiguous equal non-nil ids; every nil is its own range.
     private static func runRanges(_ groupIDs: [UUID?]) -> [Range<Int>] {
         var ranges: [Range<Int>] = []
         var start = 0

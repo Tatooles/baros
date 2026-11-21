@@ -2,8 +2,6 @@ import BarosCore
 import ClerkKitUI
 import SwiftUI
 
-/// Tells someone who signed in on this iPhone before that they're signed out
-/// and their workouts are still saved, until they dismiss it or sign back in.
 struct SignedOutReminderBanner: View {
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler

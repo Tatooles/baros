@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// The release sheet shipped for Baros 1.2.
 struct WhatsNewVersion1_2View: View {
     let onDismiss: () -> Void
 

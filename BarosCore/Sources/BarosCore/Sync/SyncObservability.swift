@@ -372,8 +372,6 @@ public struct SentryRuntimeConfiguration: Equatable {
         }
         let isProduction = environmentValue.caseInsensitiveCompare("Production") == .orderedSame
         #if DEBUG
-        // Device diagnostics can opt in through build settings without using
-        // production auth/backend configuration or mislabeling test events.
         let isDevelopment = environmentValue.caseInsensitiveCompare("Development") == .orderedSame
         #else
         let isDevelopment = false

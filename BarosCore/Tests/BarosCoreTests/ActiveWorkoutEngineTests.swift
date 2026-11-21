@@ -33,7 +33,6 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             let originalDate = session.updatedAt
             let exerciseDate = first.updatedAt
             let fail: (ModelContext) throws -> Void = { _ in throw Failure.injected }
-            // A pending edit outside the action must survive every restoration.
             second.notes = "Unrelated pending note"
             XCTAssertThrowsError(try engine.addSet(to: first, context: context, save: fail))
             XCTAssertEqual(first.sortedSets.map(\.id), originalSets.map(\.id))
@@ -154,7 +153,6 @@ final class ActiveWorkoutEngineTests: XCTestCase {
                 context.insert(past)
                 try context.save()
 
-                // A fresh engine cannot rely on the previous engine's activeSessionID.
                 let engine = ActiveWorkoutEngine()
                 XCTAssertThrowsError(try {
                     if fromHistory {
@@ -1042,7 +1040,6 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let row = Exercise(name: "Barbell Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
         context.insert(bench)
         context.insert(row)
-        // The replacement's history seeds several sets, all of which must roll back.
         try insertCompletedSession(
             startedAt: Date(timeIntervalSince1970: 50),
             exercise: row,
@@ -1289,8 +1286,6 @@ final class ActiveWorkoutEngineTests: XCTestCase {
 
         let added = try engine.addExercise(bench, to: session, context: context)
 
-        // A newly added occurrence has no source link, so it follows the latest
-        // performance like the Previous column.
         XCTAssertNil(added.sourceLoggedExerciseID)
         XCTAssertEqual(added.sortedSets.map(\.kind), [.warmup, .working, .working])
         let previous = PreviousSetPerformance.lastCompletedSets(
@@ -1324,19 +1319,16 @@ final class ActiveWorkoutEngineTests: XCTestCase {
 
         let exercises = session.sortedLoggedExercises
         XCTAssertEqual(exercises.map(\.exerciseSnapshotName), ["Ab Crunch", "Squat", "Curl"])
-        // A newer session logged Ab Crunch and Squat: their rows match its completed sets.
         XCTAssertEqual(exercises[0].sortedSets.map(\.kind), [.working, .working, .failure])
         XCTAssertEqual(exercises[1].sortedSets.map(\.kind), [.working])
         for exercise in exercises[0...1] {
             XCTAssertNil(exercise.sourceLoggedExerciseID)
             XCTAssertTrue(exercise.sortedSets.allSatisfy { $0.sourceLoggedSetID == nil && !$0.isCompleted })
         }
-        // No newer session logged Curl: it stays a linked copy of the source rows.
         let sourceCurl = try XCTUnwrap(source.sortedLoggedExercises.last)
         XCTAssertEqual(exercises[2].sourceLoggedExerciseID, sourceCurl.id)
         XCTAssertEqual(exercises[2].sortedSets.map(\.sourceLoggedSetID), sourceCurl.sortedSets.map(\.id))
 
-        // Every row has a Previous value, and no Previous value lacks a row.
         let previous = PreviousSetPerformance.lastCompletedSetsByExerciseID(
             for: exercises,
             in: try context.fetch(FetchDescriptor<WorkoutSession>()),
@@ -1351,7 +1343,6 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(bench)
-        // Same start and title, so only the id can order them.
         let startedAt = Date(timeIntervalSince1970: 100)
         let first = try insertCompletedWorkout(
             startedAt: startedAt, entries: [(bench, [(.working, true), (.working, true)])], in: context
@@ -1368,7 +1359,6 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             }
             XCTAssertEqual(results[0], results[1])
         }
-        // Exactly one of the tied workouts ranks as newer than the other.
         let seededSources = [first, second].filter {
             !PreviousSetPerformance.newerCompletedSetKindsByExerciseID(
                 for: $0, in: [first, second], ownerTokenIdentifier: nil
@@ -1385,8 +1375,6 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let row = Exercise(name: "Barbell Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .upperBack)
         [bench, row].forEach(context.insert)
         let owner = "issuer|owner_a"
-        // Bench appears twice in the source, so a newer performance can't be
-        // paired with either occurrence; Row's newer session belongs to another owner.
         let source = try insertCompletedWorkout(startedAt: Date(timeIntervalSince1970: 100), entries: [
             (bench, [(.working, true)]),
             (row, [(.working, true), (.working, true)]),
@@ -1452,7 +1440,6 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         XCTAssertEqual(sets.map(\.orderIndex), [0, 1, 2])
         XCTAssertTrue(sets.allSatisfy { $0.weight == nil && $0.reps == nil && !$0.isCompleted })
         XCTAssertTrue(sets.allSatisfy { $0.createdAt == swapDate && $0.updatedAt == swapDate })
-        // Swapping the workout's only exercise leaves exactly the replacement visible.
         XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [replacement.id])
         XCTAssertEqual(replacement.orderIndex, 0)
         XCTAssertTrue(original.isDeleted)

@@ -163,7 +163,6 @@ final class WorkoutAccountTransitionTests: XCTestCase {
                 let gate = WorkoutAccountTransition(context: h.context, engine: h.engine,
                     save: { context in
                         saveCalls += 1
-                        // Both records must be staged before the only save.
                         XCTAssertEqual(first.status, resolution == .finish ? .completed : .discarded)
                         XCTAssertEqual(second.status, first.status)
                         XCTAssertEqual(h.engine.activeSessionID, first.id)

@@ -1,14 +1,6 @@
 import BarosCore
 import SwiftUI
 
-/// Link Exercises mode. A link sits midway between every two neighboring
-/// exercises, and tapping it joins or splits them. Reordering and removing stay
-/// in the regular list, so this is a plain stack: each link is one view, drawn
-/// above both cards, which a list's clipped cells couldn't do.
-///
-/// Every card sits exactly where the regular list had it, so changing modes only
-/// fades the controls around them. The spacing also holds still while linking,
-/// so a link never moves out from under the finger.
 struct ReorderLinkList<Item: ReorderListExercise, Header: View>: View {
     private static var cardSpacing: CGFloat { 12 }
     private static var linkDiameter: CGFloat { 30 }
@@ -21,7 +13,6 @@ struct ReorderLinkList<Item: ReorderListExercise, Header: View>: View {
     let header: Header
     let memory: ReorderListMemory
     @State private var scrollPosition: ScrollPosition
-    /// Room for the superset labels the regular list showed when the mode opened.
     @State private var labelSpace: LabelSpace
 
     init(
@@ -56,7 +47,6 @@ struct ReorderLinkList<Item: ReorderListExercise, Header: View>: View {
         let groupIDs = exercises.map(\.supersetGroupID)
         ScrollView {
             VStack(spacing: 0) {
-                // Showing but not editable, so the name stays above the cards.
                 header
                     .padding(.horizontal, 20)
                     .padding(.top, 6)
@@ -84,12 +74,9 @@ struct ReorderLinkList<Item: ReorderListExercise, Header: View>: View {
         .scrollPosition($scrollPosition)
         .rememberingScrollOffset(in: memory)
         .safeAreaBar(edge: .bottom, spacing: 0) { bar }
-        // In the title area, since a taller bar would push the cards up.
         .navigationSubtitle("Tap a link to join or split")
     }
 
-    /// Where the regular list had this card. A card it never laid out, off screen in
-    /// a long workout, lines up with the others.
     private func cardInsets(for exercise: Item) -> EdgeInsets {
         let list = memory.listFrame
         guard let card = memory.cardFrames[exercise.id] ?? memory.cardFrames.values.first else {
@@ -98,7 +85,6 @@ struct ReorderLinkList<Item: ReorderListExercise, Header: View>: View {
         return EdgeInsets(top: 0, leading: card.minX - list.minX, bottom: 0, trailing: list.maxX - card.maxX)
     }
 
-    /// The space a superset label takes in the regular list, left empty here.
     private func emptyLabel(_ spacingEdge: Edge.Set) -> some View {
         SupersetLabel(count: 2)
             .hidden()
@@ -106,7 +92,6 @@ struct ReorderLinkList<Item: ReorderListExercise, Header: View>: View {
             .padding(spacingEdge, SupersetRail<EmptyView>.labelSpacing)
     }
 
-    /// The space between two cards. Holding the link here centers it at any height.
     private func gap(below upper: Int, groupIDs: [UUID?]) -> some View {
         VStack(spacing: 0) {
             if labelSpace.below.contains(exercises[upper].id) { emptyLabel(.top) }
@@ -118,11 +103,9 @@ struct ReorderLinkList<Item: ReorderListExercise, Header: View>: View {
             rail(joinsAbove: true, joinsBelow: true, isVisible: SupersetGrouping.areGrouped(groupIDs, upper, upper + 1))
         }
         .overlay { link(below: upper, groupIDs: groupIDs) }
-        // The link's tap area reaches over the next card, which would otherwise draw above it.
         .zIndex(1)
     }
 
-    /// One card's piece of the rail. Grouped neighbors' pieces meet through the gap.
     private func railPiece(at index: Int, groupIDs: [UUID?]) -> some View {
         let joinsAbove = SupersetGrouping.areGrouped(groupIDs, index, index - 1)
         let joinsBelow = SupersetGrouping.areGrouped(groupIDs, index, index + 1)
@@ -164,7 +147,6 @@ struct ReorderLinkList<Item: ReorderListExercise, Header: View>: View {
         .accessibilityIdentifier("SupersetLinkButton-\(upper)")
     }
 
-    /// Sits where the regular list's last row does at the end of a long workout.
     private var bar: some View {
         Button(action: finish) {
             Text("Done Linking")

@@ -1,33 +1,36 @@
-# macOS
 .DS_Store
 
-# Git worktrees
 .worktrees/
 worktrees/
 .superpowers/
 
-# Xcode user data
 xcuserdata/
 *.xcuserstate
 
-# Xcode build products
 build/
 DerivedData/
 
-# Swift Package Manager
 .build/
 Packages/
 Package.resolved
 !Baros.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
-# Fastlane
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
-.env.local
+.env
+.env.*
+!.env.example
 
 node_modules/
 
 .sentryclirc
+
+# Signing material and local credentials
+*.p8
+*.p12
+*.pem
+*.mobileprovision
+*.cer

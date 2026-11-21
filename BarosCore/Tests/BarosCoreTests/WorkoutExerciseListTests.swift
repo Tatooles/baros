@@ -9,10 +9,9 @@ final class WorkoutExerciseListTests: XCTestCase {
         let session = try fixture(in: container.mainContext)
         let first = session.sortedLoggedExercises[0]
         let sets = first.sortedSets
-        sets[0].weight = 0 // An explicitly entered bodyweight value still counts.
+        sets[0].weight = 0
         sets[1].reps = 5
         sets[2].isCompleted = true
-        // Suggestions are display-only, never assigned to the fourth blank row.
         var draft = WorkoutExerciseListDraft(session: session)
         draft.orderedIDs.removeFirst()
         XCTAssertTrue(draft.needsRemovalConfirmation)
@@ -78,7 +77,6 @@ final class WorkoutExerciseListTests: XCTestCase {
         XCTAssertEqual(session.updatedAt, sessionUpdatedAt)
         XCTAssertEqual(session.notes, "Unrelated unsaved note")
         XCTAssertEqual(timer.current?.rest.setID, starter.id)
-        // A later unrelated save must not accidentally persist failed tombstones.
         try context.save()
         let fresh = ModelContext(container)
         let persisted = try XCTUnwrap(fresh.fetch(FetchDescriptor<WorkoutSession>()).first)
@@ -99,7 +97,7 @@ final class WorkoutExerciseListTests: XCTestCase {
         let baseline = WorkoutExerciseListSnapshot(session: session)
         let ids = session.sortedLoggedExercises.map(\.id)
         let exercise = session.sortedLoggedExercises[0]
-        exercise.sortedSets[0].reps = 8 // Does not change the exercise timestamp.
+        exercise.sortedSets[0].reps = 8
         XCTAssertThrowsError(try engine.applyExerciseListChanges(
             in: session, orderedIDs: Array(ids.dropFirst()), baseline: baseline,
             context: context, save: { _ in XCTFail("Stale edits must not save") }
@@ -115,7 +113,6 @@ final class WorkoutExerciseListTests: XCTestCase {
             context: context, save: { _ in XCTFail("New exercises must not be silently removed") }
         ))
         XCTAssertFalse(newExercise.isDeleted)
-        // A freshly reviewed draft is usable, rather than stuck in a retry loop.
         try engine.applyExerciseListChanges(
             in: session, orderedIDs: session.sortedLoggedExercises.map(\.id),
             baseline: WorkoutExerciseListSnapshot(session: session), context: context
@@ -225,7 +222,6 @@ final class WorkoutExerciseListTests: XCTestCase {
         draft.append([library]) { engine.initialSetKinds(for: $0, ownerTokenIdentifier: nil, sessions: [history]) }
         XCTAssertEqual(draft.exercises.last?.progressText, "0/3 sets")
         XCTAssertTrue(draft.exercises.last?.accessibilityValue.contains("New") == true)
-        // The initial rows promised in the draft remain stable if history changes before Done.
         logged.sets.forEach { $0.isCompleted = false }
         try context.save()
         try engine.applyExerciseListChanges(in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline,

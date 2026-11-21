@@ -101,8 +101,6 @@ struct AppShellView: View {
                 if newState.presentation == .activeWorkout,
                    oldState.presentation != .activeWorkout || oldState == newState,
                    let activeSession {
-                    // Seed counts at the shell boundary too: the child's onAppear
-                    // may run before this initial shell-state observation.
                     let size = UIHangWorkoutSize(session: activeSession)
                     context.activeWorkoutBecameCurrent(exerciseCount: size.exerciseCount, setCount: size.setCount)
                 }
@@ -139,8 +137,6 @@ struct AppShellView: View {
             }
             .sheet(isPresented: activeWorkoutPresentationBinding, onDismiss: {
                 activeWorkoutEngine.clearSetSaveIfInaccessible(in: activeSession)
-                // The native grabber can finish dismissing before a blur save fails.
-                // Reuse this sheet rather than losing its retained recovery action.
                 if activeWorkoutEngine.hasPendingSetSave {
                     navigationState.presentActiveWorkout()
                 }
@@ -221,8 +217,6 @@ struct AppShellView: View {
             }
             .onChange(of: currentOwnerCoordinator.localDataOwnerTokenIdentifier, initial: true) { _, owner in
                 activeWorkoutEngine.restSettingsOwnerTokenIdentifier = owner
-                // Even an ownerless session may remain visible after sign-in;
-                // its old pending action must not cross that identity boundary.
                 activeWorkoutEngine.discardSetSave()
             }
             .task {
@@ -239,7 +233,6 @@ struct AppShellView: View {
         return hasMadeLaunchExperienceDecision && launchPresentation == nil
             && firstRunStore.state.hasCompletedOnboarding
             && !activeWorkoutEngine.isAccountTransitionInProgress
-            // Hidden outgoing-owner workouts remain active until recovery/discard (#188).
             && !sessions.contains { $0.status == .active && !$0.isDeleted }
             && !navigationState.isActiveWorkoutPresented
     }
@@ -378,8 +371,6 @@ struct AppShellView: View {
             return
         case .skipForActiveWorkout:
             hasMadeLaunchExperienceDecision = true
-            // Nothing is presented over the workout, but a signed-in launch
-            // still settles onboarding so a later signed-out launch skips it.
             completeOnboardingSilentlyIfSignedIn()
         case .evaluateStore:
             hasMadeLaunchExperienceDecision = true

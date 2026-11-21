@@ -16,13 +16,10 @@ final class RestTimerNotifications: RestNotificationScheduling {
         revision += 1
         let revision = revision
         let previous = pendingOperation
-        // Serialize adds and removals, including work suspended on the permission
-        // prompt. Skipping/replacing during that prompt must not leave a stale alert.
         pendingOperation = Task { [self] in
             await previous?.value
             guard self.revision == revision else { return }
             var settings = await center.notificationSettings()
-            // Turning timers off or skipping during the lookup must not prompt.
             guard self.revision == revision else { return }
             if requestAuthorization, settings.authorizationStatus == .notDetermined {
                 _ = try? await center.requestAuthorization(options: [.alert, .sound])
@@ -70,11 +67,13 @@ extension RestTimerCoordinator {
         #if DEBUG
             let isUITest = ProcessInfo.processInfo.arguments.contains("--uitest-in-memory-store")
             let uiTestEnabled = !ProcessInfo.processInfo.arguments.contains("--uitest-disable-rest-timers")
+            let keepsOpenedControls = isUITest
+                && ProcessInfo.processInfo.arguments.contains("--uitest-keep-rest-controls-open")
         #else
             let isUITest = false
             let uiTestEnabled = true
+            let keepsOpenedControls = false
         #endif
-        // Absent means the default: on.
         let isEnabled = isUITest ? uiTestEnabled : (defaults.object(forKey: enabledKey) as? Bool ?? true)
         return RestTimerCoordinator(
             restoredRest: isUITest ? nil : restored,
@@ -98,7 +97,8 @@ extension RestTimerCoordinator {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 AudioServicesPlaySystemSound(1007)
             },
-            voiceOverRunning: { UIAccessibility.isVoiceOverRunning }
+            voiceOverRunning: { UIAccessibility.isVoiceOverRunning },
+            keepsOpenedControls: keepsOpenedControls
         )
     }
 }

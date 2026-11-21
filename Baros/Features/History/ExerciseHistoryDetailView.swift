@@ -65,7 +65,6 @@ struct ExerciseHistoryDetailView: View {
 
     private func workouts(_ groups: [ExerciseHistorySessionGroup], records: ExerciseHistoryRecords?) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            // At accessibility sizes the caption stacks so the title never breaks mid-word.
             let headerLayout = dynamicTypeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
                 : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
@@ -82,8 +81,6 @@ struct ExerciseHistoryDetailView: View {
             }
             .padding(.horizontal, 4)
 
-            // Not lazy: every performance stays in the accessibility tree, and
-            // a record tap can scroll to any of them.
             SurfaceCard(padding: 0) {
                 VStack(spacing: 0) {
                     ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
@@ -109,8 +106,6 @@ struct ExerciseHistoryDetailView: View {
         }
     }
 
-    /// Scrolls a record's source workout into view, washes it briefly, and
-    /// moves VoiceOver there so the source set is the next thing read.
     private func reveal(_ workoutID: UUID, with proxy: ScrollViewProxy) {
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.45)) {
             proxy.scrollTo(workoutID, anchor: .center)

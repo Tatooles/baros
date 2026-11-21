@@ -604,7 +604,6 @@ final class WorkoutLiveActivityTests: XCTestCase {
         XCTAssertFalse(
             WorkoutLiveActivityRecord.State(activityState: .ended).canRemainVisible
         )
-        // Stale = past the rest-end stale date; the activity can still be updated.
         XCTAssertTrue(
             WorkoutLiveActivityRecord.State(activityState: .stale).canRemainVisible
         )

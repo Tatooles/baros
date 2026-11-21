@@ -1,9 +1,5 @@
 import XCTest
 
-/// Captures the raw screens behind the App Store screenshots and baros.fit imagery.
-/// Skipped unless `BAROS_MARKETING_CAPTURE=1`; run it through
-/// the release skill's `scripts/capture-screens.sh`, which sets the simulator up first.
-/// Each test attaches one screenshot named after its shot in `docs/release/listing.json`.
 final class MarketingScreenshotTests: XCTestCase {
     private let timeout: TimeInterval = 8
 
@@ -34,7 +30,6 @@ final class MarketingScreenshotTests: XCTestCase {
             XCTAssertTrue(complete.waitToExist(timeout: timeout))
             complete.tap()
         }
-        // Lets the rest timer count down from its starting value.
         Thread.sleep(forTimeInterval: 3)
         capture("active-rest")
     }
@@ -50,11 +45,9 @@ final class MarketingScreenshotTests: XCTestCase {
     @MainActor
     func testSuperset() {
         let app = launch()
-        // Full Body opens with a press-and-row superset; log its first round.
         startTemplate("Full Body", in: app)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "SupersetLabel").firstMatch
             .waitToExist(timeout: timeout))
-        // One check logs the whole round: the partner set completes with it.
         let complete = app.buttons["SetCompletionButton-0-0"]
         XCTAssertTrue(complete.waitToExist(timeout: timeout))
         complete.tap()
@@ -101,13 +94,9 @@ final class MarketingScreenshotTests: XCTestCase {
         capture("settings")
     }
 
-    // MARK: Helpers
-
     @MainActor
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
-        // The pool simulators are shared, so pin what formats dates and numbers. Resetting the
-        // app appearance restores its dark default whatever the simulator uses.
         app.launchArguments = [
             "--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-reset-app-appearance",
             "--uitest-reset-home-ring-period", "--uitest-skip-first-run-experience",
@@ -138,7 +127,6 @@ final class MarketingScreenshotTests: XCTestCase {
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: timeout))
     }
 
-    /// Lets transitions and scroll deceleration finish before the capture.
     private func settle() {
         Thread.sleep(forTimeInterval: 1.5)
     }

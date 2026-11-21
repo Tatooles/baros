@@ -27,7 +27,6 @@ public struct ExerciseSyncPayload: Codable, Equatable, Sendable {
     public let notes: String
     public let isArchived: Bool
     public let isSeeded: Bool
-    /// Left out of the upload when nil, so the server keeps its value.
     public var trackingMethodRaw: String? = nil
     /// The server version this edit started from (`syncBaseUpdatedAt`), or
     /// nil for a record never synced. Always sent, as null when nil.
@@ -71,10 +70,7 @@ public struct LoggedExerciseSyncPayload: Codable, Equatable, Sendable {
     public let referenceNotes: String?
     public let sourceLoggedExerciseID: String?
     public var supersetGroupID: String? = nil
-    /// Omitted uploads keep the server's grouping, as for older builds. Null is
-    /// sent only for a removal made on this device.
     public var sendsSupersetGroupID = false
-    /// Left out of the upload when nil, so the server keeps its value.
     public var trackingMethodRaw: String? = nil
     /// The server version this edit started from (`syncBaseUpdatedAt`), or
     /// nil for a record never synced. Always sent, as null when nil.
@@ -98,8 +94,6 @@ public struct LoggedSetSyncPayload: Codable, Equatable, Sendable {
     public let healthLinkID: String?
     public let sourceLoggedSetID: String?
     public var durationSeconds: Int? = nil
-    /// Omitted uploads keep the server's time, as for older builds. Null is
-    /// sent only when this device knows the exercise's tracking method.
     public var sendsDurationSeconds = false
     /// The server version this edit started from (`syncBaseUpdatedAt`), or
     /// nil for a record never synced. Always sent, as null when nil.
@@ -258,7 +252,6 @@ public struct SyncChangeCursors: Codable, Equatable {
     public var workoutSessions: Double = 0
     public var loggedExercises: Double = 0
     public var loggedSets: Double = 0
-    /// Sent only by builds with templates; older servers reject it.
     public var workoutTemplates: Double? = nil
 }
 
@@ -375,7 +368,6 @@ public struct SyncFetchChangesResponse: Codable, Equatable {
     let workoutSessions: [WorkoutSessionSyncRecord]
     let loggedExercises: [LoggedExerciseSyncRecord]
     let loggedSets: [LoggedSetSyncRecord]
-    /// Present only when the request sent a template cursor.
     var workoutTemplates: [WorkoutTemplateSyncRecord]? = nil
     let cursors: SyncChangeCursors
     let hasMore: SyncHasMore

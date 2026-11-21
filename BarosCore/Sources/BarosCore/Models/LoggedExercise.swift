@@ -9,19 +9,11 @@ public final class LoggedExercise: Identifiable {
     var exerciseSnapshotEquipmentRaw: String = ExerciseEquipment.other.rawValue
     var exerciseSnapshotPrimaryMuscleGroupRaw: String = ExerciseMuscleGroup.other.rawValue
     var hasSnapshotMetadata: Bool = false
-    /// The exercise's tracking method when it was added, so a later library
-    /// edit doesn't reinterpret this workout. Nil reads as reps and is left out
-    /// of uploads: the row predates timed exercises on this device.
     var trackingMethodRaw: String?
     public var notes: String
     var referenceNotes: String?
     public var sourceLoggedExerciseID: UUID?
-    /// Shared by neighboring exercises in a superset. See `SupersetGrouping`.
     public var supersetGroupID: UUID?
-    /// Whether this device has changed the grouping, so nil means "ungrouped"
-    /// rather than unknown. A row from before supersets, or pulled by an older
-    /// build, may have a server group this device never saw; uploads omit nil
-    /// for those so the server keeps it.
     var hasLocalSupersetChange: Bool = false
     var createdAt: Date
     var updatedAt: Date
@@ -84,7 +76,6 @@ public final class LoggedExercise: Identifiable {
         deletedAt != nil
     }
 
-    /// Whether this exercise's sets record reps or time.
     public var trackingMethod: ExerciseTrackingMethod {
         ExerciseTrackingMethod(storedRawValue: trackingMethodRaw)
     }

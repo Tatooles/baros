@@ -60,7 +60,6 @@ public struct ExerciseMutationService {
         context: ModelContext,
         now: Date = .now
     ) throws {
-        // Nil leaves the method alone, including a stored "never chosen".
         let trackingMethod = trackingMethod ?? exercise.trackingMethod
         guard exercise.name != name
             || exercise.category != category
@@ -123,7 +122,6 @@ public struct ExerciseMutationService {
         now: Date, save: (ModelContext) throws -> Void
     ) throws {
         let owner = owner ?? syncScheduler?.currentOwnerTokenIdentifier
-        // Library actions never claim records belonging to a different local owner.
         guard exercise.isVisible(to: owner), !exercise.isDeleted else {
             throw SyncMutationOwnershipError.ownerMismatch
         }
@@ -143,7 +141,6 @@ public struct ExerciseMutationService {
             $0.entityKind == .exercise && $0.entityID == exercise.id
                 && $0.ownerTokenIdentifier == owner
         }
-        // Only these fields are changed by recordUpdate/recordDelete.
         let restoreEntries = entries.map { entry in
             let operation = entry.operationRaw, status = entry.statusRaw
             let created = entry.createdAt, updated = entry.updatedAt

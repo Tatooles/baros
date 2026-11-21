@@ -1,8 +1,6 @@
 import BarosCore
 import SwiftUI
 
-/// A drawn region of the body figure. Muscle regions map to the exercise
-/// muscle group they select; the rest only complete the silhouette.
 enum BodyFigurePart: String, CaseIterable, Sendable {
     case abs
     case adductors
@@ -55,9 +53,6 @@ enum BodyFigurePart: String, CaseIterable, Sendable {
 }
 
 extension ExerciseMuscleGroup {
-    /// The figure regions highlighted for this group. Full Body highlights every
-    /// muscle, Upper Body everything above the waist, and Lower Body the hips
-    /// and legs; Cardio and Other have no anatomical region.
     var figureParts: Set<BodyFigurePart> {
         let groups: Set<ExerciseMuscleGroup> = switch self {
         case .fullBody: Self.upperBodyGroups.union(Self.lowerBodyGroups)
@@ -89,7 +84,6 @@ struct BodyFigureRegion: Identifiable, Sendable {
     var id: BodyFigurePart { part }
 }
 
-/// One side of the body figure in its source coordinate space.
 struct BodyFigureDrawing: Sendable {
     let bounds: CGRect
     let regions: [BodyFigureRegion]
@@ -109,7 +103,6 @@ struct BodyFigureDrawing: Sendable {
         self.regions = order.map { BodyFigureRegion(part: $0, path: merged[$0]!) }
     }
 
-    /// Scales the figure to fit `size`, centered.
     func transform(fitting size: CGSize) -> CGAffineTransform {
         let scale = min(size.width / bounds.width, size.height / bounds.height)
         let offsetX = (size.width - bounds.width * scale) / 2
@@ -120,7 +113,6 @@ struct BodyFigureDrawing: Sendable {
     }
 }
 
-/// Parses the absolute M/L/C/Q/Z path data in `BodyFigureArtwork`.
 enum SVGPathData {
     static func path(from data: String) -> Path {
         var path = Path()

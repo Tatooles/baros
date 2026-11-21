@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Bump MARKETING_VERSION to the next release and register it in the release catalog.
-#
-#   bump-version.sh <next-version>      e.g. bump-version.sh 1.6
-#
-# Edits project.yml, Baros.xcodeproj/project.pbxproj, and AppReleaseCatalog.swift.
-# Tests are not touched; it lists the ones mentioning the old version for review.
 set -euo pipefail
 
 next="${1:?usage: bump-version.sh <next-version>}"

@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
-// docs/release/listing.json drives the App Store listing and baros.fit's app screens.
-// These checks catch, on every PR, what would otherwise surface mid-release.
 const repo = new URL("../../", import.meta.url);
 const read = async (path) => readFile(new URL(path, repo), "utf8");
 const listing = JSON.parse(await read("docs/release/listing.json"));

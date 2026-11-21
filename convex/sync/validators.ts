@@ -54,7 +54,6 @@ export const workoutSessionPayloadValidator = v.object({
   durationSeconds: v.number(),
   notes: v.string(),
   referenceNotes: nullableString,
-  // Active sessions stay local-only for v1 and are intentionally excluded from Convex sync.
   statusRaw: v.union(v.literal("completed"), v.literal("discarded")),
   sourceRaw: v.union(
     v.literal("blank"),
@@ -108,8 +107,6 @@ export const loggedSetPayloadValidator = v.object({
   durationSeconds: v.optional(nullableNumber),
 });
 
-// Entries are stored inside the template, so the server merges them by id:
-// a field an older build leaves out keeps the stored value.
 export const workoutTemplateEntryValidator = v.object({
   id: v.string(),
   exerciseClientId: nullableString,

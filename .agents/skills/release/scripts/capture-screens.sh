@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-# Captures the raw listing screens with MarketingScreenshotTests.
-#
-#   capture-screens.sh <simulator-udid> <out-dir>
-#
-# Use the iPhone 17 Pro pool device: its 1206x2622 captures are the size baros.fit serves.
-# The app renders dark on its own; this sets a 9:41 status bar for the run (agent-device has
-# no status-bar override, so this is simctl's one job here) and clears it afterwards.
-# Writes <out-dir>/<shot>.png for every shot in docs/release/listing.json.
 set -euo pipefail
 
 udid="${1:?usage: capture-screens.sh <simulator-udid> <out-dir>}"

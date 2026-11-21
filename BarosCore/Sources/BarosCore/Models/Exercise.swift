@@ -15,9 +15,6 @@ public final class Exercise: Identifiable {
     public var equipmentRaw: String
     var primaryMuscleRaw: String = ""
     var primaryMuscleGroupRaw: String = ExerciseMuscleGroup.other.rawValue
-    /// Nil until someone chooses a method on a build that has timed exercises.
-    /// Nil reads as reps and is left out of uploads, so an exercise this device
-    /// last saw on an older build can't overwrite a choice made elsewhere.
     var trackingMethodRaw: String?
     public var notes: String
     public var isArchived: Bool
@@ -163,11 +160,9 @@ public final class Exercise: Identifiable {
         }
     }
 
-    /// Whether new sets of this exercise record reps or time.
     public var trackingMethod: ExerciseTrackingMethod {
         get { ExerciseTrackingMethod(storedRawValue: trackingMethodRaw) }
         set {
-            // Keep "never chosen" until the method really changes.
             guard newValue != trackingMethod else { return }
             trackingMethodRaw = newValue.rawValue
             touch()

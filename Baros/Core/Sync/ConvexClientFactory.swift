@@ -15,8 +15,6 @@ protocol ClerkConvexAuthenticating: AnyObject {
 
 extension ClerkConvexAuthProvider: ClerkConvexAuthenticating {}
 
-/// Lets Convex clear only its installed authentication. Clerk remains the
-/// authority for the signed-in account and is signed out through Clerk UI flows.
 @MainActor
 final class ClerkRetainingConvexAuthProvider: AuthProvider {
     typealias T = String

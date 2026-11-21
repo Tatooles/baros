@@ -295,8 +295,6 @@ private struct CompletedWorkoutEditSetValues: Equatable {
     }
 }
 
-// A field the person did not edit follows the latest saved value. Identical edits
-// converge; divergent changes to the same field require reviewing a fresh draft.
 private func mergedHistoryValue<Value: Equatable>(
     original: Value, edited: Value, saved: Value,
     areEqual: (Value, Value) -> Bool = (==)
@@ -329,7 +327,6 @@ public struct WorkoutHistoryMutationService {
     ) throws {
         try validateEditable(session, ownerTokenIdentifier: ownerTokenIdentifier)
         try validateDraftReferences(draft, for: session)
-        // Reconcile the complete draft before changing any saved values or outbox entries.
         let draft = try draft.mergingSavedChanges(from: session)
 
         var didChange = false
@@ -684,7 +681,6 @@ public struct WorkoutHistoryMutationService {
 
         if set.durationSeconds != draft.durationSeconds {
             set.durationSeconds = draft.durationSeconds
-            // An edit made here is this device's own, so a later clear uploads.
             set.knowsDuration = true
             didChange = true
         }

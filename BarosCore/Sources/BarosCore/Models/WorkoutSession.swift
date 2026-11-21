@@ -13,8 +13,6 @@ public final class WorkoutSession: Identifiable {
     public var statusRaw: String
     var sourceRaw: String
     public var sourceSessionID: UUID?
-    /// The template a workout started from. Nil for other sources and for
-    /// template workouts from before the link existed.
     var sourceTemplateID: UUID? = nil
     var createdAt: Date
     public var updatedAt: Date
@@ -90,7 +88,6 @@ public final class WorkoutSession: Identifiable {
         deletedAt != nil
     }
 
-    /// Title for workouts the person hasn't named.
     public static let defaultTitle = "Workout"
 
     public var sortedLoggedExercises: [LoggedExercise] {

@@ -5,7 +5,6 @@ import XCTest
 
 @MainActor
 final class HomeContentTests: XCTestCase {
-    // Unsaved models duplicate to-many relationships, so fixtures live in an in-memory store.
     private var container: ModelContainer!
 
     override func setUp() async throws {

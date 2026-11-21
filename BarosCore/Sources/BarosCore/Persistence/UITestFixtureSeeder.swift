@@ -15,26 +15,19 @@ public enum UITestFixtureSeeder {
     static let largeActiveWorkoutArgument = "--uitest-seed-large-active-workout"
     static let largeActiveWorkoutTitle = "Performance Workout 10x5"
     static let longNameActiveWorkoutArgument = "--uitest-seed-long-name-active-workout"
-    /// With the long-name workout: exercise 1 alone, 2–3 as a pair and 4–6 as a giant set.
     static let supersetsArgument = "--uitest-seed-supersets"
     static let homeRingHistoryArgument = "--uitest-seed-home-ring-history"
-    /// Fourteen months of named workouts with varied exercises and double days, for scrub previews.
     static let homeRingScrubHistoryArgument = "--uitest-seed-home-ring-scrub-history"
-    /// Twelve weeks of progressive push/pull/leg training with linked library exercises,
-    /// for reviewing History and Records against believable data.
     static let historyShowcaseArgument = "--uitest-seed-history-showcase"
     /// A completed workout with one set the cloud turned down repeatedly, so its
     /// change is dead-lettered and waits for Retry.
     static let blockedSyncChangeArgument = "--uitest-seed-blocked-sync-change"
-    /// Seeds fixtures for an owner who is no longer signed in, as after an expired session.
     static let signedOutOwnerArgument = "--uitest-seed-signed-out-owner"
 
     public static func signedOutOwner(in arguments: [String]) -> String? {
         values(after: signedOutOwnerArgument, in: arguments).first
     }
 
-    /// Reproduces a newer saved value arriving after the Edit sheet snapshots its draft.
-    /// Restricted to disposable in-memory UI-test stores; the editor still uses its real save path.
     @MainActor
     public static func simulateConcurrentHistorySave(session: WorkoutSession, context: ModelContext) throws {
         let arguments = ProcessInfo.processInfo.arguments
@@ -57,7 +50,6 @@ public enum UITestFixtureSeeder {
         ownerTokenIdentifier: String? = nil,
         context: ModelContext
     ) throws {
-        // Disposable reproduction: repeated A, with an independently added exercise from B.
         if arguments.contains("--uitest-seed-previous-missing-source"),
            arguments.contains("--uitest-in-memory-store") {
             let sourceExercise = LoggedExercise(orderIndex: 0, exerciseSnapshotName: "Bench Press",
@@ -116,7 +108,6 @@ public enum UITestFixtureSeeder {
             try context.save()
         }
 
-        // A retained outgoing-owner workout needs no exercise catalog to block updates.
         if arguments.contains("--uitest-update-hidden-active-workout"),
            arguments.contains("--uitest-in-memory-store") {
             context.insert(WorkoutSession(
@@ -247,8 +238,6 @@ public enum UITestFixtureSeeder {
         }
     }
 
-    /// Two library exercises logged by time, one unweighted and one weighted,
-    /// with a completed workout of each from yesterday.
     static func seedTimedExercises(ownerTokenIdentifier: String?, context: ModelContext, now: Date = .now) throws {
         let startedAt = now.addingTimeInterval(-86_400)
         let endedAt = startedAt.addingTimeInterval(1_200)
@@ -276,7 +265,6 @@ public enum UITestFixtureSeeder {
             loggedExercises: loggedExercises
         ))
         if ProcessInfo.processInfo.arguments.contains("--uitest-seed-timed-active-workout") {
-            // The same two exercises again, with empty sets to fill in.
             context.insert(WorkoutSession(
                 title: "Grip & Carries", startedAt: now, status: .active, source: .blank,
                 syncOwnerTokenIdentifier: ownerTokenIdentifier,
@@ -289,7 +277,6 @@ public enum UITestFixtureSeeder {
         try context.save()
     }
 
-    /// Separate from value-only ring fixtures: real, idempotent SwiftData history for live-query QA.
     static func seedHomeRingHistory(
         ownerTokenIdentifier: String?, context: ModelContext, now: Date = .now, calendar: Calendar = .current
     ) throws {
@@ -299,7 +286,6 @@ public enum UITestFixtureSeeder {
         for index in 0..<500 {
             let id = stableUUID(String(format: "00000312-0000-4000-8000-%012d", index))
             guard !existingIDs.contains(id) else { continue }
-            // Calendar arithmetic covers three years, year boundaries and both DST transitions.
             let daysBack = index * 1095 / 499
             guard let day = calendar.date(byAdding: .day, value: -daysBack, to: today),
                   let startedAt = calendar.date(bySettingHour: daysBack == 0 ? 0 : 17,
@@ -320,9 +306,6 @@ public enum UITestFixtureSeeder {
         try context.save()
     }
 
-    /// Idempotent: Mon/Wed/Fri/Sat plans with skipped days and double days, plus stress cases that a
-    /// straight drag reaches. Month: a long name 8 days back, a long double 15 back, a triple 22 back.
-    /// Year: 7 workouts 13 weeks back, 5 long names 26 back, and 6 with a double day 39 back.
     static func seedHomeRingScrubHistory(
         ownerTokenIdentifier: String?, context: ModelContext, now: Date = .now, calendar: Calendar = .current
     ) throws {
@@ -394,7 +377,6 @@ public enum UITestFixtureSeeder {
         try context.save()
     }
 
-    /// Six exercise blocks with mixed notes, plus two older Bench Press sessions.
     private static func seedHistoryBlocks(ownerTokenIdentifier: String?, context: ModelContext) throws {
         let date = Date(timeIntervalSince1970: 1_788_544_800)
         for (index, title) in ["Full Body", "Upper Body", "Push Day"].enumerated() {
@@ -437,7 +419,6 @@ public enum UITestFixtureSeeder {
             from: try context.fetch(FetchDescriptor<Exercise>()),
             ownerTokenIdentifier: ownerTokenIdentifier
         )
-        // (seed, set count, starting weight, weekly increment, reps)
         typealias Lift = (seed: String, sets: Int, start: Double, step: Double, reps: Int)
         let plans: [(title: String, weekday: Int, lifts: [Lift])] = [
             ("Push Day", 2, [("bench-press", 3, 185, 2.5, 5), ("overhead-press", 3, 105, 1.25, 6),
@@ -460,7 +441,6 @@ public enum UITestFixtureSeeder {
                       startedAt < now else { continue }
                 let durationSeconds = (48 + (index * 7) % 22) * 60
                 let endedAt = startedAt.addingTimeInterval(TimeInterval(durationSeconds))
-                // A deload in week 7 keeps the progression believable.
                 let progress = Double(week >= 7 ? week - 2 : week)
                 let occurrences = plan.lifts.enumerated().compactMap { order, lift -> LoggedExercise? in
                     guard let exercise = library.first(where: { $0.seedIdentifier == lift.seed }) else { return nil }
@@ -478,7 +458,6 @@ public enum UITestFixtureSeeder {
                             updatedAt: endedAt
                         )
                     }
-                    // One heavy single sets Heaviest Rep apart from the best estimate.
                     if lift.seed == "bench-press", week == 9 {
                         sets.append(LoggedSet(orderIndex: sets.count, weight: 235, reps: 1, rpe: 9.5,
                                               isCompleted: true, completedAt: endedAt,
@@ -530,7 +509,6 @@ public enum UITestFixtureSeeder {
                 LoggedSet(orderIndex: index, weight: value.0, reps: value.1, isCompleted: true)
             }
             if scenario == "review-layout" { sets[0].isCompleted = false }
-            // Any working set now produces an estimate, so only warmups leave it empty.
             if scenario == "no-estimate" { sets.forEach { $0.kind = .warmup } }
             if scenario == "rpe-layout" {
                 sets[0].rpe = 10
@@ -888,12 +866,10 @@ public enum UITestFixtureSeeder {
         try context.save()
     }
 
-    /// Real-world exercise names long enough to wrap, with completed, entered-only and blank sets.
     static func seedLongNameActiveWorkout(ownerTokenIdentifier: String?, context: ModelContext) throws {
         let id = stableUUID("00000327-0000-4000-8000-000000000001")
         guard try !context.fetch(FetchDescriptor<WorkoutSession>()).contains(where: { $0.id == id }) else { return }
         let library = try context.fetch(FetchDescriptor<Exercise>()).filter { $0.isVisible(to: ownerTokenIdentifier) }
-        // (library seed, displayed name, completed sets, entered-but-unchecked sets)
         let plan: [(String, String, Int, Int)] = [
             ("bench-press", "Slingshot Pause Bench Press", 2, 0),
             ("pull-up", "Pull-Up", 0, 1),

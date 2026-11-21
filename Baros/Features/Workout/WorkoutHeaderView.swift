@@ -45,7 +45,6 @@ struct WorkoutHeaderView: View {
     }
 }
 
-/// Timer state and ticks stay below WorkoutHeaderView's observation boundary.
 private struct WorkoutHeaderMetrics: View {
     let startedAt: Date
     let completedSets: Int
@@ -81,8 +80,6 @@ private struct WorkoutHeaderMetrics: View {
             }
         }
         .animation(.easeOut(duration: reducesMotion ? 0.15 : 0.2), value: timer.showsHeaderFallback)
-        // The glass container morphs the pill into the badge and progress
-        // pills; Reduce Motion keeps the instant swap instead.
         .animation(reducesMotion ? nil : restControlsAnimation(reducesMotion: false), value: timer.current?.controlsExpanded)
     }
 

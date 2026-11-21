@@ -46,7 +46,6 @@ struct ExerciseEditorView: View {
                 }
                 .accessibilityIdentifier("ExerciseEquipmentPicker")
             } footer: {
-                // Above the figure, so the message stays on screen after Save.
                 if let validationMessage {
                     Text(validationMessage)
                         .foregroundStyle(AppTheme.destructiveForeground)

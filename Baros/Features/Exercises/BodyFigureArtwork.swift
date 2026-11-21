@@ -17,10 +17,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-//
-// Paths are converted to absolute M/L/C/Q/Z commands, the back view is shifted
-// to its own origin, and the source's upper-back, lower-back, and gluteal
-// regions are split into lats, obliques, and gluteus medius.
 
 import CoreGraphics
 

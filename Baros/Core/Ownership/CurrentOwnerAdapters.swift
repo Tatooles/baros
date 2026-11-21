@@ -64,9 +64,6 @@ final class ClerkCurrentOwnerSessionProvider: CurrentOwnerClerkSessionProviding 
     func observeSessionStates(
         _ receive: @MainActor @escaping (CurrentOwnerClerkSessionState) -> Void
     ) async {
-        // Subscribe before waiting for loading, independently of the Convex
-        // bridge's token requests, so a confirmed identity change cannot wait
-        // behind network authentication.
         let events = Clerk.shared.auth.events
         await waitUntilLoaded()
         guard !Task.isCancelled else { return }
@@ -132,8 +129,6 @@ final class ConvexCurrentOwnerAuthenticationClient: CurrentOwnerAuthenticationCl
 }
 
 #if DEBUG
-/// Simulates Clerk session events while cloud authentication stays pending.
-/// Used only with --uitest-clerk-session-control; it never contacts Clerk or Convex.
 @MainActor
 final class CurrentOwnerClerkSessionUITestProvider: CurrentOwnerClerkSessionProviding {
     private(set) var state: CurrentOwnerClerkSessionState

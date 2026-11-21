@@ -21,7 +21,6 @@ struct SetRowView: View, @MainActor Equatable {
     var focusedField: FocusState<WorkoutField?>.Binding
     let isWeightFocused: Bool
     let isRepsFocused: Bool
-    /// What the time wheels read while they are this set's keyboard.
     let timeEditingSeconds: Int?
     let weightUnit: MeasurementUnit
     let previous: PreviousSetPerformance?
@@ -124,8 +123,6 @@ struct SetRowView: View, @MainActor Equatable {
             publishPreview()
         }
         .onDisappear {
-            // Rows can leave the tree mid-edit (collapse, delete, finish); the
-            // central focus transition can no longer reach them, so flush here.
             commitDraftsIfNeeded()
             if let commitRegistrationID {
                 setInputRegistry.unregister(commitRegistrationID)
@@ -158,8 +155,6 @@ struct SetRowView: View, @MainActor Equatable {
             completionButton
         }
         .background {
-            // A completed set reads at a glance down the column without
-            // relying on the checkmark color alone.
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(AppTheme.completedSetFill)
                 .padding(.horizontal, -8)
@@ -246,9 +241,6 @@ struct SetRowView: View, @MainActor Equatable {
         .accessibilityIdentifier("SetCompletionButton-\(exerciseIndex)-\(index)")
     }
 
-    /// Preparation stays local until the engine either saves or retains the
-    /// failed action. Only then release the row's draft, so Discard cannot
-    /// accidentally replay it through a later blur/disappearance callback.
     private func commitDraftsIfNeeded() {
         guard !engine.hasPendingSetSave, canEditSet else { return }
         var preparedInput = input
@@ -257,7 +249,6 @@ struct SetRowView: View, @MainActor Equatable {
             do {
                 try engine.commitActiveSetDraft(set, values: commit.values, context: modelContext)
             } catch {
-                // The engine restored the model and owns the attempted values for Retry.
             }
         }
         input = preparedInput
@@ -309,8 +300,6 @@ struct SetRowView: View, @MainActor Equatable {
         trackingMethod == .duration ? "SetTime" : "SetReps"
     }
 
-    /// Reps are typed; a timed exercise's time is chosen from wheels. Both
-    /// sit in the same slot.
     @ViewBuilder
     private var measureField: some View {
         Group {
@@ -334,14 +323,11 @@ struct SetRowView: View, @MainActor Equatable {
     }
 
     private var timeButton: some View {
-        // While the wheels are open the cell shows what they read, which is
-        // the time the set keeps when they close.
         let seconds = WorkoutNumericInputPolicy.validatedDuration(timeEditingSeconds)
             ?? WorkoutNumericInputPolicy.validatedDuration(durationSeconds)
         let time = seconds.map(WorkoutFormatters.setDuration)
         let suggestion = seconds == nil ? suggestionText(for: .duration) : nil
         let placeholder = trackingMethod.fieldLabel
-        // Spoken as a length of time, not as the punctuation on screen.
         let spokenSuggestion = suggestion == nil ? nil : WorkoutFormatters.setDurationAccessibilityDescription(
             inputValues.timePickerStart(suggestions: suggestions, previous: nil)
         )
@@ -359,8 +345,6 @@ struct SetRowView: View, @MainActor Equatable {
                     RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius, style: .continuous)
                 )
                 .background {
-                    // The well and focus ring the typed fields use, so the set
-                    // the wheels are open on reads as the one being edited.
                     let well = RoundedRectangle(cornerRadius: 10, style: .continuous)
                     well
                         .fill(isTimeEditing ? AppTheme.brandAccentMuted
@@ -387,8 +371,6 @@ struct SetRowView: View, @MainActor Equatable {
         .accessibilityIdentifier("\(measureIdentifierPrefix)Field-\(exerciseIndex)-\(index)")
     }
 
-    /// Matches the typed fields: an entered value, a quieter suggestion, or
-    /// the small column label when there is neither.
     private func timeText(time: String?, suggestion: String?, placeholder: String) -> Text {
         if let value = time ?? suggestion {
             return Text(value)
@@ -412,8 +394,6 @@ struct SetRowView: View, @MainActor Equatable {
     private var rpeBadge: some View {
         if let rpe = WorkoutNumericInputPolicy.validatedRPE(set.rpe) {
             Button {
-                // A timed set's keyboard is its time wheels, and the RPE
-                // chips sit on the bar above them.
                 if trackingMethod == .duration { editTime() }
                 onEditRPE(set)
             } label: {
@@ -458,8 +438,6 @@ struct SetRowView: View, @MainActor Equatable {
                 focusedField.wrappedValue = focusTarget
             }
             .background {
-                // Open sets show a quiet well so the editable region is clear
-                // at rest; completed sets drop it and read as recorded values.
                 let well = RoundedRectangle(cornerRadius: 10, style: .continuous)
                 well
                     .fill(isFocused ? AppTheme.brandAccentMuted
@@ -477,12 +455,8 @@ struct SetRowView: View, @MainActor Equatable {
             .accessibilityIdentifier(accessibilityIdentifier)
     }
 
-    /// A suggestion previews a real value, so it keeps the field's size. The
-    /// unit placeholder only marks an empty field and stays quieter than the
-    /// column header above it.
     private func fieldPrompt(placeholder: String, suggestion: String?) -> Text {
         if let suggestion {
-            // Readable but still distinct from an entered value.
             return Text(suggestion)
                 .foregroundStyle(AppTheme.textSecondary)
         }
@@ -540,15 +514,11 @@ struct SetRowView: View, @MainActor Equatable {
     }
 
     private func completeButtonTapped() {
-        // A superset round fills partners from saved values, so save a draft
-        // still being typed in another row first.
         if let field = focusedField.wrappedValue, !ownFields.contains(field) {
             setInputRegistry.commit(field)
         }
         guard !engine.hasPendingSetSave, canEditSet else { return }
         var preparedValues = prepareValuesForSetAction(completesSet: !set.isCompleted)
-        // The time on the wheels saves with the completion, so one Retry
-        // recovers both.
         if let shown = WorkoutNumericInputPolicy.validatedDuration(timeEditingSeconds) {
             preparedValues = preparedValues.settingDuration(shown)
         }
@@ -560,7 +530,6 @@ struct SetRowView: View, @MainActor Equatable {
                     context: modelContext
                 )
             } catch {
-                // The pending action is presented by WorkoutSessionView.
             }
         }
         if isTimeEditing { onEditTime(set, .close) }
@@ -595,8 +564,6 @@ struct SetRowView: View, @MainActor Equatable {
         defer { onPreviewChange(nil) }
         guard !engine.hasPendingSetSave else { return }
         var values = input.commit(current: inputValues, weightUnit: weightUnit).values
-        // The time on the wheels saves with the fill, wherever Previous has
-        // none of its own, so one Retry recovers the whole fill.
         if let shown = WorkoutNumericInputPolicy.validatedDuration(timeEditingSeconds) {
             values = values.settingDuration(shown)
         }
@@ -606,8 +573,6 @@ struct SetRowView: View, @MainActor Equatable {
             preparedValues: values,
             context: modelContext
         )
-        // The wheels close on the set's time, so they cannot write their
-        // older reading back over the fill.
         if isTimeEditing {
             onEditTime(set, .change(WorkoutNumericInputPolicy.validatedDuration(set.durationSeconds) ?? 0))
             onEditTime(set, .close)

@@ -39,6 +39,28 @@ export default defineSchema({
       "cloudDataDeletedAt",
     ]),
 
+  // One row per record a sync damage repair changed (convex/syncRepair.ts),
+  // so a repair can be reviewed and its records restored. It holds row ids
+  // and timestamps only: no account identifier and no workout content.
+  syncRepairLog: defineTable({
+    runId: v.string(),
+    damageKind: v.string(),
+    tableName: v.string(),
+    rowId: v.string(),
+    clientId: v.string(),
+    before: v.object({
+      updatedAt: v.number(),
+      deletedAt: nullableNumber,
+      serverUpdatedAt: v.number(),
+    }),
+    after: v.object({
+      updatedAt: v.number(),
+      deletedAt: nullableNumber,
+      serverUpdatedAt: v.number(),
+    }),
+    repairedAt: v.number(),
+  }).index("by_runId", ["runId"]),
+
   userSettings: defineTable({
     ...syncFields,
     weightUnitRaw: v.union(v.literal("pounds"), v.literal("kilograms")),
@@ -65,7 +87,6 @@ export default defineSchema({
     notes: v.string(),
     isArchived: v.boolean(),
     isSeeded: v.boolean(),
-    // "reps" or "duration". Missing means reps.
     trackingMethodRaw: v.optional(v.string()),
   })
     .index("by_ownerTokenIdentifier_and_clientId", [
@@ -85,7 +106,6 @@ export default defineSchema({
     durationSeconds: v.number(),
     notes: v.string(),
     referenceNotes: nullableString,
-    // Active sessions stay local-only for v1 and are intentionally excluded from Convex sync.
     statusRaw: v.union(v.literal("completed"), v.literal("discarded")),
     sourceRaw: v.union(
       v.literal("blank"),
@@ -118,7 +138,6 @@ export default defineSchema({
     referenceNotes: nullableString,
     sourceLoggedExerciseID: v.optional(nullableString),
     supersetGroupID: v.optional(nullableString),
-    // The exercise's tracking method when it was logged. Missing means reps.
     trackingMethodRaw: v.optional(v.string()),
   })
     .index("by_ownerTokenIdentifier_and_clientId", [
