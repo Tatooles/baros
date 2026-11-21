@@ -66,13 +66,13 @@ test("paths with spaces or non-ASCII letters in real git output are still checke
   try {
     const run = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8" });
     run("init", "-q");
-    run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "base");
+    run("-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "base");
     mkdirSync(join(repo, "BarosUITests"));
     const body = "func testA() {\n    Thread.sleep(forTimeInterval: 1)\n}\n";
     writeFileSync(join(repo, "BarosUITests", "Sleep Test.swift"), body);
     writeFileSync(join(repo, "BarosUITests", "Séance.swift"), body);
     run("add", ".");
-    run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "head");
+    run("-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "head");
 
     for (const quotePath of ["true", "false"]) {
       const files = parseDiff(run("-c", `core.quotePath=${quotePath}`, "diff", "-U0", "HEAD~1", "HEAD"));
@@ -157,6 +157,47 @@ test("a multi-line skip may name its issue in a later argument line", () => {
   ];
   const files = parseDiff(diffFor("BarosUITests/A.swift", { added: lines, isNew: true }));
   assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [[5, "skip-needs-reason"]]);
+});
+
+test("a Swift Testing disable needs a reason in any layout, and SwiftUI's .disabled never does", () => {
+  const lines = [
+    '@Test(.tags(.slow), .disabled("flaky")) func a() {}',
+    "@Test(",
+    "    .tags(.slow),",
+    '    .disabled("flaky")',
+    ")",
+    "func b() {}",
+    "@Test(",
+    '    .disabled("Parked on #403")',
+    ") func c() {}",
+    'Button("Save") {}',
+    "    .disabled(isSaving)",
+  ];
+  const files = parseDiff(diffFor("BarosCore/Tests/BarosCoreTests/A.swift", { added: lines, isNew: true }));
+  assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [
+    [1, "skip-needs-reason"],
+    [4, "skip-needs-reason"],
+  ]);
+});
+
+test("a parenthesis inside a string doesn't end a skip's arguments early", () => {
+  const lines = ["try XCTSkipIf(", '    value == ")",', '    "Parked on #403."', ")"];
+  const files = parseDiff(diffFor("BarosUITests/A.swift", { added: lines, isNew: true }));
+  assert.deepEqual(checkHygiene(files, () => lines), []);
+});
+
+test("a bare marker on the line above, with no reason, doesn't count", () => {
+  const lines = [
+    "// allow-sleep:",
+    "Thread.sleep(forTimeInterval: 1)",
+    "// allow-skip:",
+    'throw XCTSkip("later")',
+  ];
+  const files = parseDiff(diffFor("BarosTests/A.swift", { added: lines, isNew: true }));
+  assert.deepEqual(rulesOf(checkHygiene(files, () => lines)), [
+    [2, "no-new-sleep"],
+    [4, "skip-needs-reason"],
+  ]);
 });
 
 test("an issue number in code above a skip doesn't explain it; a comment does", () => {

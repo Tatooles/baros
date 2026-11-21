@@ -5,8 +5,8 @@
 #
 #   scripts/check-changed.sh [--base <ref>] [--skip-build]
 #
-# The build uses Xcode's default DerivedData folder for this checkout; set DERIVED_DATA to
-# build somewhere else.
+# The build goes in .build/check-changed-DerivedData, which is git-ignored and removed with the
+# worktree; set DERIVED_DATA to build somewhere else.
 
 set -uo pipefail
 
@@ -33,11 +33,13 @@ fi
 # The merge base, so commits that landed on the base after this branch started don't count.
 base="$(git merge-base "$base_ref" HEAD)" || exit 2
 
-if ! tracked="$(git diff --name-only "$base")"; then
+# -z prints paths raw; without it Git quotes non-ASCII names and the path rules miss them.
+# --no-renames keeps a moved file's old path, so moving one out of BarosCore/ still tests it.
+if ! tracked="$(git diff --name-only --no-renames -z "$base" | tr '\0' '\n')"; then
   echo "git diff failed against $base" >&2
   exit 2
 fi
-if ! untracked="$(git ls-files --others --exclude-standard)"; then
+if ! untracked="$(git ls-files --others --exclude-standard -z | tr '\0' '\n')"; then
   echo "git ls-files failed" >&2
   exit 2
 fi
@@ -83,15 +85,11 @@ workflow_contracts() {
 
 # arm64 only: ConvexMobile ships no x86_64 simulator slice (#384).
 app_build() {
-  local derived_data=()
-  if [[ -n "${DERIVED_DATA:-}" ]]; then
-    derived_data=(-derivedDataPath "$DERIVED_DATA")
-  fi
   xcodebuild build-for-testing \
     -project Baros.xcodeproj \
     -scheme Baros \
     -destination 'generic/platform=iOS Simulator' \
-    ${derived_data[@]+"${derived_data[@]}"} \
+    -derivedDataPath "${DERIVED_DATA:-.build/check-changed-DerivedData}" \
     -quiet \
     ARCHS=arm64
 }
@@ -101,7 +99,7 @@ app_paths='^(Baros|BarosCore|BarosLiveActivity|BarosTests|BarosUITests|Baros\.xc
 core_paths='^BarosCore/|^\.github/workflows/app-ci\.yml$'
 convex_paths='^convex/|^(package\.json|pnpm-lock\.yaml|vitest\.config\.ts|\.github/workflows/convex-ci\.yml)$'
 support_paths='^SupportSite/|^docs/release/app-store/|^(docs/release/app-store-submission-pack\.md|docs/release/listing\.json|docs/release/listing-approved\.json|BarosUITests/MarketingScreenshotTests\.swift|\.github/workflows/support-site-ci\.yml)$'
-workflow_paths='^(\.github/workflows|ci_scripts)/'
+workflow_paths='^(\.github/workflows|ci_scripts)/|^scripts/check-changed\.sh$'
 
 run "Test hygiene" node scripts/pr-checks.mjs hygiene --base "$base"
 

@@ -122,24 +122,45 @@ export function untrackedFile(path, contents) {
 const SLEEP =
   /(?:\bThread\.sleep|\bTask\.sleep|(?<![.\w]|\bfunc\s)u?sleep)\s*\(|\bRunLoop\.\w+\.run\s*\(\s*until:|\.asyncAfter\s*\(/;
 // `.disabled(` counts only as a Swift Testing trait, never the SwiftUI modifier.
-const SKIP = /\bXCTSkip(?:If|Unless)?\b|\bXCTExpectFailure\b|@(?:Test|Suite)\s*\([^)]*\.disabled\s*\(/;
-const ALLOW_SLEEP = /allow-sleep:\s*\S/;
-const ALLOW_SKIP = /allow-skip:\s*\S|#\d{2,}/;
+const SKIP = /\bXCTSkip(?:If|Unless)?\b|\bXCTExpectFailure\b|@(?:Test|Suite)\s*\(.*\.disabled\s*\(/;
+const DISABLED = /\.disabled\s*\(/;
+const TEST_ATTRIBUTE = /@(?:Test|Suite)\s*\(/;
+// [ \t] rather than \s, so a bare marker on the line above can't borrow the next line as its reason.
+const ALLOW_SLEEP = /allow-sleep:[ \t]*\S/;
+const ALLOW_SKIP = /allow-skip:[ \t]*\S|#\d{2,}/;
 
 const MAX_CALL_LINES = 8;
 
 const isComment = (text) => /^\s*\/\//.test(text);
 const codeOf = (text) => text.replace(/\s*\/\/.*$/, "").replace(/\s+/g, " ").trim();
 
+/** Open minus closed parentheses, not counting any inside string literals. */
+function parenDepth(text) {
+  const code = text.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+  return (code.match(/\(/g) ?? []).length - (code.match(/\)/g) ?? []).length;
+}
+
 /** The call's own line plus the lines that finish its arguments. */
 function callText(lines, line, text) {
   const parts = [text];
-  let depth = (text.match(/\(/g) ?? []).length - (text.match(/\)/g) ?? []).length;
+  let depth = parenDepth(text);
   for (let index = line; depth > 0 && index < Math.min(lines.length, line - 1 + MAX_CALL_LINES); index += 1) {
     parts.push(lines[index]);
-    depth += (lines[index].match(/\(/g) ?? []).length - (lines[index].match(/\)/g) ?? []).length;
+    depth += parenDepth(lines[index]);
   }
   return parts.join("\n");
+}
+
+/** Whether 1-based `line` sits inside the arguments of a multi-line `@Test(` or `@Suite(`. */
+function insideTestAttribute(lines, line) {
+  for (let start = line - 2; start >= Math.max(0, line - 1 - MAX_CALL_LINES); start -= 1) {
+    const match = lines[start].match(TEST_ATTRIBUTE);
+    if (!match) continue;
+    let depth = parenDepth(lines[start].slice(match.index));
+    for (let index = start + 1; index < line - 1; index += 1) depth += parenDepth(lines[index]);
+    return depth > 0;
+  }
+  return false;
 }
 
 /**
@@ -160,7 +181,11 @@ export function checkHygiene(files, readLines) {
     for (const { line, text } of file.added) {
       if (isComment(text)) continue;
       const isSleep = SLEEP.test(text);
-      const isSkip = SKIP.test(text);
+      let isSkip = SKIP.test(text);
+      if (!isSkip && DISABLED.test(text)) {
+        lines ??= readLines(file.path);
+        isSkip = insideTestAttribute(lines, line);
+      }
       if (!isSleep && !isSkip) continue;
       lines ??= readLines(file.path);
       const above = isComment(lines[line - 2] ?? "") ? lines[line - 2] : "";
@@ -350,7 +375,7 @@ function main(argv) {
     console.log(`PR size: ${size.label} (${size.lines} changed lines${note}; see AGENTS.md → "PR size")`);
     console.log(`Test delta: ${describeDelta(delta)}`);
     const comment = deltaComment(delta);
-    if (comment && delta.kinds.ui > 0) console.log(comment.split("\n").at(-1));
+    if (comment) console.log(comment.split("\n").at(-1));
     return 0;
   }
 
