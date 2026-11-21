@@ -15,6 +15,7 @@ import type * as sync from "../sync.js";
 import type * as sync_errors from "../sync/errors.js";
 import type * as sync_merge from "../sync/merge.js";
 import type * as sync_validators from "../sync/validators.js";
+import type * as syncRepair from "../syncRepair.js";
 
 import type {
   ApiFromModules,
@@ -30,6 +31,7 @@ declare const fullApi: ApiFromModules<{
   "sync/errors": typeof sync_errors;
   "sync/merge": typeof sync_merge;
   "sync/validators": typeof sync_validators;
+  syncRepair: typeof syncRepair;
 }>;
 
 /**
