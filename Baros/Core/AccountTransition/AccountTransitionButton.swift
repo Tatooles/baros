@@ -94,9 +94,9 @@ struct AccountTransitionButton<Label: View>: View {
     }
 
     private func resolve(_ resolution: WorkoutAccountTransition.Resolution, on gate: WorkoutAccountTransition) {
+        let choice = gate.startResolving(resolution)
         Task {
-            await gate.resolve(resolution)
-            if let message = gate.errorMessage { pendingError = message }
+            if let message = await choice.value { pendingError = message }
         }
     }
 

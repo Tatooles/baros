@@ -38,6 +38,33 @@ final class WorkoutAccountTransitionTests: XCTestCase {
         }
     }
 
+    func testCancelRightAfterAChoiceStartsDoesNotDropIt() async throws {
+        for resolution in [WorkoutAccountTransition.Resolution.finish, .discard] {
+            let h = try Harness()
+            let session = try h.start()
+            await h.request()
+            let choice = h.gate.startResolving(resolution)
+            // The presenter can disappear for a moment as the choice alert closes.
+            h.gate.cancel()
+            let message = await choice.value
+            XCTAssertNil(message)
+            XCTAssertEqual(h.calls, 1)
+            XCTAssertEqual(session.status, resolution == .finish ? .completed : .discarded)
+        }
+    }
+
+    func testCancelRightAfterAFailedChoiceKeepsItsError() async throws {
+        let h = try Harness(failsSave: true)
+        let session = try h.start()
+        await h.request()
+        let choice = h.gate.startResolving(.discard)
+        h.gate.cancel()
+        let message = await choice.value
+        XCTAssertTrue(message?.hasPrefix("The workout could not be saved") == true, message ?? "nil")
+        XCTAssertEqual(h.calls, 0)
+        XCTAssertEqual(session.status, .active)
+    }
+
     func testFinishAndDiscardPersistBeforeAccountAction() async throws {
         for resolution in [WorkoutAccountTransition.Resolution.finish, .discard] {
             let h = try Harness()
