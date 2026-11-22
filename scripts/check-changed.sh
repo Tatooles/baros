@@ -18,7 +18,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --base) base_ref="${2:?--base needs a ref}"; shift 2 ;;
     --skip-build) skip_build=true; shift ;;
-    -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,9p' scripts/check-changed.sh | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -96,7 +96,6 @@ app_build() {
 
 # Keep these in step with the path filters in .github/workflows; ci-workflows.test.mjs checks them.
 app_paths='^(Baros|BarosCore|BarosLiveActivity|BarosTests|BarosUITests|Baros\.xcodeproj|LiftingLog\.xcodeproj|ci_scripts)/|^(project\.yml|convex/auth\.config\.ts|convex/syncSim/merge-vectors\.json|\.github/workflows/app-ci\.yml)$'
-core_paths='^BarosCore/|^\.github/workflows/app-ci\.yml$'
 convex_paths='^convex/|^(package\.json|pnpm-lock\.yaml|vitest\.config\.ts|\.github/workflows/convex-ci\.yml)$'
 support_paths='^SupportSite/|^docs/release/app-store/|^(docs/release/app-store-submission-pack\.md|docs/release/listing\.json|docs/release/listing-approved\.json|BarosUITests/MarketingScreenshotTests\.swift|\.github/workflows/support-site-ci\.yml)$'
 workflow_paths='^(\.github/workflows|ci_scripts)/|^scripts/check-changed\.sh$'
@@ -107,11 +106,9 @@ if touches '^scripts/|^\.github/workflows/pr-checks\.yml$'; then
   run "Script tests" node --test scripts/*.test.mjs
 fi
 
-if touches "$core_paths"; then
-  run "BarosCore tests" swift test --package-path BarosCore
-fi
-
+# CI runs the BarosCore tests for any app change, not only BarosCore/ ones.
 if touches "$app_paths"; then
+  run "BarosCore tests" swift test --package-path BarosCore
   if [[ "$skip_build" == true ]]; then
     echo
     echo "==> App and test build skipped (--skip-build)"

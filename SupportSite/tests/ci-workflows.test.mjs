@@ -509,7 +509,7 @@ test("PR checks run repository code only without a write token", async () => {
     "the job holding a write token must not check out or run actions",
   );
   assert.ok(
-    writer.steps.every((step) => !/\b(node|pnpm|npm|yarn|bash \S|sh \S|\.\/)/.test(step.run ?? "")),
+    writer.steps.every((step) => !/\b(node|pnpm|npm|yarn|bash \S|sh \S)|\.\//.test(step.run ?? "")),
     "the job holding a write token must not run repository code",
   );
 });

@@ -93,8 +93,29 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           rank() { case "$1" in risk:low) echo 1 ;; risk:medium) echo 2 ;; risk:high) echo 3 ;; *) echo 0 ;; esac; }
-          # The template's "**Risk:** medium, <why>" line. The author can raise the floor, never lower it.
-          declared="$(printf '%s\n' "${PR_BODY}" | grep -m 1 -ioE '^[*_ ]*risk[*_ ]*:[*_ ]*(high|medium|low)([^a-z]|$)' | grep -ioE 'high|medium|low' | tail -n 1 | tr 'A-Z' 'a-z' || true)"
+          # The template's "**Risk:** medium, <why>" line, read outside code blocks and HTML comments so
+          # a quoted example doesn't count. With several, the highest wins. The author can raise the
+          # floor, never lower it.
+          prose="$(printf '%s\n' "${PR_BODY}" | tr -d '\r' | awk '
+            /^[[:space:]]*(```|~~~)/ { fence = !fence; next }
+            fence { next }
+            {
+              line = $0; out = ""
+              while (line != "") {
+                if (comment) { i = index(line, "-->"); if (!i) break; line = substr(line, i + 3); comment = 0 }
+                else { i = index(line, "<!--"); if (!i) { out = out line; break } out = out substr(line, 1, i - 1); line = substr(line, i + 4); comment = 1 }
+              }
+              print out
+            }')"
+          declared=""
+          while IFS= read -r line; do
+            level="$(printf '%s\n' "${line}" | grep -ioE '^[-*_>#` ]*risk[*_` ]*:[*_` ]*(risk:)?(high|medium|low)([^a-z]|$)' | grep -ioE 'high|medium|low' | tail -n 1 | tr 'A-Z' 'a-z' || true)"
+            if [[ -z "${level}" ]]; then
+              echo "::warning::The PR's Risk: line doesn't start with low, medium, or high, so only the floor counts."
+            elif (( $(rank "risk:${level}") > $(rank "risk:${declared}") )); then
+              declared="${level}"
+            fi
+          done < <(printf '%s\n' "${prose}" | grep -iE '^[-*_>#` ]*risk[*_` ]*:' || true)
           label="${FLOOR}"
           if (( $(rank "risk:${declared}") > $(rank "${label}") )); then label="risk:${declared}"; fi
           case "${label}" in
@@ -107,9 +128,12 @@ jobs:
 
           gh label create "${label}" --repo "${REPO}" --color "${color}" \
             --description "The higher of the path floor and the author's risk line. See AGENTS.md → PR risk." --force
-          for current in $(gh api "repos/${REPO}/issues/${PR}/labels" --jq '.[].name | select(startswith("risk:"))'); do
+          # Read before writing, so a failed read fails the job, and add before removing, so a failed
+          # run never leaves the PR unlabelled.
+          existing="$(gh api "repos/${REPO}/issues/${PR}/labels" --jq '.[].name | select(startswith("risk:"))')"
+          gh api -X POST "repos/${REPO}/issues/${PR}/labels" -f "labels[]=${label}" --silent
+          for current in ${existing}; do
             if [[ "${current}" != "${label}" ]]; then
               gh api -X DELETE "repos/${REPO}/issues/${PR}/labels/${current}" --silent
             fi
           done
-          gh api -X POST "repos/${REPO}/issues/${PR}/labels" -f "labels[]=${label}" --silent

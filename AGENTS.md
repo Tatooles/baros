@@ -55,8 +55,8 @@ A full `BarosUITests` run takes about two hours in CI, so the suite covers only 
 
 ## Review guidelines
 
-- Treat as P0 any change that can lose or overwrite a user's logged workouts: sync merges, SwiftData model changes, sign-out, local-data reset, and account deletion.
-- Flag a PR whose **Risk:** line is lower than the change deserves, such as a change to code that sync or a data-safety flow calls from outside the floor's paths.
+- Treat as P0 any change that can lose or overwrite a user's logged workouts: sync merges, SwiftData model changes, sign-out, local-data reset, account deletion, and active-workout recovery.
+- Flag a PR whose **Risk:** line is missing or lower than the change deserves, such as a change to code that sync or a data-safety flow calls from outside the floor's paths.
 - Flag a change to a public Convex function's arguments or return shape, or to `convex/schema.ts`, that installed builds can't handle (README → "Production deploys").
 - Flag logic tested through `BarosUITests` or hosted `BarosTests` that `BarosCore` could test, and new UI tests outside the list in "UI tests".
 - Flag new tests that repeat a case an existing test covers, or check what the types already guarantee.
