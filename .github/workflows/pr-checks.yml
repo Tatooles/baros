@@ -1,0 +1,139 @@
+name: PR Checks
+
+# Reads only the PR's diff, so it needs no macOS runner and no path filter.
+# scripts/pr-checks.mjs holds the rules; scripts/check-changed.sh runs the same ones locally.
+on:
+  pull_request:
+    # edited re-labels when the author changes the risk line.
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-hygiene:
+    name: test-hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.12.0
+
+      - name: Test the PR check rules
+        run: node --test scripts/*.test.mjs
+
+      - name: Check added test lines
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/pr-checks.mjs hygiene --base "${BASE_SHA}" --head "${HEAD_SHA}"
+
+  pr-risk:
+    name: pr-risk
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      floor: ${{ steps.floor.outputs.floor }}
+
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.12.0
+
+      - name: Find the risk floor from the changed paths
+        id: floor
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          result="$(node scripts/pr-checks.mjs risk --base "${BASE_SHA}" --head "${HEAD_SHA}")"
+          echo "floor=${result%% *}" >> "${GITHUB_OUTPUT}"
+          echo "Risk floor: ${result}" >> "${GITHUB_STEP_SUMMARY}"
+
+  # Holds the write token, so it checks nothing out and runs no repository code. It treats the
+  # floor and the PR body as untrusted data and applies only a known label.
+  pr-risk-label:
+    name: pr-risk-label
+    needs: pr-risk
+    # Fork and Dependabot PRs get a read-only token.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Apply the higher of the floor and the author's risk line
+        env:
+          FLOOR: ${{ needs.pr-risk.outputs.floor }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          rank() { case "$1" in risk:low) echo 1 ;; risk:medium) echo 2 ;; risk:high) echo 3 ;; *) echo 0 ;; esac; }
+          # The template's "**Risk:** medium, <why>" line, read outside code blocks and HTML comments so
+          # a quoted example doesn't count. With several, the highest wins. The author can raise the
+          # floor, never lower it.
+          prose="$(printf '%s\n' "${PR_BODY}" | tr -d '\r' | awk '
+            /^[[:space:]]*(```|~~~)/ { fence = !fence; next }
+            fence { next }
+            {
+              line = $0; out = ""
+              while (line != "") {
+                if (comment) { i = index(line, "-->"); if (!i) break; line = substr(line, i + 3); comment = 0 }
+                else { i = index(line, "<!--"); if (!i) { out = out line; break } out = out substr(line, 1, i - 1); line = substr(line, i + 4); comment = 1 }
+              }
+              print out
+            }')"
+          declared=""
+          while IFS= read -r line; do
+            level="$(printf '%s\n' "${line}" | grep -ioE '^[-*_>#` ]*risk[*_` ]*:[*_` ]*(risk:)?(high|medium|low)([^a-z]|$)' | grep -ioE 'high|medium|low' | tail -n 1 | tr 'A-Z' 'a-z' || true)"
+            if [[ -z "${level}" ]]; then
+              echo "::warning::The PR's Risk: line doesn't start with low, medium, or high, so only the floor counts."
+            elif (( $(rank "risk:${level}") > $(rank "risk:${declared}") )); then
+              declared="${level}"
+            fi
+          done < <(printf '%s\n' "${prose}" | grep -iE '^[-*_>#` ]*risk[*_` ]*:' || true)
+          label="${FLOOR}"
+          if (( $(rank "risk:${declared}") > $(rank "${label}") )); then label="risk:${declared}"; fi
+          case "${label}" in
+            risk:high) color=b60205 ;;
+            risk:medium) color=fbca04 ;;
+            risk:low) color=0e8a16 ;;
+            *) echo "::error::Unexpected risk floor: ${FLOOR}"; exit 1 ;;
+          esac
+          echo "Floor ${FLOOR}, author ${declared:-none}: applying ${label}" >> "${GITHUB_STEP_SUMMARY}"
+
+          gh label create "${label}" --repo "${REPO}" --color "${color}" \
+            --description "The higher of the path floor and the author's risk line. See AGENTS.md → PR risk." --force
+          # Read before writing, so a failed read fails the job, and add before removing, so a failed
+          # run never leaves the PR unlabelled.
+          existing="$(gh api "repos/${REPO}/issues/${PR}/labels" --jq '.[].name | select(startswith("risk:"))')"
+          gh api -X POST "repos/${REPO}/issues/${PR}/labels" -f "labels[]=${label}" --silent
+          for current in ${existing}; do
+            if [[ "${current}" != "${label}" ]]; then
+              gh api -X DELETE "repos/${REPO}/issues/${PR}/labels/${current}" --silent
+            fi
+          done
