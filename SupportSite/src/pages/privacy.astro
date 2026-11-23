@@ -9,7 +9,7 @@ import DocumentLayout from "../layouts/DocumentLayout.astro";
   description="Privacy Policy for Baros."
   heading="Privacy Policy"
   intro="This policy explains how Baros handles workout data, account data, sync, export, and deletion."
-  lastUpdated="August 9, 2026"
+  lastUpdated="November 22, 2026"
 >
   <DocumentSection title="Summary">
     <p>
@@ -49,6 +49,40 @@ import DocumentLayout from "../layouts/DocumentLayout.astro";
       When you sign in, Baros uses Convex to sync supported workout, exercise,
       settings, and history data for your account. Sync data is scoped to your
       authenticated account.
+    </p>
+  </DocumentSection>
+
+  <DocumentSection title="Apple Health">
+    <p>
+      Apple Health is off unless you turn on Save Workouts to Apple Health in
+      Settings. Baros then asks for permission to save workouts, heart rate, and
+      active energy to Apple Health, and to read heart rate. With permission, a
+      workout you start in Baros and finish is saved to Apple Health as a strength
+      workout; a workout you discard is not saved. If you use the Baros Apple Watch
+      app and your Watch is available, the Watch records the workout; otherwise
+      your iPhone does. During a workout, Baros shows your live heart rate from
+      your Apple Watch or a supported sensor such as AirPods Pro 3.
+    </p>
+    <p>
+      Baros processes Health data only on your devices. It never uploads heart
+      rate or other Health data to its servers, never syncs it with your Baros
+      account, and never uses it for advertising, marketing, or analytics. Apple
+      Health keeps its own copy of your workouts, which Apple may sync between your
+      devices through iCloud according to your Health settings.
+    </p>
+    <p>
+      For a workout your iPhone saved, changing its date or duration in Baros
+      updates the Health copy while Save Workouts to Apple Health is on, and
+      deleting the workout in Baros deletes the Health copy while Baros still has
+      Health access. Heart-rate readings recorded
+      during the workout stay in Apple Health. Workouts saved by your Apple Watch
+      aren't changed or deleted by Baros; you can delete them in the Health app.
+    </p>
+    <p>
+      Signing out, deleting local data, or deleting your Baros account doesn't
+      remove workouts already saved to Apple Health; you can delete them in the
+      Health app. You can turn the setting off at any time, or remove Baros's
+      access in the Health app.
     </p>
   </DocumentSection>
 

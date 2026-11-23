@@ -15,12 +15,15 @@ enum DeleteDataMode: Hashable {
     }
 
     var warningText: String {
-        switch self {
+        let base = switch self {
         case .account:
             "This permanently deletes your cloud account, cloud workout data, and local data on this iPhone."
         case .localData:
             "This deletes only local data on this iPhone. It does not delete a cloud account or cloud data."
         }
+        // Saved Health copies belong to the person and stay (ADR 0005). Always said, because a local-data
+        // reset clears the record of which copies exist.
+        return base + " Any workouts saved to Apple Health stay there; you can delete them in the Health app."
     }
 
     var buttonTitle: String {
