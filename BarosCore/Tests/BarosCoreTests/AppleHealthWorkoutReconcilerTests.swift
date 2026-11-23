@@ -362,6 +362,17 @@ final class AppleHealthWorkoutReconcilerTests: XCTestCase {
         XCTAssertGreaterThan(ledger.entry(for: id)?.lastWrittenVersion ?? 0, 5)
     }
 
+    func testTransientErrorWhileResumingAnInterruptedDeleteKeepsItsRecord() async {
+        ledger.save(AppleHealthLedgerEntry(workoutID: id, writer: .iPhone, phase: .deletingWithWorkout, isSaveConfirmed: true))
+        recorder.deleteFailure = .transient
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 100, isDeleted: true)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .deletingWithWorkout)
+    }
+
     func testRejectedDeleteIsRetriedFromScratch() async {
         saveConfirmed()
         recorder.savedIDs = [id]

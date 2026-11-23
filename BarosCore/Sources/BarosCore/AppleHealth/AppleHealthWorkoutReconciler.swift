@@ -200,8 +200,8 @@ public final class AppleHealthWorkoutReconciler {
             }
 
         case let .deleteSavedWorkout(workoutID):
+            let isFirstAttempt = ledger.entry(for: workoutID)?.phase == .saved
             do {
-                let isFirstAttempt = ledger.entry(for: workoutID)?.phase == .saved
                 if isFirstAttempt {
                     // Confirm the copy exists before deleting, and record the pending delete, so a delete
                     // interrupted by a crash is never mistaken for one the person made in Health.
@@ -225,8 +225,13 @@ public final class AppleHealthWorkoutReconciler {
                 }
             } catch {
                 update(workoutID, passGeneration) { entry in
-                    // HealthKit answered: the delete didn't happen. Only a crash leaves the outcome unknown.
-                    entry.phase = error == .terminal ? .abandoned : .saved
+                    if error == .terminal {
+                        entry.phase = .abandoned
+                    } else if isFirstAttempt {
+                        // HealthKit answered: this first delete didn't happen. Look the copy up again next time.
+                        entry.phase = .saved
+                    }
+                    // Resuming an interrupted delete: an earlier attempt may have succeeded, so keep the record.
                 }
             }
 
