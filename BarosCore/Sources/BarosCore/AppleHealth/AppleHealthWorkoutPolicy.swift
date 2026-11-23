@@ -43,7 +43,7 @@ public enum AppleHealthWorkoutPolicy {
             return AppleHealthWorkoutDecision(entry: entry, action: discardLive)
         }
 
-        if entry.phase == .saved || entry.phase == .deletedWithWorkout {
+        if entry.phase == .saved || entry.phase == .deletingWithWorkout || entry.phase == .deletedWithWorkout {
             return decideSaved(snapshot, entry: entry, environment: environment, discardLive: discardLive)
         }
 
@@ -83,7 +83,7 @@ public enum AppleHealthWorkoutPolicy {
         }
         let isDeleted = snapshot.isDeleted || snapshot.status == .discarded
         switch entry.phase {
-        case .saved where isDeleted:
+        case .saved where isDeleted, .deletingWithWorkout:
             return AppleHealthWorkoutDecision(entry: entry, action: .deleteSavedWorkout(workoutID: id))
         case .saved:
             guard

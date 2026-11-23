@@ -19,6 +19,9 @@ public struct AppleHealthLedgerEntry: Codable, Equatable, Sendable {
         case sessionLost
         /// A Health copy was saved. Later date or duration edits replace it; a tombstone deletes it.
         case saved
+        /// The Baros workout was deleted and its Health copy was confirmed to exist; the delete may not
+        /// have finished. A retry that finds nothing means Baros already deleted it.
+        case deletingWithWorkout
         /// The Baros workout was deleted, so Baros deleted its Health copy. If the delete is reverted,
         /// the workout is saved again.
         case deletedWithWorkout

@@ -201,15 +201,24 @@ public final class AppleHealthWorkoutReconciler {
 
         case let .deleteSavedWorkout(workoutID):
             do {
-                let deletedCount = try await recorder.deleteSavedWorkout(workoutID: workoutID)
-                update(workoutID, passGeneration) { entry in
-                    if deletedCount > 0 {
-                        entry.phase = .deletedWithWorkout
-                    } else if entry.isSaveConfirmed {
-                        // Already gone: the person deleted it in Health first. Never bring it back.
-                        entry.phase = .removedInHealth
+                if ledger.entry(for: workoutID)?.phase == .saved {
+                    // Confirm the copy exists before deleting, and record the pending delete, so a delete
+                    // interrupted by a crash is never mistaken for one the person made in Health.
+                    let existing = try await recorder.savedWorkout(workoutID: workoutID)
+                    guard isCurrent(passGeneration) else { return }
+                    guard existing != nil else {
+                        update(workoutID, passGeneration) { entry in
+                            // Already gone: the person deleted it in Health first. Never bring it back.
+                            // A copy saved while locked may not be readable yet: retry on a later pass.
+                            if entry.isSaveConfirmed { entry.phase = .removedInHealth }
+                        }
+                        return
                     }
-                    // A copy saved while locked may not be readable yet: retry on a later pass.
+                    update(workoutID, passGeneration) { $0.phase = .deletingWithWorkout }
+                }
+                _ = try await recorder.deleteSavedWorkout(workoutID: workoutID)
+                update(workoutID, passGeneration) { entry in
+                    entry.phase = .deletedWithWorkout
                 }
             } catch {
                 guard error == .terminal else { return } // Retried on the next pass.
