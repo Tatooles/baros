@@ -6,6 +6,8 @@ public struct AppleHealthLedgerEntry: Codable, Equatable, Sendable {
         /// Started on this device, but no writer has been chosen yet.
         case undecided
         case iPhone
+        /// The Baros Watch app owns the session. Once a claim is sent it is "Watch or nothing".
+        case watch
         /// Never saved to Health, for example after write permission was revoked.
         case none
     }
@@ -13,8 +15,12 @@ public struct AppleHealthLedgerEntry: Codable, Equatable, Sendable {
     public enum Phase: String, Codable, Sendable {
         /// Seen active on this device. Nothing was started.
         case observed
+        /// The Watch app is being launched; no claim has been sent.
+        case launchingWatch
         /// A live session is recording.
         case recording
+        /// A command was sent to the Watch writer and is waiting for its acknowledgement.
+        case awaitingWatch
         /// The live session ended early. The fallback saves the workout at finish.
         case sessionLost
         /// A Health copy was saved. Later date or duration edits replace it; a tombstone deletes it.
@@ -40,6 +46,10 @@ public struct AppleHealthLedgerEntry: Codable, Equatable, Sendable {
     public var lastWrittenEnd: Date?
     /// A save completed on this device, so a later missing copy means the person deleted it in Health.
     public var isSaveConfirmed: Bool
+    /// The token in the Watch claim; the Watch saves only on a `finish` that names it.
+    public var watchToken: UUID?
+    /// The command the Watch hasn't acknowledged yet.
+    public var pendingWatchCommand: AppleHealthWatchCommand?
 
     public init(
         workoutID: UUID,
@@ -49,7 +59,9 @@ public struct AppleHealthLedgerEntry: Codable, Equatable, Sendable {
         lastWrittenVersion: Int64? = nil,
         lastWrittenStart: Date? = nil,
         lastWrittenEnd: Date? = nil,
-        isSaveConfirmed: Bool = false
+        isSaveConfirmed: Bool = false,
+        watchToken: UUID? = nil,
+        pendingWatchCommand: AppleHealthWatchCommand? = nil
     ) {
         self.workoutID = workoutID
         self.writer = writer
@@ -59,6 +71,8 @@ public struct AppleHealthLedgerEntry: Codable, Equatable, Sendable {
         self.lastWrittenStart = lastWrittenStart
         self.lastWrittenEnd = lastWrittenEnd
         self.isSaveConfirmed = isSaveConfirmed
+        self.watchToken = watchToken
+        self.pendingWatchCommand = pendingWatchCommand
     }
 
     var isTerminal: Bool {

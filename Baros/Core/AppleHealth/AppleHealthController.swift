@@ -1,5 +1,6 @@
 import BarosCore
 import Foundation
+import HealthKit
 import Observation
 import SwiftData
 
@@ -24,6 +25,7 @@ final class AppleHealthController {
     private(set) var heartRates: [UUID: LiveHeartRate] = [:]
 
     @ObservationIgnored private let recorder: HealthKitWorkoutRecorder
+    @ObservationIgnored private let watchLink: WatchWorkoutLink
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let reconciler: AppleHealthWorkoutReconciler
     /// Passes wait until a session HealthKit kept alive across a relaunch is reattached, so it isn't
@@ -34,10 +36,13 @@ final class AppleHealthController {
     init(
         container: ModelContainer,
         currentOwner: @escaping @MainActor () -> SwiftDataAppleHealthSnapshotSource.CurrentOwnerVisibility,
-        recorder: HealthKitWorkoutRecorder = HealthKitWorkoutRecorder(),
+        healthStore: HKHealthStore = HKHealthStore(),
         defaults: UserDefaults = .standard
     ) {
+        let recorder = HealthKitWorkoutRecorder(healthStore: healthStore)
+        let watchLink = WatchWorkoutLink(healthStore: healthStore)
         self.recorder = recorder
+        self.watchLink = watchLink
         self.defaults = defaults
         isEnabled = AppleHealthPreference.isEnabled(defaults: defaults)
         authorization = recorder.authorization()
@@ -45,6 +50,7 @@ final class AppleHealthController {
             recorder: recorder,
             ledger: AppleHealthLedgerStore(defaults: defaults),
             snapshotSource: SwiftDataAppleHealthSnapshotSource(container: container, currentOwner: currentOwner),
+            watchLink: watchLink,
             isSettingEnabled: { [defaults] in AppleHealthPreference.isEnabled(defaults: defaults) }
         )
         recorder.onHeartRate = { [weak self] workoutID, reading in
@@ -52,6 +58,9 @@ final class AppleHealthController {
         }
         recorder.onSessionEnded = { [weak self] workoutID in
             self?.heartRates[workoutID] = nil
+        }
+        watchLink.onMessage = { [weak self] message in
+            self?.handle(message)
         }
         Task { [weak self] in
             await recorder.recoverActiveSession()
@@ -104,6 +113,31 @@ final class AppleHealthController {
         isEnabled = true
         AppleHealthPreference.setEnabled(true, defaults: defaults)
         requestReconciliation()
+    }
+
+    /// Messages from the Baros Watch app (ADR 0005, "Watch writer").
+    private func handle(_ message: WatchWorkoutMessage) {
+        switch message {
+        case let .acknowledged(workoutID, token, outcome):
+            heartRates[workoutID] = nil
+            let mapped: AppleHealthWatchOutcome = switch outcome {
+            case .saved: .saved
+            case .savedWhileLocked: .savedWhileLocked
+            case .discarded: .discarded
+            case .failed: .failed
+            }
+            reconciler.handleWatchAcknowledgement(workoutID: workoutID, token: token, outcome: mapped)
+        case let .statusRequest(workoutID, token, isEndRequest):
+            if let command = reconciler.watchCommand(forStatusOf: workoutID, token: token, isEndRequest: isEndRequest) {
+                watchLink.send(command)
+            } else {
+                watchLink.send(.continueRecording(workoutID: workoutID))
+            }
+        case let .heartRate(workoutID, beatsPerMinute, measuredAt):
+            heartRates[workoutID] = LiveHeartRate(beatsPerMinute: beatsPerMinute, measuredAt: measuredAt)
+        case .readyForClaim, .declineClaim, .claim, .finish, .discard, .continueRecording:
+            break // iPhone → Watch only.
+        }
     }
 
     func refreshAuthorization() {

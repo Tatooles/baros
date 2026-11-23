@@ -59,11 +59,19 @@ public struct AppleHealthEnvironment: Equatable, Sendable {
     public let isSettingEnabled: Bool
     public let authorization: AppleHealthAuthorization
     public let now: Date
+    /// The Baros Watch app is paired and installed, so a new workout tries the Watch first.
+    public let isWatchAvailable: Bool
 
-    public init(isSettingEnabled: Bool, authorization: AppleHealthAuthorization, now: Date) {
+    public init(
+        isSettingEnabled: Bool,
+        authorization: AppleHealthAuthorization,
+        now: Date,
+        isWatchAvailable: Bool = false
+    ) {
         self.isSettingEnabled = isSettingEnabled
         self.authorization = authorization
         self.now = now
+        self.isWatchAvailable = isWatchAvailable
     }
 
     var allowsWriting: Bool {

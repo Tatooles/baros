@@ -40,6 +40,7 @@
 		29B5A9964E5182409F3969FE /* AppAppearancePreferenceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E98A1FADF01A5D331676FFC /* AppAppearancePreferenceStoreTests.swift */; };
 		2A7B70976DE4621BB2C53644 /* AppReleaseCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1618E93838C0B4F83088CAA9 /* AppReleaseCatalogTests.swift */; };
 		2B783EA966521A85C385ED72 /* WorkoutLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82450D0B1348AED3BE0B547 /* WorkoutLiveActivityWidget.swift */; };
+		2C511C5F16290109004E6C4F /* BarosWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CB77B40BD3510B3AC31784C /* BarosWatchApp.swift */; };
 		2ECD33907C8A5FABCC5EF1C3 /* RPEChipRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA03F6A97DC5E4B559FD09E /* RPEChipRow.swift */; };
 		2EECC4C9026B3B687C2B9B82 /* WorkoutHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF2386D026311F4720EF90CE /* WorkoutHeaderView.swift */; };
 		2F84C61A372496C48A391E09 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8552E82D3C1C75E25C71DFE9 /* AppShellView.swift */; };
@@ -65,6 +66,8 @@
 		5525D30F148CDFA02B8598A3 /* SupersetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC49EA0F74AD67C212E209A /* SupersetTests.swift */; };
 		55F7352C891E2AD6A8827E8F /* SettingsAccountSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BAAE5E20B23FFCD982FADAF /* SettingsAccountSection.swift */; };
 		56919F514C52CBA46A364197 /* ExerciseLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44C8EF7413F539FC06139F9B /* ExerciseLibraryView.swift */; };
+		59287D4F7180F50496966B5E /* WatchWorkoutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88F8B1C1933C5999F1F0897B /* WatchWorkoutManager.swift */; };
+		594178F474736BFBD229CA08 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4E2709B6422528E5D6A0209A /* AppIcon.icon */; };
 		5AD4FC88B8B8E2EB7852228C /* ExerciseHistoryNoteBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0F85EAEFED85356D177792 /* ExerciseHistoryNoteBlock.swift */; };
 		5C8372D64F3446711717DC10 /* WorkoutLiveActivityLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCBB7F163907A7CF68878C68 /* WorkoutLiveActivityLink.swift */; };
 		5E4A8385102FCFF2F948C934 /* DeveloperDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6BD2ACCC1481D31808F5C38 /* DeveloperDiagnosticsView.swift */; };
@@ -93,6 +96,8 @@
 		7FAB3891D8987EEB4AEC52B9 /* OnboardingPreferencesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC71E0E57B22679D69EA00A /* OnboardingPreferencesPage.swift */; };
 		8277E0708DFBA5C33ABFCF35 /* WhatsNewVersion1_5View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01641B742A83B5EA9D540F9F /* WhatsNewVersion1_5View.swift */; };
 		82D214DEBC73D2AB2126A1EB /* MarketingScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFA671BC732A13735092CF11 /* MarketingScreenshotTests.swift */; };
+		84A04EB1C3B7B1F0DA1D15C5 /* WatchWorkoutMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 679FD279B71FD0B706AFCD1A /* WatchWorkoutMessage.swift */; };
+		85A7ADB5A0267BC4ABC2112E /* WatchWorkoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A481DCD2347F8D569EC60716 /* WatchWorkoutView.swift */; };
 		86B5E9036591C404924B147A /* ExerciseEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B558C5A03C499024D523024 /* ExerciseEditorView.swift */; };
 		89835361B13D19E2B0F19B37 /* AppleHealthSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79FA5C8C1F6F31C9F0396F9E /* AppleHealthSettingsSection.swift */; };
 		8D915D827482CBB112214669 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF15B15837756D447B0803F /* HomeView.swift */; };
@@ -103,6 +108,7 @@
 		920C6FE31D76F085CA3A6293 /* BarosBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC0941499EC84B7040CE8EDF /* BarosBrand.swift */; };
 		938D96AFF51E6A9ADC7C8F39 /* AppUpdateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53ACF4138F734FA696F1E985 /* AppUpdateServiceTests.swift */; };
 		9648E59EF3C2727A04EAC646 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD824F36A386212D32C34A33 /* OnboardingFlow.swift */; };
+		993F5CDC336BB46EBF7ADF9E /* WatchWorkoutLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 687AB83ACC71D0998A73B02E /* WatchWorkoutLink.swift */; };
 		9AE0DB1B5CB6CF7B13C4B4DF /* ReorderLinkList.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7ED5945A57B9CDA55AF4687 /* ReorderLinkList.swift */; };
 		9C48CDEEAE041FC54E2134A4 /* WorkoutRecoveryNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9A8AE470D90811B40DEA33F /* WorkoutRecoveryNotice.swift */; };
 		9CD891183EBE88A375C504F1 /* SyncRecoveryAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCDF19AED28F861C331A3BF6 /* SyncRecoveryAction.swift */; };
@@ -119,9 +125,11 @@
 		B64A05C6FD184B841E18C861 /* WorkoutLiveActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C47B6DD51B01ED88DCD3D3D /* WorkoutLiveActivityTests.swift */; };
 		B7D859D6B8E81E7705AFA98D /* AccountSignInButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E7557852BCB0466B13D71EF /* AccountSignInButton.swift */; };
 		BA2F5DE8D041AF193D8E851B /* SetRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D63A6EF8824690577A135B9 /* SetRowView.swift */; };
+		BDB2C95BC76B27915F902CE5 /* BarosWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 6D7B79172B44C55D901423D8 /* BarosWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BDD006935D0653A210EC4A2B /* AppNavigationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24D93E6500956F3496B2557B /* AppNavigationStateTests.swift */; };
 		BF4DDDA5F251F4C9C9FC8653 /* AccountDisplayStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7393C373A9C49F7A8182E8DF /* AccountDisplayStateTests.swift */; };
 		BFA1F88CDA27994A88C5685F /* CurrentOwnerLaunchConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0800BEE55FAC603B1A30047 /* CurrentOwnerLaunchConfigurationTests.swift */; };
+		C04DFA83EFA1D38BEECBBFBD /* WatchWorkoutMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 679FD279B71FD0B706AFCD1A /* WatchWorkoutMessage.swift */; };
 		C076EEB341F310F942D5B804 /* ConvexSyncArgumentMapperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110A73B9F77C374CF5A3F0DF /* ConvexSyncArgumentMapperTests.swift */; };
 		C4FFD221970EFA50DF0BBF5C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98BD4C40E1C5B8977BF9AC5 /* SettingsView.swift */; };
 		C6DC63CA4B0DFB832C7E5CE5 /* RestTimerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 776F226A3F2002E996B67500 /* RestTimerViews.swift */; };
@@ -165,6 +173,13 @@
 			remoteGlobalIDString = 43B31D3AF242F326DF12BBDC;
 			remoteInfo = Baros;
 		};
+		5F52E955D9519BC7CB219FB3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AC4D31E82D75BDF37C7BA5CB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C39841C1F44CB8A205959605;
+			remoteInfo = BarosWatch;
+		};
 		A5CE9897B33780C92484A394 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AC4D31E82D75BDF37C7BA5CB /* Project object */;
@@ -182,6 +197,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		50A252D1CE4C50C0446EAF74 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				BDB2C95BC76B27915F902CE5 /* BarosWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F08C5331EC07BD869247ECC7 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -201,6 +227,7 @@
 		06B35F51ABC00FD0B31231F1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0727ACA9304D7A79490879CF /* BarosLiveActivityBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarosLiveActivityBundle.swift; sourceTree = "<group>"; };
 		0806162D8B4D60C712F43690 /* EmptyHistoryStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyHistoryStateView.swift; sourceTree = "<group>"; };
+		0CB77B40BD3510B3AC31784C /* BarosWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarosWatchApp.swift; sourceTree = "<group>"; };
 		0EC5F25DFB5B9816D415FAC0 /* FinishWorkoutSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinishWorkoutSheet.swift; sourceTree = "<group>"; };
 		110A73B9F77C374CF5A3F0DF /* ConvexSyncArgumentMapperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexSyncArgumentMapperTests.swift; sourceTree = "<group>"; };
 		11366E3369494F75444516B4 /* BarosUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BarosUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -231,6 +258,7 @@
 		44C8EF7413F539FC06139F9B /* ExerciseLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseLibraryView.swift; sourceTree = "<group>"; };
 		454FB40586943F2723492FC8 /* EmptyHistoryPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyHistoryPresentationTests.swift; sourceTree = "<group>"; };
 		45A640E8DEFC5A40AD554FD6 /* ExerciseHistoryRecordsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryRecordsCard.swift; sourceTree = "<group>"; };
+		488BC5E2BB4C7CFF80647756 /* BarosWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BarosWatch.entitlements; sourceTree = "<group>"; };
 		4B73A1BFB640E17165FD3E49 /* CompletedWorkoutEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletedWorkoutEditView.swift; sourceTree = "<group>"; };
 		4BAAE5E20B23FFCD982FADAF /* SettingsAccountSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsAccountSection.swift; sourceTree = "<group>"; };
 		4C321F4F0F9D38ED79E21081 /* WorkoutLiveActivitySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutLiveActivitySnapshot.swift; sourceTree = "<group>"; };
@@ -242,12 +270,16 @@
 		5E98A1FADF01A5D331676FFC /* AppAppearancePreferenceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearancePreferenceStoreTests.swift; sourceTree = "<group>"; };
 		62D75149FBAE878C25D0D614 /* ExerciseHistoryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryRow.swift; sourceTree = "<group>"; };
 		63D053CC597AD0865A0C84D5 /* WhatsNewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewSheet.swift; sourceTree = "<group>"; };
+		679FD279B71FD0B706AFCD1A /* WatchWorkoutMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutMessage.swift; sourceTree = "<group>"; };
 		681B3BF8E6FAF5257948AB56 /* SignedOutReminderBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignedOutReminderBanner.swift; sourceTree = "<group>"; };
+		687AB83ACC71D0998A73B02E /* WatchWorkoutLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutLink.swift; sourceTree = "<group>"; };
 		6BD656B1F611BE5925B97EB6 /* HomePastWorkoutReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePastWorkoutReviewView.swift; sourceTree = "<group>"; };
+		6D7B79172B44C55D901423D8 /* BarosWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BarosWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		72A675DA33EED3402F188F59 /* NativeGroupedReorderList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeGroupedReorderList.swift; sourceTree = "<group>"; };
 		7393C373A9C49F7A8182E8DF /* AccountDisplayStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDisplayStateTests.swift; sourceTree = "<group>"; };
 		74123B04D836BA0F872DA70D /* ExerciseHistoryPerformanceRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryPerformanceRow.swift; sourceTree = "<group>"; };
 		776F226A3F2002E996B67500 /* RestTimerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestTimerViews.swift; sourceTree = "<group>"; };
+		77C81F6C244C57FE15E43482 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		78C1E552B94BD12C68370E57 /* SwipeToDeleteRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDeleteRow.swift; sourceTree = "<group>"; };
 		79FA5C8C1F6F31C9F0396F9E /* AppleHealthSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleHealthSettingsSection.swift; sourceTree = "<group>"; };
 		7B558C5A03C499024D523024 /* ExerciseEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseEditorView.swift; sourceTree = "<group>"; };
@@ -259,6 +291,7 @@
 		857EFC239F41F1B8BFF58873 /* HistorySetTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySetTable.swift; sourceTree = "<group>"; };
 		8746E9D6BAEBDF7062B16003 /* WhatsNewVersion1_2View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewVersion1_2View.swift; sourceTree = "<group>"; };
 		87B573FDF309E99E1D02F1C9 /* AccountDeletionFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionFactory.swift; sourceTree = "<group>"; };
+		88F8B1C1933C5999F1F0897B /* WatchWorkoutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutManager.swift; sourceTree = "<group>"; };
 		891A7966461F2C13DC209A71 /* BarosLiveActivity.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = BarosLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		899D04423C1918B8B8546277 /* WorkoutEditingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutEditingComponents.swift; sourceTree = "<group>"; };
 		89F5824C417A49E6256B25EE /* ConvexConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexConfigurationTests.swift; sourceTree = "<group>"; };
@@ -272,6 +305,7 @@
 		A0B7EEE0CEBDB12A42E92F89 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1F2ABEC64F2B017CBD065DD /* AppUpdatePrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdatePrompt.swift; sourceTree = "<group>"; };
 		A422AEA968D8813BD7F386AE /* AppNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationState.swift; sourceTree = "<group>"; };
+		A481DCD2347F8D569EC60716 /* WatchWorkoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutView.swift; sourceTree = "<group>"; };
 		A818C833AC1D3BA4E797C7CD /* WorkoutHistoryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutHistoryRow.swift; sourceTree = "<group>"; };
 		A81CCBA2B96D9D02F9A9F97D /* TimedExerciseUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedExerciseUITests.swift; sourceTree = "<group>"; };
 		A82450D0B1348AED3BE0B547 /* WorkoutLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutLiveActivityWidget.swift; sourceTree = "<group>"; };
@@ -373,6 +407,7 @@
 			children = (
 				F6D0EFEEE164EF69014171F5 /* AppleHealthController.swift */,
 				2BD2AC7F8B15A417EB8B2134 /* HealthKitWorkoutRecorder.swift */,
+				687AB83ACC71D0998A73B02E /* WatchWorkoutLink.swift */,
 			);
 			path = AppleHealth;
 			sourceTree = "<group>";
@@ -481,6 +516,7 @@
 				E8BEFB708AFB88A02F5898C9 /* BarosLiveActivity */,
 				7D52346070662A2FF1FCC198 /* BarosTests */,
 				2A71A5654E556B5348150ADC /* BarosUITests */,
+				DA64CD2B5D8241EAE22F2F2B /* BarosWatch */,
 				1530FFD420C369A719A656AF /* Packages */,
 				EFFB0976949E3BBB72DAD21B /* Products */,
 			);
@@ -624,6 +660,18 @@
 			path = Features;
 			sourceTree = "<group>";
 		};
+		DA64CD2B5D8241EAE22F2F2B /* BarosWatch */ = {
+			isa = PBXGroup;
+			children = (
+				488BC5E2BB4C7CFF80647756 /* BarosWatch.entitlements */,
+				0CB77B40BD3510B3AC31784C /* BarosWatchApp.swift */,
+				77C81F6C244C57FE15E43482 /* Info.plist */,
+				88F8B1C1933C5999F1F0897B /* WatchWorkoutManager.swift */,
+				A481DCD2347F8D569EC60716 /* WatchWorkoutView.swift */,
+			);
+			path = BarosWatch;
+			sourceTree = "<group>";
+		};
 		DED8414B2EC921F1AF0690F8 /* Core */ = {
 			isa = PBXGroup;
 			children = (
@@ -649,6 +697,14 @@
 			path = WorkoutLiveActivity;
 			sourceTree = "<group>";
 		};
+		DFFA79E5FF736FE491A16F84 /* WatchLink */ = {
+			isa = PBXGroup;
+			children = (
+				679FD279B71FD0B706AFCD1A /* WatchWorkoutMessage.swift */,
+			);
+			path = WatchLink;
+			sourceTree = "<group>";
+		};
 		E7AD26E588B747C86FFE063F /* AccountTransition */ = {
 			isa = PBXGroup;
 			children = (
@@ -664,6 +720,7 @@
 				0B6693B117B32C3A914F2665 /* Components */,
 				1393B6EAD3F0806BFF1EEADF /* DesignSystem */,
 				6A22D6E3B385E4A26BBB13F5 /* LiveActivity */,
+				DFFA79E5FF736FE491A16F84 /* WatchLink */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -710,6 +767,7 @@
 				891A7966461F2C13DC209A71 /* BarosLiveActivity.appex */,
 				DA9615ADEE1BFA19E6244260 /* BarosTests.xctest */,
 				11366E3369494F75444516B4 /* BarosUITests.xctest */,
+				6D7B79172B44C55D901423D8 /* BarosWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -746,6 +804,7 @@
 				1B0E2F5494BA16AE203D400C /* Resources */,
 				4FCACF5B8AB6DBF8054E37B4 /* Frameworks */,
 				F08C5331EC07BD869247ECC7 /* Embed Foundation Extensions */,
+				50A252D1CE4C50C0446EAF74 /* Embed Watch Content */,
 				1BE28BD9A0FE10AF53495929 /* Write Build Source Metadata */,
 				0B9FDBAF45068423F94BB1C1 /* Upload Debug Symbols to Sentry */,
 			);
@@ -753,6 +812,7 @@
 			);
 			dependencies = (
 				EC5269158DCE258547C8590D /* PBXTargetDependency */,
+				482B523575841049DE927732 /* PBXTargetDependency */,
 			);
 			name = Baros;
 			packageProductDependencies = (
@@ -803,6 +863,24 @@
 			productReference = 11366E3369494F75444516B4 /* BarosUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		C39841C1F44CB8A205959605 /* BarosWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EF8DE5210A16FF90E61C8990 /* Build configuration list for PBXNativeTarget "BarosWatch" */;
+			buildPhases = (
+				4EF8B195046FE8B0A912DB3B /* Sources */,
+				F0325EFC3700FB47669663FC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BarosWatch;
+			packageProductDependencies = (
+			);
+			productName = BarosWatch;
+			productReference = 6D7B79172B44C55D901423D8 /* BarosWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 		F1AF6C68C6F6E829ADB33DC8 /* BarosTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A3E5B5D3215D3540E394EE4A /* Build configuration list for PBXNativeTarget "BarosTests" */;
@@ -843,6 +921,10 @@
 					B0DACF9F203283C3F2CF152B = {
 						TestTargetID = 43B31D3AF242F326DF12BBDC;
 					};
+					C39841C1F44CB8A205959605 = {
+						DevelopmentTeam = RJGJJ38RV9;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = 9DEEC136AA1249784755F9D7 /* Build configuration list for PBXProject "Baros" */;
@@ -870,6 +952,7 @@
 				5E7E48E07F0688736A1E0AAC /* BarosLiveActivity */,
 				F1AF6C68C6F6E829ADB33DC8 /* BarosTests */,
 				B0DACF9F203283C3F2CF152B /* BarosUITests */,
+				C39841C1F44CB8A205959605 /* BarosWatch */,
 			);
 		};
 /* End PBXProject section */
@@ -890,6 +973,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				4FC116B818C26AAC7C46BF20 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0325EFC3700FB47669663FC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				594178F474736BFBD229CA08 /* AppIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -947,6 +1038,17 @@
 				24915F5B9D45D7A97AD80469 /* WorkoutLiveActivityAttributes.swift in Sources */,
 				B5C985A8818BF0A3027CEBE9 /* WorkoutLiveActivityLink.swift in Sources */,
 				2B783EA966521A85C385ED72 /* WorkoutLiveActivityWidget.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4EF8B195046FE8B0A912DB3B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2C511C5F16290109004E6C4F /* BarosWatchApp.swift in Sources */,
+				59287D4F7180F50496966B5E /* WatchWorkoutManager.swift in Sources */,
+				84A04EB1C3B7B1F0DA1D15C5 /* WatchWorkoutMessage.swift in Sources */,
+				85A7ADB5A0267BC4ABC2112E /* WatchWorkoutView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1033,6 +1135,8 @@
 				7D7C7011281BAC6866B28823 /* TemplateReviewView.swift in Sources */,
 				4BD77D210ECA5340A1F37DE4 /* TemplatesListView.swift in Sources */,
 				1641AD7E3908F4AD86002131 /* UIHangContextObservability.swift in Sources */,
+				993F5CDC336BB46EBF7ADF9E /* WatchWorkoutLink.swift in Sources */,
+				C04DFA83EFA1D38BEECBBFBD /* WatchWorkoutMessage.swift in Sources */,
 				60B195E54051085E1C59AA35 /* WhatsNewSheet.swift in Sources */,
 				F863D4E692F744FD07AE8518 /* WhatsNewVersion1_0View.swift in Sources */,
 				2786D08BE698998D8DACAE88 /* WhatsNewVersion1_2View.swift in Sources */,
@@ -1105,6 +1209,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		482B523575841049DE927732 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C39841C1F44CB8A205959605 /* BarosWatch */;
+			targetProxy = 5F52E955D9519BC7CB219FB3 /* PBXContainerItemProxy */;
+		};
 		C57DB863C42B043E62989184 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 43B31D3AF242F326DF12BBDC /* Baros */;
@@ -1123,6 +1232,25 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		262335E7D17AB960DF0FB06D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_DISPLAY_NAME = Baros;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				BAROS_COMPANION_BUNDLE_ID = com.kevintatooles.LiftingLog;
+				CODE_SIGN_ENTITLEMENTS = BarosWatch/BarosWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = RJGJJ38RV9;
+				INFOPLIST_FILE = BarosWatch/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevintatooles.LiftingLog.watchkitapp;
+				PRODUCT_NAME = BarosWatch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
 		2CF5DF74E09C780C5F77B069 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1238,7 +1366,6 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
@@ -1328,7 +1455,6 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 6.0;
@@ -1353,6 +1479,25 @@
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		9CC6B2067B81083087810F81 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_DISPLAY_NAME = "Baros Dev";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				BAROS_COMPANION_BUNDLE_ID = com.kevintatooles.LiftingLog.dev;
+				CODE_SIGN_ENTITLEMENTS = BarosWatch/BarosWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = RJGJJ38RV9;
+				INFOPLIST_FILE = BarosWatch/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevintatooles.LiftingLog.dev.watchkitapp;
+				PRODUCT_NAME = BarosWatch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Debug;
 		};
@@ -1473,6 +1618,15 @@
 			buildConfigurations = (
 				4270D1369563E199C49E7702 /* Debug */,
 				A057104EEEEFB7FF7E954785 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EF8DE5210A16FF90E61C8990 /* Build configuration list for PBXNativeTarget "BarosWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9CC6B2067B81083087810F81 /* Debug */,
+				262335E7D17AB960DF0FB06D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
