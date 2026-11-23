@@ -10,6 +10,10 @@ public enum AppleHealthWorkoutAction: Equatable, Sendable {
     case replaceSavedWorkout(workoutID: UUID, startedAt: Date, endedAt: Date, syncVersion: Int64)
     /// Delete the saved Health copy because the Baros workout was deleted.
     case deleteSavedWorkout(workoutID: UUID)
+    /// Launch the Baros Watch app for this workout; on success the Watch becomes the writer.
+    case launchWatch(workoutID: UUID, startedAt: Date, syncVersion: Int64)
+    /// Send (or resend) the Watch writer's pending command.
+    case sendWatchCommand(AppleHealthWatchCommand)
 }
 
 public struct AppleHealthWorkoutDecision: Equatable, Sendable {
@@ -47,6 +51,10 @@ public enum AppleHealthWorkoutPolicy {
             return decideSaved(snapshot, entry: entry, environment: environment, discardLive: discardLive)
         }
 
+        if entry.writer == .watch {
+            return decideWatch(snapshot, entry: entry, environment: environment, discardLive: discardLive)
+        }
+
         // A missing row (local-data reset, account deletion), a tombstone, or a discard: no Health copy.
         guard let snapshot, !snapshot.isDeleted, snapshot.status != .discarded else {
             entry.phase = .abandoned
@@ -78,7 +86,9 @@ public enum AppleHealthWorkoutPolicy {
         discardLive: AppleHealthWorkoutAction?
     ) -> AppleHealthWorkoutDecision {
         let id = entry.workoutID
-        guard let snapshot, environment.authorization == .authorized else {
+        // Edits and deletes of Watch-saved workouts aren't propagated in 1.6 (ADR 0005, pending the #464
+        // device check of whether the iPhone app can change the Watch app's workout).
+        guard let snapshot, environment.authorization == .authorized, entry.writer != .watch else {
             return AppleHealthWorkoutDecision(entry: entry, action: discardLive)
         }
         let isDeleted = snapshot.isDeleted || snapshot.status == .discarded
@@ -108,6 +118,51 @@ public enum AppleHealthWorkoutPolicy {
         default:
             return AppleHealthWorkoutDecision(entry: entry, action: nil)
         }
+    }
+
+    /// A Watch-writer workout (ADR 0005, "One writer per workout"). The iPhone never saves it; it sends
+    /// the Watch one durable command, finish or discard, and resends it until acknowledged.
+    private static func decideWatch(
+        _ snapshot: AppleHealthWorkoutSnapshot?,
+        entry: AppleHealthLedgerEntry,
+        environment: AppleHealthEnvironment,
+        discardLive: AppleHealthWorkoutAction?
+    ) -> AppleHealthWorkoutDecision {
+        var entry = entry
+        let id = entry.workoutID
+        if let pending = entry.pendingWatchCommand {
+            return AppleHealthWorkoutDecision(entry: entry, action: .sendWatchCommand(pending))
+        }
+
+        let command: AppleHealthWatchCommand?
+        if let snapshot, !snapshot.isDeleted, snapshot.status != .discarded {
+            let age = entry.sessionStartedAt.map { environment.now.timeIntervalSince($0) } ?? 0
+            switch snapshot.status {
+            case .active where !environment.allowsWriting || !snapshot.isVisible || age > AppleHealthEnvironment.maximumSessionAge:
+                command = .discard(workoutID: id)
+            case .active:
+                command = nil
+            case .completed:
+                if environment.allowsWriting, let token = entry.watchToken, let endedAt = snapshot.endedAt {
+                    command = .finish(workoutID: id, token: token, endedAt: endedAt)
+                } else {
+                    command = .discard(workoutID: id)
+                }
+            case .discarded:
+                command = .discard(workoutID: id)
+            }
+        } else {
+            command = .discard(workoutID: id)
+        }
+
+        guard let command else { return AppleHealthWorkoutDecision(entry: entry, action: discardLive) }
+        entry.pendingWatchCommand = command
+        entry.phase = .awaitingWatch
+        if case let .finish(_, _, endedAt) = command {
+            entry.lastWrittenStart = snapshot?.startedAt
+            entry.lastWrittenEnd = endedAt
+        }
+        return AppleHealthWorkoutDecision(entry: entry, action: .sendWatchCommand(command))
     }
 
     private static func observedEntry(for snapshot: AppleHealthWorkoutSnapshot?) -> AppleHealthLedgerEntry? {
@@ -149,8 +204,9 @@ public enum AppleHealthWorkoutPolicy {
             return AppleHealthWorkoutDecision(entry: entry, action: nil)
         }
 
-        if entry.phase == .recording {
-            // The session ended without Baros asking: a crash, a reboot, or another app's session.
+        if entry.phase == .recording || entry.phase == .launchingWatch {
+            // The session ended without Baros asking (a crash, a reboot, or another app's session), or the
+            // app quit while launching the Watch, before any claim.
             entry.phase = .sessionLost
             return AppleHealthWorkoutDecision(entry: entry, action: nil)
         }
@@ -170,10 +226,18 @@ public enum AppleHealthWorkoutPolicy {
         }
 
         let version = AppleHealthSyncVersion.next(updatedAt: snapshot.updatedAt, lastWritten: entry.lastWrittenVersion)
-        entry.writer = .iPhone
-        entry.phase = .recording
         entry.sessionStartedAt = environment.now
         entry.lastWrittenVersion = version
+        if environment.isWatchAvailable {
+            // Try the Watch first. The writer stays undecided until the Watch is ready for a claim.
+            entry.phase = .launchingWatch
+            return AppleHealthWorkoutDecision(
+                entry: entry,
+                action: .launchWatch(workoutID: id, startedAt: snapshot.startedAt, syncVersion: version)
+            )
+        }
+        entry.writer = .iPhone
+        entry.phase = .recording
         return AppleHealthWorkoutDecision(
             entry: entry,
             action: .startSession(workoutID: id, startedAt: snapshot.startedAt, syncVersion: version)
