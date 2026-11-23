@@ -30,6 +30,7 @@ struct BarosApp: App {
     @State private var appAppearanceStore: AppAppearancePreferenceStore
     @State private var syncScheduler: SyncScheduler
     @State private var currentOwnerCoordinator: CurrentOwnerCoordinator
+    @State private var appleHealthController: AppleHealthController
 
     init() {
         let syncObservability = SentryRuntime.startIfEnabled()
@@ -146,6 +147,16 @@ struct BarosApp: App {
                 startupMode: startupMode
             )
             _currentOwnerCoordinator = State(initialValue: currentOwnerCoordinator)
+            _appleHealthController = State(initialValue: AppleHealthController(
+                container: container,
+                currentOwner: {
+                    WorkoutLiveActivityOwnerResolutionPolicy.shouldDeferOwnerSensitiveWork(
+                        currentOwnerState: currentOwnerCoordinator.state
+                    ) ? .unresolved : .resolved(
+                        ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier
+                    )
+                }
+            ))
             networkPathObserver = NetworkPathObserver {
                 networkRecoveryActivity.makeCandidate {
                     currentOwnerCoordinator.makeNetworkRecoveryCandidate()
@@ -188,6 +199,7 @@ struct BarosApp: App {
             .environment(activeWorkoutEngine)
             .environment(syncScheduler)
             .environment(currentOwnerCoordinator)
+            .environment(appleHealthController)
             .environment(\.accountSignOutAction, accountSignOutAction)
             .environment(
                 \.syncRecoveryAction,
@@ -197,7 +209,10 @@ struct BarosApp: App {
             )
             .environment(
                 \.accountDeletionFactory,
-                AccountDeletionFactory.live(syncClient: ConvexSyncClient(client: convexClient))
+                AccountDeletionFactory.live(
+                    syncClient: ConvexSyncClient(client: convexClient),
+                    localDataResetObserver: appleHealthController
+                )
             )
             .overlay(alignment: .bottom) {
                 if uiTestSyncOwner != nil {

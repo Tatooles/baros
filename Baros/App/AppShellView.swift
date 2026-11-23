@@ -8,6 +8,7 @@ struct AppShellView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SyncScheduler.self) private var syncScheduler
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
+    @Environment(AppleHealthController.self) private var appleHealthController
     @Environment(\.syncRecoveryAction) private var syncRecoveryAction
     @Bindable var navigationState: AppNavigationState
     @Bindable var activeWorkoutEngine: ActiveWorkoutEngine
@@ -211,6 +212,11 @@ struct AppShellView: View {
                 navigationState: navigationState,
                 coordinator: workoutLiveActivityCoordinator,
                 willHandleWorkoutLiveActivityLink: { launchPresentation = nil }
+            )
+            .appleHealthIntegration(
+                controller: appleHealthController,
+                sessions: sessions,
+                activeSessionID: activeSession?.id
             )
             .onChange(of: activeSession?.id, initial: true) { _, _ in
                 activeWorkoutEngine.clearSetSaveIfInaccessible(in: activeSession)

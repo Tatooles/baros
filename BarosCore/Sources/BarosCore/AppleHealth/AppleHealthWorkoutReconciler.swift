@@ -214,3 +214,13 @@ public final class AppleHealthWorkoutReconciler {
         !isPaused && generation == passGeneration
     }
 }
+
+extension AppleHealthWorkoutReconciler: LocalDataResetObserving {
+    public func localDataResetWillBegin() {
+        prepareForLocalDataReset()
+    }
+
+    public func localDataResetDidEnd() {
+        resumeAfterLocalDataReset()
+    }
+}

@@ -10,6 +10,7 @@ struct SettingsView: View {
     @Environment(RestTimerCoordinator.self) private var restTimer
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Environment(SyncScheduler.self) private var syncScheduler
+    @Environment(AppleHealthController.self) private var appleHealthController
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     let settings: UserSettings
@@ -34,6 +35,8 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("SettingsTemplatesLink")
             }
+
+            AppleHealthSettingsSection(controller: appleHealthController)
 
             Section("Logging") {
                 VStack(alignment: .leading, spacing: 10) {

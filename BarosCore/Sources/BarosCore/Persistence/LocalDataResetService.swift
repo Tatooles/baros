@@ -1,11 +1,26 @@
 import Foundation
 import SwiftData
 
+/// Told around a local-data reset, so device-local state that mirrors the store (the Apple Health
+/// ledger, ADR 0005) is cleared before rows go. Both calls must return without throwing or waiting.
+@MainActor
+public protocol LocalDataResetObserving: AnyObject {
+    func localDataResetWillBegin()
+    /// Called after the reset succeeds or rolls back.
+    func localDataResetDidEnd()
+}
+
 @MainActor
 public struct LocalDataResetService {
-    public init() {}
+    private weak var observer: (any LocalDataResetObserving)?
+
+    public init(observer: (any LocalDataResetObserving)? = nil) {
+        self.observer = observer
+    }
 
     func reset(context: ModelContext) throws {
+        observer?.localDataResetWillBegin()
+        defer { observer?.localDataResetDidEnd() }
         let resetContext = ModelContext(context.container)
         resetContext.autosaveEnabled = false
         do {

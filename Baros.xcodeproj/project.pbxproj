@@ -28,6 +28,7 @@
 		19963E4522612DC77999DA75 /* RestTimerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B718A68C7A96E4B9318B7C53 /* RestTimerTests.swift */; };
 		1BE75AA267FD088A1F025F89 /* PreviousSetPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D3DF0D84D449AEEBB18FD5 /* PreviousSetPerformanceTests.swift */; };
 		1CA3C2D4EB1DE15086129C9C /* SyncObservabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDAF79438867AE4B03C833D2 /* SyncObservabilityTests.swift */; };
+		1CCC97E850FB025EDE4F1C34 /* AppleHealthController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6D0EFEEE164EF69014171F5 /* AppleHealthController.swift */; };
 		1E8C9B53B3B5803EE6CE732E /* ExercisePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C712C286971BE7C1978A666F /* ExercisePickerView.swift */; };
 		1F4BD41F4A5C5E3390D3C392 /* ClerkConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9D88B27463914E4DA59FDA2 /* ClerkConfigurationTests.swift */; };
 		21066674B18CC7CBCD2DFB8B /* AccountTransitionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E361D78D62270A78767AAF /* AccountTransitionButton.swift */; };
@@ -93,6 +94,7 @@
 		8277E0708DFBA5C33ABFCF35 /* WhatsNewVersion1_5View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01641B742A83B5EA9D540F9F /* WhatsNewVersion1_5View.swift */; };
 		82D214DEBC73D2AB2126A1EB /* MarketingScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFA671BC732A13735092CF11 /* MarketingScreenshotTests.swift */; };
 		86B5E9036591C404924B147A /* ExerciseEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B558C5A03C499024D523024 /* ExerciseEditorView.swift */; };
+		89835361B13D19E2B0F19B37 /* AppleHealthSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79FA5C8C1F6F31C9F0396F9E /* AppleHealthSettingsSection.swift */; };
 		8D915D827482CBB112214669 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF15B15837756D447B0803F /* HomeView.swift */; };
 		90549B1D069028EFCE819C36 /* RestTimerAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8BA79E3D56FF2BBB6C088A1 /* RestTimerAlerts.swift */; };
 		907368EECC26EF87934D403C /* SupersetRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BB7A0935E7697C18BBDCFFA /* SupersetRail.swift */; };
@@ -108,6 +110,7 @@
 		9DC29890B91BB78CE7A3B5E8 /* BodyFigureArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C5359815DACFAE48D37B5B /* BodyFigureArtwork.swift */; };
 		9E271B0ADCB359B0939A0EC3 /* SentrySyncObservability.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5AF0566582191A5F473612A /* SentrySyncObservability.swift */; };
 		A05B49D0AB6E217F4A75842E /* WhatsNewVersion1_3View.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDBF6F0AB31325A5534FA052 /* WhatsNewVersion1_3View.swift */; };
+		A23F619DFBBB36317BD5DEF5 /* AppleHealthIntegrationModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0321A68F5A3E5F4E1D26E4 /* AppleHealthIntegrationModifier.swift */; };
 		A810C90DDCE356BA444A57FC /* ExerciseHistoryRecordsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BA5DB2C885EBBD3A16C1654 /* ExerciseHistoryRecordsUITests.swift */; };
 		A989D009EFD543F56F6AEE9A /* WorkoutLiveActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D531081F595D8867EA34D882 /* WorkoutLiveActivityCoordinator.swift */; };
 		AD4FE5279A4B6D32CE0987ED /* AppInitializationOrderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91EC9A9A2151AAECCF22118 /* AppInitializationOrderTests.swift */; };
@@ -246,6 +249,7 @@
 		74123B04D836BA0F872DA70D /* ExerciseHistoryPerformanceRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryPerformanceRow.swift; sourceTree = "<group>"; };
 		776F226A3F2002E996B67500 /* RestTimerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestTimerViews.swift; sourceTree = "<group>"; };
 		78C1E552B94BD12C68370E57 /* SwipeToDeleteRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDeleteRow.swift; sourceTree = "<group>"; };
+		79FA5C8C1F6F31C9F0396F9E /* AppleHealthSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleHealthSettingsSection.swift; sourceTree = "<group>"; };
 		7B558C5A03C499024D523024 /* ExerciseEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseEditorView.swift; sourceTree = "<group>"; };
 		7BA5DB2C885EBBD3A16C1654 /* ExerciseHistoryRecordsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryRecordsUITests.swift; sourceTree = "<group>"; };
 		7DB88730C21A5D2F8B0A8F50 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -325,11 +329,13 @@
 		EC72CE677AAA5F7EF79C6CCA /* ConvexSyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexSyncClient.swift; sourceTree = "<group>"; };
 		ED6FD1AFCBF39F0871519249 /* WorkoutFocusTransitionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutFocusTransitionCoordinatorTests.swift; sourceTree = "<group>"; };
 		EED5BFD652D5E785F0B322F2 /* TemplateEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateEditorSheet.swift; sourceTree = "<group>"; };
+		EF0321A68F5A3E5F4E1D26E4 /* AppleHealthIntegrationModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleHealthIntegrationModifier.swift; sourceTree = "<group>"; };
 		F17977696D09948006DA8512 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F2DE6F61DE5984C1572E6E51 /* WorkoutSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSessionView.swift; sourceTree = "<group>"; };
 		F4DE766934CCDD1A7E8432B5 /* SettingsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTabView.swift; sourceTree = "<group>"; };
 		F5136DBA81EF9A02B0542881 /* BarosCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = BarosCore; path = BarosCore; sourceTree = SOURCE_ROOT; };
 		F5AF0566582191A5F473612A /* SentrySyncObservability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentrySyncObservability.swift; sourceTree = "<group>"; };
+		F6D0EFEEE164EF69014171F5 /* AppleHealthController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleHealthController.swift; sourceTree = "<group>"; };
 		F91EC9A9A2151AAECCF22118 /* AppInitializationOrderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInitializationOrderTests.swift; sourceTree = "<group>"; };
 		F9A8AE470D90811B40DEA33F /* WorkoutRecoveryNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutRecoveryNotice.swift; sourceTree = "<group>"; };
 		FCDF19AED28F861C331A3BF6 /* SyncRecoveryAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncRecoveryAction.swift; sourceTree = "<group>"; };
@@ -365,6 +371,7 @@
 		02370A68A6303752B445E1E2 /* AppleHealth */ = {
 			isa = PBXGroup;
 			children = (
+				F6D0EFEEE164EF69014171F5 /* AppleHealthController.swift */,
 				2BD2AC7F8B15A417EB8B2134 /* HealthKitWorkoutRecorder.swift */,
 			);
 			path = AppleHealth;
@@ -446,6 +453,7 @@
 		4BC53A4A50CAA2D920D0804D /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				79FA5C8C1F6F31C9F0396F9E /* AppleHealthSettingsSection.swift */,
 				EB8BEE03F664DDD4F87D5FAE /* DeleteDataConfirmationView.swift */,
 				D6BD2ACCC1481D31808F5C38 /* DeveloperDiagnosticsView.swift */,
 				C73CDBC33A46B6B1171799D1 /* PrivacyDataSection.swift */,
@@ -585,6 +593,14 @@
 			path = AccountDeletion;
 			sourceTree = "<group>";
 		};
+		933715704F99F7498041DE7D /* AppleHealth */ = {
+			isa = PBXGroup;
+			children = (
+				EF0321A68F5A3E5F4E1D26E4 /* AppleHealthIntegrationModifier.swift */,
+			);
+			path = AppleHealth;
+			sourceTree = "<group>";
+		};
 		99BD7283F5063F0FD35E0285 /* Ownership */ = {
 			isa = PBXGroup;
 			children = (
@@ -596,6 +612,7 @@
 		B73EF48554168FF96F025686 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				933715704F99F7498041DE7D /* AppleHealth */,
 				F30DBA140CD5A24606733AA6 /* Exercises */,
 				373E0F51D5A1E868F69C2A1F /* History */,
 				113AFCFACF27E2C7A15AB7EE /* Home */,
@@ -949,6 +966,9 @@
 				6C4A4A87211FA295C973E273 /* AppTheme.swift in Sources */,
 				E205D01C1A36D0E25CC12EF0 /* AppUpdatePrompt.swift in Sources */,
 				38B43929CD2297D16DA7F77A /* AppUpdateService.swift in Sources */,
+				1CCC97E850FB025EDE4F1C34 /* AppleHealthController.swift in Sources */,
+				A23F619DFBBB36317BD5DEF5 /* AppleHealthIntegrationModifier.swift in Sources */,
+				89835361B13D19E2B0F19B37 /* AppleHealthSettingsSection.swift in Sources */,
 				F6746554759E782D870C1781 /* BarosApp.swift in Sources */,
 				5313F911A8901442046518C4 /* BarosBrand.swift in Sources */,
 				27335FD82315972D6FA080FC /* BodyFigure.swift in Sources */,
