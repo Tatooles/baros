@@ -26,6 +26,11 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
 
     private let healthStore: HKHealthStore
     private var liveSessions: [UUID: LiveSession] = [:]
+    /// Called on the main actor with each new heart rate a live session collects (from AirPods Pro 3,
+    /// Powerbeats Pro 2, or a Bluetooth strap). Nothing is reported without a sensor.
+    var onHeartRate: ((UUID, LiveHeartRate) -> Void)?
+    /// Called on the main actor when a live session ends for any reason, so its reading disappears at once.
+    var onSessionEnded: ((UUID) -> Void)?
 
     init(healthStore: HKHealthStore = HKHealthStore()) {
         self.healthStore = healthStore
@@ -82,6 +87,7 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         let builder = session.associatedWorkoutBuilder()
         builder.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: configuration)
         session.delegate = self
+        builder.delegate = self
         let live = LiveSession(session: session, builder: builder)
         liveSessions[workoutID] = live
 
@@ -213,6 +219,7 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         }
         if liveSessions[workoutID] === live {
             liveSessions[workoutID] = nil
+            onSessionEnded?(workoutID)
         }
     }
 
@@ -221,6 +228,17 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         if state == .stopped {
             live.isStopped = true
         }
+    }
+
+    private func handleCollectedHeartRate(from builder: HKLiveWorkoutBuilder) {
+        guard
+            let workoutID = liveSessions.first(where: { $0.value.builder === builder })?.key,
+            let statistics = builder.statistics(for: HKQuantityType(.heartRate)),
+            let quantity = statistics.mostRecentQuantity()
+        else { return }
+        let beatsPerMinute = quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+        let measuredAt = statistics.mostRecentQuantityDateInterval()?.end ?? .now
+        onHeartRate?(workoutID, LiveHeartRate(beatsPerMinute: Int(beatsPerMinute.rounded()), measuredAt: measuredAt))
     }
 
     private func handleFailure(of session: HKWorkoutSession) {
@@ -248,4 +266,15 @@ extension HealthKitWorkoutRecorder: HKWorkoutSessionDelegate {
             self.handleFailure(of: workoutSession)
         }
     }
+}
+
+extension HealthKitWorkoutRecorder: HKLiveWorkoutBuilderDelegate {
+    nonisolated func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder, didCollectDataOf collectedTypes: Set<HKSampleType>) {
+        guard collectedTypes.contains(HKQuantityType(.heartRate)) else { return }
+        Task { @MainActor in
+            self.handleCollectedHeartRate(from: workoutBuilder)
+        }
+    }
+
+    nonisolated func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {}
 }
