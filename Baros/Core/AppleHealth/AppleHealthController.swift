@@ -20,6 +20,8 @@ final class AppleHealthController {
     private(set) var isEnabled: Bool
     private(set) var authorization: AppleHealthAuthorization
     private(set) var isRequestingAccess = false
+    /// Latest heart rate per Active Workout, for the workout header. Never stored or uploaded.
+    private(set) var heartRates: [UUID: LiveHeartRate] = [:]
 
     @ObservationIgnored private let recorder: HealthKitWorkoutRecorder
     @ObservationIgnored private let defaults: UserDefaults
@@ -41,7 +43,29 @@ final class AppleHealthController {
             snapshotSource: SwiftDataAppleHealthSnapshotSource(container: container, currentOwner: currentOwner),
             isSettingEnabled: { [defaults] in AppleHealthPreference.isEnabled(defaults: defaults) }
         )
+        recorder.onHeartRate = { [weak self] workoutID, reading in
+            self?.heartRates[workoutID] = reading
+        }
     }
+
+    /// The heart rate to show for this workout now, or `nil` to show nothing.
+    func displayedHeartRate(for workoutID: UUID, at now: Date) -> Int? {
+        #if DEBUG
+        if let fixture = Self.uiTestHeartRate { return fixture }
+        #endif
+        return heartRates[workoutID]?.displayedBeatsPerMinute(at: now)
+    }
+
+    #if DEBUG
+    /// `--uitest-heart-rate <bpm>` shows a fixed reading, since simulators have no heart-rate sensor.
+    private static let uiTestHeartRate: Int? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "--uitest-heart-rate"), arguments.indices.contains(index + 1) else {
+            return nil
+        }
+        return Int(arguments[index + 1])
+    }()
+    #endif
 
     var settingState: SettingState {
         switch authorization {
@@ -75,6 +99,8 @@ final class AppleHealthController {
 
     func requestReconciliation() {
         refreshAuthorization()
+        let liveIDs = recorder.liveSessionWorkoutIDs()
+        heartRates = heartRates.filter { liveIDs.contains($0.key) }
         reconciler.requestReconciliation()
     }
 }

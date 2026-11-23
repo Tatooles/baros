@@ -2,6 +2,7 @@ import BarosCore
 import SwiftUI
 
 struct WorkoutHeaderView: View {
+    let workoutID: UUID
     let startedAt: Date
     let completedSets: Int
     let totalSets: Int
@@ -11,7 +12,7 @@ struct WorkoutHeaderView: View {
     var body: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 10) {
-                WorkoutHeaderMetrics(startedAt: startedAt, completedSets: completedSets,
+                WorkoutHeaderMetrics(workoutID: workoutID, startedAt: startedAt, completedSets: completedSets,
                                      totalSets: totalSets, timer: restTimer)
 
                 Button(action: onFinish) {
@@ -46,11 +47,13 @@ struct WorkoutHeaderView: View {
 }
 
 private struct WorkoutHeaderMetrics: View {
+    let workoutID: UUID
     let startedAt: Date
     let completedSets: Int
     let totalSets: Int
     let timer: RestTimerCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(AppleHealthController.self) private var appleHealth: AppleHealthController?
 
     var body: some View {
         Group {
@@ -75,6 +78,7 @@ private struct WorkoutHeaderMetrics: View {
                         elapsedTime
                             .transition(.opacity)
                     }
+                    heartRate
                     setProgress
                 }
             }
@@ -102,6 +106,35 @@ private struct WorkoutHeaderMetrics: View {
         }
     }
 
+    /// Shown only while a sensor is sending readings (ADR 0005); otherwise the header has no slot for it.
+    @ViewBuilder
+    private var heartRate: some View {
+        if let appleHealth {
+            TimelineView(.periodic(from: .now, by: 5)) { timeline in
+                if let beatsPerMinute = appleHealth.displayedHeartRate(for: workoutID, at: timeline.date) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "heart.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.red)
+                        Text("\(beatsPerMinute)")
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(AppTheme.textPrimary)
+                            .contentTransition(.numericText())
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .glassEffect(.regular)
+                    .fixedSize()
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Heart rate \(beatsPerMinute) beats per minute")
+                    .accessibilityIdentifier("WorkoutHeaderHeartRate")
+                    .transition(.opacity)
+                }
+            }
+            .fixedSize()
+        }
+    }
+
     private var setProgress: some View {
         HStack(spacing: 10) {
             ProgressView(value: totalSets > 0 ? Double(completedSets) / Double(totalSets) : 0)
@@ -111,6 +144,8 @@ private struct WorkoutHeaderMetrics: View {
                 .font(.subheadline.weight(.semibold).monospacedDigit())
                 .foregroundStyle(AppTheme.textSecondary)
                 .contentTransition(.numericText())
+                .lineLimit(1)
+                .fixedSize()
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, minHeight: 44)

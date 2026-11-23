@@ -880,6 +880,7 @@ private struct ActiveWorkoutMetricsHeader: View, @MainActor Equatable {
         let cacheKey = WorkoutMetrics.CacheKey(session: session)
 
         WorkoutHeaderView(
+            workoutID: session.id,
             startedAt: session.startedAt,
             completedSets: cachedMetrics?.completedSetCount ?? 0,
             totalSets: cachedMetrics?.totalSetCount ?? 0,
