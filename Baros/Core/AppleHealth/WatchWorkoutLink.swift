@@ -21,7 +21,9 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
     /// survives a relaunch. Its Watch session may still report ready, so for a while a new launch can't tell
     /// whose readiness it is; the iPhone records the workout itself instead.
     private static let unresolvedLaunchKey = "Baros.AppleHealth.unresolvedWatchLaunchAt"
-    private static let abandonedLaunchQuarantine: TimeInterval = 60
+    /// Well past the Watch's 45 s claim deadline. Apple doesn't bound how late a launch can arrive, so a
+    /// launch delayed past this could still be mistaken for the next one (see #464).
+    private static let abandonedLaunchQuarantine: TimeInterval = 5 * 60
     private let defaults: UserDefaults
     /// Allows for clock differences between iPhone and Watch.
     private static let clockTolerance: TimeInterval = 5
