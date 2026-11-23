@@ -306,6 +306,34 @@ final class AppleHealthWorkoutReconcilerTests: XCTestCase {
         XCTAssertEqual(ledger.entry(for: id)?.phase, .saved)
     }
 
+    func testDeletingACopyAlreadyDeletedInHealthNeverRestoresIt() async {
+        saveConfirmed()
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 100, isDeleted: true)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .removedInHealth)
+
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 200)]
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.saveAttempts, 0, "Reverting the delete must not recreate a copy the person deleted")
+    }
+
+    func testReplacementThatAlreadyLandedIsAdoptedNotResaved() async {
+        saveConfirmed()
+        let landed = AppleHealthSavedCopy(syncVersion: 42, startedAt: start, endedAt: start.addingTimeInterval(65 * 60))
+        recorder.existingCopies[id] = landed
+        source.snapshots = [completed(endedAfter: 65, updatedAfter: 120)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.saveAttempts, 0)
+        XCTAssertEqual(ledger.entry(for: id)?.lastWrittenVersion, 42)
+        XCTAssertEqual(ledger.entry(for: id)?.lastWrittenEnd, landed.endedAt)
+    }
+
     func testLedgerSurvivesRelaunch() async {
         let reconciler = makeReconciler()
         source.snapshots = [snapshot(.active)]
@@ -377,11 +405,13 @@ private final class FakeAppleHealthRecorder: AppleHealthWorkoutRecording {
     var deletedIDs: [UUID] = []
     var deleteFailure: AppleHealthRecordingFailure?
 
-    func deleteSavedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) {
+    func deleteSavedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> Int {
         if let deleteFailure { throw deleteFailure }
+        let existed = savedIDs.contains(workoutID) || existingCopies[workoutID] != nil
         deletedIDs.append(workoutID)
         savedIDs.remove(workoutID)
         existingCopies[workoutID] = nil
+        return existed ? 1 : 0
     }
 
     func discardSession(workoutID: UUID) {

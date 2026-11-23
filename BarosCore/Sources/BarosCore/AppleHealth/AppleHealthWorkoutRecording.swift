@@ -51,8 +51,9 @@ public protocol AppleHealthWorkoutRecording: AnyObject {
         endedAt: Date,
         syncVersion: Int64
     ) async throws(AppleHealthRecordingFailure) -> AppleHealthSaveConfirmation
-    /// Deletes this device's Health copy (matched by sync identifier). Deleting nothing is a success.
-    func deleteSavedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure)
+    /// Deletes this device's Health copy (matched by sync identifier) and returns how many objects were
+    /// deleted. Zero means there was nothing to delete.
+    func deleteSavedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> Int
 }
 
 /// Committed Baros state for the recorder. Implementations read only saved records.

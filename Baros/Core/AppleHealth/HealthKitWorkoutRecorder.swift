@@ -171,9 +171,9 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         }
     }
 
-    func deleteSavedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) {
+    func deleteSavedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> Int {
         do {
-            _ = try await healthStore.deleteObjects(of: HKObjectType.workoutType(), predicate: Self.ownCopyPredicate(for: workoutID))
+            return try await healthStore.deleteObjects(of: HKObjectType.workoutType(), predicate: Self.ownCopyPredicate(for: workoutID))
         } catch {
             throw Self.failure(for: error)
         }

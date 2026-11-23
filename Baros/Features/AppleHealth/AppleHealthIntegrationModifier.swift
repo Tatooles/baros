@@ -11,18 +11,18 @@ private struct AppleHealthIntegrationModifier: ViewModifier {
     let sessions: [WorkoutSession]
     let activeSessionID: UUID?
 
-    private struct Fingerprint: Equatable {
-        let activeSessionID: UUID?
-        let count: Int
-        let latestUpdate: Date?
-    }
-
-    private var fingerprint: Fingerprint {
-        Fingerprint(
-            activeSessionID: activeSessionID,
-            count: sessions.count,
-            latestUpdate: sessions.lazy.map(\.updatedAt).max()
-        )
+    /// Changes whenever any workout's revision changes, including a synced edit or tombstone for an
+    /// older workout.
+    private var fingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(activeSessionID)
+        for session in sessions {
+            hasher.combine(session.id)
+            hasher.combine(session.updatedAt)
+            hasher.combine(session.deletedAt)
+            hasher.combine(session.status)
+        }
+        return hasher.finalize()
     }
 
     func body(content: Content) -> some View {
