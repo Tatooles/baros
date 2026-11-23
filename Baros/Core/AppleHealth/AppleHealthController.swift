@@ -46,6 +46,9 @@ final class AppleHealthController {
         recorder.onHeartRate = { [weak self] workoutID, reading in
             self?.heartRates[workoutID] = reading
         }
+        recorder.onSessionEnded = { [weak self] workoutID in
+            self?.heartRates[workoutID] = nil
+        }
     }
 
     /// The heart rate to show for this workout now, or `nil` to show nothing.
@@ -99,8 +102,6 @@ final class AppleHealthController {
 
     func requestReconciliation() {
         refreshAuthorization()
-        let liveIDs = recorder.liveSessionWorkoutIDs()
-        heartRates = heartRates.filter { liveIDs.contains($0.key) }
         reconciler.requestReconciliation()
     }
 }

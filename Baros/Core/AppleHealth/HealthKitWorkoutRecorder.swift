@@ -29,6 +29,8 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
     /// Called on the main actor with each new heart rate a live session collects (from AirPods Pro 3,
     /// Powerbeats Pro 2, or a Bluetooth strap). Nothing is reported without a sensor.
     var onHeartRate: ((UUID, LiveHeartRate) -> Void)?
+    /// Called on the main actor when a live session ends for any reason, so its reading disappears at once.
+    var onSessionEnded: ((UUID) -> Void)?
 
     init(healthStore: HKHealthStore = HKHealthStore()) {
         self.healthStore = healthStore
@@ -217,6 +219,7 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         }
         if liveSessions[workoutID] === live {
             liveSessions[workoutID] = nil
+            onSessionEnded?(workoutID)
         }
     }
 
