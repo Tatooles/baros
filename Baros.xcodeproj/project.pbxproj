@@ -19,6 +19,7 @@
 		0C332CBD89B528BF2308B4B9 /* ClerkAccountDeleter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34A7BF26BF96D523969B77D2 /* ClerkAccountDeleter.swift */; };
 		0E134259CB3FA6B54D18BD27 /* HistoryPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84EA7E27926EFEAA5C6E5D93 /* HistoryPersistenceTests.swift */; };
 		0E16F7BD17CB1EA123F3FCFD /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = E49F56257C19C0BBCE62F977 /* Sentry */; };
+		0F538D34CE2A8249575F2FC3 /* WhatsNewVersion1_6View.swift in Sources */ = {isa = PBXBuildFile; fileRef = A563FDD6226BCA5D0CD1010A /* WhatsNewVersion1_6View.swift */; };
 		133709AB3073D2256EBCC8C3 /* BarosLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0727ACA9304D7A79490879CF /* BarosLiveActivityBundle.swift */; };
 		15918DBC9EBE07ABD6D29670 /* EmptyHistoryPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454FB40586943F2723492FC8 /* EmptyHistoryPresentationTests.swift */; };
 		1641AD7E3908F4AD86002131 /* UIHangContextObservability.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCF0AAACFE6DEE697191BFBA /* UIHangContextObservability.swift */; };
@@ -306,6 +307,7 @@
 		A1F2ABEC64F2B017CBD065DD /* AppUpdatePrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdatePrompt.swift; sourceTree = "<group>"; };
 		A422AEA968D8813BD7F386AE /* AppNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationState.swift; sourceTree = "<group>"; };
 		A481DCD2347F8D569EC60716 /* WatchWorkoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutView.swift; sourceTree = "<group>"; };
+		A563FDD6226BCA5D0CD1010A /* WhatsNewVersion1_6View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewVersion1_6View.swift; sourceTree = "<group>"; };
 		A818C833AC1D3BA4E797C7CD /* WorkoutHistoryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutHistoryRow.swift; sourceTree = "<group>"; };
 		A81CCBA2B96D9D02F9A9F97D /* TimedExerciseUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedExerciseUITests.swift; sourceTree = "<group>"; };
 		A82450D0B1348AED3BE0B547 /* WorkoutLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutLiveActivityWidget.swift; sourceTree = "<group>"; };
@@ -756,6 +758,7 @@
 				BDBF6F0AB31325A5534FA052 /* WhatsNewVersion1_3View.swift */,
 				C3F853222F6DBCFF9B0C4789 /* WhatsNewVersion1_4View.swift */,
 				01641B742A83B5EA9D540F9F /* WhatsNewVersion1_5View.swift */,
+				A563FDD6226BCA5D0CD1010A /* WhatsNewVersion1_6View.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -1143,6 +1146,7 @@
 				A05B49D0AB6E217F4A75842E /* WhatsNewVersion1_3View.swift in Sources */,
 				30DEDD3ACEA80DD4096ED883 /* WhatsNewVersion1_4View.swift in Sources */,
 				8277E0708DFBA5C33ABFCF35 /* WhatsNewVersion1_5View.swift in Sources */,
+				0F538D34CE2A8249575F2FC3 /* WhatsNewVersion1_6View.swift in Sources */,
 				FF2C2372AAE61B0B690AD23E /* WorkoutEditingComponents.swift in Sources */,
 				2EECC4C9026B3B687C2B9B82 /* WorkoutHeaderView.swift in Sources */,
 				E6A0DE6C2B0F1E62B68519EF /* WorkoutHistoryDetailView.swift in Sources */,

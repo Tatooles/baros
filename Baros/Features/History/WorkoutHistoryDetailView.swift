@@ -160,7 +160,11 @@ struct WorkoutHistoryDetailView: View {
                 deleteWorkout()
             }
         } message: {
-            Text("This removes it from your history. This can't be undone.")
+            Text(
+                AppleHealthPreference.isEnabled()
+                    ? "This removes it from your history and from Apple Health. Heart-rate readings stay in Health. This can't be undone."
+                    : "This removes it from your history. This can't be undone."
+            )
         }
         .alert(
             "Couldn't Delete Workout",
