@@ -168,6 +168,7 @@ final class AppleHealthWorkoutReconcilerTests: XCTestCase {
 
         reconciler.prepareForLocalDataReset()
         XCTAssertTrue(ledger.entries.isEmpty)
+        XCTAssertTrue(recorder.liveIDs.isEmpty, "Live sessions are discarded before any row is deleted")
 
         // Rows are gone after the reset. Passes while paused do nothing.
         source.snapshots = []
@@ -301,7 +302,7 @@ private final class FakeAppleHealthRecorder: AppleHealthWorkoutRecording {
         return .visible
     }
 
-    func discardSession(workoutID: UUID) async {
+    func discardSession(workoutID: UUID) {
         liveIDs.remove(workoutID)
         discardedIDs.append(workoutID)
     }

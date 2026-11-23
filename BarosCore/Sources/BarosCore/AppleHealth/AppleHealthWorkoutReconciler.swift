@@ -17,6 +17,7 @@ public final class AppleHealthWorkoutReconciler {
     private var generation = 0
     private var isReconciliationPending = false
     private var drainTask: Task<Void, Never>?
+    private var expiryTasks: [UUID: Task<Void, Never>] = [:]
 
     public init(
         recorder: any AppleHealthWorkoutRecording,
@@ -50,14 +51,10 @@ public final class AppleHealthWorkoutReconciler {
     public func prepareForLocalDataReset() {
         isPaused = true
         generation += 1
-        let liveIDs = recorder.liveSessionWorkoutIDs()
-        ledger.removeAll()
-        let recorder = recorder
-        Task {
-            for id in liveIDs {
-                await recorder.discardSession(workoutID: id)
-            }
+        for id in recorder.liveSessionWorkoutIDs() {
+            recorder.discardSession(workoutID: id)
         }
+        ledger.removeAll()
     }
 
     /// Called after local-data reset finishes, whether it succeeded or rolled back.
@@ -120,6 +117,7 @@ public final class AppleHealthWorkoutReconciler {
         case let .startSession(workoutID, startedAt, syncVersion):
             do {
                 try await recorder.startSession(workoutID: workoutID, startedAt: startedAt, syncVersion: syncVersion)
+                scheduleExpiryPass(for: workoutID)
             } catch {
                 update(workoutID, passGeneration) { entry in
                     if error == .terminal {
@@ -153,7 +151,7 @@ public final class AppleHealthWorkoutReconciler {
             }
 
         case let .discardSession(workoutID):
-            await recorder.discardSession(workoutID: workoutID)
+            recorder.discardSession(workoutID: workoutID)
 
         case let .saveWorkout(workoutID, startedAt, endedAt, syncVersion):
             do {
@@ -200,6 +198,18 @@ public final class AppleHealthWorkoutReconciler {
         }
     }
 
+    /// One pass just after the new session reaches its age limit, even if nothing else changes.
+    private func scheduleExpiryPass(for workoutID: UUID) {
+        expiryTasks[workoutID]?.cancel()
+        expiryTasks[workoutID] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(AppleHealthEnvironment.maximumSessionAge + 1))
+            guard !Task.isCancelled, let self else { return }
+            expiryTasks[workoutID] = nil
+            guard recorder.liveSessionWorkoutIDs().contains(workoutID) else { return }
+            requestReconciliation()
+        }
+    }
+
     private func update(
         _ workoutID: UUID,
         _ passGeneration: Int,
@@ -212,5 +222,15 @@ public final class AppleHealthWorkoutReconciler {
 
     private func isCurrent(_ passGeneration: Int) -> Bool {
         !isPaused && generation == passGeneration
+    }
+}
+
+extension AppleHealthWorkoutReconciler: LocalDataResetObserving {
+    public func localDataResetWillBegin() {
+        prepareForLocalDataReset()
+    }
+
+    public func localDataResetDidEnd() {
+        resumeAfterLocalDataReset()
     }
 }

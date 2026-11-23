@@ -48,6 +48,20 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         }
     }
 
+    /// The one Health permission sheet (ADR 0005): save workouts, heart rate, and active energy (the
+    /// builder saves those samples), and read heart rate. Returns the resulting write authorization.
+    func requestAuthorization() async -> AppleHealthAuthorization {
+        guard HKHealthStore.isHealthDataAvailable() else { return .unavailable }
+        let share: Set<HKSampleType> = [
+            HKObjectType.workoutType(),
+            HKQuantityType(.heartRate),
+            HKQuantityType(.activeEnergyBurned),
+        ]
+        let read: Set<HKObjectType> = [HKQuantityType(.heartRate)]
+        try? await healthStore.requestAuthorization(toShare: share, read: read)
+        return authorization()
+    }
+
     func liveSessionWorkoutIDs() -> Set<UUID> {
         Set(liveSessions.keys)
     }
@@ -102,7 +116,7 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         }
     }
 
-    func discardSession(workoutID: UUID) async {
+    func discardSession(workoutID: UUID) {
         guard let live = liveSessions[workoutID] else { return }
         end(live, workoutID: workoutID, discarding: true)
     }

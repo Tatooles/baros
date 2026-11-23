@@ -40,7 +40,8 @@ public protocol AppleHealthWorkoutRecording: AnyObject {
         workoutID: UUID,
         endedAt: Date
     ) async throws(AppleHealthRecordingFailure) -> AppleHealthSaveConfirmation
-    func discardSession(workoutID: UUID) async
+    /// Ends the session and discards its builder immediately, so no later save can follow.
+    func discardSession(workoutID: UUID)
     /// This device's Health copy, matched by sync identifier, if one exists. Called before any retry or
     /// fallback save, so a save that succeeded without being recorded isn't repeated.
     func savedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> AppleHealthSavedCopy?

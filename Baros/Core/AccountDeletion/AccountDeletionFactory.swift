@@ -10,7 +10,11 @@ struct AccountDeletionFactory {
         _ clerk: Clerk
     ) -> AccountDeletionCoordinator
 
-    static func live(syncClient: any SyncClient & Sendable) -> AccountDeletionFactory {
+    @MainActor
+    static func live(
+        syncClient: any SyncClient & Sendable,
+        localDataResetObserver: any LocalDataResetObserving
+    ) -> AccountDeletionFactory {
         AccountDeletionFactory { modelContext, syncScheduler, clerk in
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--uitest-in-memory-store"),
@@ -19,7 +23,7 @@ struct AccountDeletionFactory {
                     syncClient: CloudDeletionUITestClient(),
                     accountDeleter: CloudDeletionUITestAccountDeleter(),
                     attemptStore: CloudDeletionUITestAttemptStore(),
-                    localDataResetService: LocalDataResetService(),
+                    localDataResetService: LocalDataResetService(observer: localDataResetObserver),
                     syncScheduler: syncScheduler,
                     modelContext: modelContext
                 )
@@ -29,7 +33,7 @@ struct AccountDeletionFactory {
                 syncClient: syncClient,
                 accountDeleter: ClerkAccountDeleter(clerk: clerk),
                 attemptStore: UserDefaultsAccountDeletionAttemptStore(),
-                localDataResetService: LocalDataResetService(),
+                localDataResetService: LocalDataResetService(observer: localDataResetObserver),
                 syncScheduler: syncScheduler,
                 modelContext: modelContext
             )
