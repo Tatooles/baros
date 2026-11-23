@@ -74,24 +74,29 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         session.prepare()
         session.startActivity(with: startedAt)
         do {
-            try await builder.addMetadata(Self.metadata(workoutID: workoutID, syncVersion: syncVersion))
             try await builder.beginCollection(at: startedAt)
+            try await builder.addMetadata(Self.metadata(workoutID: workoutID, syncVersion: syncVersion))
         } catch {
             end(live, workoutID: workoutID, discarding: true)
             throw Self.failure(for: error)
         }
     }
 
-    func finishSession(workoutID: UUID, endedAt: Date) async throws(AppleHealthRecordingFailure) {
+    func finishSession(
+        workoutID: UUID,
+        endedAt: Date
+    ) async throws(AppleHealthRecordingFailure) -> AppleHealthSaveConfirmation {
         guard let live = liveSessions[workoutID] else { throw .transient }
         defer { end(live, workoutID: workoutID, discarding: false) }
 
         live.session.stopActivity(with: endedAt)
-        await waitUntilStopped(live)
+        // Touch the builder only once the session has stopped. If it doesn't stop in time, end the
+        // session; the next pass looks the workout up by sync identifier before any fallback save.
+        guard await waitUntilStopped(live) else { throw .transient }
         do {
             try await live.builder.endCollection(at: endedAt)
-            // A locked phone can complete with neither a workout nor an error; that is a success.
-            _ = try await live.builder.finishWorkout()
+            // A locked phone can complete with neither a workout nor an error; that is still a save.
+            return try await live.builder.finishWorkout() == nil ? .savedWhileLocked : .visible
         } catch {
             throw Self.failure(for: error)
         }
@@ -102,7 +107,7 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         end(live, workoutID: workoutID, discarding: true)
     }
 
-    func savedWorkoutExists(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> Bool {
+    func savedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> AppleHealthSavedCopy? {
         let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
             HKQuery.predicateForObjects(
                 withMetadataKey: HKMetadataKeySyncIdentifier,
@@ -115,10 +120,18 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
             sortDescriptors: [],
             limit: 1
         )
+        let workout: HKWorkout?
         do {
-            return try await !descriptor.result(for: healthStore).isEmpty
+            workout = try await descriptor.result(for: healthStore).first
         } catch {
             throw Self.failure(for: error)
+        }
+        return workout.map {
+            AppleHealthSavedCopy(
+                syncVersion: ($0.metadata?[HKMetadataKeySyncVersion] as? NSNumber)?.int64Value,
+                startedAt: $0.startDate,
+                endedAt: $0.endDate
+            )
         }
     }
 
@@ -127,7 +140,7 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         startedAt: Date,
         endedAt: Date,
         syncVersion: Int64
-    ) async throws(AppleHealthRecordingFailure) {
+    ) async throws(AppleHealthRecordingFailure) -> AppleHealthSaveConfirmation {
         let builder = HKWorkoutBuilder(
             healthStore: healthStore,
             configuration: Self.workoutConfiguration,
@@ -137,7 +150,7 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
             try await builder.beginCollection(at: startedAt)
             try await builder.addMetadata(Self.metadata(workoutID: workoutID, syncVersion: syncVersion))
             try await builder.endCollection(at: endedAt)
-            _ = try await builder.finishWorkout()
+            return try await builder.finishWorkout() == nil ? .savedWhileLocked : .visible
         } catch {
             builder.discardWorkout()
             throw Self.failure(for: error)
@@ -168,19 +181,21 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         }
     }
 
-    private func waitUntilStopped(_ live: LiveSession) async {
+    /// Returns whether the session reached `.stopped` within the timeout.
+    private func waitUntilStopped(_ live: LiveSession) async -> Bool {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: Self.stopTimeout)
-        while !live.isStopped, live.session.state != .stopped, live.session.state != .ended, clock.now < deadline {
+        while !live.isStopped, live.session.state != .stopped, clock.now < deadline {
             try? await Task.sleep(for: .milliseconds(100))
         }
+        return live.isStopped || live.session.state == .stopped
     }
 
     private func end(_ live: LiveSession, workoutID: UUID, discarding: Bool) {
+        live.session.end()
         if discarding {
             live.builder.discardWorkout()
         }
-        live.session.end()
         if liveSessions[workoutID] === live {
             liveSessions[workoutID] = nil
         }
@@ -188,7 +203,7 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
 
     private func handle(state: HKWorkoutSessionState, for session: HKWorkoutSession) {
         guard let live = liveSessions.values.first(where: { $0.session === session }) else { return }
-        if state == .stopped || state == .ended {
+        if state == .stopped {
             live.isStopped = true
         }
     }

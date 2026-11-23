@@ -133,10 +133,10 @@ public final class AppleHealthWorkoutReconciler {
 
         case let .finishSession(workoutID, endedAt):
             do {
-                try await recorder.finishSession(workoutID: workoutID, endedAt: endedAt)
+                let confirmation = try await recorder.finishSession(workoutID: workoutID, endedAt: endedAt)
                 update(workoutID, passGeneration) { entry in
                     entry.phase = .saved
-                    entry.isSaveConfirmed = true
+                    entry.isSaveConfirmed = confirmation == .visible
                     entry.lastWrittenStart = snapshot?.startedAt
                     entry.lastWrittenEnd = endedAt
                 }
@@ -157,18 +157,29 @@ public final class AppleHealthWorkoutReconciler {
 
         case let .saveWorkout(workoutID, startedAt, endedAt, syncVersion):
             do {
-                let alreadySaved = try await recorder.savedWorkoutExists(workoutID: workoutID)
-                if !alreadySaved {
-                    try await recorder.saveWorkout(
-                        workoutID: workoutID,
-                        startedAt: startedAt,
-                        endedAt: endedAt,
-                        syncVersion: syncVersion
-                    )
+                if let existing = try await recorder.savedWorkout(workoutID: workoutID) {
+                    update(workoutID, passGeneration) { entry in
+                        entry.phase = .saved
+                        entry.isSaveConfirmed = true
+                        entry.lastWrittenVersion = existing.syncVersion ?? entry.lastWrittenVersion
+                        entry.lastWrittenStart = existing.startedAt
+                        entry.lastWrittenEnd = existing.endedAt
+                    }
+                    return
                 }
+                // The lookup can wait; the setting, permission, or a reset may have changed meanwhile.
+                guard isCurrent(passGeneration), isSettingEnabled(), recorder.authorization() == .authorized else {
+                    return
+                }
+                let confirmation = try await recorder.saveWorkout(
+                    workoutID: workoutID,
+                    startedAt: startedAt,
+                    endedAt: endedAt,
+                    syncVersion: syncVersion
+                )
                 update(workoutID, passGeneration) { entry in
                     entry.phase = .saved
-                    entry.isSaveConfirmed = true
+                    entry.isSaveConfirmed = confirmation == .visible
                     entry.lastWrittenVersion = syncVersion
                     entry.lastWrittenStart = startedAt
                     entry.lastWrittenEnd = endedAt

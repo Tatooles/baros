@@ -85,6 +85,15 @@ final class AppleHealthWorkoutPolicyTests: XCTestCase {
         XCTAssertEqual(decision.entry, AppleHealthLedgerEntry(workoutID: id))
     }
 
+    func testTurningTheSettingOnMidWorkoutWaitsForTheFallback() {
+        // First seen with the setting off, then the setting is turned on a minute later.
+        let observed = AppleHealthLedgerEntry(workoutID: id)
+        let decision = decide(snapshot(.active), entry: observed, environment(minutesAfterStart: 2))
+
+        XCTAssertNil(decision.action)
+        XCTAssertEqual(decision.entry, observed)
+    }
+
     func testActiveWorkoutSeenAfterTheStartWindowWaitsForTheFallback() {
         let decision = decide(snapshot(.active), environment(minutesAfterStart: 30))
 

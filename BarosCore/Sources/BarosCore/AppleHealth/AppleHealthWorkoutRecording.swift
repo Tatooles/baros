@@ -7,6 +7,25 @@ public enum AppleHealthRecordingFailure: Error, Equatable, Sendable {
     case transient
 }
 
+/// What a successful save returned. A locked phone can save a workout without returning it.
+public enum AppleHealthSaveConfirmation: Equatable, Sendable {
+    case visible
+    case savedWhileLocked
+}
+
+/// This device's Health copy of a workout, as found by sync identifier.
+public struct AppleHealthSavedCopy: Equatable, Sendable {
+    public let syncVersion: Int64?
+    public let startedAt: Date
+    public let endedAt: Date
+
+    public init(syncVersion: Int64?, startedAt: Date, endedAt: Date) {
+        self.syncVersion = syncVersion
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+    }
+}
+
 /// The HealthKit side of the recorder. The app implements it with `HKWorkoutSession`; tests use a fake.
 ///
 /// Implementations must follow ADR 0005's session lifetime: after one bounded finish or discard
@@ -17,17 +36,20 @@ public protocol AppleHealthWorkoutRecording: AnyObject {
     func authorization() -> AppleHealthAuthorization
     func liveSessionWorkoutIDs() -> Set<UUID>
     func startSession(workoutID: UUID, startedAt: Date, syncVersion: Int64) async throws(AppleHealthRecordingFailure)
-    func finishSession(workoutID: UUID, endedAt: Date) async throws(AppleHealthRecordingFailure)
+    func finishSession(
+        workoutID: UUID,
+        endedAt: Date
+    ) async throws(AppleHealthRecordingFailure) -> AppleHealthSaveConfirmation
     func discardSession(workoutID: UUID) async
-    /// Whether Health already holds this device's copy (matched by sync identifier). Called before any
-    /// retry or fallback save, so a save that succeeded without being recorded isn't repeated.
-    func savedWorkoutExists(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> Bool
+    /// This device's Health copy, matched by sync identifier, if one exists. Called before any retry or
+    /// fallback save, so a save that succeeded without being recorded isn't repeated.
+    func savedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> AppleHealthSavedCopy?
     func saveWorkout(
         workoutID: UUID,
         startedAt: Date,
         endedAt: Date,
         syncVersion: Int64
-    ) async throws(AppleHealthRecordingFailure)
+    ) async throws(AppleHealthRecordingFailure) -> AppleHealthSaveConfirmation
 }
 
 /// Committed Baros state for the recorder. Implementations read only saved records.

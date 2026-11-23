@@ -29,6 +29,7 @@ public enum AppleHealthWorkoutPolicy {
     ) -> AppleHealthWorkoutDecision {
         let discardLive: AppleHealthWorkoutAction? = hasLiveSession ? .discardSession(workoutID: workoutID) : nil
 
+        let isNewlyObserved = existingEntry == nil
         guard var entry = existingEntry ?? observedEntry(for: snapshot) else {
             // Not started on this device, for example a workout that arrived by sync.
             return AppleHealthWorkoutDecision(entry: nil, action: discardLive)
@@ -46,7 +47,13 @@ public enum AppleHealthWorkoutPolicy {
 
         switch snapshot.status {
         case .active:
-            return decideActive(snapshot, entry: entry, hasLiveSession: hasLiveSession, environment: environment)
+            return decideActive(
+                snapshot,
+                entry: entry,
+                isNewlyObserved: isNewlyObserved,
+                hasLiveSession: hasLiveSession,
+                environment: environment
+            )
         case .completed:
             return decideCompleted(snapshot, entry: entry, hasLiveSession: hasLiveSession, environment: environment)
         case .discarded:
@@ -63,6 +70,7 @@ public enum AppleHealthWorkoutPolicy {
     private static func decideActive(
         _ snapshot: AppleHealthWorkoutSnapshot,
         entry: AppleHealthLedgerEntry,
+        isNewlyObserved: Bool,
         hasLiveSession: Bool,
         environment: AppleHealthEnvironment
     ) -> AppleHealthWorkoutDecision {
@@ -93,8 +101,11 @@ public enum AppleHealthWorkoutPolicy {
             return AppleHealthWorkoutDecision(entry: entry, action: nil)
         }
 
+        // A live session starts only on the pass that first sees the workout, close to its start. A
+        // workout seen earlier with writing off (the setting turned on mid-workout) gets the fallback save.
         let isFreshStart = environment.now.timeIntervalSince(snapshot.startedAt) <= AppleHealthEnvironment.liveStartWindow
         guard
+            isNewlyObserved,
             entry.writer == .undecided,
             entry.phase == .observed,
             environment.allowsWriting,

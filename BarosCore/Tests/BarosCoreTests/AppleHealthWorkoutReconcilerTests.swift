@@ -177,7 +177,55 @@ final class AppleHealthWorkoutReconcilerTests: XCTestCase {
 
         XCTAssertTrue(recorder.liveIDs.isEmpty)
         XCTAssertEqual(recorder.savedIDs, [saved], "Saved Health copies stay after a reset")
-        XCTAssertTrue(recorder.deletedIDs.isEmpty)
+        XCTAssertTrue(ledger.entries.isEmpty)
+    }
+
+    func testExistingCopyRecordsWhatHealthActuallyHolds() async {
+        ledger.save(AppleHealthLedgerEntry(workoutID: id, writer: .iPhone, phase: .sessionLost, lastWrittenVersion: 1))
+        source.snapshots = [snapshot(.completed, endedAfter: 50)]
+        let copy = AppleHealthSavedCopy(syncVersion: 9_999_999_999_999, startedAt: start, endedAt: start.addingTimeInterval(45 * 60))
+        recorder.existingCopies[id] = copy
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertTrue(recorder.fallbackSaves.isEmpty)
+        XCTAssertEqual(ledger.entry(for: id)?.lastWrittenVersion, copy.syncVersion)
+        XCTAssertEqual(ledger.entry(for: id)?.lastWrittenEnd, copy.endedAt)
+    }
+
+    func testSaveOnALockedPhoneIsSavedButNotConfirmed() async {
+        ledger.save(AppleHealthLedgerEntry(workoutID: id, writer: .iPhone, phase: .sessionLost))
+        source.snapshots = [snapshot(.completed, endedAfter: 50)]
+        recorder.saveConfirmation = .savedWhileLocked
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .saved)
+        XCTAssertEqual(ledger.entry(for: id)?.isSaveConfirmed, false)
+    }
+
+    func testTurningTheSettingOffDuringTheLookupStopsTheFallbackSave() async {
+        ledger.save(AppleHealthLedgerEntry(workoutID: id, writer: .iPhone, phase: .sessionLost))
+        source.snapshots = [snapshot(.completed, endedAfter: 50)]
+        recorder.onLookup = { [unowned self] in settingEnabled = false }
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.saveAttempts, 0)
+    }
+
+    func testResetDuringTheLookupStopsTheFallbackSave() async {
+        ledger.save(AppleHealthLedgerEntry(workoutID: id, writer: .iPhone, phase: .sessionLost))
+        source.snapshots = [snapshot(.completed, endedAfter: 50)]
+        let reconciler = makeReconciler()
+        recorder.onLookup = { reconciler.prepareForLocalDataReset() }
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.saveAttempts, 0)
         XCTAssertTrue(ledger.entries.isEmpty)
     }
 
@@ -216,7 +264,6 @@ private final class FakeAppleHealthRecorder: AppleHealthWorkoutRecording {
     var authorizationStatus: AppleHealthAuthorization = .authorized
     var liveIDs: Set<UUID> = []
     var savedIDs: Set<UUID> = []
-    var deletedIDs: Set<UUID> = []
     var finishedIDs: [UUID] = []
     var discardedIDs: [UUID] = []
     var fallbackSaves: [UUID] = []
@@ -225,6 +272,9 @@ private final class FakeAppleHealthRecorder: AppleHealthWorkoutRecording {
     var finishFailure: AppleHealthRecordingFailure?
     var finishSavesDespiteFailure = false
     var saveFailure: AppleHealthRecordingFailure?
+    var saveConfirmation: AppleHealthSaveConfirmation = .visible
+    var existingCopies: [UUID: AppleHealthSavedCopy] = [:]
+    var onLookup: (() -> Void)?
 
     func authorization() -> AppleHealthAuthorization { authorizationStatus }
 
@@ -235,7 +285,7 @@ private final class FakeAppleHealthRecorder: AppleHealthWorkoutRecording {
         liveIDs.insert(workoutID)
     }
 
-    func finishSession(workoutID: UUID, endedAt: Date) async throws(AppleHealthRecordingFailure) {
+    func finishSession(workoutID: UUID, endedAt: Date) async throws(AppleHealthRecordingFailure) -> AppleHealthSaveConfirmation {
         // The session always ends after one attempt, even when the save fails.
         liveIDs.remove(workoutID)
         finishedIDs.append(workoutID)
@@ -244,6 +294,7 @@ private final class FakeAppleHealthRecorder: AppleHealthWorkoutRecording {
             throw finishFailure
         }
         savedIDs.insert(workoutID)
+        return .visible
     }
 
     func discardSession(workoutID: UUID) async {
@@ -251,14 +302,22 @@ private final class FakeAppleHealthRecorder: AppleHealthWorkoutRecording {
         discardedIDs.append(workoutID)
     }
 
-    func savedWorkoutExists(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> Bool {
-        savedIDs.contains(workoutID)
+    func savedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> AppleHealthSavedCopy? {
+        onLookup?()
+        if let copy = existingCopies[workoutID] { return copy }
+        return savedIDs.contains(workoutID) ? AppleHealthSavedCopy(syncVersion: nil, startedAt: .distantPast, endedAt: .distantPast) : nil
     }
 
-    func saveWorkout(workoutID: UUID, startedAt: Date, endedAt: Date, syncVersion: Int64) async throws(AppleHealthRecordingFailure) {
+    func saveWorkout(
+        workoutID: UUID,
+        startedAt: Date,
+        endedAt: Date,
+        syncVersion: Int64
+    ) async throws(AppleHealthRecordingFailure) -> AppleHealthSaveConfirmation {
         saveAttempts += 1
         if let saveFailure { throw saveFailure }
         fallbackSaves.append(workoutID)
         savedIDs.insert(workoutID)
+        return saveConfirmation
     }
 }
