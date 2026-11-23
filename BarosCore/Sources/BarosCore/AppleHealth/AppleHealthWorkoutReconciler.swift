@@ -201,7 +201,8 @@ public final class AppleHealthWorkoutReconciler {
 
         case let .deleteSavedWorkout(workoutID):
             do {
-                if ledger.entry(for: workoutID)?.phase == .saved {
+                let isFirstAttempt = ledger.entry(for: workoutID)?.phase == .saved
+                if isFirstAttempt {
                     // Confirm the copy exists before deleting, and record the pending delete, so a delete
                     // interrupted by a crash is never mistaken for one the person made in Health.
                     let existing = try await recorder.savedWorkout(workoutID: workoutID)
@@ -216,9 +217,11 @@ public final class AppleHealthWorkoutReconciler {
                     }
                     update(workoutID, passGeneration) { $0.phase = .deletingWithWorkout }
                 }
-                _ = try await recorder.deleteSavedWorkout(workoutID: workoutID)
+                let deletedCount = try await recorder.deleteSavedWorkout(workoutID: workoutID)
                 update(workoutID, passGeneration) { entry in
-                    entry.phase = .deletedWithWorkout
+                    // Zero on the first attempt: the person deleted it in Health after the lookup. Zero
+                    // when resuming a recorded delete: Baros deleted it before a crash.
+                    entry.phase = deletedCount == 0 && isFirstAttempt ? .removedInHealth : .deletedWithWorkout
                 }
             } catch {
                 guard error == .terminal else { return } // Retried on the next pass.

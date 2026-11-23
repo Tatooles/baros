@@ -83,7 +83,7 @@ public enum AppleHealthWorkoutPolicy {
         }
         let isDeleted = snapshot.isDeleted || snapshot.status == .discarded
         switch entry.phase {
-        case .saved where isDeleted, .deletingWithWorkout:
+        case .saved where isDeleted, .deletingWithWorkout where isDeleted:
             return AppleHealthWorkoutDecision(entry: entry, action: .deleteSavedWorkout(workoutID: id))
         case .saved:
             guard
@@ -97,8 +97,10 @@ public enum AppleHealthWorkoutPolicy {
                 entry: entry,
                 action: .replaceSavedWorkout(workoutID: id, startedAt: snapshot.startedAt, endedAt: endedAt, syncVersion: version)
             )
-        case .deletedWithWorkout where !isDeleted && snapshot.status == .completed && environment.isSettingEnabled:
-            // The delete was reverted (for example by sync): save it again.
+        case .deletedWithWorkout where !isDeleted && snapshot.status == .completed && environment.isSettingEnabled,
+             .deletingWithWorkout where !isDeleted && snapshot.status == .completed && environment.isSettingEnabled:
+            // The delete was reverted (for example by sync): save it again. If an interrupted delete left
+            // the copy in place, the higher sync version replaces it rather than adding a second one.
             guard let endedAt = snapshot.endedAt else { return AppleHealthWorkoutDecision(entry: entry, action: nil) }
             let version = AppleHealthSyncVersion.next(updatedAt: snapshot.updatedAt, lastWritten: entry.lastWrittenVersion)
             return AppleHealthWorkoutDecision(

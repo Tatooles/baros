@@ -335,6 +335,19 @@ final class AppleHealthWorkoutReconcilerTests: XCTestCase {
         XCTAssertEqual(recorder.fallbackSaves, [id], "A reverted delete restores the copy Baros deleted")
     }
 
+    func testRestoreDuringAnInterruptedDeleteKeepsOneCopy() async {
+        // The delete failed after being recorded, then sync restored the workout.
+        ledger.save(AppleHealthLedgerEntry(workoutID: id, writer: .iPhone, phase: .deletingWithWorkout, isSaveConfirmed: true))
+        recorder.savedIDs = [id]
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 200)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertTrue(recorder.deletedIDs.isEmpty, "The copy of a restored workout is never deleted")
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .saved)
+    }
+
     func testReplacementThatAlreadyLandedIsAdoptedNotResaved() async {
         saveConfirmed()
         let landed = AppleHealthSavedCopy(syncVersion: 42, startedAt: start, endedAt: start.addingTimeInterval(65 * 60))
