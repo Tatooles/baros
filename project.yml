@@ -198,6 +198,7 @@ targets:
       ProvisioningStyle: Automatic
     sources:
       - path: BarosWatch
+      - path: Baros/Shared/WatchLink
       - path: Baros/AppIcon.icon
         buildPhase: resources
     settings:

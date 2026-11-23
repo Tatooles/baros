@@ -1,0 +1,50 @@
+import Foundation
+
+/// Messages between the iPhone and the Baros Watch app about the Watch-owned Health workout
+/// (ADR 0005, "Watch writer"). Compiled into both apps; Foundation only.
+///
+/// They travel over the mirrored workout session when it's connected, and the durable ones (claim
+/// excepted) also over WatchConnectivity `transferUserInfo`, so a command sent while the Watch is
+/// out of range arrives later. Every message is idempotent by workout ID and token.
+enum WatchWorkoutMessage: Codable, Equatable, Sendable {
+    /// iPhone → Watch: the Watch may save this workout, and only on a `finish` naming `token`.
+    case claim(workoutID: UUID, startedAt: Date, token: UUID, syncVersion: Int64)
+    /// iPhone → Watch: save the workout ending at `endedAt`.
+    case finish(workoutID: UUID, token: UUID, endedAt: Date)
+    /// iPhone → Watch: end the session and save nothing.
+    case discard(workoutID: UUID)
+    /// iPhone → Watch: the Baros workout is still active; keep recording.
+    case continueRecording(workoutID: UUID)
+    /// Watch → iPhone: the result of a finish or discard.
+    case acknowledged(workoutID: UUID, outcome: Outcome)
+    /// Watch → iPhone: what should happen to this session (after a relaunch, or from the End button).
+    case statusRequest(workoutID: UUID, isEndRequest: Bool)
+    /// Watch → iPhone: the latest heart rate for the workout header. Never stored.
+    case heartRate(workoutID: UUID, beatsPerMinute: Int, measuredAt: Date)
+
+    enum Outcome: String, Codable, Sendable {
+        case saved
+        case savedWhileLocked
+        case discarded
+        case failed
+    }
+
+    static let userInfoKey = "baros.watchWorkoutMessage"
+
+    func encoded() -> Data? {
+        try? JSONEncoder().encode(self)
+    }
+
+    init?(data: Data) {
+        guard let message = try? JSONDecoder().decode(Self.self, from: data) else { return nil }
+        self = message
+    }
+
+    /// Commands the iPhone also queues with `transferUserInfo`, so they survive the Watch being away.
+    var isDurable: Bool {
+        switch self {
+        case .finish, .discard, .acknowledged: true
+        case .claim, .continueRecording, .statusRequest, .heartRate: false
+        }
+    }
+}

@@ -7,6 +7,7 @@ import Foundation
 @MainActor
 public final class AppleHealthWorkoutReconciler {
     private let recorder: any AppleHealthWorkoutRecording
+    private let watchLink: (any AppleHealthWatchLinking)?
     private let ledger: AppleHealthLedgerStore
     private let snapshotSource: any AppleHealthWorkoutSnapshotSource
     private let isSettingEnabled: () -> Bool
@@ -23,10 +24,12 @@ public final class AppleHealthWorkoutReconciler {
         recorder: any AppleHealthWorkoutRecording,
         ledger: AppleHealthLedgerStore,
         snapshotSource: any AppleHealthWorkoutSnapshotSource,
+        watchLink: (any AppleHealthWatchLinking)? = nil,
         isSettingEnabled: @escaping () -> Bool,
         now: @escaping () -> Date = Date.init
     ) {
         self.recorder = recorder
+        self.watchLink = watchLink
         self.ledger = ledger
         self.snapshotSource = snapshotSource
         self.isSettingEnabled = isSettingEnabled
@@ -88,7 +91,8 @@ public final class AppleHealthWorkoutReconciler {
         let environment = AppleHealthEnvironment(
             isSettingEnabled: isSettingEnabled(),
             authorization: recorder.authorization(),
-            now: now()
+            now: now(),
+            isWatchAvailable: watchLink?.isWatchAvailable ?? false
         )
 
         // A session recovered after a relaunch lost its age-limit timer: arm it for the time left.
@@ -121,6 +125,31 @@ public final class AppleHealthWorkoutReconciler {
         passGeneration: Int
     ) async {
         switch action {
+        case let .launchWatch(workoutID, startedAt, syncVersion):
+            let isReady = await watchLink?.prepareWatchSession(workoutID: workoutID) ?? false
+            guard isCurrent(passGeneration) else { return }
+            guard isReady, let watchLink else {
+                // A definite or timed-out failure before any claim: the iPhone records it instead.
+                update(workoutID, passGeneration) { entry in
+                    entry.writer = .iPhone
+                    entry.phase = .recording
+                }
+                await perform(.startSession(workoutID: workoutID, startedAt: startedAt, syncVersion: syncVersion),
+                              snapshot: snapshot, passGeneration: passGeneration)
+                return
+            }
+            // Record the Watch as the writer before the claim leaves, so the iPhone can never also save it.
+            let token = UUID()
+            update(workoutID, passGeneration) { entry in
+                entry.writer = .watch
+                entry.phase = .recording
+                entry.watchToken = token
+            }
+            await watchLink.sendClaim(workoutID: workoutID, startedAt: startedAt, token: token, syncVersion: syncVersion)
+
+        case let .sendWatchCommand(command):
+            watchLink?.send(command)
+
         case let .startSession(workoutID, startedAt, syncVersion):
             do {
                 try await recorder.startSession(workoutID: workoutID, startedAt: startedAt, syncVersion: syncVersion)
@@ -273,6 +302,44 @@ public final class AppleHealthWorkoutReconciler {
                 }
             }
         }
+    }
+
+    /// The Watch carried out a command. Only an acknowledgement for the pending command counts.
+    public func handleWatchAcknowledgement(workoutID: UUID, outcome: AppleHealthWatchOutcome) {
+        guard !isPaused, var entry = ledger.entry(for: workoutID), entry.writer == .watch else { return }
+        switch outcome {
+        case .saved, .savedWhileLocked:
+            guard case .finish = entry.pendingWatchCommand else { return }
+            entry.phase = .saved
+            entry.isSaveConfirmed = outcome == .saved
+        case .discarded, .failed:
+            entry.phase = .abandoned
+        }
+        entry.pendingWatchCommand = nil
+        ledger.save(entry)
+    }
+
+    /// What the Watch should do with its session, when it asks (after a relaunch, or from its End button).
+    /// `nil` means keep recording. A workout the iPhone doesn't know is discarded.
+    public func watchCommand(forStatusOf workoutID: UUID, isEndRequest: Bool) -> AppleHealthWatchCommand? {
+        guard var entry = ledger.entry(for: workoutID), entry.writer == .watch else {
+            return .discard(workoutID: workoutID)
+        }
+        if let pending = entry.pendingWatchCommand { return pending }
+        let isActive = (try? snapshotSource.snapshots(includingWorkoutIDs: [workoutID]))?
+            .first { $0.workoutID == workoutID }?.status == .active
+        guard isEndRequest || !isActive else { return nil }
+        guard isActive else {
+            // Not active any more: the next pass decides finish or discard.
+            requestReconciliation()
+            return nil
+        }
+        // Ended on the Watch while the Baros workout continues: this workout gets no Health copy.
+        let command = AppleHealthWatchCommand.discard(workoutID: workoutID)
+        entry.pendingWatchCommand = command
+        entry.phase = .awaitingWatch
+        ledger.save(entry)
+        return command
     }
 
     /// One pass just after the new session reaches its age limit, even if nothing else changes.

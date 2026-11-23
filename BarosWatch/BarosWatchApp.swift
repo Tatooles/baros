@@ -1,20 +1,32 @@
+import HealthKit
 import SwiftUI
+import WatchKit
 
-/// The Baros Watch companion (ADR 0005). For now it only proves the target builds, signs, and
-/// installs with the iPhone app; #464 adds the workout session, heart rate, and elapsed time.
+/// The Baros Watch companion (ADR 0005): live heart rate and elapsed time for a workout started on
+/// the iPhone. Logging stays on the iPhone.
 @main
 struct BarosWatchApp: App {
+    @WKApplicationDelegateAdaptor private var appDelegate: WatchAppDelegate
+
     var body: some Scene {
         WindowGroup {
-            VStack(spacing: 6) {
-                Text("Baros")
-                    .font(.headline)
-                Text("Start a workout on your iPhone.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .accessibilityIdentifier("BarosWatchPlaceholder")
+            WatchWorkoutView(manager: .shared)
+        }
+    }
+}
+
+final class WatchAppDelegate: NSObject, WKApplicationDelegate {
+    /// The iPhone started a Baros workout with `startWatchApp`.
+    func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
+        Task { @MainActor in
+            await WatchWorkoutManager.shared.start(configuration: workoutConfiguration)
+        }
+    }
+
+    /// The app relaunched while its workout session was still running.
+    func handleActiveWorkoutRecovery() {
+        Task { @MainActor in
+            await WatchWorkoutManager.shared.recover()
         }
     }
 }

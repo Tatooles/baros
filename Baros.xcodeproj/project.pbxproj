@@ -66,6 +66,7 @@
 		5525D30F148CDFA02B8598A3 /* SupersetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC49EA0F74AD67C212E209A /* SupersetTests.swift */; };
 		55F7352C891E2AD6A8827E8F /* SettingsAccountSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BAAE5E20B23FFCD982FADAF /* SettingsAccountSection.swift */; };
 		56919F514C52CBA46A364197 /* ExerciseLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44C8EF7413F539FC06139F9B /* ExerciseLibraryView.swift */; };
+		59287D4F7180F50496966B5E /* WatchWorkoutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88F8B1C1933C5999F1F0897B /* WatchWorkoutManager.swift */; };
 		594178F474736BFBD229CA08 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4E2709B6422528E5D6A0209A /* AppIcon.icon */; };
 		5AD4FC88B8B8E2EB7852228C /* ExerciseHistoryNoteBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0F85EAEFED85356D177792 /* ExerciseHistoryNoteBlock.swift */; };
 		5C8372D64F3446711717DC10 /* WorkoutLiveActivityLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCBB7F163907A7CF68878C68 /* WorkoutLiveActivityLink.swift */; };
@@ -95,6 +96,8 @@
 		7FAB3891D8987EEB4AEC52B9 /* OnboardingPreferencesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC71E0E57B22679D69EA00A /* OnboardingPreferencesPage.swift */; };
 		8277E0708DFBA5C33ABFCF35 /* WhatsNewVersion1_5View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01641B742A83B5EA9D540F9F /* WhatsNewVersion1_5View.swift */; };
 		82D214DEBC73D2AB2126A1EB /* MarketingScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFA671BC732A13735092CF11 /* MarketingScreenshotTests.swift */; };
+		84A04EB1C3B7B1F0DA1D15C5 /* WatchWorkoutMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 679FD279B71FD0B706AFCD1A /* WatchWorkoutMessage.swift */; };
+		85A7ADB5A0267BC4ABC2112E /* WatchWorkoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A481DCD2347F8D569EC60716 /* WatchWorkoutView.swift */; };
 		86B5E9036591C404924B147A /* ExerciseEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B558C5A03C499024D523024 /* ExerciseEditorView.swift */; };
 		89835361B13D19E2B0F19B37 /* AppleHealthSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79FA5C8C1F6F31C9F0396F9E /* AppleHealthSettingsSection.swift */; };
 		8D915D827482CBB112214669 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF15B15837756D447B0803F /* HomeView.swift */; };
@@ -105,6 +108,7 @@
 		920C6FE31D76F085CA3A6293 /* BarosBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC0941499EC84B7040CE8EDF /* BarosBrand.swift */; };
 		938D96AFF51E6A9ADC7C8F39 /* AppUpdateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53ACF4138F734FA696F1E985 /* AppUpdateServiceTests.swift */; };
 		9648E59EF3C2727A04EAC646 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD824F36A386212D32C34A33 /* OnboardingFlow.swift */; };
+		993F5CDC336BB46EBF7ADF9E /* WatchWorkoutLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 687AB83ACC71D0998A73B02E /* WatchWorkoutLink.swift */; };
 		9AE0DB1B5CB6CF7B13C4B4DF /* ReorderLinkList.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7ED5945A57B9CDA55AF4687 /* ReorderLinkList.swift */; };
 		9C48CDEEAE041FC54E2134A4 /* WorkoutRecoveryNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9A8AE470D90811B40DEA33F /* WorkoutRecoveryNotice.swift */; };
 		9CD891183EBE88A375C504F1 /* SyncRecoveryAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCDF19AED28F861C331A3BF6 /* SyncRecoveryAction.swift */; };
@@ -125,6 +129,7 @@
 		BDD006935D0653A210EC4A2B /* AppNavigationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24D93E6500956F3496B2557B /* AppNavigationStateTests.swift */; };
 		BF4DDDA5F251F4C9C9FC8653 /* AccountDisplayStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7393C373A9C49F7A8182E8DF /* AccountDisplayStateTests.swift */; };
 		BFA1F88CDA27994A88C5685F /* CurrentOwnerLaunchConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0800BEE55FAC603B1A30047 /* CurrentOwnerLaunchConfigurationTests.swift */; };
+		C04DFA83EFA1D38BEECBBFBD /* WatchWorkoutMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 679FD279B71FD0B706AFCD1A /* WatchWorkoutMessage.swift */; };
 		C076EEB341F310F942D5B804 /* ConvexSyncArgumentMapperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110A73B9F77C374CF5A3F0DF /* ConvexSyncArgumentMapperTests.swift */; };
 		C4FFD221970EFA50DF0BBF5C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98BD4C40E1C5B8977BF9AC5 /* SettingsView.swift */; };
 		C6DC63CA4B0DFB832C7E5CE5 /* RestTimerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 776F226A3F2002E996B67500 /* RestTimerViews.swift */; };
@@ -265,7 +270,9 @@
 		5E98A1FADF01A5D331676FFC /* AppAppearancePreferenceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearancePreferenceStoreTests.swift; sourceTree = "<group>"; };
 		62D75149FBAE878C25D0D614 /* ExerciseHistoryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryRow.swift; sourceTree = "<group>"; };
 		63D053CC597AD0865A0C84D5 /* WhatsNewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewSheet.swift; sourceTree = "<group>"; };
+		679FD279B71FD0B706AFCD1A /* WatchWorkoutMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutMessage.swift; sourceTree = "<group>"; };
 		681B3BF8E6FAF5257948AB56 /* SignedOutReminderBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignedOutReminderBanner.swift; sourceTree = "<group>"; };
+		687AB83ACC71D0998A73B02E /* WatchWorkoutLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutLink.swift; sourceTree = "<group>"; };
 		6BD656B1F611BE5925B97EB6 /* HomePastWorkoutReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePastWorkoutReviewView.swift; sourceTree = "<group>"; };
 		6D7B79172B44C55D901423D8 /* BarosWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BarosWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		72A675DA33EED3402F188F59 /* NativeGroupedReorderList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeGroupedReorderList.swift; sourceTree = "<group>"; };
@@ -284,6 +291,7 @@
 		857EFC239F41F1B8BFF58873 /* HistorySetTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySetTable.swift; sourceTree = "<group>"; };
 		8746E9D6BAEBDF7062B16003 /* WhatsNewVersion1_2View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewVersion1_2View.swift; sourceTree = "<group>"; };
 		87B573FDF309E99E1D02F1C9 /* AccountDeletionFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionFactory.swift; sourceTree = "<group>"; };
+		88F8B1C1933C5999F1F0897B /* WatchWorkoutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutManager.swift; sourceTree = "<group>"; };
 		891A7966461F2C13DC209A71 /* BarosLiveActivity.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = BarosLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		899D04423C1918B8B8546277 /* WorkoutEditingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutEditingComponents.swift; sourceTree = "<group>"; };
 		89F5824C417A49E6256B25EE /* ConvexConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexConfigurationTests.swift; sourceTree = "<group>"; };
@@ -297,6 +305,7 @@
 		A0B7EEE0CEBDB12A42E92F89 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1F2ABEC64F2B017CBD065DD /* AppUpdatePrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdatePrompt.swift; sourceTree = "<group>"; };
 		A422AEA968D8813BD7F386AE /* AppNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationState.swift; sourceTree = "<group>"; };
+		A481DCD2347F8D569EC60716 /* WatchWorkoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutView.swift; sourceTree = "<group>"; };
 		A818C833AC1D3BA4E797C7CD /* WorkoutHistoryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutHistoryRow.swift; sourceTree = "<group>"; };
 		A81CCBA2B96D9D02F9A9F97D /* TimedExerciseUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedExerciseUITests.swift; sourceTree = "<group>"; };
 		A82450D0B1348AED3BE0B547 /* WorkoutLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutLiveActivityWidget.swift; sourceTree = "<group>"; };
@@ -398,6 +407,7 @@
 			children = (
 				F6D0EFEEE164EF69014171F5 /* AppleHealthController.swift */,
 				2BD2AC7F8B15A417EB8B2134 /* HealthKitWorkoutRecorder.swift */,
+				687AB83ACC71D0998A73B02E /* WatchWorkoutLink.swift */,
 			);
 			path = AppleHealth;
 			sourceTree = "<group>";
@@ -656,6 +666,8 @@
 				488BC5E2BB4C7CFF80647756 /* BarosWatch.entitlements */,
 				0CB77B40BD3510B3AC31784C /* BarosWatchApp.swift */,
 				77C81F6C244C57FE15E43482 /* Info.plist */,
+				88F8B1C1933C5999F1F0897B /* WatchWorkoutManager.swift */,
+				A481DCD2347F8D569EC60716 /* WatchWorkoutView.swift */,
 			);
 			path = BarosWatch;
 			sourceTree = "<group>";
@@ -685,6 +697,14 @@
 			path = WorkoutLiveActivity;
 			sourceTree = "<group>";
 		};
+		DFFA79E5FF736FE491A16F84 /* WatchLink */ = {
+			isa = PBXGroup;
+			children = (
+				679FD279B71FD0B706AFCD1A /* WatchWorkoutMessage.swift */,
+			);
+			path = WatchLink;
+			sourceTree = "<group>";
+		};
 		E7AD26E588B747C86FFE063F /* AccountTransition */ = {
 			isa = PBXGroup;
 			children = (
@@ -700,6 +720,7 @@
 				0B6693B117B32C3A914F2665 /* Components */,
 				1393B6EAD3F0806BFF1EEADF /* DesignSystem */,
 				6A22D6E3B385E4A26BBB13F5 /* LiveActivity */,
+				DFFA79E5FF736FE491A16F84 /* WatchLink */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -1025,6 +1046,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				2C511C5F16290109004E6C4F /* BarosWatchApp.swift in Sources */,
+				59287D4F7180F50496966B5E /* WatchWorkoutManager.swift in Sources */,
+				84A04EB1C3B7B1F0DA1D15C5 /* WatchWorkoutMessage.swift in Sources */,
+				85A7ADB5A0267BC4ABC2112E /* WatchWorkoutView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1111,6 +1135,8 @@
 				7D7C7011281BAC6866B28823 /* TemplateReviewView.swift in Sources */,
 				4BD77D210ECA5340A1F37DE4 /* TemplatesListView.swift in Sources */,
 				1641AD7E3908F4AD86002131 /* UIHangContextObservability.swift in Sources */,
+				993F5CDC336BB46EBF7ADF9E /* WatchWorkoutLink.swift in Sources */,
+				C04DFA83EFA1D38BEECBBFBD /* WatchWorkoutMessage.swift in Sources */,
 				60B195E54051085E1C59AA35 /* WhatsNewSheet.swift in Sources */,
 				F863D4E692F744FD07AE8518 /* WhatsNewVersion1_0View.swift in Sources */,
 				2786D08BE698998D8DACAE88 /* WhatsNewVersion1_2View.swift in Sources */,
