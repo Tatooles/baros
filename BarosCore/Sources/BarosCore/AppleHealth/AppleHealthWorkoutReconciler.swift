@@ -17,6 +17,7 @@ public final class AppleHealthWorkoutReconciler {
     private var generation = 0
     private var isReconciliationPending = false
     private var drainTask: Task<Void, Never>?
+    private var expiryTasks: [UUID: Task<Void, Never>] = [:]
 
     public init(
         recorder: any AppleHealthWorkoutRecording,
@@ -116,6 +117,7 @@ public final class AppleHealthWorkoutReconciler {
         case let .startSession(workoutID, startedAt, syncVersion):
             do {
                 try await recorder.startSession(workoutID: workoutID, startedAt: startedAt, syncVersion: syncVersion)
+                scheduleExpiryPass(for: workoutID)
             } catch {
                 update(workoutID, passGeneration) { entry in
                     if error == .terminal {
@@ -193,6 +195,17 @@ public final class AppleHealthWorkoutReconciler {
                     entry.phase = .abandoned
                 }
             }
+        }
+    }
+
+    /// One pass just after the new session reaches its age limit, even if nothing else changes.
+    private func scheduleExpiryPass(for workoutID: UUID) {
+        expiryTasks[workoutID]?.cancel()
+        expiryTasks[workoutID] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(AppleHealthEnvironment.maximumSessionAge + 1))
+            guard !Task.isCancelled, let self else { return }
+            expiryTasks[workoutID] = nil
+            requestReconciliation()
         }
     }
 
