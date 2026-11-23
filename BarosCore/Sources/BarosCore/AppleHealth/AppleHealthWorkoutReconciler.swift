@@ -224,9 +224,9 @@ public final class AppleHealthWorkoutReconciler {
                     entry.phase = deletedCount == 0 && isFirstAttempt ? .removedInHealth : .deletedWithWorkout
                 }
             } catch {
-                guard error == .terminal else { return } // Retried on the next pass.
                 update(workoutID, passGeneration) { entry in
-                    entry.phase = .abandoned
+                    // HealthKit answered: the delete didn't happen. Only a crash leaves the outcome unknown.
+                    entry.phase = error == .terminal ? .abandoned : .saved
                 }
             }
 
@@ -235,6 +235,8 @@ public final class AppleHealthWorkoutReconciler {
 
         case let .saveWorkout(workoutID, startedAt, endedAt, syncVersion):
             do {
+                let phase = ledger.entry(for: workoutID)?.phase
+                let isRestoring = phase == .deletingWithWorkout || phase == .deletedWithWorkout
                 if let existing = try await recorder.savedWorkout(workoutID: workoutID) {
                     update(workoutID, passGeneration) { entry in
                         entry.phase = .saved
@@ -242,6 +244,10 @@ public final class AppleHealthWorkoutReconciler {
                         entry.lastWrittenVersion = existing.syncVersion ?? entry.lastWrittenVersion
                         entry.lastWrittenStart = existing.startedAt
                         entry.lastWrittenEnd = existing.endedAt
+                    }
+                    if isRestoring, existing.startedAt != startedAt || existing.endedAt != endedAt {
+                        // A restore found a surviving copy with other times: replace it on the next pass.
+                        requestReconciliation()
                     }
                     return
                 }

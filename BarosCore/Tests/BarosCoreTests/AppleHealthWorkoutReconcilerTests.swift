@@ -348,6 +348,32 @@ final class AppleHealthWorkoutReconcilerTests: XCTestCase {
         XCTAssertEqual(ledger.entry(for: id)?.phase, .saved)
     }
 
+    func testRestoredWorkoutWithNewTimesReplacesTheSurvivingCopy() async {
+        ledger.save(AppleHealthLedgerEntry(workoutID: id, writer: .iPhone, phase: .deletingWithWorkout, isSaveConfirmed: true))
+        recorder.existingCopies[id] = AppleHealthSavedCopy(syncVersion: 5, startedAt: start, endedAt: start.addingTimeInterval(50 * 60))
+        source.snapshots = [completed(endedAfter: 65, updatedAfter: 200)]
+        let reconciler = makeReconciler()
+
+        // The adopt pass asks for one more pass, which the drain loop runs before finishing.
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.fallbackSaves, [id])
+        XCTAssertEqual(ledger.entry(for: id)?.lastWrittenEnd, start.addingTimeInterval(65 * 60))
+        XCTAssertGreaterThan(ledger.entry(for: id)?.lastWrittenVersion ?? 0, 5)
+    }
+
+    func testRejectedDeleteIsRetriedFromScratch() async {
+        saveConfirmed()
+        recorder.savedIDs = [id]
+        recorder.deleteFailure = .transient
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 100, isDeleted: true)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .saved, "HealthKit answered; this is not a crash")
+    }
+
     func testReplacementThatAlreadyLandedIsAdoptedNotResaved() async {
         saveConfirmed()
         let landed = AppleHealthSavedCopy(syncVersion: 42, startedAt: start, endedAt: start.addingTimeInterval(65 * 60))
