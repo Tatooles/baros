@@ -205,6 +205,7 @@ public final class AppleHealthWorkoutReconciler {
             try? await Task.sleep(for: .seconds(AppleHealthEnvironment.maximumSessionAge + 1))
             guard !Task.isCancelled, let self else { return }
             expiryTasks[workoutID] = nil
+            guard recorder.liveSessionWorkoutIDs().contains(workoutID) else { return }
             requestReconciliation()
         }
     }
