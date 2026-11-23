@@ -213,8 +213,12 @@ final class AppleHealthWorkoutReconcilerTests: XCTestCase {
         let reconciler = makeReconciler()
 
         await reconciler.requestReconciliation().value
+        recorder.onLookup = nil
+        settingEnabled = true
+        await reconciler.requestReconciliation().value
 
-        XCTAssertEqual(recorder.saveAttempts, 0)
+        XCTAssertEqual(recorder.saveAttempts, 0, "Turning the setting back on later must not export it")
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .abandoned)
     }
 
     func testResetDuringTheLookupStopsTheFallbackSave() async {

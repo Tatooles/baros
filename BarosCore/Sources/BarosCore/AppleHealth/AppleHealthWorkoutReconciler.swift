@@ -168,7 +168,13 @@ public final class AppleHealthWorkoutReconciler {
                     return
                 }
                 // The lookup can wait; the setting, permission, or a reset may have changed meanwhile.
-                guard isCurrent(passGeneration), isSettingEnabled(), recorder.authorization() == .authorized else {
+                guard isCurrent(passGeneration) else { return }
+                guard isSettingEnabled(), recorder.authorization() == .authorized else {
+                    // Finished while writing was off: never written, as in the policy.
+                    update(workoutID, passGeneration) { entry in
+                        entry.writer = .none
+                        entry.phase = .abandoned
+                    }
                     return
                 }
                 let confirmation = try await recorder.saveWorkout(

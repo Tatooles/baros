@@ -185,7 +185,8 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
     private func waitUntilStopped(_ live: LiveSession) async -> Bool {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: Self.stopTimeout)
-        while !live.isStopped, live.session.state != .stopped, clock.now < deadline {
+        // `.ended` without `.stopped` means another app or the system ended it: stop waiting.
+        while !live.isStopped, live.session.state != .stopped, live.session.state != .ended, clock.now < deadline {
             try? await Task.sleep(for: .milliseconds(100))
         }
         return live.isStopped || live.session.state == .stopped
