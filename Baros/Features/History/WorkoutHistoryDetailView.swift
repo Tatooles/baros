@@ -184,7 +184,7 @@ struct WorkoutHistoryDetailView: View {
         let entry = AppleHealthLedgerStore().entry(for: session.id)
         switch (entry?.phase, entry?.writer) {
         case (.saved, .iPhone):
-            return "This removes it from your history and its copy in Apple Health. Heart-rate readings stay in Health. This can't be undone."
+            return "This removes it from your history and, if Baros still has Health access, its copy in Apple Health. Heart-rate readings stay in Health. This can't be undone."
         case (.saved, .watch):
             return "This removes it from your history. The copy your Apple Watch saved stays in Apple Health; you can delete it in the Health app. This can't be undone."
         default:

@@ -19,7 +19,7 @@ struct WhatsNewVersion1_6View: View {
                     LaunchExperienceFeatureRow(
                         systemImage: "applewatch",
                         title: "Baros on Apple Watch",
-                        detail: "With the Baros Watch app and your Watch nearby, start a workout on your iPhone and see live heart rate and time on your wrist."
+                        detail: "With Apple Health on, the Baros Watch app, and your Watch nearby, start a workout on your iPhone and see live heart rate and time on your wrist."
                     )
                     LaunchExperienceFeatureRow(
                         systemImage: "heart.fill",
