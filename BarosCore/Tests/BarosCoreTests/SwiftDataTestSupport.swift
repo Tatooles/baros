@@ -36,3 +36,27 @@ func assertStamped(_ stamp: Date, at expected: Date, file: StaticString = #fileP
         line: line
     )
 }
+
+/// Counts `ModelContext.didSave` posts from one context while it is alive.
+final class SaveCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var saves = 0
+    private var observer: NSObjectProtocol?
+
+    var count: Int { lock.withLock { saves } }
+
+    init(context: ModelContext) {
+        observer = NotificationCenter.default.addObserver(
+            forName: ModelContext.didSave,
+            object: context,
+            queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.lock.withLock { self.saves += 1 }
+        }
+    }
+
+    deinit {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+    }
+}

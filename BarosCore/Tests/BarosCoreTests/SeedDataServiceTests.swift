@@ -103,12 +103,15 @@ final class SeedDataServiceTests: XCTestCase {
         let context = container.mainContext
 
         try SeedDataService.seedIfNeeded(context: context, ownerTokenIdentifier: "issuer|owner_b")
+        let saves = SaveCounter(context: context)
         try SeedDataService.seedIfNeeded(context: context, ownerTokenIdentifier: "issuer|owner_b")
 
         let settings = try context.fetch(FetchDescriptor<UserSettings>())
         let exercises = try context.fetch(FetchDescriptor<Exercise>())
         XCTAssertEqual(settings.filter { $0.syncOwnerTokenIdentifier == "issuer|owner_b" }.count, 1)
         XCTAssertEqual(exercises.filter { $0.syncOwnerTokenIdentifier == "issuer|owner_b" && $0.isSeeded }.count, 20)
+        // Owner activation re-seeds on every launch; BAROS-IOS-1M hung inside that save's `didSave`.
+        XCTAssertEqual(saves.count, 0, "A seed that changes nothing must not save")
     }
 
     func testStartupSeedDoesNotCreateUnownedDefaultsWhenOwnedDefaultsExist() throws {

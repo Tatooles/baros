@@ -684,55 +684,17 @@ private struct PreviousSetsCacheLoader: View {
                 )
             }
             .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
-                cache.reloadIfNeeded(
-                    after: notification,
-                    session: session,
-                    context: modelContext,
-                    ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
-                    lastSyncedAt: syncScheduler.lastSyncedAt,
-                    onUpdate: onUpdate
-                )
+                cache.scheduleReload(after: notification, context: modelContext) { changes in
+                    cache.reloadIfNeeded(
+                        for: changes,
+                        session: session,
+                        context: modelContext,
+                        ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
+                        lastSyncedAt: syncScheduler.lastSyncedAt,
+                        onUpdate: onUpdate
+                    )
+                }
             }
-    }
-}
-
-struct PreviousSetsCacheSaveChanges {
-    let insertedIDs: Set<PersistentIdentifier>
-    let updatedIDs: Set<PersistentIdentifier>
-    let deletedIDs: Set<PersistentIdentifier>
-    let invalidatedAllIdentifiers: Bool
-
-    var containsOnlySyncBookkeeping: Bool {
-        guard !invalidatedAllIdentifiers else { return false }
-        let identifiers = insertedIDs.union(updatedIDs).union(deletedIDs)
-        guard !identifiers.isEmpty else { return false }
-        return identifiers.allSatisfy {
-            $0.entityName == String(describing: SyncOutboxEntry.self)
-                || $0.entityName == String(describing: SyncCursorState.self)
-        }
-    }
-
-    init(notification: Notification) {
-        insertedIDs = Self.identifiers(for: .insertedIdentifiers, in: notification)
-        updatedIDs = Self.identifiers(for: .updatedIdentifiers, in: notification)
-        deletedIDs = Self.identifiers(for: .deletedIdentifiers, in: notification)
-        invalidatedAllIdentifiers = notification.userInfo?[
-            ModelContext.NotificationKey.invalidatedAllIdentifiers.rawValue
-        ] as? Bool ?? false
-    }
-
-    private static func identifiers(
-        for key: ModelContext.NotificationKey,
-        in notification: Notification
-    ) -> Set<PersistentIdentifier> {
-        let value = notification.userInfo?[key.rawValue]
-        if let identifiers = value as? Set<PersistentIdentifier> {
-            return identifiers
-        }
-        if let identifiers = value as? [PersistentIdentifier] {
-            return Set(identifiers)
-        }
-        return []
     }
 }
 
@@ -766,12 +728,24 @@ final class PreviousSetsCacheLoaderCache {
 
     private var activeStructureKey: ActiveStructureKey?
     private var cacheKey: PreviousSetPerformance.CacheKey?
+    private let deferredSaves = DeferredSaveChanges()
     private let fetchSessions: @MainActor (ModelContext, String?) throws -> [WorkoutSession]
 
     init(
         fetchSessions: (@MainActor (ModelContext, String?) throws -> [WorkoutSession])? = nil
     ) {
         self.fetchSessions = fetchSessions ?? Self.fetchCompletedHistory
+    }
+
+    /// Reads no models here: this runs inside the `save()` that posted the
+    /// notification. The reload waits for a later main-actor turn.
+    func scheduleReload(
+        after notification: Notification,
+        context: ModelContext,
+        reload: @escaping @MainActor (PreviousSetsCacheSaveChanges) -> Void
+    ) {
+        guard let changes = Self.relevantChanges(in: notification, for: context) else { return }
+        deferredSaves.enqueue(changes, handler: reload)
     }
 
     func reloadIfNeeded(
@@ -782,12 +756,27 @@ final class PreviousSetsCacheLoaderCache {
         lastSyncedAt: Date?,
         onUpdate: ([UUID: [PreviousSetPerformance]]) -> Void
     ) {
-        if let savedContext = notification.object as? ModelContext,
-           savedContext.container !== context.container {
-            return
-        }
-        let changes = PreviousSetsCacheSaveChanges(notification: notification)
-        guard !changes.containsOnlySyncBookkeeping else { return }
+        guard let changes = Self.relevantChanges(in: notification, for: context) else { return }
+        reloadIfNeeded(
+            for: changes,
+            session: session,
+            context: context,
+            ownerTokenIdentifier: ownerTokenIdentifier,
+            lastSyncedAt: lastSyncedAt,
+            onUpdate: onUpdate
+        )
+    }
+
+    func reloadIfNeeded(
+        for changes: PreviousSetsCacheSaveChanges,
+        session: WorkoutSession,
+        context: ModelContext,
+        ownerTokenIdentifier: String?,
+        lastSyncedAt: Date?,
+        onUpdate: ([UUID: [PreviousSetPerformance]]) -> Void
+    ) {
+        // The workout may have been discarded and saved away before this turn.
+        guard session.modelContext != nil else { return }
         guard PreviousSetsCacheReloadPolicy.shouldReload(
             insertedIDs: changes.insertedIDs,
             updatedIDs: changes.updatedIDs,
@@ -804,6 +793,18 @@ final class PreviousSetsCacheLoaderCache {
             lastSyncedAt: lastSyncedAt,
             onUpdate: onUpdate
         )
+    }
+
+    private static func relevantChanges(
+        in notification: Notification,
+        for context: ModelContext
+    ) -> PreviousSetsCacheSaveChanges? {
+        if let savedContext = notification.object as? ModelContext,
+           savedContext.container !== context.container {
+            return nil
+        }
+        let changes = PreviousSetsCacheSaveChanges(notification: notification)
+        return changes.containsOnlySyncBookkeeping ? nil : changes
     }
 
     static func fetchCompletedHistory(

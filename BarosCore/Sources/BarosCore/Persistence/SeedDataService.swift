@@ -23,7 +23,11 @@ public enum SeedDataService {
         try ensureExercises(context: context, ownerTokenIdentifier: ownerTokenIdentifier, ownerlessScope: ownerlessScope)
         try migrateLegacyPrimaryMuscleGroups(context: context)
         try ensureSeedMetadata(context: context)
-        try context.save()
+        // Owner activation seeds on every launch. A save posts `didSave` to every
+        // listener on this call stack, so save only when the seed changed something.
+        if context.hasChanges {
+            try context.save()
+        }
     }
 
     private static func claimOwnerlessVisibleRecords(
@@ -117,7 +121,8 @@ public enum SeedDataService {
     private static func ensureSeedMetadata(context: ModelContext) throws {
         let metadata = try context.fetch(FetchDescriptor<SeedMetadata>())
         if let existing = metadata.first(where: { $0.key == exerciseSeedKey }) {
-            existing.version = max(existing.version, exerciseSeedVersion)
+            guard existing.version < exerciseSeedVersion else { return }
+            existing.version = exerciseSeedVersion
             existing.appliedAt = .now
         } else {
             context.insert(SeedMetadata(key: exerciseSeedKey, version: exerciseSeedVersion))
