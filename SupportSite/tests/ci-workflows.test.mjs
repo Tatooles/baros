@@ -15,6 +15,7 @@ const appPaths = [
   "Baros/**",
   "BarosCore/**",
   "BarosLiveActivity/**",
+  "BarosWatch/**",
   "BarosTests/**",
   "BarosUITests/**",
   "Baros.xcodeproj/**",

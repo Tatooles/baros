@@ -10,6 +10,7 @@ on:
       - "Baros/**"
       - "BarosCore/**"
       - "BarosLiveActivity/**"
+      - "BarosWatch/**"
       - "BarosTests/**"
       - "BarosUITests/**"
       - "Baros.xcodeproj/**"
@@ -75,6 +76,7 @@ jobs:
             'Baros/**' \
             'BarosCore/**' \
             'BarosLiveActivity/**' \
+            'BarosWatch/**' \
             'BarosTests/**' \
             'BarosUITests/**' \
             'Baros.xcodeproj/**' \
