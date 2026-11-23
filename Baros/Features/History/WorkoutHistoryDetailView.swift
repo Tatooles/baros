@@ -160,11 +160,7 @@ struct WorkoutHistoryDetailView: View {
                 deleteWorkout()
             }
         } message: {
-            Text(
-                AppleHealthPreference.isEnabled()
-                    ? "This removes it from your history and from Apple Health. Heart-rate readings stay in Health. This can't be undone."
-                    : "This removes it from your history. This can't be undone."
-            )
+            Text(deleteConfirmationMessage)
         }
         .alert(
             "Couldn't Delete Workout",
@@ -180,6 +176,19 @@ struct WorkoutHistoryDetailView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(deleteErrorMessage ?? "Try deleting again.")
+        }
+    }
+
+    /// Says what happens to this workout's Apple Health copy, if it has one (ADR 0005).
+    private var deleteConfirmationMessage: String {
+        let entry = AppleHealthLedgerStore().entry(for: session.id)
+        switch (entry?.phase, entry?.writer) {
+        case (.saved, .iPhone):
+            return "This removes it from your history and its copy in Apple Health. Heart-rate readings stay in Health. This can't be undone."
+        case (.saved, .watch):
+            return "This removes it from your history. The copy your Apple Watch saved stays in Apple Health; you can delete it in the Health app. This can't be undone."
+        default:
+            return "This removes it from your history. This can't be undone."
         }
     }
 

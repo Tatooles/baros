@@ -14,12 +14,12 @@ struct WhatsNewVersion1_6View: View {
                     LaunchExperienceFeatureRow(
                         systemImage: "heart.text.square",
                         title: "Save workouts to Apple Health",
-                        detail: "Turn it on in Settings. Each workout shows up in Health and Fitness and counts toward your Activity."
+                        detail: "Turn it on in Settings, and with your permission, workouts you finish show up in Health and Fitness."
                     )
                     LaunchExperienceFeatureRow(
                         systemImage: "applewatch",
                         title: "Baros on Apple Watch",
-                        detail: "Start a workout on your iPhone and your Watch shows live heart rate and time, then saves it to Health."
+                        detail: "With the Baros Watch app and your Watch nearby, start a workout on your iPhone and see live heart rate and time on your wrist."
                     )
                     LaunchExperienceFeatureRow(
                         systemImage: "heart.fill",

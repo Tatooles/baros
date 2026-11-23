@@ -14,6 +14,7 @@ enum DeleteDataMode: Hashable {
         }
     }
 
+    @MainActor
     var warningText: String {
         let base = switch self {
         case .account:
@@ -22,7 +23,8 @@ enum DeleteDataMode: Hashable {
             "This deletes only local data on this iPhone. It does not delete a cloud account or cloud data."
         }
         // Saved Health copies belong to the person and stay (ADR 0005).
-        return AppleHealthPreference.isEnabled()
+        let hasSavedHealthCopies = AppleHealthLedgerStore().entries.values.contains { $0.phase == .saved }
+        return hasSavedHealthCopies
             ? base + " Workouts already saved to Apple Health stay there; you can delete them in the Health app."
             : base
     }

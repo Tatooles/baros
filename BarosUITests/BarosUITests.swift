@@ -2000,18 +2000,18 @@ final class BarosUITests: XCTestCase {
             whatsNewButton.tap()
 
             XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitToExist(timeout: 3))
-            XCTAssertTrue(app.staticTexts["What's new in Baros 1.5"].exists)
-            XCTAssertTrue(app.staticTexts["Workout templates"].exists)
-            XCTAssertTrue(app.staticTexts["Supersets"].exists)
-            XCTAssertTrue(app.staticTexts["Records that tell the story"].exists)
+            XCTAssertTrue(app.staticTexts["What's new in Baros 1.6"].exists)
+            XCTAssertTrue(app.staticTexts["Save workouts to Apple Health"].exists)
+            XCTAssertTrue(app.staticTexts["Baros on Apple Watch"].exists)
+            XCTAssertTrue(app.staticTexts["Live heart rate"].exists)
             XCTAssertEqual(app.buttons["LaunchExperiencePrimaryButton"].label, "Continue")
 
-            attachWhatsNewScreenshot("whats-new-1.5-\(appearance)")
+            attachWhatsNewScreenshot("whats-new-1.6-\(appearance)")
             let continueButton = app.buttons["LaunchExperiencePrimaryButton"]
             XCTAssertEqual(app.buttons.matching(identifier: "LaunchExperiencePrimaryButton").count, 1)
             for _ in 0..<8 where !(continueButton.exists && continueButton.isHittable) { app.swipeUp() }
             XCTAssertTrue(continueButton.isHittable)
-            attachWhatsNewScreenshot("whats-new-1.5-\(appearance)-continue")
+            attachWhatsNewScreenshot("whats-new-1.6-\(appearance)-continue")
             continueButton.tap()
             XCTAssertTrue(app.staticTexts["LaunchExperienceTitle"].waitToDisappear(timeout: 3))
             XCTAssertTrue(app.navigationBars["Settings"].exists)
