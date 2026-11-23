@@ -150,6 +150,50 @@ public final class AppleHealthWorkoutReconciler {
                 }
             }
 
+        case let .replaceSavedWorkout(workoutID, startedAt, endedAt, syncVersion):
+            do {
+                let existing = try await recorder.savedWorkout(workoutID: workoutID)
+                guard isCurrent(passGeneration), isSettingEnabled() else { return }
+                guard existing != nil else {
+                    // After a confirmed save, a missing copy means the person deleted it in Health.
+                    // Otherwise (saved while locked) it may not be readable yet: retry later.
+                    update(workoutID, passGeneration) { entry in
+                        if entry.isSaveConfirmed { entry.phase = .removedInHealth }
+                    }
+                    return
+                }
+                let confirmation = try await recorder.saveWorkout(
+                    workoutID: workoutID,
+                    startedAt: startedAt,
+                    endedAt: endedAt,
+                    syncVersion: syncVersion
+                )
+                update(workoutID, passGeneration) { entry in
+                    entry.isSaveConfirmed = confirmation == .visible
+                    entry.lastWrittenVersion = syncVersion
+                    entry.lastWrittenStart = startedAt
+                    entry.lastWrittenEnd = endedAt
+                }
+            } catch {
+                guard error == .terminal else { return } // Retried on the next pass.
+                update(workoutID, passGeneration) { entry in
+                    entry.phase = .abandoned
+                }
+            }
+
+        case let .deleteSavedWorkout(workoutID):
+            do {
+                try await recorder.deleteSavedWorkout(workoutID: workoutID)
+                update(workoutID, passGeneration) { entry in
+                    entry.phase = .deletedWithWorkout
+                }
+            } catch {
+                guard error == .terminal else { return } // Retried on the next pass.
+                update(workoutID, passGeneration) { entry in
+                    entry.phase = .abandoned
+                }
+            }
+
         case let .discardSession(workoutID):
             recorder.discardSession(workoutID: workoutID)
 

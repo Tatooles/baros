@@ -257,6 +257,74 @@ final class AppleHealthWorkoutPolicyTests: XCTestCase {
         XCTAssertEqual(decision.entry, abandoned)
     }
 
+    // MARK: Recovery, edits, and deletes (#462)
+
+    private func saved(start savedStart: Date? = nil, end: Date? = nil, version: Int64 = 1) -> AppleHealthLedgerEntry {
+        AppleHealthLedgerEntry(
+            workoutID: id, writer: .iPhone, phase: .saved, lastWrittenVersion: version,
+            lastWrittenStart: savedStart ?? start, lastWrittenEnd: end ?? start.addingTimeInterval(50 * 60),
+            isSaveConfirmed: true
+        )
+    }
+
+    func testRecoveredSessionIsAdoptedAgainWhileActive() {
+        let lost = entry(writer: .iPhone, phase: .sessionLost, sessionStartedAt: start)
+        let decision = decide(snapshot(.active), entry: lost, live: true, environment())
+
+        XCTAssertNil(decision.action)
+        XCTAssertEqual(decision.entry?.phase, .recording)
+    }
+
+    func testRecoveredSessionFinishesNormally() {
+        let lost = entry(writer: .iPhone, phase: .sessionLost, sessionStartedAt: start)
+        let decision = decide(snapshot(.completed, endedAfter: 50), entry: lost, live: true, environment(minutesAfterStart: 51))
+
+        XCTAssertEqual(decision.action, .finishSession(workoutID: id, endedAt: start.addingTimeInterval(50 * 60)))
+    }
+
+    func testDurationEditReplacesTheSavedCopyWithAHigherVersion() {
+        let edited = snapshot(.completed, endedAfter: 65, updatedAfter: 120)
+        let decision = decide(edited, entry: saved(version: 9_999_999_999_999), environment(minutesAfterStart: 121))
+
+        XCTAssertEqual(
+            decision.action,
+            .replaceSavedWorkout(workoutID: id, startedAt: start, endedAt: start.addingTimeInterval(65 * 60), syncVersion: 10_000_000_000_000)
+        )
+    }
+
+    func testTitleOnlyEditLeavesHealthAlone() {
+        let renamed = snapshot(.completed, endedAfter: 50, updatedAfter: 120)
+
+        XCTAssertNil(decide(renamed, entry: saved(), environment(minutesAfterStart: 121)).action)
+    }
+
+    func testDeletedWorkoutDeletesTheSavedCopy() {
+        let deleted = snapshot(.completed, endedAfter: 50, isDeleted: true)
+
+        XCTAssertEqual(decide(deleted, entry: saved(), environment()).action, .deleteSavedWorkout(workoutID: id))
+    }
+
+    func testMissingRowNeverDeletesTheSavedCopy() {
+        XCTAssertNil(decide(nil, entry: saved(), environment()).action)
+    }
+
+    func testRevertedDeleteSavesTheWorkoutAgain() {
+        var deleted = saved()
+        deleted.phase = .deletedWithWorkout
+        let decision = decide(snapshot(.completed, endedAfter: 50, updatedAfter: 200), entry: deleted, environment())
+
+        guard case .saveWorkout = decision.action else {
+            return XCTFail("Expected the restored workout to be saved again, got \(String(describing: decision.action))")
+        }
+    }
+
+    func testCopyDeletedInHealthIsNeverRestored() {
+        var removed = saved()
+        removed.phase = .removedInHealth
+
+        XCTAssertNil(decide(snapshot(.completed, endedAfter: 65, updatedAfter: 200), entry: removed, environment()).action)
+    }
+
     // MARK: Sync version
 
     func testSyncVersionNeverGoesBackwards() {

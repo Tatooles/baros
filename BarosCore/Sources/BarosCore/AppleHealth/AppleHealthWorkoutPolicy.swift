@@ -6,6 +6,10 @@ public enum AppleHealthWorkoutAction: Equatable, Sendable {
     case discardSession(workoutID: UUID)
     /// Offline save of a workout without a surviving live session (ADR 0005, "Fallback write").
     case saveWorkout(workoutID: UUID, startedAt: Date, endedAt: Date, syncVersion: Int64)
+    /// Replace the saved Health copy after its date or duration changed (a higher sync version).
+    case replaceSavedWorkout(workoutID: UUID, startedAt: Date, endedAt: Date, syncVersion: Int64)
+    /// Delete the saved Health copy because the Baros workout was deleted.
+    case deleteSavedWorkout(workoutID: UUID)
 }
 
 public struct AppleHealthWorkoutDecision: Equatable, Sendable {
@@ -39,6 +43,10 @@ public enum AppleHealthWorkoutPolicy {
             return AppleHealthWorkoutDecision(entry: entry, action: discardLive)
         }
 
+        if entry.phase == .saved || entry.phase == .deletedWithWorkout {
+            return decideSaved(snapshot, entry: entry, environment: environment, discardLive: discardLive)
+        }
+
         // A missing row (local-data reset, account deletion), a tombstone, or a discard: no Health copy.
         guard let snapshot, !snapshot.isDeleted, snapshot.status != .discarded else {
             entry.phase = .abandoned
@@ -58,6 +66,47 @@ public enum AppleHealthWorkoutPolicy {
             return decideCompleted(snapshot, entry: entry, hasLiveSession: hasLiveSession, environment: environment)
         case .discarded:
             preconditionFailure("Handled above")
+        }
+    }
+
+    /// A workout this device already saved (ADR 0005, "Edits and deletes"). Only the stored start and end
+    /// matter; title or note edits never touch Health. A missing row never deletes a Health copy.
+    private static func decideSaved(
+        _ snapshot: AppleHealthWorkoutSnapshot?,
+        entry: AppleHealthLedgerEntry,
+        environment: AppleHealthEnvironment,
+        discardLive: AppleHealthWorkoutAction?
+    ) -> AppleHealthWorkoutDecision {
+        let id = entry.workoutID
+        guard let snapshot, environment.authorization == .authorized else {
+            return AppleHealthWorkoutDecision(entry: entry, action: discardLive)
+        }
+        let isDeleted = snapshot.isDeleted || snapshot.status == .discarded
+        switch entry.phase {
+        case .saved where isDeleted:
+            return AppleHealthWorkoutDecision(entry: entry, action: .deleteSavedWorkout(workoutID: id))
+        case .saved:
+            guard
+                environment.isSettingEnabled,
+                snapshot.status == .completed,
+                let endedAt = snapshot.endedAt,
+                snapshot.startedAt != entry.lastWrittenStart || endedAt != entry.lastWrittenEnd
+            else { return AppleHealthWorkoutDecision(entry: entry, action: nil) }
+            let version = AppleHealthSyncVersion.next(updatedAt: snapshot.updatedAt, lastWritten: entry.lastWrittenVersion)
+            return AppleHealthWorkoutDecision(
+                entry: entry,
+                action: .replaceSavedWorkout(workoutID: id, startedAt: snapshot.startedAt, endedAt: endedAt, syncVersion: version)
+            )
+        case .deletedWithWorkout where !isDeleted && snapshot.status == .completed && environment.isSettingEnabled:
+            // The delete was reverted (for example by sync): save it again.
+            guard let endedAt = snapshot.endedAt else { return AppleHealthWorkoutDecision(entry: entry, action: nil) }
+            let version = AppleHealthSyncVersion.next(updatedAt: snapshot.updatedAt, lastWritten: entry.lastWrittenVersion)
+            return AppleHealthWorkoutDecision(
+                entry: entry,
+                action: .saveWorkout(workoutID: id, startedAt: snapshot.startedAt, endedAt: endedAt, syncVersion: version)
+            )
+        default:
+            return AppleHealthWorkoutDecision(entry: entry, action: nil)
         }
     }
 
@@ -83,6 +132,11 @@ public enum AppleHealthWorkoutPolicy {
             entry.writer = .none
             entry.phase = .abandoned
             return AppleHealthWorkoutDecision(entry: entry, action: hasLiveSession ? .discardSession(workoutID: id) : nil)
+        }
+
+        if hasLiveSession, entry.writer == .iPhone, entry.phase == .sessionLost {
+            // A session recovered after a relaunch: adopt it again so it finishes normally.
+            entry.phase = .recording
         }
 
         if hasLiveSession {
@@ -143,7 +197,9 @@ public enum AppleHealthWorkoutPolicy {
             return AppleHealthWorkoutDecision(entry: entry, action: hasLiveSession ? .discardSession(workoutID: id) : nil)
         }
 
-        if hasLiveSession, entry.phase == .recording {
+        if hasLiveSession, entry.writer == .iPhone, entry.phase == .recording || entry.phase == .sessionLost {
+            // A session recovered after a relaunch finishes like any other.
+            entry.phase = .recording
             return AppleHealthWorkoutDecision(entry: entry, action: .finishSession(workoutID: id, endedAt: endedAt))
         }
 
