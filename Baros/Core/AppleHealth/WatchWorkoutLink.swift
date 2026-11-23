@@ -17,18 +17,21 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
     /// While a launch waits, the first session that reports `readyForClaim`; the claim goes to exactly it.
     private var isAwaitingReadiness = false
     private var launchRequestedAt = Date.distantFuture
-    /// When a launch last gave up waiting. Its Watch session may still report ready, so for a while a new
-    /// launch can't tell whose readiness it is; the iPhone records the workout itself instead.
-    private var lastAbandonedLaunchAt: Date?
+    /// A launch that hasn't been matched to a ready Watch session, persisted before HealthKit is asked so it
+    /// survives a relaunch. Its Watch session may still report ready, so for a while a new launch can't tell
+    /// whose readiness it is; the iPhone records the workout itself instead.
+    private static let unresolvedLaunchKey = "Baros.AppleHealth.unresolvedWatchLaunchAt"
     private static let abandonedLaunchQuarantine: TimeInterval = 60
+    private let defaults: UserDefaults
     /// Allows for clock differences between iPhone and Watch.
     private static let clockTolerance: TimeInterval = 5
     private var readySession: (sessionID: UUID, session: HKWorkoutSession)?
     /// Called on the main actor with each message from the Watch.
     var onMessage: ((WatchWorkoutMessage) -> Void)?
 
-    init(healthStore: HKHealthStore) {
+    init(healthStore: HKHealthStore, defaults: UserDefaults = .standard) {
         self.healthStore = healthStore
+        self.defaults = defaults
         super.init()
         if WCSession.isSupported() {
             WCSession.default.delegate = self
@@ -49,16 +52,20 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
     /// Ready only when a freshly launched Watch session reports `readyForClaim`; an older session that
     /// reconnects meanwhile doesn't count.
     func prepareWatchSession(workoutID: UUID) async -> Bool {
-        if let lastAbandonedLaunchAt, Date.now.timeIntervalSince(lastAbandonedLaunchAt) < Self.abandonedLaunchQuarantine {
+        if let unresolved = defaults.object(forKey: Self.unresolvedLaunchKey) as? Date,
+           Date.now.timeIntervalSince(unresolved) < Self.abandonedLaunchQuarantine {
             return false
         }
         readySession = nil
         isAwaitingReadiness = true
         launchRequestedAt = .now
+        defaults.set(launchRequestedAt, forKey: Self.unresolvedLaunchKey)
         defer { isAwaitingReadiness = false }
         do {
             try await healthStore.startWatchApp(toHandle: HealthKitWorkoutRecorder.workoutConfiguration)
         } catch {
+            // A definite launch failure (for example, the Watch is out of range): no session can follow.
+            defaults.removeObject(forKey: Self.unresolvedLaunchKey)
             return false
         }
         let clock = ContinuousClock()
@@ -66,8 +73,13 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
         while readySession == nil, clock.now < deadline {
             try? await Task.sleep(for: .milliseconds(200))
         }
-        if readySession == nil { lastAbandonedLaunchAt = .now }
-        return readySession != nil
+        if readySession == nil {
+            // Abandoned: quarantine from now, so its late session has time to discard itself.
+            defaults.set(Date.now, forKey: Self.unresolvedLaunchKey)
+            return false
+        }
+        defaults.removeObject(forKey: Self.unresolvedLaunchKey)
+        return true
     }
 
     func sendClaim(workoutID: UUID, startedAt: Date, token: UUID, syncVersion: Int64) async {
