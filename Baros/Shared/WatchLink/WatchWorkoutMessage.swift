@@ -7,21 +7,24 @@ import Foundation
 /// excepted) also over WatchConnectivity `transferUserInfo`, so a command sent while the Watch is
 /// out of range arrives later. Every message is idempotent by workout ID and token.
 enum WatchWorkoutMessage: Codable, Equatable, Sendable {
-    /// Watch → iPhone: a freshly launched session is mirrored and waiting for a claim.
-    case readyForClaim(sessionID: UUID)
+    /// Watch → iPhone: a freshly launched session is mirrored and waiting for a claim. The start time
+    /// lets the iPhone tell this launch from an earlier, abandoned one.
+    case readyForClaim(sessionID: UUID, sessionStartedAt: Date)
+    /// iPhone → Watch: the iPhone isn't waiting for this session; end it and save nothing.
+    case declineClaim(sessionID: UUID)
     /// iPhone → Watch: the Watch may save this workout, and only on a `finish` naming `token`. It names
     /// the session that reported ready, so it can't land on another session.
     case claim(workoutID: UUID, startedAt: Date, token: UUID, syncVersion: Int64, sessionID: UUID)
     /// iPhone → Watch: save the workout ending at `endedAt`.
     case finish(workoutID: UUID, token: UUID, endedAt: Date)
     /// iPhone → Watch: end the session and save nothing.
-    case discard(workoutID: UUID)
+    case discard(workoutID: UUID, token: UUID)
     /// iPhone → Watch: the Baros workout is still active; keep recording.
     case continueRecording(workoutID: UUID)
     /// Watch → iPhone: the result of a finish or discard.
-    case acknowledged(workoutID: UUID, outcome: Outcome)
+    case acknowledged(workoutID: UUID, token: UUID, outcome: Outcome)
     /// Watch → iPhone: what should happen to this session (after a relaunch, or from the End button).
-    case statusRequest(workoutID: UUID, isEndRequest: Bool)
+    case statusRequest(workoutID: UUID, token: UUID, isEndRequest: Bool)
     /// Watch → iPhone: the latest heart rate for the workout header. Never stored.
     case heartRate(workoutID: UUID, beatsPerMinute: Int, measuredAt: Date)
 
@@ -50,7 +53,7 @@ enum WatchWorkoutMessage: Codable, Equatable, Sendable {
     var isDurable: Bool {
         switch self {
         case .finish, .discard, .acknowledged: true
-        case .readyForClaim, .claim, .continueRecording, .statusRequest, .heartRate: false
+        case .readyForClaim, .declineClaim, .claim, .continueRecording, .statusRequest, .heartRate: false
         }
     }
 }

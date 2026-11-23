@@ -141,20 +141,20 @@ public enum AppleHealthWorkoutPolicy {
             let age = entry.sessionStartedAt.map { environment.now.timeIntervalSince($0) } ?? 0
             switch snapshot.status {
             case .active where !environment.allowsWriting || !snapshot.isVisible || age > AppleHealthEnvironment.maximumSessionAge:
-                command = .discard(workoutID: id)
+                command = .discard(workoutID: id, token: entry.watchToken ?? id)
             case .active:
                 command = nil
             case .completed:
                 if environment.allowsWriting, let token = entry.watchToken, let endedAt = snapshot.endedAt {
                     command = .finish(workoutID: id, token: token, endedAt: endedAt)
                 } else {
-                    command = .discard(workoutID: id)
+                    command = .discard(workoutID: id, token: entry.watchToken ?? id)
                 }
             case .discarded:
-                command = .discard(workoutID: id)
+                command = .discard(workoutID: id, token: entry.watchToken ?? id)
             }
         } else {
-            command = .discard(workoutID: id)
+            command = .discard(workoutID: id, token: entry.watchToken ?? id)
         }
 
         guard let command else { return AppleHealthWorkoutDecision(entry: entry, action: discardLive) }

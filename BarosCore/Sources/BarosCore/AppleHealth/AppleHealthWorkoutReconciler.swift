@@ -60,7 +60,7 @@ public final class AppleHealthWorkoutReconciler {
         // A Watch writer can't be ended from here: tell it to discard before its ledger entry goes.
         // WatchConnectivity keeps the command queued until the Watch receives it.
         for entry in ledger.entries.values where entry.writer == .watch && !entry.isTerminal && entry.phase != .saved {
-            watchLink?.send(.discard(workoutID: entry.workoutID))
+            watchLink?.send(.discard(workoutID: entry.workoutID, token: entry.watchToken ?? entry.workoutID))
         }
         ledger.removeAll()
     }
@@ -324,8 +324,14 @@ public final class AppleHealthWorkoutReconciler {
     }
 
     /// The Watch carried out a command. Only an acknowledgement for the pending command counts.
-    public func handleWatchAcknowledgement(workoutID: UUID, outcome: AppleHealthWatchOutcome) {
-        guard !isPaused, var entry = ledger.entry(for: workoutID), entry.writer == .watch else { return }
+    public func handleWatchAcknowledgement(workoutID: UUID, token: UUID, outcome: AppleHealthWatchOutcome) {
+        // Only the current claim's acknowledgement counts; a delayed one for an old claim is ignored.
+        guard
+            !isPaused,
+            var entry = ledger.entry(for: workoutID),
+            entry.writer == .watch,
+            entry.watchToken == token
+        else { return }
         switch outcome {
         case .saved, .savedWhileLocked:
             guard case .finish = entry.pendingWatchCommand else { return }
@@ -340,9 +346,10 @@ public final class AppleHealthWorkoutReconciler {
 
     /// What the Watch should do with its session, when it asks (after a relaunch, or from its End button).
     /// `nil` means keep recording. A workout the iPhone doesn't know is discarded.
-    public func watchCommand(forStatusOf workoutID: UUID, isEndRequest: Bool) -> AppleHealthWatchCommand? {
-        guard var entry = ledger.entry(for: workoutID), entry.writer == .watch else {
-            return .discard(workoutID: workoutID)
+    public func watchCommand(forStatusOf workoutID: UUID, token: UUID, isEndRequest: Bool) -> AppleHealthWatchCommand? {
+        guard var entry = ledger.entry(for: workoutID), entry.writer == .watch, entry.watchToken == token else {
+            // A session for a workout or claim the iPhone doesn't know: it can never be saved.
+            return .discard(workoutID: workoutID, token: token)
         }
         if let pending = entry.pendingWatchCommand { return pending }
         let isActive = (try? snapshotSource.snapshots(includingWorkoutIDs: [workoutID]))?
@@ -354,7 +361,7 @@ public final class AppleHealthWorkoutReconciler {
             return nil
         }
         // Ended on the Watch while the Baros workout continues: this workout gets no Health copy.
-        let command = AppleHealthWatchCommand.discard(workoutID: workoutID)
+        let command = AppleHealthWatchCommand.discard(workoutID: workoutID, token: token)
         entry.pendingWatchCommand = command
         entry.phase = .awaitingWatch
         ledger.save(entry)

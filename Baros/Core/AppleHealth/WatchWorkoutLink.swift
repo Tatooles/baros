@@ -16,6 +16,9 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
     private var mirroredSession: HKWorkoutSession?
     /// While a launch waits, the first session that reports `readyForClaim`; the claim goes to exactly it.
     private var isAwaitingReadiness = false
+    private var launchRequestedAt = Date.distantFuture
+    /// Allows for clock differences between iPhone and Watch.
+    private static let clockTolerance: TimeInterval = 5
     private var readySession: (sessionID: UUID, session: HKWorkoutSession)?
     /// Called on the main actor with each message from the Watch.
     var onMessage: ((WatchWorkoutMessage) -> Void)?
@@ -44,6 +47,7 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
     func prepareWatchSession(workoutID: UUID) async -> Bool {
         readySession = nil
         isAwaitingReadiness = true
+        launchRequestedAt = .now
         defer { isAwaitingReadiness = false }
         do {
             try await healthStore.startWatchApp(toHandle: HealthKitWorkoutRecorder.workoutConfiguration)
@@ -71,7 +75,7 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
     func send(_ command: AppleHealthWatchCommand) {
         let message: WatchWorkoutMessage = switch command {
         case let .finish(workoutID, token, endedAt): .finish(workoutID: workoutID, token: token, endedAt: endedAt)
-        case let .discard(workoutID): .discard(workoutID: workoutID)
+        case let .discard(workoutID, token): .discard(workoutID: workoutID, token: token)
         }
         send(message)
     }
@@ -102,8 +106,15 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
 
     private func receive(_ data: Data, from session: HKWorkoutSession?) {
         guard let message = WatchWorkoutMessage(data: data) else { return }
-        if case let .readyForClaim(sessionID) = message {
-            if isAwaitingReadiness, readySession == nil, let session { readySession = (sessionID, session) }
+        if case let .readyForClaim(sessionID, sessionStartedAt) = message {
+            // Only a session started by this launch counts. Anything else (for example, an earlier launch
+            // that timed out) is declined, and that Watch session discards.
+            let isThisLaunch = sessionStartedAt >= launchRequestedAt.addingTimeInterval(-Self.clockTolerance)
+            if isAwaitingReadiness, readySession == nil, isThisLaunch, let session {
+                readySession = (sessionID, session)
+            } else if let session, let data = WatchWorkoutMessage.declineClaim(sessionID: sessionID).encoded() {
+                Task { try? await session.sendToRemoteWorkoutSession(data: data) }
+            }
             return
         }
         onMessage?(message)

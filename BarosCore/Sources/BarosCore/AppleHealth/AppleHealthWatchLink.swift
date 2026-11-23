@@ -4,11 +4,12 @@ import Foundation
 /// until the Watch acknowledges it, and the Watch saves only on a `finish` that names its token.
 public enum AppleHealthWatchCommand: Codable, Equatable, Sendable {
     case finish(workoutID: UUID, token: UUID, endedAt: Date)
-    case discard(workoutID: UUID)
+    /// Scoped to a claim token, so a delayed discard for an old claim can't end a newer session.
+    case discard(workoutID: UUID, token: UUID)
 
     public var workoutID: UUID {
         switch self {
-        case let .finish(workoutID, _, _), let .discard(workoutID): workoutID
+        case let .finish(workoutID, _, _), let .discard(workoutID, _): workoutID
         }
     }
 }

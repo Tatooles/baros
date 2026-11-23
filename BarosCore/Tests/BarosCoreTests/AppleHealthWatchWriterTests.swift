@@ -80,7 +80,7 @@ final class AppleHealthWatchWriterTests: XCTestCase {
         XCTAssertEqual(watch.commands, [.finish(workoutID: id, token: token!, endedAt: start.addingTimeInterval(50 * 60))])
         XCTAssertEqual(ledger.entry(for: id)?.phase, .awaitingWatch)
 
-        reconciler.handleWatchAcknowledgement(workoutID: id, outcome: .saved)
+        reconciler.handleWatchAcknowledgement(workoutID: id, token: watch.claims.first!.token, outcome: .saved)
 
         XCTAssertEqual(ledger.entry(for: id)?.phase, .saved)
         XCTAssertEqual(recorder.saveAttempts, 0, "Watch or nothing: the iPhone never saves it")
@@ -95,7 +95,7 @@ final class AppleHealthWatchWriterTests: XCTestCase {
         await reconciler.requestReconciliation().value
         XCTAssertEqual(watch.commands.count, 2)
 
-        reconciler.handleWatchAcknowledgement(workoutID: id, outcome: .saved)
+        reconciler.handleWatchAcknowledgement(workoutID: id, token: watch.claims.first!.token, outcome: .saved)
         await reconciler.requestReconciliation().value
 
         XCTAssertEqual(watch.commands.count, 2)
@@ -117,9 +117,9 @@ final class AppleHealthWatchWriterTests: XCTestCase {
 
         source.snapshots = [snapshot(.discarded)]
         await reconciler.requestReconciliation().value
-        reconciler.handleWatchAcknowledgement(workoutID: id, outcome: .discarded)
+        reconciler.handleWatchAcknowledgement(workoutID: id, token: watch.claims.first!.token, outcome: .discarded)
 
-        XCTAssertEqual(watch.commands, [.discard(workoutID: id)])
+        XCTAssertEqual(watch.commands, [.discard(workoutID: id, token: watch.claims.first!.token)])
         XCTAssertEqual(ledger.entry(for: id)?.phase, .abandoned)
     }
 
@@ -130,14 +130,14 @@ final class AppleHealthWatchWriterTests: XCTestCase {
         source.snapshots = [snapshot(.active, isVisible: false)]
         await reconciler.requestReconciliation().value
 
-        XCTAssertEqual(watch.commands, [.discard(workoutID: id)])
+        XCTAssertEqual(watch.commands, [.discard(workoutID: id, token: watch.claims.first!.token)])
     }
 
     func testSavedAcknowledgementWithoutAPendingFinishIsIgnored() async {
         let reconciler = makeReconciler()
         await startOnWatch(reconciler)
 
-        reconciler.handleWatchAcknowledgement(workoutID: id, outcome: .saved)
+        reconciler.handleWatchAcknowledgement(workoutID: id, token: watch.claims.first!.token, outcome: .saved)
 
         XCTAssertEqual(ledger.entry(for: id)?.phase, .recording)
     }
@@ -146,10 +146,24 @@ final class AppleHealthWatchWriterTests: XCTestCase {
         let reconciler = makeReconciler()
         await startOnWatch(reconciler)
 
-        XCTAssertEqual(reconciler.watchCommand(forStatusOf: UUID(), isEndRequest: false)?.workoutID != id, true)
-        XCTAssertNil(reconciler.watchCommand(forStatusOf: id, isEndRequest: false), "After a relaunch, keep recording")
-        XCTAssertEqual(reconciler.watchCommand(forStatusOf: id, isEndRequest: true), .discard(workoutID: id))
-        XCTAssertEqual(ledger.entry(for: id)?.pendingWatchCommand, .discard(workoutID: id))
+        let token = watch.claims.first!.token
+        let stranger = UUID()
+        XCTAssertEqual(reconciler.watchCommand(forStatusOf: stranger, token: token, isEndRequest: false),
+                       .discard(workoutID: stranger, token: token))
+        XCTAssertNil(reconciler.watchCommand(forStatusOf: id, token: token, isEndRequest: false), "After a relaunch, keep recording")
+        XCTAssertEqual(reconciler.watchCommand(forStatusOf: id, token: token, isEndRequest: true), .discard(workoutID: id, token: token))
+        XCTAssertEqual(ledger.entry(for: id)?.pendingWatchCommand, .discard(workoutID: id, token: token))
+    }
+
+    func testAcknowledgementForAnOldClaimIsIgnored() async {
+        let reconciler = makeReconciler()
+        await startOnWatch(reconciler)
+        source.snapshots = [snapshot(.completed, endedAfter: 50)]
+        await reconciler.requestReconciliation().value
+
+        reconciler.handleWatchAcknowledgement(workoutID: id, token: UUID(), outcome: .discarded)
+
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .awaitingWatch)
     }
 
     func testLocalDataResetTellsAWatchWriterToDiscard() async {
@@ -158,7 +172,7 @@ final class AppleHealthWatchWriterTests: XCTestCase {
 
         reconciler.prepareForLocalDataReset()
 
-        XCTAssertEqual(watch.commands, [.discard(workoutID: id)])
+        XCTAssertEqual(watch.commands, [.discard(workoutID: id, token: watch.claims.first!.token)])
         XCTAssertTrue(ledger.entries.isEmpty)
     }
 

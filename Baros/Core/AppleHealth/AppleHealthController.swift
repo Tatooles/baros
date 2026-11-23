@@ -118,7 +118,7 @@ final class AppleHealthController {
     /// Messages from the Baros Watch app (ADR 0005, "Watch writer").
     private func handle(_ message: WatchWorkoutMessage) {
         switch message {
-        case let .acknowledged(workoutID, outcome):
+        case let .acknowledged(workoutID, token, outcome):
             heartRates[workoutID] = nil
             let mapped: AppleHealthWatchOutcome = switch outcome {
             case .saved: .saved
@@ -126,16 +126,16 @@ final class AppleHealthController {
             case .discarded: .discarded
             case .failed: .failed
             }
-            reconciler.handleWatchAcknowledgement(workoutID: workoutID, outcome: mapped)
-        case let .statusRequest(workoutID, isEndRequest):
-            if let command = reconciler.watchCommand(forStatusOf: workoutID, isEndRequest: isEndRequest) {
+            reconciler.handleWatchAcknowledgement(workoutID: workoutID, token: token, outcome: mapped)
+        case let .statusRequest(workoutID, token, isEndRequest):
+            if let command = reconciler.watchCommand(forStatusOf: workoutID, token: token, isEndRequest: isEndRequest) {
                 watchLink.send(command)
             } else {
                 watchLink.send(.continueRecording(workoutID: workoutID))
             }
         case let .heartRate(workoutID, beatsPerMinute, measuredAt):
             heartRates[workoutID] = LiveHeartRate(beatsPerMinute: beatsPerMinute, measuredAt: measuredAt)
-        case .readyForClaim, .claim, .finish, .discard, .continueRecording:
+        case .readyForClaim, .declineClaim, .claim, .finish, .discard, .continueRecording:
             break // iPhone → Watch only.
         }
     }
