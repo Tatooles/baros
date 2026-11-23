@@ -17,6 +17,10 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
     /// While a launch waits, the first session that reports `readyForClaim`; the claim goes to exactly it.
     private var isAwaitingReadiness = false
     private var launchRequestedAt = Date.distantFuture
+    /// When a launch last gave up waiting. Its Watch session may still report ready, so for a while a new
+    /// launch can't tell whose readiness it is; the iPhone records the workout itself instead.
+    private var lastAbandonedLaunchAt: Date?
+    private static let abandonedLaunchQuarantine: TimeInterval = 60
     /// Allows for clock differences between iPhone and Watch.
     private static let clockTolerance: TimeInterval = 5
     private var readySession: (sessionID: UUID, session: HKWorkoutSession)?
@@ -45,6 +49,9 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
     /// Ready only when a freshly launched Watch session reports `readyForClaim`; an older session that
     /// reconnects meanwhile doesn't count.
     func prepareWatchSession(workoutID: UUID) async -> Bool {
+        if let lastAbandonedLaunchAt, Date.now.timeIntervalSince(lastAbandonedLaunchAt) < Self.abandonedLaunchQuarantine {
+            return false
+        }
         readySession = nil
         isAwaitingReadiness = true
         launchRequestedAt = .now
@@ -59,6 +66,7 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
         while readySession == nil, clock.now < deadline {
             try? await Task.sleep(for: .milliseconds(200))
         }
+        if readySession == nil { lastAbandonedLaunchAt = .now }
         return readySession != nil
     }
 

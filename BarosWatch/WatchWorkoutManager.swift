@@ -140,7 +140,8 @@ final class WatchWorkoutManager: NSObject {
 
     /// The End button. The iPhone decides finish or discard; without an answer, nothing is saved.
     func endFromWatch() {
-        guard !isSettingUp else { return }
+        // Setting up or already saving: End has nothing to do (a confirmation may still be on screen).
+        guard !isSettingUp, phase != .ending else { return }
         guard let claim, phase == .recording, let session else {
             discardSession(acknowledging: false)
             return
@@ -196,11 +197,8 @@ final class WatchWorkoutManager: NSObject {
         }
         guard let claim, claim.workoutID == workoutID, claim.token == token, session != nil else {
             // Not this session's claim: repeat an earlier answer, or report there's nothing to save.
-            if case .discard = message {
-                acknowledge(workoutID, token, recentOutcome(workoutID) ?? .discarded)
-            } else {
-                acknowledge(workoutID, token, recentOutcome(workoutID) ?? .failed)
-            }
+            let fallback: WatchWorkoutMessage.Outcome = if case .discard = message { .discarded } else { .failed }
+            send(.acknowledged(workoutID: workoutID, token: token, outcome: recentOutcome(workoutID, token) ?? fallback))
             return
         }
         guard phase != .ending else { return } // Already finishing or discarding; the outcome follows.
@@ -361,8 +359,9 @@ final class WatchWorkoutManager: NSObject {
         }
     }
 
+    /// Reports what this Watch actually did with its own claim, and remembers it for repeated commands.
     private func acknowledge(_ workoutID: UUID, _ token: UUID, _ outcome: WatchWorkoutMessage.Outcome) {
-        rememberOutcome(outcome, for: workoutID)
+        rememberOutcome(outcome, for: workoutID, token: token)
         send(.acknowledged(workoutID: workoutID, token: token, outcome: outcome))
     }
 
@@ -375,16 +374,20 @@ final class WatchWorkoutManager: NSObject {
         return try? JSONDecoder().decode(Claim.self, from: data)
     }
 
-    private func rememberOutcome(_ outcome: WatchWorkoutMessage.Outcome, for workoutID: UUID) {
+    private static func outcomeKey(_ workoutID: UUID, _ token: UUID) -> String {
+        "\(workoutID.uuidString)|\(token.uuidString)"
+    }
+
+    private func rememberOutcome(_ outcome: WatchWorkoutMessage.Outcome, for workoutID: UUID, token: UUID) {
         var outcomes = UserDefaults.standard.dictionary(forKey: Self.outcomesKey) as? [String: String] ?? [:]
-        outcomes[workoutID.uuidString] = outcome.rawValue
+        outcomes[Self.outcomeKey(workoutID, token)] = outcome.rawValue
         if outcomes.count > 20, let oldest = outcomes.keys.sorted().first { outcomes.removeValue(forKey: oldest) }
         UserDefaults.standard.set(outcomes, forKey: Self.outcomesKey)
     }
 
-    private func recentOutcome(_ workoutID: UUID) -> WatchWorkoutMessage.Outcome? {
+    private func recentOutcome(_ workoutID: UUID, _ token: UUID) -> WatchWorkoutMessage.Outcome? {
         let outcomes = UserDefaults.standard.dictionary(forKey: Self.outcomesKey) as? [String: String]
-        return outcomes?[workoutID.uuidString].flatMap(WatchWorkoutMessage.Outcome.init(rawValue:))
+        return outcomes?[Self.outcomeKey(workoutID, token)].flatMap(WatchWorkoutMessage.Outcome.init(rawValue:))
     }
 
     // MARK: Delegate hops
