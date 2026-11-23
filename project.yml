@@ -198,6 +198,8 @@ targets:
       ProvisioningStyle: Automatic
     sources:
       - path: BarosWatch
+      - path: Baros/AppIcon.icon
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: BarosWatch
@@ -206,6 +208,7 @@ targets:
         APP_DISPLAY_NAME: Baros Dev
         INFOPLIST_FILE: BarosWatch/Info.plist
         CODE_SIGN_ENTITLEMENTS: BarosWatch/BarosWatch.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: RJGJJ38RV9
         SKIP_INSTALL: YES

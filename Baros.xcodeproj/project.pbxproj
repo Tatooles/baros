@@ -65,6 +65,7 @@
 		5525D30F148CDFA02B8598A3 /* SupersetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC49EA0F74AD67C212E209A /* SupersetTests.swift */; };
 		55F7352C891E2AD6A8827E8F /* SettingsAccountSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BAAE5E20B23FFCD982FADAF /* SettingsAccountSection.swift */; };
 		56919F514C52CBA46A364197 /* ExerciseLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44C8EF7413F539FC06139F9B /* ExerciseLibraryView.swift */; };
+		594178F474736BFBD229CA08 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4E2709B6422528E5D6A0209A /* AppIcon.icon */; };
 		5AD4FC88B8B8E2EB7852228C /* ExerciseHistoryNoteBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0F85EAEFED85356D177792 /* ExerciseHistoryNoteBlock.swift */; };
 		5C8372D64F3446711717DC10 /* WorkoutLiveActivityLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCBB7F163907A7CF68878C68 /* WorkoutLiveActivityLink.swift */; };
 		5E4A8385102FCFF2F948C934 /* DeveloperDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6BD2ACCC1481D31808F5C38 /* DeveloperDiagnosticsView.swift */; };
@@ -829,6 +830,7 @@
 			buildConfigurationList = EF8DE5210A16FF90E61C8990 /* Build configuration list for PBXNativeTarget "BarosWatch" */;
 			buildPhases = (
 				4EF8B195046FE8B0A912DB3B /* Sources */,
+				F0325EFC3700FB47669663FC /* Resources */,
 			);
 			buildRules = (
 			);
@@ -933,6 +935,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				4FC116B818C26AAC7C46BF20 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0325EFC3700FB47669663FC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				594178F474736BFBD229CA08 /* AppIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
