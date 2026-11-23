@@ -154,10 +154,12 @@ save. The other device never saves that workout, even as a fallback.
   restored. Otherwise the replacement stays pending and retries.
 - **Delete.** A tombstone deletes the Health copy with `deleteObjects(of:predicate:)`
   on the sync identifier. Heart-rate samples from the workout stay in Health, and
-  the delete copy says so.
-- **iPhone-recorded workouts.** A replacement re-adds the old workout's heart-rate
-  samples inside the new interval. The spike also confirms which sample types need
-  write permission *(spike)*.
+  the delete copy says so. If the delete is reverted (for example, by sync), the
+  workout is saved again with a higher version.
+- **iPhone-recorded workouts.** A replacement saves the new times only. It doesn't
+  copy heart-rate samples, because copying would duplicate them in Health. The #462
+  device check records whether HealthKit keeps the old samples attached to the
+  replacement *(spike)*.
 - **Watch-recorded workouts.** Propagation happens only if the spike shows the
   iPhone app can replace or delete the Watch app's workout. Otherwise edits and
   deletes aren't propagated in 1.6, and the copy says so.

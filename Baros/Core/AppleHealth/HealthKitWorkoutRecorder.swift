@@ -128,13 +128,7 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
     }
 
     func savedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> AppleHealthSavedCopy? {
-        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
-            HKQuery.predicateForObjects(
-                withMetadataKey: HKMetadataKeySyncIdentifier,
-                allowedValues: [Self.syncIdentifier(for: workoutID)]
-            ),
-            HKQuery.predicateForObjects(from: HKSource.default()),
-        ])
+        let predicate = Self.ownCopyPredicate(for: workoutID)
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.workout(predicate)],
             sortDescriptors: [],
@@ -177,7 +171,50 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         }
     }
 
+    func deleteSavedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> Int {
+        do {
+            return try await healthStore.deleteObjects(of: HKObjectType.workoutType(), predicate: Self.ownCopyPredicate(for: workoutID))
+        } catch {
+            throw Self.failure(for: error)
+        }
+    }
+
+    /// Reattaches to a session HealthKit kept alive across a crash or relaunch (ADR 0005, "Recovery").
+    /// The builder's sync identifier names the Baros workout; a session without one is ended.
+    func recoverActiveSession() async {
+        guard HKHealthStore.isHealthDataAvailable(), let session = try? await healthStore.recoverActiveWorkoutSession() else {
+            return
+        }
+        let builder = session.associatedWorkoutBuilder()
+        guard
+            let identifier = builder.metadata[HKMetadataKeySyncIdentifier] as? String,
+            let workoutID = UUID(uuidString: identifier),
+            liveSessions[workoutID] == nil
+        else {
+            session.end()
+            builder.discardWorkout()
+            return
+        }
+        builder.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: session.workoutConfiguration)
+        session.delegate = self
+        builder.delegate = self
+        let live = LiveSession(session: session, builder: builder)
+        live.isStopped = session.state == .stopped
+        liveSessions[workoutID] = live
+    }
+
     // MARK: - Helpers
+
+    /// This app's own copy of a workout, by sync identifier.
+    private static func ownCopyPredicate(for workoutID: UUID) -> NSPredicate {
+        NSCompoundPredicate(andPredicateWithSubpredicates: [
+            HKQuery.predicateForObjects(
+                withMetadataKey: HKMetadataKeySyncIdentifier,
+                allowedValues: [syncIdentifier(for: workoutID)]
+            ),
+            HKQuery.predicateForObjects(from: HKSource.default()),
+        ])
+    }
 
     static func syncIdentifier(for workoutID: UUID) -> String {
         workoutID.uuidString.lowercased()

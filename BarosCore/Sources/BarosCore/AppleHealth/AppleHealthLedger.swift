@@ -17,8 +17,16 @@ public struct AppleHealthLedgerEntry: Codable, Equatable, Sendable {
         case recording
         /// The live session ended early. The fallback saves the workout at finish.
         case sessionLost
-        /// A Health copy was saved.
+        /// A Health copy was saved. Later date or duration edits replace it; a tombstone deletes it.
         case saved
+        /// The Baros workout was deleted and its Health copy was confirmed to exist; the delete may not
+        /// have finished. A retry that finds nothing means Baros already deleted it.
+        case deletingWithWorkout
+        /// The Baros workout was deleted, so Baros deleted its Health copy. If the delete is reverted,
+        /// the workout is saved again.
+        case deletedWithWorkout
+        /// Terminal: the person deleted the Health copy in the Health app. It is never restored.
+        case removedInHealth
         /// Terminal: this workout never gets a Health copy from this device.
         case abandoned
     }
@@ -54,7 +62,7 @@ public struct AppleHealthLedgerEntry: Codable, Equatable, Sendable {
     }
 
     var isTerminal: Bool {
-        phase == .saved || phase == .abandoned
+        phase == .removedInHealth || phase == .abandoned
     }
 }
 

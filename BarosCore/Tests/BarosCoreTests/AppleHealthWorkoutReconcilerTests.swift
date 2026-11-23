@@ -234,6 +234,171 @@ final class AppleHealthWorkoutReconcilerTests: XCTestCase {
         XCTAssertTrue(ledger.entries.isEmpty)
     }
 
+    private func completed(endedAfter minutes: Double, updatedAfter updated: Double, isDeleted: Bool = false) -> AppleHealthWorkoutSnapshot {
+        AppleHealthWorkoutSnapshot(
+            workoutID: id, status: .completed, startedAt: start,
+            endedAt: start.addingTimeInterval(minutes * 60), updatedAt: start.addingTimeInterval(updated * 60),
+            isDeleted: isDeleted, isVisible: true
+        )
+    }
+
+    private func saveConfirmed(_ isConfirmed: Bool = true) {
+        ledger.save(AppleHealthLedgerEntry(
+            workoutID: id, writer: .iPhone, phase: .saved, lastWrittenVersion: 1,
+            lastWrittenStart: start, lastWrittenEnd: start.addingTimeInterval(50 * 60), isSaveConfirmed: isConfirmed
+        ))
+    }
+
+    func testEditReplacesTheExistingCopy() async {
+        saveConfirmed()
+        recorder.savedIDs = [id]
+        source.snapshots = [completed(endedAfter: 65, updatedAfter: 120)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.fallbackSaves, [id])
+        XCTAssertEqual(ledger.entry(for: id)?.lastWrittenEnd, start.addingTimeInterval(65 * 60))
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .saved)
+    }
+
+    func testEditAfterTheCopyWasDeletedInHealthNeverRestoresIt() async {
+        saveConfirmed()
+        source.snapshots = [completed(endedAfter: 65, updatedAfter: 120)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+        source.snapshots = [completed(endedAfter: 70, updatedAfter: 130)]
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.saveAttempts, 0)
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .removedInHealth)
+    }
+
+    func testEditOfACopySavedWhileLockedWaitsUntilItIsReadable() async {
+        saveConfirmed(false)
+        source.snapshots = [completed(endedAfter: 65, updatedAfter: 120)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .saved)
+
+        recorder.savedIDs = [id]
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.fallbackSaves, [id])
+    }
+
+    func testDeleteRemovesTheCopyAndARevertedDeleteSavesItAgain() async {
+        saveConfirmed()
+        recorder.savedIDs = [id]
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 100, isDeleted: true)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+        XCTAssertEqual(recorder.deletedIDs, [id])
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .deletedWithWorkout)
+
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 200)]
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.fallbackSaves, [id])
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .saved)
+    }
+
+    func testDeletingACopyAlreadyDeletedInHealthNeverRestoresIt() async {
+        saveConfirmed()
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 100, isDeleted: true)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .removedInHealth)
+
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 200)]
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.saveAttempts, 0, "Reverting the delete must not recreate a copy the person deleted")
+    }
+
+    func testDeleteInterruptedByACrashIsStillTreatedAsABarosDelete() async {
+        // HealthKit deleted the copy, but the app quit before recording it.
+        ledger.save(AppleHealthLedgerEntry(workoutID: id, writer: .iPhone, phase: .deletingWithWorkout, isSaveConfirmed: true))
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 100, isDeleted: true)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .deletedWithWorkout)
+
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 200)]
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.fallbackSaves, [id], "A reverted delete restores the copy Baros deleted")
+    }
+
+    func testRestoreDuringAnInterruptedDeleteKeepsOneCopy() async {
+        // The delete failed after being recorded, then sync restored the workout.
+        ledger.save(AppleHealthLedgerEntry(workoutID: id, writer: .iPhone, phase: .deletingWithWorkout, isSaveConfirmed: true))
+        recorder.savedIDs = [id]
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 200)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertTrue(recorder.deletedIDs.isEmpty, "The copy of a restored workout is never deleted")
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .saved)
+    }
+
+    func testRestoredWorkoutWithNewTimesReplacesTheSurvivingCopy() async {
+        ledger.save(AppleHealthLedgerEntry(workoutID: id, writer: .iPhone, phase: .deletingWithWorkout, isSaveConfirmed: true))
+        recorder.existingCopies[id] = AppleHealthSavedCopy(syncVersion: 5, startedAt: start, endedAt: start.addingTimeInterval(50 * 60))
+        source.snapshots = [completed(endedAfter: 65, updatedAfter: 200)]
+        let reconciler = makeReconciler()
+
+        // The adopt pass asks for one more pass, which the drain loop runs before finishing.
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.fallbackSaves, [id])
+        XCTAssertEqual(ledger.entry(for: id)?.lastWrittenEnd, start.addingTimeInterval(65 * 60))
+        XCTAssertGreaterThan(ledger.entry(for: id)?.lastWrittenVersion ?? 0, 5)
+    }
+
+    func testTransientErrorWhileResumingAnInterruptedDeleteKeepsItsRecord() async {
+        ledger.save(AppleHealthLedgerEntry(workoutID: id, writer: .iPhone, phase: .deletingWithWorkout, isSaveConfirmed: true))
+        recorder.deleteFailure = .transient
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 100, isDeleted: true)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .deletingWithWorkout)
+    }
+
+    func testRejectedDeleteIsRetriedFromScratch() async {
+        saveConfirmed()
+        recorder.savedIDs = [id]
+        recorder.deleteFailure = .transient
+        source.snapshots = [completed(endedAfter: 50, updatedAfter: 100, isDeleted: true)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(ledger.entry(for: id)?.phase, .saved, "HealthKit answered; this is not a crash")
+    }
+
+    func testReplacementThatAlreadyLandedIsAdoptedNotResaved() async {
+        saveConfirmed()
+        let landed = AppleHealthSavedCopy(syncVersion: 42, startedAt: start, endedAt: start.addingTimeInterval(65 * 60))
+        recorder.existingCopies[id] = landed
+        source.snapshots = [completed(endedAfter: 65, updatedAfter: 120)]
+        let reconciler = makeReconciler()
+
+        await reconciler.requestReconciliation().value
+
+        XCTAssertEqual(recorder.saveAttempts, 0)
+        XCTAssertEqual(ledger.entry(for: id)?.lastWrittenVersion, 42)
+        XCTAssertEqual(ledger.entry(for: id)?.lastWrittenEnd, landed.endedAt)
+    }
+
     func testLedgerSurvivesRelaunch() async {
         let reconciler = makeReconciler()
         source.snapshots = [snapshot(.active)]
@@ -300,6 +465,18 @@ private final class FakeAppleHealthRecorder: AppleHealthWorkoutRecording {
         }
         savedIDs.insert(workoutID)
         return .visible
+    }
+
+    var deletedIDs: [UUID] = []
+    var deleteFailure: AppleHealthRecordingFailure?
+
+    func deleteSavedWorkout(workoutID: UUID) async throws(AppleHealthRecordingFailure) -> Int {
+        if let deleteFailure { throw deleteFailure }
+        let existed = savedIDs.contains(workoutID) || existingCopies[workoutID] != nil
+        deletedIDs.append(workoutID)
+        savedIDs.remove(workoutID)
+        existingCopies[workoutID] = nil
+        return existed ? 1 : 0
     }
 
     func discardSession(workoutID: UUID) {

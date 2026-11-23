@@ -26,6 +26,10 @@ final class AppleHealthController {
     @ObservationIgnored private let recorder: HealthKitWorkoutRecorder
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let reconciler: AppleHealthWorkoutReconciler
+    /// Passes wait until a session HealthKit kept alive across a relaunch is reattached, so it isn't
+    /// mistaken for a lost one.
+    @ObservationIgnored private var isRecoveringSession = true
+    @ObservationIgnored private var isReconciliationPending = false
 
     init(
         container: ModelContainer,
@@ -48,6 +52,12 @@ final class AppleHealthController {
         }
         recorder.onSessionEnded = { [weak self] workoutID in
             self?.heartRates[workoutID] = nil
+        }
+        Task { [weak self] in
+            await recorder.recoverActiveSession()
+            guard let self else { return }
+            isRecoveringSession = false
+            if isReconciliationPending { requestReconciliation() }
         }
     }
 
@@ -102,6 +112,11 @@ final class AppleHealthController {
 
     func requestReconciliation() {
         refreshAuthorization()
+        guard !isRecoveringSession else {
+            isReconciliationPending = true
+            return
+        }
+        isReconciliationPending = false
         reconciler.requestReconciliation()
     }
 }
