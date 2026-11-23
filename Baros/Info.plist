@@ -43,6 +43,10 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Baros reads your heart rate during a workout to show it live. Baros never uploads your Health data.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Baros saves your strength workouts to Apple Health, with the heart rate and energy measured during them.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>BarosEnvironment</key>
