@@ -7,8 +7,11 @@ import Foundation
 /// excepted) also over WatchConnectivity `transferUserInfo`, so a command sent while the Watch is
 /// out of range arrives later. Every message is idempotent by workout ID and token.
 enum WatchWorkoutMessage: Codable, Equatable, Sendable {
-    /// iPhone → Watch: the Watch may save this workout, and only on a `finish` naming `token`.
-    case claim(workoutID: UUID, startedAt: Date, token: UUID, syncVersion: Int64)
+    /// Watch → iPhone: a freshly launched session is mirrored and waiting for a claim.
+    case readyForClaim(sessionID: UUID)
+    /// iPhone → Watch: the Watch may save this workout, and only on a `finish` naming `token`. It names
+    /// the session that reported ready, so it can't land on another session.
+    case claim(workoutID: UUID, startedAt: Date, token: UUID, syncVersion: Int64, sessionID: UUID)
     /// iPhone → Watch: save the workout ending at `endedAt`.
     case finish(workoutID: UUID, token: UUID, endedAt: Date)
     /// iPhone → Watch: end the session and save nothing.
@@ -31,8 +34,11 @@ enum WatchWorkoutMessage: Codable, Equatable, Sendable {
 
     static let userInfoKey = "baros.watchWorkoutMessage"
 
+    /// Sorted keys, so identical messages encode identically (queued transfers are deduplicated by bytes).
     func encoded() -> Data? {
-        try? JSONEncoder().encode(self)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return try? encoder.encode(self)
     }
 
     init?(data: Data) {
@@ -44,7 +50,7 @@ enum WatchWorkoutMessage: Codable, Equatable, Sendable {
     var isDurable: Bool {
         switch self {
         case .finish, .discard, .acknowledged: true
-        case .claim, .continueRecording, .statusRequest, .heartRate: false
+        case .readyForClaim, .claim, .continueRecording, .statusRequest, .heartRate: false
         }
     }
 }

@@ -14,6 +14,9 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
 
     private let healthStore: HKHealthStore
     private var mirroredSession: HKWorkoutSession?
+    /// While a launch waits, the first session that reports `readyForClaim`; the claim goes to exactly it.
+    private var isAwaitingReadiness = false
+    private var readySession: (sessionID: UUID, session: HKWorkoutSession)?
     /// Called on the main actor with each message from the Watch.
     var onMessage: ((WatchWorkoutMessage) -> Void)?
 
@@ -36,8 +39,12 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
         return session.activationState == .activated && session.isPaired && session.isWatchAppInstalled
     }
 
+    /// Ready only when a freshly launched Watch session reports `readyForClaim`; an older session that
+    /// reconnects meanwhile doesn't count.
     func prepareWatchSession(workoutID: UUID) async -> Bool {
-        mirroredSession = nil
+        readySession = nil
+        isAwaitingReadiness = true
+        defer { isAwaitingReadiness = false }
         do {
             try await healthStore.startWatchApp(toHandle: HealthKitWorkoutRecorder.workoutConfiguration)
         } catch {
@@ -45,14 +52,20 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
         }
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: Self.mirrorTimeout)
-        while mirroredSession == nil, clock.now < deadline {
+        while readySession == nil, clock.now < deadline {
             try? await Task.sleep(for: .milliseconds(200))
         }
-        return mirroredSession != nil
+        return readySession != nil
     }
 
     func sendClaim(workoutID: UUID, startedAt: Date, token: UUID, syncVersion: Int64) async {
-        await sendOverMirror(.claim(workoutID: workoutID, startedAt: startedAt, token: token, syncVersion: syncVersion))
+        guard let (sessionID, session) = readySession else { return }
+        readySession = nil
+        let claim = WatchWorkoutMessage.claim(
+            workoutID: workoutID, startedAt: startedAt, token: token, syncVersion: syncVersion, sessionID: sessionID
+        )
+        guard let data = claim.encoded() else { return }
+        try? await session.sendToRemoteWorkoutSession(data: data)
     }
 
     func send(_ command: AppleHealthWatchCommand) {
@@ -87,13 +100,18 @@ final class WatchWorkoutLink: NSObject, AppleHealthWatchLinking {
         session.delegate = self
     }
 
-    private func receive(_ data: Data) {
+    private func receive(_ data: Data, from session: HKWorkoutSession?) {
         guard let message = WatchWorkoutMessage(data: data) else { return }
+        if case let .readyForClaim(sessionID) = message {
+            if isAwaitingReadiness, readySession == nil, let session { readySession = (sessionID, session) }
+            return
+        }
         onMessage?(message)
     }
 
     private func dropMirroredSession(_ session: HKWorkoutSession) {
         if mirroredSession === session { mirroredSession = nil }
+        if readySession?.session === session { readySession = nil }
     }
 }
 
@@ -111,7 +129,7 @@ extension WatchWorkoutLink: HKWorkoutSessionDelegate {
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: any Error) {}
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didReceiveDataFromRemoteWorkoutSession data: [Data]) {
-        Task { @MainActor in data.forEach(self.receive) }
+        Task { @MainActor in data.forEach { self.receive($0, from: workoutSession) } }
     }
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didDisconnectFromRemoteDeviceWithError error: (any Error)?) {
@@ -131,6 +149,6 @@ extension WatchWorkoutLink: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         guard let data = userInfo[WatchWorkoutMessage.userInfoKey] as? Data else { return }
-        Task { @MainActor in self.receive(data) }
+        Task { @MainActor in self.receive(data, from: nil) }
     }
 }

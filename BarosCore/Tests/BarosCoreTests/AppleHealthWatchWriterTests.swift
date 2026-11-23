@@ -152,6 +152,16 @@ final class AppleHealthWatchWriterTests: XCTestCase {
         XCTAssertEqual(ledger.entry(for: id)?.pendingWatchCommand, .discard(workoutID: id))
     }
 
+    func testLocalDataResetTellsAWatchWriterToDiscard() async {
+        let reconciler = makeReconciler()
+        await startOnWatch(reconciler)
+
+        reconciler.prepareForLocalDataReset()
+
+        XCTAssertEqual(watch.commands, [.discard(workoutID: id)])
+        XCTAssertTrue(ledger.entries.isEmpty)
+    }
+
     func testEditsToAWatchSavedWorkoutAreNotPropagated() async {
         ledger.save(AppleHealthLedgerEntry(
             workoutID: id, writer: .watch, phase: .saved, lastWrittenStart: start,

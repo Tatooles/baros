@@ -24,10 +24,12 @@ final class WatchWorkoutManager: NSObject {
     }
 
     /// Without a claim by then, the session ends and discards (the iPhone has given up on the Watch).
-    private static let claimDeadline: Duration = .seconds(45)
-    private static let maximumSessionAge: Duration = .seconds(6 * 60 * 60)
+    private static let claimDeadline: TimeInterval = 45
+    private static let maximumSessionAge: TimeInterval = 6 * 60 * 60
     /// After End, how long to wait for the iPhone's answer before discarding.
     private static let endReplyTimeout: Duration = .seconds(10)
+    /// How long commands for a stored claim wait for crash recovery before being answered.
+    private static let recoveryWait: Duration = .seconds(15)
     private static let stopTimeout: Duration = .seconds(10)
     private static let claimKey = "Baros.Watch.claim"
     private static let outcomesKey = "Baros.Watch.recentOutcomes"
@@ -39,15 +41,25 @@ final class WatchWorkoutManager: NSObject {
     @ObservationIgnored private let healthStore = HKHealthStore()
     @ObservationIgnored private var session: HKWorkoutSession?
     @ObservationIgnored private var builder: HKLiveWorkoutBuilder?
+    /// Identifies this session in the readiness handshake, so a claim can't land on another session.
+    @ObservationIgnored private var sessionID: UUID?
     @ObservationIgnored private var claim: Claim?
+    /// The claim is bound, but `beginCollection` and the metadata aren't done yet.
+    @ObservationIgnored private var isSettingUp = false
+    /// A stored claim exists and recovery hasn't said whether its session survived.
+    @ObservationIgnored private var isAwaitingRecovery = false
+    /// Finish or discard commands that arrived before the session could act on them.
+    @ObservationIgnored private var heldCommands: [WatchWorkoutMessage] = []
     @ObservationIgnored private var isStopped = false
     @ObservationIgnored private var deadlineTask: Task<Void, Never>?
     @ObservationIgnored private var ageTask: Task<Void, Never>?
     @ObservationIgnored private var endReplyTask: Task<Void, Never>?
+    @ObservationIgnored private var recoveryWaitTask: Task<Void, Never>?
     @ObservationIgnored private var lastHeartRateSent = Date.distantPast
 
     override private init() {
         super.init()
+        isAwaitingRecovery = storedClaim() != nil
         if WCSession.isSupported() {
             WCSession.default.delegate = self
             WCSession.default.activate()
@@ -65,36 +77,46 @@ final class WatchWorkoutManager: NSObject {
 
     // MARK: Lifecycle
 
-    /// Launched by the iPhone with `startWatchApp`. Starts the session and mirroring, then waits for a claim.
+    /// Launched by the iPhone with `startWatchApp`. Starts the session and mirroring, then tells the iPhone
+    /// it's ready for a claim.
     func start(configuration: HKWorkoutConfiguration) async {
         guard session == nil else { return }
+        let session: HKWorkoutSession
         do {
-            let session = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
-            let builder = session.associatedWorkoutBuilder()
-            builder.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: configuration)
-            adopt(session, builder)
-            session.prepare()
-            session.startActivity(with: .now)
-            phase = .waitingForClaim
-            try await session.startMirroringToCompanionDevice()
+            session = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
         } catch {
-            discardSession(acknowledging: false)
             return
         }
-        deadlineTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.claimDeadline)
-            guard !Task.isCancelled, let self, claim == nil else { return }
-            discardSession(acknowledging: false)
+        let builder = session.associatedWorkoutBuilder()
+        builder.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: configuration)
+        let sessionID = UUID()
+        adopt(session, builder, sessionID: sessionID)
+        session.prepare()
+        session.startActivity(with: .now)
+        phase = .waitingForClaim
+        // Deadlines are armed before any wait, so a slow mirror can't extend an unclaimed session.
+        deadlineTask = sessionTask(for: session, after: Self.claimDeadline) { manager in
+            guard manager.claim == nil else { return }
+            manager.discardSession(acknowledging: false)
         }
-        armAgeLimit()
+        armAgeLimit(for: session, startedAt: .now)
+        do {
+            try await session.startMirroringToCompanionDevice()
+        } catch {
+            if self.session === session { discardSession(acknowledging: false) }
+            return
+        }
+        guard self.session === session else { return }
+        send(.readyForClaim(sessionID: sessionID))
     }
 
     /// After a crash or relaunch (`handleActiveWorkoutRecovery`): reattach, re-mirror, and ask the iPhone.
     func recover() async {
+        defer { finishAwaitingRecovery() }
         guard session == nil, let session = try? await healthStore.recoverActiveWorkoutSession() else { return }
         let builder = session.associatedWorkoutBuilder()
         builder.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: session.workoutConfiguration)
-        adopt(session, builder)
+        adopt(session, builder, sessionID: UUID())
         isStopped = session.state == .stopped
         guard let claim = storedClaim() else {
             // Never claimed, so it can never be saved.
@@ -102,16 +124,18 @@ final class WatchWorkoutManager: NSObject {
             return
         }
         self.claim = claim
-        startDate = builder.startDate
+        let startedAt = builder.startDate ?? .now
+        startDate = startedAt
         phase = .recording
+        armAgeLimit(for: session, startedAt: startedAt)
         try? await session.startMirroringToCompanionDevice()
+        guard self.session === session else { return }
         send(.statusRequest(workoutID: claim.workoutID, isEndRequest: false))
-        armAgeLimit()
     }
 
     /// The End button. The iPhone decides finish or discard; without an answer, nothing is saved.
     func endFromWatch() {
-        guard let claim, phase == .recording else {
+        guard let claim, phase == .recording, let session else {
             discardSession(acknowledging: false)
             return
         }
@@ -119,7 +143,7 @@ final class WatchWorkoutManager: NSObject {
         endReplyTask?.cancel()
         endReplyTask = Task { [weak self] in
             try? await Task.sleep(for: Self.endReplyTimeout)
-            guard !Task.isCancelled, let self, phase == .recording else { return }
+            guard !Task.isCancelled, let self, self.session === session, phase == .recording else { return }
             discardSession(acknowledging: true)
         }
     }
@@ -128,50 +152,85 @@ final class WatchWorkoutManager: NSObject {
 
     func receive(_ message: WatchWorkoutMessage) {
         switch message {
-        case let .claim(workoutID, startedAt, token, syncVersion):
-            Task { await accept(Claim(workoutID: workoutID, token: token), startedAt: startedAt, syncVersion: syncVersion) }
-        case let .finish(workoutID, token, endedAt):
-            guard let claim, claim.workoutID == workoutID, claim.token == token, session != nil else {
-                replyFromMemory(workoutID)
-                return
-            }
-            Task { await finish(at: endedAt) }
-        case let .discard(workoutID):
-            guard let claim, claim.workoutID == workoutID, session != nil else {
-                acknowledge(workoutID, recentOutcome(workoutID) ?? .discarded)
-                return
-            }
-            discardSession(acknowledging: true)
+        case let .claim(workoutID, startedAt, token, syncVersion, claimSessionID):
+            // Bind synchronously, so a finish in the same batch sees the claim.
+            guard phase == .waitingForClaim, claim == nil, claimSessionID == sessionID, let session, let builder else { return }
+            deadlineTask?.cancel()
+            let claim = Claim(workoutID: workoutID, token: token)
+            self.claim = claim
+            storeClaim(claim)
+            isSettingUp = true
+            phase = .recording
+            startDate = startedAt
+            Task { await setUp(session, builder, startedAt: startedAt, workoutID: workoutID, syncVersion: syncVersion) }
+        case let .finish(workoutID, _, _), let .discard(workoutID):
+            handleTerminal(message, workoutID: workoutID)
         case let .continueRecording(workoutID):
             guard claim?.workoutID == workoutID else { return }
             endReplyTask?.cancel()
-        case .acknowledged, .statusRequest, .heartRate:
+        case .acknowledged, .statusRequest, .heartRate, .readyForClaim:
             break // Watch → iPhone only.
         }
     }
 
-    private func accept(_ claim: Claim, startedAt: Date, syncVersion: Int64) async {
-        guard phase == .waitingForClaim, self.claim == nil, let builder else { return }
-        deadlineTask?.cancel()
-        self.claim = claim
-        storeClaim(claim)
+    private func handleTerminal(_ message: WatchWorkoutMessage, workoutID: UUID) {
+        if isSettingUp, claim?.workoutID == workoutID {
+            heldCommands.append(message)
+            return
+        }
+        if isAwaitingRecovery, storedClaim()?.workoutID == workoutID {
+            heldCommands.append(message)
+            armRecoveryWait()
+            return
+        }
+        guard let claim, claim.workoutID == workoutID, session != nil else {
+            // Not this session's workout: repeat an earlier answer, or report there's nothing to save.
+            if case .discard = message {
+                acknowledge(workoutID, recentOutcome(workoutID) ?? .discarded)
+            } else {
+                acknowledge(workoutID, recentOutcome(workoutID) ?? .failed)
+            }
+            return
+        }
+        guard phase != .ending else { return } // Already finishing or discarding; the outcome follows.
+        switch message {
+        case let .finish(_, token, endedAt) where token == claim.token:
+            phase = .ending
+            Task { await finish(at: endedAt) }
+        case .finish:
+            acknowledge(workoutID, .failed)
+        default:
+            discardSession(acknowledging: true)
+        }
+    }
+
+    private func setUp(
+        _ session: HKWorkoutSession,
+        _ builder: HKLiveWorkoutBuilder,
+        startedAt: Date,
+        workoutID: UUID,
+        syncVersion: Int64
+    ) async {
         do {
             try await builder.beginCollection(at: startedAt)
             try await builder.addMetadata([
-                HKMetadataKeySyncIdentifier: claim.workoutID.uuidString.lowercased(),
+                HKMetadataKeySyncIdentifier: workoutID.uuidString.lowercased(),
                 HKMetadataKeySyncVersion: NSNumber(value: syncVersion),
             ])
         } catch {
+            guard self.session === session else { return }
+            isSettingUp = false
+            heldCommands = []
             discardSession(acknowledging: true, outcome: .failed)
             return
         }
-        startDate = startedAt
-        phase = .recording
+        guard self.session === session else { return }
+        isSettingUp = false
+        flushHeldCommands()
     }
 
     private func finish(at endedAt: Date) async {
         guard let session, let builder, let claim else { return }
-        phase = .ending
         endReplyTask?.cancel()
         session.stopActivity(with: endedAt)
         let clock = ContinuousClock()
@@ -190,7 +249,8 @@ final class WatchWorkoutManager: NSObject {
         }
         session.end()
         if outcome == .failed { builder.discardWorkout() }
-        clear()
+        // Only clean up the session this finish started with.
+        if self.session === session { clear() }
         acknowledge(claim.workoutID, outcome)
     }
 
@@ -202,9 +262,10 @@ final class WatchWorkoutManager: NSObject {
         if acknowledging, let workoutID { acknowledge(workoutID, outcome) }
     }
 
-    private func adopt(_ session: HKWorkoutSession, _ builder: HKLiveWorkoutBuilder) {
+    private func adopt(_ session: HKWorkoutSession, _ builder: HKLiveWorkoutBuilder, sessionID: UUID) {
         self.session = session
         self.builder = builder
+        self.sessionID = sessionID
         session.delegate = self
         builder.delegate = self
         isStopped = false
@@ -216,19 +277,62 @@ final class WatchWorkoutManager: NSObject {
         endReplyTask?.cancel()
         session = nil
         builder = nil
+        sessionID = nil
         claim = nil
+        isSettingUp = false
         startDate = nil
         heartRate = nil
         phase = .idle
         UserDefaults.standard.removeObject(forKey: Self.claimKey)
     }
 
-    private func armAgeLimit() {
-        ageTask?.cancel()
-        ageTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.maximumSessionAge)
+    private func flushHeldCommands() {
+        let held = heldCommands
+        heldCommands = []
+        for message in held {
+            if case let .finish(workoutID, _, _) = message { handleTerminal(message, workoutID: workoutID) }
+            if case let .discard(workoutID) = message { handleTerminal(message, workoutID: workoutID) }
+        }
+    }
+
+    private func finishAwaitingRecovery() {
+        guard isAwaitingRecovery else { return }
+        isAwaitingRecovery = false
+        recoveryWaitTask?.cancel()
+        flushHeldCommands()
+    }
+
+    private func armRecoveryWait() {
+        guard recoveryWaitTask == nil else { return }
+        recoveryWaitTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.recoveryWait)
             guard !Task.isCancelled, let self else { return }
-            discardSession(acknowledging: true)
+            // No session came back: answer the held commands (nothing to save).
+            recoveryWaitTask = nil
+            if session == nil { UserDefaults.standard.removeObject(forKey: Self.claimKey) }
+            finishAwaitingRecovery()
+        }
+    }
+
+    /// A task that runs once after `delay`, and only if `session` is still the current one.
+    private func sessionTask(
+        for session: HKWorkoutSession,
+        after delay: TimeInterval,
+        _ action: @escaping @MainActor (WatchWorkoutManager) -> Void
+    ) -> Task<Void, Never> {
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(0, delay)))
+            guard !Task.isCancelled, let self, self.session === session else { return }
+            action(self)
+        }
+    }
+
+    /// The age limit counts from the session's original start, including across a recovery.
+    private func armAgeLimit(for session: HKWorkoutSession, startedAt: Date) {
+        ageTask?.cancel()
+        let remaining = Self.maximumSessionAge - Date.now.timeIntervalSince(startedAt)
+        ageTask = sessionTask(for: session, after: remaining) { manager in
+            manager.discardSession(acknowledging: true)
         }
     }
 
@@ -249,11 +353,6 @@ final class WatchWorkoutManager: NSObject {
         send(.acknowledged(workoutID: workoutID, outcome: outcome))
     }
 
-    /// A repeated command for a workout this Watch already finished: repeat the answer.
-    private func replyFromMemory(_ workoutID: UUID) {
-        acknowledge(workoutID, recentOutcome(workoutID) ?? .failed)
-    }
-
     private func storeClaim(_ claim: Claim) {
         UserDefaults.standard.set(try? JSONEncoder().encode(claim), forKey: Self.claimKey)
     }
@@ -266,7 +365,7 @@ final class WatchWorkoutManager: NSObject {
     private func rememberOutcome(_ outcome: WatchWorkoutMessage.Outcome, for workoutID: UUID) {
         var outcomes = UserDefaults.standard.dictionary(forKey: Self.outcomesKey) as? [String: String] ?? [:]
         outcomes[workoutID.uuidString] = outcome.rawValue
-        if outcomes.count > 20 { outcomes.removeValue(forKey: outcomes.keys.sorted().first!) }
+        if outcomes.count > 20, let oldest = outcomes.keys.sorted().first { outcomes.removeValue(forKey: oldest) }
         UserDefaults.standard.set(outcomes, forKey: Self.outcomesKey)
     }
 
@@ -284,7 +383,7 @@ final class WatchWorkoutManager: NSObject {
 
     private func sessionFailed(_ session: HKWorkoutSession) {
         // For example, another workout app took over the Watch: nothing from this session is saved.
-        guard session === self.session else { return }
+        guard session === self.session, phase != .ending else { return }
         discardSession(acknowledging: true, outcome: .failed)
     }
 

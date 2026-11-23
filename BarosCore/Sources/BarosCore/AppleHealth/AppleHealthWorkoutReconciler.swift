@@ -57,6 +57,11 @@ public final class AppleHealthWorkoutReconciler {
         for id in recorder.liveSessionWorkoutIDs() {
             recorder.discardSession(workoutID: id)
         }
+        // A Watch writer can't be ended from here: tell it to discard before its ledger entry goes.
+        // WatchConnectivity keeps the command queued until the Watch receives it.
+        for entry in ledger.entries.values where entry.writer == .watch && !entry.isTerminal && entry.phase != .saved {
+            watchLink?.send(.discard(workoutID: entry.workoutID))
+        }
         ledger.removeAll()
     }
 

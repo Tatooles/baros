@@ -135,7 +135,7 @@ final class AppleHealthController {
             }
         case let .heartRate(workoutID, beatsPerMinute, measuredAt):
             heartRates[workoutID] = LiveHeartRate(beatsPerMinute: beatsPerMinute, measuredAt: measuredAt)
-        case .claim, .finish, .discard, .continueRecording:
+        case .readyForClaim, .claim, .finish, .discard, .continueRecording:
             break // iPhone → Watch only.
         }
     }
