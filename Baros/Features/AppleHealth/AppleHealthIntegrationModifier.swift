@@ -37,6 +37,13 @@ private struct AppleHealthIntegrationModifier: ViewModifier {
                 guard phase == .active else { return }
                 controller.requestReconciliation()
             }
+            .task(id: activeSessionID) {
+                // One pass when a live session would pass its age limit, even if nothing else changes.
+                guard activeSessionID != nil else { return }
+                try? await Task.sleep(for: .seconds(AppleHealthEnvironment.maximumSessionAge + 60))
+                guard !Task.isCancelled else { return }
+                controller.requestReconciliation()
+            }
     }
 }
 

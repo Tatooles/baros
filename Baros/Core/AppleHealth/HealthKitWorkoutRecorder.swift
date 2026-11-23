@@ -116,7 +116,7 @@ final class HealthKitWorkoutRecorder: NSObject, AppleHealthWorkoutRecording {
         }
     }
 
-    func discardSession(workoutID: UUID) async {
+    func discardSession(workoutID: UUID) {
         guard let live = liveSessions[workoutID] else { return }
         end(live, workoutID: workoutID, discarding: true)
     }

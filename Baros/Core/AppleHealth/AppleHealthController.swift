@@ -47,7 +47,6 @@ final class AppleHealthController {
         switch authorization {
         case .unavailable: .unavailable
         case .denied where isEnabled: .accessDenied
-        case .notDetermined where isEnabled: .accessDenied
         default: isEnabled ? .on : .off
         }
     }
@@ -63,6 +62,8 @@ final class AppleHealthController {
         isRequestingAccess = true
         authorization = await recorder.requestAuthorization()
         isRequestingAccess = false
+        // The sheet failed or was dismissed without an answer: leave the setting off so it can be retried.
+        guard authorization != .notDetermined, authorization != .unavailable else { return }
         isEnabled = true
         AppleHealthPreference.setEnabled(true, defaults: defaults)
         requestReconciliation()

@@ -50,14 +50,10 @@ public final class AppleHealthWorkoutReconciler {
     public func prepareForLocalDataReset() {
         isPaused = true
         generation += 1
-        let liveIDs = recorder.liveSessionWorkoutIDs()
-        ledger.removeAll()
-        let recorder = recorder
-        Task {
-            for id in liveIDs {
-                await recorder.discardSession(workoutID: id)
-            }
+        for id in recorder.liveSessionWorkoutIDs() {
+            recorder.discardSession(workoutID: id)
         }
+        ledger.removeAll()
     }
 
     /// Called after local-data reset finishes, whether it succeeded or rolled back.
@@ -153,7 +149,7 @@ public final class AppleHealthWorkoutReconciler {
             }
 
         case let .discardSession(workoutID):
-            await recorder.discardSession(workoutID: workoutID)
+            recorder.discardSession(workoutID: workoutID)
 
         case let .saveWorkout(workoutID, startedAt, endedAt, syncVersion):
             do {
