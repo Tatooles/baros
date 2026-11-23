@@ -52,6 +52,15 @@ final class WatchWorkoutManager: NSObject {
             WCSession.default.delegate = self
             WCSession.default.activate()
         }
+        #if DEBUG
+        // `--uitest-watch-recording` shows the recording screen with fixed values for screenshots,
+        // since simulators can't run the paired iPhone and Watch together here.
+        if ProcessInfo.processInfo.arguments.contains("--uitest-watch-recording") {
+            phase = .recording
+            startDate = .now.addingTimeInterval(-754)
+            heartRate = 132
+        }
+        #endif
     }
 
     // MARK: Lifecycle
