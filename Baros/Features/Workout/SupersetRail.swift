@@ -4,12 +4,10 @@ struct SupersetRail<Content: View>: View {
     static var railWidth: CGFloat { 4 }
     static var railSpacing: CGFloat { 6 }
     static var marginWidth: CGFloat { railWidth + railSpacing }
-    static var labelSpacing: CGFloat { 6 }
+    private static var labelSpacing: CGFloat { 6 }
 
     let count: Int
     var spacing: CGFloat = 8
-    var reachesIntoMargin = true
-    var balancesLabel = false
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -24,13 +22,8 @@ struct SupersetRail<Content: View>: View {
                         .frame(width: Self.railWidth)
                         .accessibilityHidden(true)
                 }
-            if balancesLabel {
-                SupersetLabel(count: count)
-                    .hidden()
-                    .accessibilityHidden(true)
-            }
         }
-        .padding(.leading, reachesIntoMargin ? -Self.marginWidth : 0)
+        .padding(.leading, -Self.marginWidth)
         .accessibilityElement(children: .contain)
     }
 }

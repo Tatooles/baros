@@ -1,235 +1,13 @@
 import BarosCore
 import SwiftUI
-import UIKit
 
-struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
-    let exercises: [Item]
-    let reorder: ([UUID]) -> Void
-    let remove: (Set<UUID>) -> Void
-    let add: () -> Void
-    let regroup: ([UUID?]) -> Void
-    let header: Header
-    @State private var isLinking = false
-    @State private var memory = ReorderListMemory()
-    @State private var memberReveal = ReorderMemberReveal()
-
-    init(
-        exercises: [Item],
-        reorder: @escaping ([UUID]) -> Void,
-        remove: @escaping (Set<UUID>) -> Void,
-        add: @escaping () -> Void = {},
-        regroup: @escaping ([UUID?]) -> Void,
-        @ViewBuilder header: () -> Header
-    ) {
-        self.exercises = exercises
-        self.reorder = reorder
-        self.remove = remove
-        self.add = add
-        self.regroup = regroup
-        self.header = header()
-    }
-
-    var body: some View {
-        let blocks = SupersetGrouping.blocks(exercises, groupID: \.supersetGroupID)
-        ZStack {
-            if isLinking {
-                ReorderLinkList(
-                    exercises: exercises,
-                    regroup: regroup,
-                    finish: {
-                        memory.offsetToRestore = memory.offset
-                        withAnimation(Self.modeAnimation) { isLinking = false }
-                    },
-                    header: header,
-                    memory: memory
-                )
-                .transition(.opacity)
-            } else {
-                Group {
-                    if blocks.contains(where: \.isSuperset) {
-                        NativeGroupedReorderList(
-                            blocks: blocks, reorder: reorder, remove: remove, add: add,
-                            link: linkAction, memory: memory, memberReveal: memberReveal, header: header
-                        )
-                    } else {
-                        ungroupedList(blocks)
-                    }
-                }
-                .transition(.opacity)
-            }
-        }
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { memory.listFrame = $0 }
-        .onChange(of: canLink) { _, canLink in
-            if !canLink { isLinking = false }
-        }
-        #if DEBUG
-        .overlay(alignment: .bottomLeading) {
-            if ProcessInfo.processInfo.arguments.contains("--uitest-in-memory-store"),
-               ProcessInfo.processInfo.arguments.contains("--uitest-reorder-stability-probe") {
-                ReorderStabilityProbe().frame(width: 180, height: 12)
-            }
-        }
-        #endif
-    }
-
-    private static var modeAnimation: Animation { .easeInOut(duration: 0.2) }
-
-    private var canLink: Bool { exercises.count >= 2 }
-
-    private var linkAction: (() -> Void)? {
-        guard canLink else { return nil }
-        return { withAnimation(Self.modeAnimation) { isLinking = true } }
-    }
-
-    private func ungroupedList(_ blocks: [SupersetGrouping.Block<Item>]) -> some View {
-        ungroupedRows(blocks)
-            .rememberingScrollOffset(in: memory)
-    }
-
-    private func ungroupedRows(_ blocks: [SupersetGrouping.Block<Item>]) -> some View {
-        List {
-            header
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-                .moveDisabled(true)
-                .deleteDisabled(true)
-            ForEach(blocks) { block in
-                Group {
-                    if block.isSuperset {
-                        ReorderSupersetRow(exercises: block.members, memory: memory, reveal: memberReveal, remove: { remove([$0]) })
-                    } else {
-                        ReorderExerciseRow(exercise: block.members[0], memory: memory)
-                            .contentShape(
-                                .dragPreview,
-                                RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous)
-                            )
-                    }
-                }
-                .listRowInsets(EdgeInsets(top: 6, leading: 7.5, bottom: 6, trailing: 14))
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-                .deleteDisabled(block.isSuperset)
-                .background {
-                    if block.id == blocks.first?.id { ReorderScrollRestorer(memory: memory) }
-                }
-            }
-            .onMove { source, destination in
-                var reordered = blocks
-                reordered.move(fromOffsets: source, toOffset: destination)
-                reorder(reordered.flatMap { $0.members.map(\.id) })
-            }
-            .onDelete { offsets in
-                remove(Set(offsets.flatMap { blocks[$0].members.map(\.id) }))
-            }
-            ReorderListActions(add: add, link: linkAction)
-            .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 12, trailing: 20))
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
-            .moveDisabled(true)
-            .deleteDisabled(true)
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .contentMargins(.vertical, 8, for: .scrollContent)
-        .environment(\.editMode, .constant(.active))
-        .accessibilityIdentifier("ReorderExercisesList")
-    }
-}
-
-extension ReorderExercisesList where Header == EmptyView {
-    init(
-        exercises: [Item],
-        reorder: @escaping ([UUID]) -> Void,
-        remove: @escaping (Set<UUID>) -> Void,
-        add: @escaping () -> Void = {},
-        regroup: @escaping ([UUID?]) -> Void
-    ) {
-        self.init(exercises: exercises, reorder: reorder, remove: remove, add: add, regroup: regroup) { EmptyView() }
-    }
-}
-
-final class ReorderListMemory {
-    var listFrame: CGRect = .zero
-    var cardFrames: [UUID: CGRect] = [:]
-    var offset: CGFloat = 0
-    var offsetToRestore: CGFloat?
-}
-
-private struct ReorderScrollRestorer: UIViewRepresentable {
-    let memory: ReorderListMemory
-
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        view.isUserInteractionEnabled = false
-        guard let offset = memory.offsetToRestore else { return view }
-        memory.offsetToRestore = nil
-        DispatchQueue.main.async { [weak view] in
-            var ancestor = view?.superview
-            while let current = ancestor, !(current is UIScrollView) { ancestor = current.superview }
-            guard let scrollView = ancestor as? UIScrollView else { return }
-            scrollView.contentOffset.y = offset - scrollView.adjustedContentInset.top
-        }
-        return view
-    }
-
-    func updateUIView(_ view: UIView, context: Context) {}
-}
-
-extension View {
-    func rememberingScrollOffset(in memory: ReorderListMemory) -> some View {
-        onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, offset in
-            memory.offset = offset
-        }
-    }
-}
-
-struct ReorderListActions: View {
-    let add: () -> Void
-    let link: (() -> Void)?
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) { buttons }
-            VStack(spacing: 10) { buttons }
-        }
-    }
-
-    @ViewBuilder
-    private var buttons: some View {
-        action("Add Exercises", systemImage: "plus", identifier: "EditWorkoutAddExercisesButton", perform: add)
-        if let link {
-            action("Link Exercises", systemImage: "link", identifier: "EditWorkoutLinkExercisesButton", perform: link)
-        }
-    }
-
-    private func action(
-        _ title: String, systemImage: String, identifier: String, perform: @escaping () -> Void
-    ) -> some View {
-        Button(action: perform) {
-            HStack(spacing: 8) {
-                Image(systemName: systemImage)
-                Text(title).lineLimit(1)
-            }
-            .font(.headline)
-            .foregroundStyle(AppTheme.brandAccentForeground)
-            .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: 50)
-            .background(AppTheme.brandAccentMuted, in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(identifier)
-    }
-}
-
+/// An exercise's name, details and progress, as drawn on its card in the edit list.
 struct ReorderExerciseRow: View {
     static let cornerRadius: CGFloat = 20
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var titleSize = 16
     @ScaledMetric(relativeTo: .subheadline) private var detailSize = 13
     let exercise: any ReorderListExercise
-    var memory: ReorderListMemory?
-    var keepsRestingLines = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -237,7 +15,6 @@ struct ReorderExerciseRow: View {
                 .font(.system(size: titleSize, weight: .semibold))
                 .foregroundStyle(AppTheme.textPrimary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                .modifier(RestingHeight(isKept: keepsRestingLines))
             if dynamicTypeSize.isAccessibilitySize {
                 if let metadata = exercise.metadata { detail(metadata) }
                 trailing
@@ -250,29 +27,18 @@ struct ReorderExerciseRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
+        .padding(.leading, 16)
         .padding(.vertical, 10)
         .frame(minHeight: 68)
-        .background(
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).fill(exercise.isNew ? AppTheme.brandAccentMuted : AppTheme.groupedSurface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).stroke(exercise.isNew ? AppTheme.brandAccentForeground : AppTheme.subtleBorder)
-        )
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(exercise.name)
-        .accessibilityValue(exercise.accessibilityValue)
-        .accessibilityIdentifier("ReorderExerciseRow-\(exercise.id.uuidString)")
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-            memory?.cardFrames[exercise.id] = frame
-        }
     }
+
+    /// Darker than the system secondary label in light mode, for 4.5:1 on the card.
+    static let detailColor = BarosAdaptiveColor.dynamic(light: 0x66666C, dark: 0x9A9AA1)
 
     private func detail(_ text: String) -> some View {
         Text(text)
             .font(.system(size: detailSize, weight: .medium))
-            .foregroundStyle(AppTheme.textSecondary)
-            .modifier(RestingHeight(isKept: keepsRestingLines))
+            .foregroundStyle(Self.detailColor)
     }
 
     @ViewBuilder
@@ -285,121 +51,136 @@ struct ReorderExerciseRow: View {
     }
 }
 
-private struct RestingHeight: ViewModifier {
-    let isKept: Bool
-    @State private var height: CGFloat?
-
-    func body(content: Content) -> some View {
-        content
-            .frame(height: isKept ? height : nil, alignment: .topLeading)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measured in
-                if !isKept { height = measured }
-            }
-    }
-}
-
-@MainActor @Observable final class ReorderMemberReveal {
-    var id: UUID?
-}
-
-struct ReorderSupersetRow<Item: ReorderListExercise>: View {
-    @ScaledMetric(relativeTo: .title2) private var removeColumnWidth = 28
-    @ScaledMetric(relativeTo: .body) private var deleteWidth = 64
-    let exercises: [Item]
-    let memory: ReorderListMemory
-    let reveal: ReorderMemberReveal
-    let remove: (UUID) -> Void
+/// The handle that drags an exercise, or a whole superset from its label. It sits
+/// inside what it moves, at 3:1 or better against the card.
+struct ReorderGrip: View {
+    static let color = BarosAdaptiveColor.dynamic(light: 0x76767C, dark: 0x8E8E95)
+    var height: CGFloat = 48
+    var color: Color = Self.color
 
     var body: some View {
-        let revealedHere = exercises.contains { $0.id == reveal.id }
-        SupersetRail(count: exercises.count, spacing: 12, reachesIntoMargin: false, balancesLabel: true) {
-            ForEach(exercises) { exercise in
-                let isRevealed = reveal.id == exercise.id
-                HStack(spacing: 5.5) {
-                    Button {
-                        reveal.id = isRevealed ? nil : exercise.id
-                    } label: {
-                        Image(systemName: "minus.circle.fill")
-                            .font(.title2)
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, .red)
-                            .rotationEffect(.degrees(isRevealed ? -90 : 0))
-                            .frame(width: removeColumnWidth)
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Remove \(exercise.name)")
-                    .accessibilityIdentifier("ReorderRemoveSupersetMember-\(exercise.id.uuidString)")
-
-                    ReorderExerciseRow(exercise: exercise, memory: memory, keepsRestingLines: isRevealed)
-
-                    if isRevealed {
-                        Button {
-                            reveal.id = nil
-                            remove(exercise.id)
-                        } label: {
-                            Image(systemName: "trash.fill")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: min(deleteWidth, 80))
-                                .frame(maxHeight: .infinity)
-                                .background(.red, in: RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous))
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.borderless)
-                        .padding(.leading, 6)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                        .accessibilityLabel("Delete \(exercise.name)")
-                        .accessibilityIdentifier("ReorderConfirmRemoveSupersetMember-\(exercise.id.uuidString)")
-                    }
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .contentShape(.dragPreview, Rectangle())
-        .contentShape(.interaction, Rectangle())
-        .gesture(TapGesture().onEnded { reveal.id = nil }, including: revealedHere ? .all : .subviews)
-        .animation(.snappy(duration: 0.3), value: reveal.id)
+        Image(systemName: "line.3.horizontal")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(color)
+            .frame(width: 48, height: height)
+            .contentShape(Rectangle())
     }
 }
 
-#if DEBUG
-private struct ReorderStabilityProbe: UIViewRepresentable {
-    func makeUIView(context: Context) -> UILabel {
-        let label = UILabel()
-        label.accessibilityIdentifier = "ReorderStabilityProbe"
-        label.text = "Reorder probe"
-        label.font = .systemFont(ofSize: 8)
-        label.textColor = .clear
-        let coordinator = context.coordinator
-        coordinator.timer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { [weak label, weak coordinator] _ in
-            MainActor.assumeIsolated {
-                @MainActor func findCollection(_ view: UIView) -> UIScrollView? {
-                    if let collection = view as? UICollectionView, view.accessibilityIdentifier == "ReorderExercisesList" { return collection }
-                    if let table = view as? UITableView, view.accessibilityIdentifier == "ReorderExercisesList" { return table }
-                    return view.subviews.lazy.compactMap { findCollection($0) }.first
-                }
-                guard let coordinator, let window = label?.window, let list = findCollection(window) else { return }
-                let cells: [UIView] = (list as? UICollectionView)?.visibleCells ?? (list as? UITableView)?.visibleCells ?? []
-                let order = cells.sorted { $0.frame.midY < $1.frame.midY }.map(ObjectIdentifier.init)
-                let common = Set(order).intersection(coordinator.lastOrder)
-                if common.count > 1, order.filter(common.contains) != coordinator.lastOrder.filter(common.contains) {
-                    coordinator.moves += 1
-                }
-                coordinator.lastOrder = order
-                label?.accessibilityValue = String(coordinator.moves)
-            }
-        }
-        return label
-    }
-    func updateUIView(_ view: UILabel, context: Context) {}
-    static func dismantleUIView(_ view: UILabel, coordinator: Coordinator) { coordinator.timer?.invalidate() }
-    func makeCoordinator() -> Coordinator { Coordinator() }
-    @MainActor final class Coordinator {
-        var timer: Timer?
-        var lastOrder: [ObjectIdentifier] = []
-        var moves = 0
+/// A single exercise's card surface.
+struct ReorderCardSurface: View {
+    var isNew = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous)
+        shape
+            .fill(isNew ? AppTheme.brandAccentMuted : AppTheme.groupedSurface)
+            .overlay(shape.stroke(isNew ? AppTheme.brandAccentForeground : AppTheme.subtleBorder))
     }
 }
-#endif
+
+/// The one card a superset's members share in the edit list. The accent border and
+/// faint wash set it apart from single cards in both appearances.
+struct SupersetContainerSurface: View {
+    private static let border = BarosAdaptiveColor.dynamic(
+        light: 0x1C66C7, lightAlpha: 0.58, dark: 0x4D94FF, darkAlpha: 0.7
+    )
+    private static let wash = BarosAdaptiveColor.dynamic(
+        light: 0x1C66C7, lightAlpha: 0.05, dark: 0x4D94FF, darkAlpha: 0.07
+    )
+    static let borderWidth: CGFloat = 1.5
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous)
+        shape
+            .fill(AppTheme.groupedSurface)
+            .overlay(shape.fill(Self.wash))
+            .overlay(shape.strokeBorder(Self.border, lineWidth: Self.borderWidth))
+    }
+}
+
+/// The label at the top of a superset container.
+struct SupersetContainerHeader: View {
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "link")
+            Text("SUPERSET")
+                .tracking(0.8)
+            Text("· \(count)")
+                .fontWeight(.regular)
+                .foregroundStyle(ReorderExerciseRow.detailColor)
+                .monospacedDigit()
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(AppTheme.brandAccentForeground)
+        .lineLimit(1)
+        // Stops growing at accessibility2, like the bottom bar, so the label stays inside the
+        // container's outline; it shrinks before it truncates beside the block grip.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .minimumScaleFactor(0.6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 16)
+    }
+}
+
+/// The hairline between two members of a superset container.
+struct SupersetMemberDivider: View {
+    @Environment(\.displayScale) private var displayScale
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(uiColor: .separator))
+            .frame(height: 1 / displayScale)
+            .padding(.horizontal, 16)
+            .accessibilityHidden(true)
+    }
+}
+
+/// A short message about the last edit, such as what a removal took with it.
+struct ReorderNotice: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    var detail: String?
+    /// Said after the title to VoiceOver, such as what saving will now delete.
+    var spoken: String?
+}
+
+/// Shows a notice above the bottom bar for a few seconds. Undo lives in the bar and
+/// lasts until Save, so the notice only says what happened and can go on its own.
+struct ReorderNoticeToast: View {
+    @Binding var notice: ReorderNotice?
+
+    var body: some View {
+        ZStack {
+            if let current = notice {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(current.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.textPrimary)
+                    if let detail = current.detail {
+                        Text(detail)
+                            .font(.footnote)
+                            .foregroundStyle(ReorderExerciseRow.detailColor)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("ReorderNotice")
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .task(id: current.id) {
+                    AccessibilityNotification.Announcement(
+                        [current.title, current.detail, current.spoken].compactMap { $0 }.joined(separator: ". ")
+                    ).post()
+                    try? await Task.sleep(for: .seconds(4))
+                    if notice?.id == current.id { notice = nil }
+                }
+            }
+        }
+        .animation(.snappy(duration: 0.3), value: notice?.id)
+    }
+}

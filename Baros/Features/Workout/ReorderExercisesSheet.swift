@@ -2,6 +2,8 @@ import BarosCore
 import SwiftData
 import SwiftUI
 
+/// Edits the workout's exercises as a draft: reorder, remove, add and link.
+/// Every edit can be undone until Save, and Cancel asks before it discards any.
 struct ReorderExercisesSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -10,20 +12,16 @@ struct ReorderExercisesSheet: View {
     @Bindable var engine: ActiveWorkoutEngine
     @Query private var sessions: [WorkoutSession]
     @State private var draft: WorkoutExerciseListDraft
+    /// The draft before each edit, latest last.
+    @State private var history: [WorkoutExerciseListDraft] = []
+    @State private var notice: ReorderNotice?
     @State private var showsPicker = false
-    @State private var detent: PresentationDetent = .large
+    @State private var confirmsDiscard = false
     @State private var alert: SaveAlert?
-    @State private var removalConfirmation: RemovalConfirmation?
-    @State private var alertAfterConfirmation: SaveAlert?
 
     private enum SaveAlert: String, Identifiable {
         case failure, conflict
         var id: Self { self }
-    }
-
-    private struct RemovalConfirmation: Identifiable {
-        let id = UUID()
-        let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
     }
 
     init(session: WorkoutSession, engine: ActiveWorkoutEngine) {
@@ -36,13 +34,17 @@ struct ReorderExercisesSheet: View {
         NavigationStack {
             ReorderExercisesList(
                 exercises: draft.exercises,
-                reorder: { draft.orderedIDs = $0 },
-                remove: { ids in draft.orderedIDs.removeAll(where: ids.contains) },
-                add: {
-                    detent = .large
-                    showsPicker = true
+                rearrange: { order, groups in
+                    edit {
+                        draft.orderedIDs = order
+                        draft.regroup(groups)
+                    }
                 },
-                regroup: { draft.regroup($0) }
+                remove: remove,
+                add: { showsPicker = true },
+                undo: history.isEmpty ? nil : { undo() },
+                notice: $notice,
+                warning: pendingLossWarning
             )
             .background(AppTheme.canvasBackground.ignoresSafeArea())
             .overlay {
@@ -65,32 +67,34 @@ struct ReorderExercisesSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel", action: cancel)
                         .accessibilityIdentifier("CancelReorderExercisesButton")
+                        .confirmationDialog("Discard your changes?", isPresented: $confirmsDiscard, titleVisibility: .visible) {
+                            Button("Discard Changes", role: .destructive) { dismiss() }
+                            Button("Keep Editing", role: .cancel) {}
+                        }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", action: prepareToSave)
-                        .font(.system(size: 16, weight: .semibold))
-                        .accessibilityIdentifier("DoneReorderExercisesButton")
+                    Button(action: save) {
+                        Text("Save").foregroundStyle(draft.hasChanges ? AppTheme.onBrandAccent : AppTheme.textTertiary)
+                    }
+                        .accessibilityHint(pendingLossWarning ?? "")
+                        .buttonStyle(.glassProminent)
+                        .tint(AppTheme.brandAccentFill)
+                        // Nothing to save until something changes.
+                        .disabled(!draft.hasChanges)
+                        .accessibilityIdentifier("SaveReorderExercisesButton")
                 }
             }
         }
-        .sheet(item: $removalConfirmation, onDismiss: {
-            alert = alertAfterConfirmation
-            alertAfterConfirmation = nil
-        }) { confirmation in
-            ReorderRemovalConfirmation(
-                exercises: confirmation.exercises,
-                confirm: confirmRemoval,
-                keepEditing: { removalConfirmation = nil }
-            )
-        }
+        // A swipe down would discard edits without asking; Cancel asks instead.
+        .interactiveDismissDisabled(draft.hasChanges)
         .alert(item: $alert) { alert in
             switch alert {
             case .failure:
                 Alert(
                     title: Text("Couldn't Save Changes"),
-                    message: Text("Your workout wasn't changed. Tap Done to retry, or Cancel to discard your edits."),
+                    message: Text("Your workout wasn't changed. Tap Save to retry, or Cancel to discard your edits."),
                     dismissButton: .cancel(Text("OK"))
                 )
             case .conflict:
@@ -101,15 +105,28 @@ struct ReorderExercisesSheet: View {
                 )
             }
         }
-        .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
     }
 
+    /// Keeps the draft from before an edit, for Undo.
+    private func edit(_ change: () -> Void) {
+        history.append(draft)
+        change()
+    }
+
+    private func undo() {
+        guard let previous = history.popLast() else { return }
+        notice = nil
+        withAnimation(.snappy(duration: 0.3)) { draft = previous }
+    }
+
     private func append(_ exercises: [Exercise], asSuperset: Bool) {
-        draft.append(exercises, asSuperset: asSuperset) {
-            engine.initialSetKinds(for: $0,
-                ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
-                sessions: sessions)
+        edit {
+            draft.append(exercises, asSuperset: asSuperset) {
+                engine.initialSetKinds(for: $0,
+                    ownerTokenIdentifier: currentOwnerCoordinator.localDataOwnerTokenIdentifier,
+                    sessions: sessions)
+            }
         }
         showsPicker = false
     }
@@ -120,22 +137,51 @@ struct ReorderExercisesSheet: View {
             + draft.additions.filter { remaining.contains($0.id) }.map { $0.exercise.id })
     }
 
-    private func prepareToSave() {
-        if draft.needsRemovalConfirmation, draft.baseline == WorkoutExerciseListSnapshot(session: session) {
-            removalConfirmation = RemovalConfirmation(exercises: draft.removedExercises)
-        } else if let failure = saveChanges() {
-            alert = failure
+    /// Removes at once. The notice names it, the warning keeps any entered sets it
+    /// takes in view, and Undo lasts until Save.
+    private func remove(_ id: UUID) {
+        guard let removed = draft.exercises.first(where: { $0.id == id }) else { return }
+        edit { draft.orderedIDs.removeAll { $0 == id } }
+        let title = "Removed \(removed.name)"
+        // Entered sets it takes show in the lasting warning above the bar. When that
+        // warning names this exercise, a notice would only repeat it, so VoiceOver hears
+        // the removal and the loss together instead.
+        if removed.loggedSetCount > 0, let warning = pendingLossWarning {
+            if draft.pendingSetLoss.exercises == 1 {
+                notice = nil
+                AccessibilityNotification.Announcement("\(title). \(warning)").post()
+            } else {
+                notice = ReorderNotice(title: title, spoken: warning)
+            }
+        } else {
+            notice = ReorderNotice(title: title)
         }
     }
 
-    private func confirmRemoval() {
-        alertAfterConfirmation = saveChanges()
-        if alertAfterConfirmation != nil { removalConfirmation = nil }
+    /// Stays above the bar while saving would delete entered sets, from every removal
+    /// still in the draft, so the loss is in view right up to Save.
+    private var pendingLossWarning: String? {
+        let loss = draft.pendingSetLoss
+        guard loss.sets > 0 else { return nil }
+        let sets = loss.sets == 1 ? "1 set" : "\(loss.sets) sets"
+        // One source is named, so the warning still says what it means once the notice goes.
+        let source = loss.exercises == 1
+            ? draft.lossyRemovedExerciseNames.first.map { " from \($0)" } ?? ""
+            : " from \(loss.exercises) exercises"
+        return "Save deletes \(sets) with entered values\(source)"
+    }
+
+    private func cancel() {
+        if draft.hasChanges { confirmsDiscard = true } else { dismiss() }
+    }
+
+    private func save() {
+        if let failure = saveChanges() { alert = failure }
     }
 
     private func saveChanges() -> SaveAlert? {
         guard draft.baseline == WorkoutExerciseListSnapshot(session: session) else {
-            draft = WorkoutExerciseListDraft(session: session)
+            reload()
             return .conflict
         }
         do {
@@ -148,90 +194,17 @@ struct ReorderExercisesSheet: View {
             dismiss()
             return nil
         } catch ActiveWorkoutEngineError.invalidExerciseReorder {
-            draft = WorkoutExerciseListDraft(session: session)
+            reload()
             return .conflict
         } catch {
             return .failure
         }
     }
-}
 
-private struct ReorderRemovalConfirmation: View {
-    let exercises: [WorkoutExerciseListSnapshot.ExerciseState]
-    let confirm: () -> Void
-    let keepEditing: () -> Void
-    @State private var contentHeight: CGFloat = 420
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                let isSingle = exercises.count == 1
-                VStack(spacing: 6) {
-                    Text(isSingle ? "Remove Exercise?" : "Remove \(exercises.count) Exercises?")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(AppTheme.textPrimary)
-                    Text(isSingle ? "Its sets will be removed from this workout." : "Their sets will be removed from this workout.")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(AppTheme.textSecondary)
-                }
-                .multilineTextAlignment(.center)
-                .padding(.top, 28)
-
-                VStack(spacing: 0) {
-                    ForEach(Array(exercises.enumerated()), id: \.element.id) { index, exercise in
-                        if index > 0 { Divider().padding(.leading, 16) }
-                        row(exercise)
-                    }
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous)
-                        .fill(AppTheme.groupedSurface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ReorderExerciseRow.cornerRadius, style: .continuous)
-                        .stroke(AppTheme.subtleBorder)
-                )
-
-                VStack(spacing: 14) {
-                    Button(action: confirm) {
-                        Text("Remove and Save")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(AppTheme.destructiveFill)
-
-                    Button("Keep Editing", action: keepEditing)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(AppTheme.textSecondary)
-                }
-                .padding(.bottom, 8)
-            }
-            .padding(.horizontal, 20)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
-        }
-        .scrollBounceBehavior(.basedOnSize)
-        .background(AppTheme.canvasBackground.ignoresSafeArea())
-        .presentationDetents([.height(contentHeight)])
-        .presentationCornerRadius(36)
-        .presentationDragIndicator(.visible)
-    }
-
-    private func row(_ exercise: WorkoutExerciseListSnapshot.ExerciseState) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(exercise.name)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(AppTheme.textPrimary)
-            Text(exercise.loggedSetsText)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(AppTheme.textSecondary)
-                .monospacedDigit()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("ReorderRemovalSummaryRow")
+    /// Starts over from the saved workout, whose history no longer applies.
+    private func reload() {
+        draft = WorkoutExerciseListDraft(session: session)
+        history = []
+        notice = nil
     }
 }

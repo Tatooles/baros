@@ -14,14 +14,21 @@ final class WorkoutExerciseListTests: XCTestCase {
         sets[2].isCompleted = true
         var draft = WorkoutExerciseListDraft(session: session)
         draft.orderedIDs.removeFirst()
-        XCTAssertTrue(draft.needsRemovalConfirmation)
         XCTAssertEqual(draft.removedExercises[0].loggedSetCount, 3)
-        XCTAssertEqual(draft.removedExercises[0].loggedSetsText, "3 logged sets")
+        XCTAssertTrue(draft.pendingSetLoss == (3, 1))
+        XCTAssertEqual(draft.lossyRemovedExerciseNames, [draft.removedExercises[0].name])
         XCTAssertEqual(session.sortedLoggedExercises.count, 3, "A draft cannot mutate the live workout")
 
         draft = WorkoutExerciseListDraft(session: session)
         draft.orderedIDs.removeLast()
-        XCTAssertFalse(draft.needsRemovalConfirmation)
+        XCTAssertEqual(draft.removedExercises[0].loggedSetCount, 0)
+        XCTAssertTrue(draft.pendingSetLoss == (0, 0), "Removing an empty exercise loses nothing")
+
+        // Unchecking a set keeps its RPE, so an RPE alone still counts as entered.
+        session.sortedLoggedExercises[2].sortedSets[0].rpe = 8
+        draft = WorkoutExerciseListDraft(session: session)
+        draft.orderedIDs.removeLast()
+        XCTAssertTrue(draft.pendingSetLoss == (1, 1))
     }
 
     func testCombinedSaveSoftDeletesAndReordersOnceWithoutDeletingLibraryOrOldTombstones() throws {
