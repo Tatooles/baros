@@ -1,10 +1,9 @@
 import SwiftData
 import XCTest
-@testable import Baros
 @testable import BarosCore
 
 @MainActor
-final class PreviousSetPerformanceTests: XCTestCase {
+final class PreviousSetsCacheLoaderCacheTests: XCTestCase {
     func testLoaderDoesNotFetchHistoryForSyncBookkeepingSaves() throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -150,6 +149,45 @@ final class PreviousSetPerformanceTests: XCTestCase {
         cache.reloadIfNeeded(for: historyInsert, session: shown, context: context, ownerTokenIdentifier: nil,
                              lastSyncedAt: nil, onUpdate: { _ in })
         XCTAssertEqual(fetchCount, 1, "A finished workout must not reload")
+
+        shown.status = .active
+        shown.syncOwnerTokenIdentifier = "issuer|owner"
+        cache.reloadIfNeeded(for: historyInsert, session: shown, context: context, ownerTokenIdentifier: "issuer|owner",
+                             lastSyncedAt: nil, onUpdate: { _ in })
+        XCTAssertEqual(fetchCount, 2, "The signed-in owner's own active workout still reloads")
+    }
+
+    func testQueuedReloadRetriesAfterTheShownWorkoutsFetchFailed() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        let first = WorkoutSession(title: "First", startedAt: .now, status: .active, source: .blank)
+        let second = WorkoutSession(title: "Second", startedAt: .now, status: .active, source: .blank)
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+        var fetchCount = 0
+        var failsNextFetch = false
+        let cache = PreviousSetsCacheLoaderCache { context, owner in
+            fetchCount += 1
+            if failsNextFetch {
+                failsNextFetch = false
+                throw CocoaError(.coderReadCorrupt)
+            }
+            return try PreviousSetsCacheLoaderCache.fetchCompletedHistory(context: context, ownerTokenIdentifier: owner)
+        }
+        cache.reload(session: first, context: context, ownerTokenIdentifier: nil, lastSyncedAt: nil, onUpdate: { _ in })
+        failsNextFetch = true
+        cache.reload(session: second, context: context, ownerTokenIdentifier: nil, lastSyncedAt: nil, onUpdate: { _ in })
+        XCTAssertEqual(fetchCount, 2)
+        let historyInsert = PreviousSetsCacheSaveChanges(notification: try captureSave(in: context) {
+            context.insert(WorkoutSession(title: "History", startedAt: .now, status: .completed, source: .blank))
+        })
+
+        cache.reloadIfNeeded(for: historyInsert, session: second, context: context, ownerTokenIdentifier: nil,
+                             lastSyncedAt: nil, onUpdate: { _ in })
+
+        XCTAssertEqual(fetchCount, 3, "The next save retries the workout whose fetch failed")
     }
 
     func testSaveReloadRunsOnALaterTurn() async throws {
