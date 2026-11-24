@@ -61,27 +61,28 @@ enum ExercisePickerMode {
     }
 }
 
+/// Every caller gets both add actions. In add mode, `asSuperset` is true when the person taps
+/// Add as Superset; in swap mode it is always false.
+typealias ExercisePickerSelection = (_ exercises: [Exercise], _ asSuperset: Bool) -> Void
+
 struct ExercisePickerView: View {
     @Environment(CurrentOwnerCoordinator.self) private var currentOwnerCoordinator
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query private var sessions: [WorkoutSession]
     let mode: ExercisePickerMode
     var showsCancel = true
-    let onSelectAsSuperset: (([Exercise]) -> Void)?
-    let onSelect: ([Exercise]) -> Void
+    let onSelect: ExercisePickerSelection
     private let sortPreferenceStore: ExercisePickerSortPreferenceStore
 
     init(
         mode: ExercisePickerMode,
         showsCancel: Bool = true,
         sortPreferenceStore: ExercisePickerSortPreferenceStore = ExercisePickerSortPreferenceStore(),
-        onSelectAsSuperset: (([Exercise]) -> Void)? = nil,
-        onSelect: @escaping ([Exercise]) -> Void
+        onSelect: @escaping ExercisePickerSelection
     ) {
         self.mode = mode
         self.showsCancel = showsCancel
         self.sortPreferenceStore = sortPreferenceStore
-        self.onSelectAsSuperset = onSelectAsSuperset
         self.onSelect = onSelect
     }
 
@@ -95,7 +96,6 @@ struct ExercisePickerView: View {
             mode: mode,
             showsCancel: showsCancel,
             sortPreferenceStore: sortPreferenceStore,
-            onSelectAsSuperset: onSelectAsSuperset,
             onSelect: onSelect
         )
     }
@@ -107,8 +107,7 @@ private struct SearchableExercisePicker: View {
     let mode: ExercisePickerMode
     var showsCancel = true
     let sortPreferenceStore: ExercisePickerSortPreferenceStore
-    let onSelectAsSuperset: (([Exercise]) -> Void)?
-    let onSelect: ([Exercise]) -> Void
+    let onSelect: ExercisePickerSelection
     @State private var searchText = ""
 
     var body: some View {
@@ -118,7 +117,6 @@ private struct SearchableExercisePicker: View {
             showsCancel: showsCancel,
             sortPreferenceStore: sortPreferenceStore,
             searchText: $searchText,
-            onSelectAsSuperset: onSelectAsSuperset,
             onSelect: onSelect
         )
         .searchable(text: $searchText, prompt: "Search exercises")
@@ -134,8 +132,7 @@ private struct ExercisePickerList: View {
     let baseRows: [ExercisePickerRowContent]
     let mode: ExercisePickerMode
     var showsCancel = true
-    let onSelect: ([Exercise]) -> Void
-    let onSelectAsSuperset: (([Exercise]) -> Void)?
+    let onSelect: ExercisePickerSelection
     @State private var selectedExerciseIDs: [UUID] = []
     @Binding private var searchText: String
     @State private var creationRequest: ExerciseCreationRequest?
@@ -149,10 +146,8 @@ private struct ExercisePickerList: View {
         showsCancel: Bool = true,
         sortPreferenceStore: ExercisePickerSortPreferenceStore,
         searchText: Binding<String>,
-        onSelectAsSuperset: (([Exercise]) -> Void)? = nil,
-        onSelect: @escaping ([Exercise]) -> Void
+        onSelect: @escaping ExercisePickerSelection
     ) {
-        self.onSelectAsSuperset = onSelectAsSuperset
         self.baseRows = baseRows
         self.mode = mode
         self.showsCancel = showsCancel
@@ -299,10 +294,13 @@ private struct ExercisePickerList: View {
                 swapConfirmBar(swapImpact, replacement: swapReplacement)
                     .transition(commitBarTransition)
             } else if mode.isAddExercise, !selectedExercises.isEmpty {
-                HStack(spacing: 10) {
-                    if let onSelectAsSuperset, selectedExercises.count >= 2 {
+                let actionLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(spacing: 10))
+                    : AnyLayout(HStackLayout(spacing: 10))
+                actionLayout {
+                    if selectedExercises.count >= 2 {
                         Button {
-                            onSelectAsSuperset(selectedExercises)
+                            onSelect(selectedExercises, true)
                         } label: {
                             Text("Add as Superset")
                                 .font(.headline)
@@ -316,7 +314,7 @@ private struct ExercisePickerList: View {
                         .accessibilityIdentifier("ExercisePickerAddAsSupersetButton")
                     }
                     Button {
-                        onSelect(selectedExercises)
+                        onSelect(selectedExercises, false)
                     } label: {
                         Text(addButtonTitle)
                             .font(.headline)
@@ -400,7 +398,7 @@ private struct ExercisePickerList: View {
             .accessibilityIdentifier("ExercisePickerSwapImpactText")
 
             Button {
-                onSelect([replacement])
+                onSelect([replacement], false)
             } label: {
                 Text(impact.confirmTitle(for: replacement))
                     .font(.headline)

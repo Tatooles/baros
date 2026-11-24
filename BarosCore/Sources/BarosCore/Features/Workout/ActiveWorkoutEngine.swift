@@ -291,6 +291,7 @@ public final class ActiveWorkoutEngine {
     public func addExercises(
         _ exercises: [Exercise],
         to session: WorkoutSession,
+        asSuperset: Bool = false,
         ownerTokenIdentifier: String? = nil,
         context: ModelContext,
         save: (ModelContext) throws -> Void = { try $0.save() }
@@ -300,7 +301,8 @@ public final class ActiveWorkoutEngine {
         guard !additions.isEmpty else { return [] }
         return try insertExercises(
             additions, to: session, ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context, save: save
+            context: context, save: save,
+            supersetGroupID: SupersetGrouping.groupForAdding(additions.count, asSuperset: asSuperset)
         )
     }
 
@@ -310,7 +312,8 @@ public final class ActiveWorkoutEngine {
         ownerTokenIdentifier: String?,
         context: ModelContext,
         save: (ModelContext) throws -> Void,
-        plannedSetKinds: [[SetKind]]? = nil
+        plannedSetKinds: [[SetKind]]? = nil,
+        supersetGroupID: UUID? = nil
     ) throws -> [LoggedExercise] {
         guard !exercises.isEmpty else { return [] }
         let setKinds: [[SetKind]]
@@ -326,7 +329,9 @@ public final class ActiveWorkoutEngine {
         let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
         var additions: [LoggedExercise] = []
         for (offset, exercise) in exercises.enumerated() {
-            let loggedExercise = LoggedExercise(orderIndex: nextIndex + offset, exercise: exercise)
+            let loggedExercise = LoggedExercise(
+                orderIndex: nextIndex + offset, exercise: exercise, supersetGroupID: supersetGroupID
+            )
             loggedExercise.session = session
             context.insert(loggedExercise)
             for (index, kind) in setKinds[offset].enumerated() {

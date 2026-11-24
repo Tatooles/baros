@@ -36,7 +36,7 @@ public struct WorkoutTemplateDraft: Equatable {
     }
 
     public mutating func append(_ exercises: [Exercise], asSuperset: Bool = false) {
-        let group = asSuperset && exercises.count > 1 ? UUID() : nil
+        let group = SupersetGrouping.groupForAdding(exercises.count, asSuperset: asSuperset)
         entries += exercises.map { WorkoutTemplateEntry(exercise: $0, supersetGroupID: group) }
     }
 

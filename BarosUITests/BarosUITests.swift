@@ -2156,6 +2156,8 @@ final class BarosUITests: XCTestCase {
         app.buttons["Most performed"].tap()
         XCTAssertTrue(bench.isSelected)
         XCTAssertEqual(add.label, "Add 2 Exercises")
+        let addAsSuperset = app.buttons["ExercisePickerAddAsSupersetButton"]
+        XCTAssertTrue(addAsSuperset.exists, "Top-level Add offers Add as Superset like Edit Workout")
         let selectionScreenshot = XCTAttachment(screenshot: app.screenshot())
         selectionScreenshot.name = "Multi-select picker"
         selectionScreenshot.lifetime = .keepAlways
@@ -2174,7 +2176,8 @@ final class BarosUITests: XCTestCase {
         searchScreenshot.lifetime = .keepAlways
         self.add(searchScreenshot)
         XCTAssertLessThanOrEqual(add.frame.maxY, app.keyboards.firstMatch.frame.minY)
-        add.tap()
+        XCTAssertLessThanOrEqual(addAsSuperset.frame.maxY, app.keyboards.firstMatch.frame.minY)
+        addAsSuperset.tap()
         XCTAssertTrue(app.buttons["ExerciseHeader-0"].waitToExist(timeout: 3))
         XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch, timeout: 3))
         let addedScreenshot = XCTAttachment(screenshot: app.screenshot())
@@ -2182,6 +2185,10 @@ final class BarosUITests: XCTestCase {
         addedScreenshot.lifetime = .keepAlways
         self.add(addedScreenshot)
         assertActiveWorkoutExerciseOrder(["Back Squat", "Bench Press", "Overhead Press"], in: app)
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(identifier: "SupersetLabel").firstMatch.label,
+            "Superset of 3 exercises"
+        )
     }
 
     @MainActor
@@ -2220,15 +2227,28 @@ final class BarosUITests: XCTestCase {
         blankWorkout.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)).tap()
         XCTAssertTrue(app.buttons["AddExerciseButton"].waitToExist(timeout: 3))
         app.buttons["AddExerciseButton"].tap()
-        let squat = app.buttons["ExercisePickerRow-Back Squat-Barbell"]
-        XCTAssertTrue(squat.waitToExist(timeout: 3))
-        squat.tap()
+        let row = app.buttons["ExercisePickerRow-Barbell Row-Barbell"]
+        XCTAssertTrue(row.waitToExist(timeout: 3))
+        row.tap()
         let add = app.buttons["ExercisePickerAddSelectedButton"]
         XCTAssertTrue(add.waitToExist(timeout: 3))
         XCTAssertEqual(add.label, "Add 1 Exercise")
         XCTAssertTrue(add.isHittable)
         XCTAssertGreaterThanOrEqual(add.frame.height, 44)
         XCTAssertTrue(app.buttons["ExercisePickerCancelButton"].isHittable)
+
+        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        let addAsSuperset = app.buttons["ExercisePickerAddAsSupersetButton"]
+        XCTAssertTrue(addAsSuperset.waitToExist(timeout: 3))
+        XCTAssertTrue(addAsSuperset.isHittable)
+        XCTAssertGreaterThanOrEqual(addAsSuperset.frame.width, app.frame.width * 0.75,
+                                    "Large text stacks the actions so neither label is cut off")
+        XCTAssertGreaterThanOrEqual(add.frame.width, app.frame.width * 0.75)
+        XCTAssertLessThanOrEqual(addAsSuperset.frame.maxY, add.frame.minY)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Stacked picker actions at largest text"
+        screenshot.lifetime = .keepAlways
+        self.add(screenshot)
     }
 
     @MainActor

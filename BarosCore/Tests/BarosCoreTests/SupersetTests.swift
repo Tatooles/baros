@@ -266,6 +266,57 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertNil(result[4].supersetGroupID, "Additions don't join a superset")
     }
 
+    func testAddingExercisesAsASupersetGroupsOnlyTheNewOnesInOneSave() throws {
+        let (context, session) = try makeWorkout(names: ["A", "B"], groups: [0, 0])
+        let engine = ActiveWorkoutEngine()
+        let existingGroup = session.sortedLoggedExercises[0].supersetGroupID
+        let curl = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        let raise = Exercise(name: "Raise", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .shoulders)
+        context.insert(curl)
+        context.insert(raise)
+        try context.save()
+        var saveCount = 0
+
+        let added = try engine.addExercises([curl, raise], to: session, asSuperset: true, context: context, save: {
+            saveCount += 1
+            try $0.save()
+        })
+
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName), ["A", "B", "Curl", "Raise"])
+        XCTAssertTrue(grouped(session, [2, 3]))
+        XCTAssertNotEqual(added[0].supersetGroupID, existingGroup, "New exercises don't join the superset above")
+        XCTAssertTrue(grouped(session, [0, 1]))
+    }
+
+    func testAddingAsASupersetLeavesASingleNewExerciseUngrouped() throws {
+        let (context, session) = try makeWorkout(names: ["A"])
+        let engine = ActiveWorkoutEngine()
+        let existing = try XCTUnwrap(session.sortedLoggedExercises[0].exercise)
+        let curl = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        context.insert(curl)
+        try context.save()
+
+        let added = try engine.addExercises([existing, curl], to: session, asSuperset: true, context: context)
+
+        XCTAssertEqual(added.map(\.exerciseSnapshotName), ["Curl"])
+        XCTAssertNil(added[0].supersetGroupID, "One new exercise is never a superset")
+    }
+
+    func testAddingWithoutSupersetLeavesNewExercisesUngrouped() throws {
+        let (context, session) = try makeWorkout(names: ["A"])
+        let engine = ActiveWorkoutEngine()
+        let curl = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        let raise = Exercise(name: "Raise", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .shoulders)
+        context.insert(curl)
+        context.insert(raise)
+        try context.save()
+
+        let added = try engine.addExercises([curl, raise], to: session, context: context)
+
+        XCTAssertEqual(added.map(\.supersetGroupID), [nil, nil])
+    }
+
     func testTogglingALinkJoinsMergesAndSplits() {
         let (a, b) = (UUID(), UUID())
         var fresh = (0..<20).map { _ in UUID() }.makeIterator()

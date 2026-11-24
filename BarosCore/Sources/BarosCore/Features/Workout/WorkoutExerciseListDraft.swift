@@ -153,8 +153,7 @@ public struct WorkoutExerciseListDraft {
         let pending = exercises.map { Addition(exercise: $0, initialSetKinds: initialSetKinds($0)) }
         additions.append(contentsOf: pending)
         orderedIDs.append(contentsOf: pending.map(\.id))
-        if asSuperset, pending.count > 1 {
-            let group = UUID()
+        if let group = SupersetGrouping.groupForAdding(pending.count, asSuperset: asSuperset) {
             for addition in pending { supersetGroupIDs[addition.id] = group }
         }
     }

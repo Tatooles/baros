@@ -25,6 +25,12 @@ public enum SupersetGrouping {
         areGrouped(groupIDs, index, index - 1) || areGrouped(groupIDs, index, index + 1)
     }
 
+    /// The one rule every add path follows: adding as a superset groups the new exercises together,
+    /// but only when there are at least two of them.
+    static func groupForAdding(_ count: Int, asSuperset: Bool) -> UUID? {
+        asSuperset && count > 1 ? UUID() : nil
+    }
+
     static func normalized(_ groupIDs: [UUID?], makeID: () -> UUID = UUID.init) -> [UUID?] {
         var result = groupIDs
         var seen: Set<UUID> = []
