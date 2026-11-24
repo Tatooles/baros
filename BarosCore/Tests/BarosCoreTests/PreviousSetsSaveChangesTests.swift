@@ -3,9 +3,22 @@ import XCTest
 @testable import BarosCore
 
 @MainActor
-final class DeferredSaveChangesTests: XCTestCase {
+final class PreviousSetsSaveChangesTests: XCTestCase {
+    func testSaveChangesExtractSwiftDataIdentifiers() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        let session = WorkoutSession(title: "Active", startedAt: .now, status: .active, source: .blank)
+
+        let insertion = try captureSave(in: context) { context.insert(session) }
+        XCTAssertTrue(insertion.insertedIDs.contains(session.persistentModelID))
+
+        let update = try captureSave(in: context) { session.title = "Updated" }
+        XCTAssertTrue(update.updatedIDs.contains(session.persistentModelID))
+    }
+
     /// BAROS-IOS-1M: a `didSave` receiver read models inside the seed's `save()`
-    /// and blocked launch for 160 s.
+    /// and hung the main thread.
     func testHandlerRunsAfterTheSavesReturnWithTheBurstMergedIntoOneCall() async throws {
         let container = try SwiftDataTestSupport.makeInMemoryContainer()
         let context = container.mainContext
@@ -44,10 +57,30 @@ final class DeferredSaveChangesTests: XCTestCase {
         XCTAssertFalse(delivery.duringSave)
         XCTAssertEqual(delivery.changes.insertedIDs, [first.persistentModelID, second.persistentModelID])
     }
+
+    private func captureSave(
+        in context: ModelContext,
+        changes: () -> Void
+    ) throws -> PreviousSetsCacheSaveChanges {
+        let recorder = Recorder()
+        let observer = NotificationCenter.default.addObserver(
+            forName: ModelContext.didSave,
+            object: context,
+            queue: nil
+        ) { notification in
+            let changes = PreviousSetsCacheSaveChanges(notification: notification)
+            MainActor.assumeIsolated { recorder.captured = changes }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        changes()
+        try context.save()
+        return try XCTUnwrap(recorder.captured)
+    }
 }
 
 @MainActor
 private final class Recorder {
     var isSaving = false
     var deliveries: [(changes: PreviousSetsCacheSaveChanges, duringSave: Bool)] = []
+    var captured: PreviousSetsCacheSaveChanges?
 }

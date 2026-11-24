@@ -66,9 +66,9 @@ public struct PreviousSetsCacheSaveChanges: Sendable {
 /// them returns, merging a burst of saves into one call.
 ///
 /// SwiftData posts `didSave` from inside `save()`, so a receiver that reads models
-/// or fetches runs inside whoever saved. BAROS-IOS-1M: owner activation's seed save
-/// blocked the main thread for 160 s while the active workout reloaded Previous
-/// sets on that stack.
+/// or fetches runs inside whoever saved. BAROS-IOS-1M: Sentry reported a main-thread
+/// hang while the active workout reloaded Previous sets inside owner activation's
+/// seed save.
 @MainActor
 public final class DeferredSaveChanges {
     private var pending: PreviousSetsCacheSaveChanges?

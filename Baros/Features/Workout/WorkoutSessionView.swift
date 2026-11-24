@@ -749,25 +749,6 @@ final class PreviousSetsCacheLoaderCache {
     }
 
     func reloadIfNeeded(
-        after notification: Notification,
-        session: WorkoutSession,
-        context: ModelContext,
-        ownerTokenIdentifier: String?,
-        lastSyncedAt: Date?,
-        onUpdate: ([UUID: [PreviousSetPerformance]]) -> Void
-    ) {
-        guard let changes = Self.relevantChanges(in: notification, for: context) else { return }
-        reloadIfNeeded(
-            for: changes,
-            session: session,
-            context: context,
-            ownerTokenIdentifier: ownerTokenIdentifier,
-            lastSyncedAt: lastSyncedAt,
-            onUpdate: onUpdate
-        )
-    }
-
-    func reloadIfNeeded(
         for changes: PreviousSetsCacheSaveChanges,
         session: WorkoutSession,
         context: ModelContext,
@@ -775,8 +756,10 @@ final class PreviousSetsCacheLoaderCache {
         lastSyncedAt: Date?,
         onUpdate: ([UUID: [PreviousSetPerformance]]) -> Void
     ) {
-        // The workout may have been discarded and saved away before this turn.
-        guard session.modelContext != nil else { return }
+        // A queued reload can outlive the workout it was queued for: the workout
+        // finished, or the sheet now shows another owner's workout, which its own
+        // trigger reload already covered.
+        guard isShown(session, ownerTokenIdentifier: ownerTokenIdentifier) else { return }
         guard PreviousSetsCacheReloadPolicy.shouldReload(
             insertedIDs: changes.insertedIDs,
             updatedIDs: changes.updatedIDs,
@@ -795,7 +778,17 @@ final class PreviousSetsCacheLoaderCache {
         )
     }
 
-    private static func relevantChanges(
+    private func isShown(_ session: WorkoutSession, ownerTokenIdentifier: String?) -> Bool {
+        if let activeStructureKey, activeStructureKey.sessionID != session.id {
+            return false
+        }
+        return !WorkoutSession.visibleActiveSessions(
+            from: [session],
+            ownerTokenIdentifier: ownerTokenIdentifier
+        ).isEmpty
+    }
+
+    static func relevantChanges(
         in notification: Notification,
         for context: ModelContext
     ) -> PreviousSetsCacheSaveChanges? {
