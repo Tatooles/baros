@@ -277,7 +277,7 @@ public struct PreviousSetPerformance: Equatable {
         )
     }
 
-    public struct CacheKey: Equatable {
+    struct CacheKey: Equatable {
         private struct ExerciseEntry: Equatable {
             let id: UUID
             let routeID: String
@@ -293,7 +293,7 @@ public struct PreviousSetPerformance: Equatable {
         private let latestCompletedUpdatedAt: Date?
         private let lastSyncedAt: Date?
 
-        public init(
+        init(
             session: WorkoutSession,
             sessions: [WorkoutSession],
             ownerTokenIdentifier: String?,
@@ -322,8 +322,8 @@ public struct PreviousSetPerformance: Equatable {
     }
 }
 
-public enum PreviousSetsCacheReloadPolicy {
-    public static func shouldReload<ID: Hashable>(
+enum PreviousSetsCacheReloadPolicy {
+    static func shouldReload<ID: Hashable>(
         insertedIDs: Set<ID>,
         updatedIDs: Set<ID>,
         deletedIDs: Set<ID>,

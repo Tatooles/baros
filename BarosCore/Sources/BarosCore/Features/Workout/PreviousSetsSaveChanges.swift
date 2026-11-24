@@ -2,12 +2,12 @@ import Foundation
 import SwiftData
 
 public struct PreviousSetsCacheSaveChanges: Sendable {
-    public let insertedIDs: Set<PersistentIdentifier>
+    let insertedIDs: Set<PersistentIdentifier>
     public let updatedIDs: Set<PersistentIdentifier>
     public let deletedIDs: Set<PersistentIdentifier>
     public let invalidatedAllIdentifiers: Bool
 
-    public var containsOnlySyncBookkeeping: Bool {
+    var containsOnlySyncBookkeeping: Bool {
         guard !invalidatedAllIdentifiers else { return false }
         let identifiers = insertedIDs.union(updatedIDs).union(deletedIDs)
         guard !identifiers.isEmpty else { return false }
@@ -70,15 +70,15 @@ public struct PreviousSetsCacheSaveChanges: Sendable {
 /// hang while the active workout reloaded Previous sets inside owner activation's
 /// seed save.
 @MainActor
-public final class DeferredSaveChanges {
+final class DeferredSaveChanges {
     private var pending: PreviousSetsCacheSaveChanges?
     private var handler: (@MainActor (PreviousSetsCacheSaveChanges) -> Void)?
 
-    public init() {}
+    init() {}
 
     /// Calls the latest `handler` once on a later main-actor turn with every change
     /// enqueued until then.
-    public func enqueue(
+    func enqueue(
         _ changes: PreviousSetsCacheSaveChanges,
         handler: @escaping @MainActor (PreviousSetsCacheSaveChanges) -> Void
     ) {

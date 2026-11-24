@@ -38,10 +38,12 @@ public final class PreviousSetsCacheLoaderCache {
     private let deferredSaves = DeferredSaveChanges()
     private let fetchSessions: @MainActor (ModelContext, String?) throws -> [WorkoutSession]
 
-    public init(
-        fetchSessions: (@MainActor (ModelContext, String?) throws -> [WorkoutSession])? = nil
-    ) {
-        self.fetchSessions = fetchSessions ?? Self.fetchCompletedHistory
+    public init() {
+        fetchSessions = Self.fetchCompletedHistory
+    }
+
+    init(fetchSessions: @escaping @MainActor (ModelContext, String?) throws -> [WorkoutSession]) {
+        self.fetchSessions = fetchSessions
     }
 
     /// Reads no models here: this runs inside the `save()` that posted the
