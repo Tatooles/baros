@@ -65,8 +65,8 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
         let isNew: Bool
     }
 
-    fileprivate static func signature(of blocks: [SupersetGrouping.Block<Item>]) -> [Presentation] {
-        blocks.flatMap { $0.members.map { Presentation(id: $0.id, name: $0.name,
+    fileprivate static func signature(of blocks: [SupersetGrouping.Block<Item>]) -> [[Presentation]] {
+        blocks.map { $0.members.map { Presentation(id: $0.id, name: $0.name,
             metadata: $0.metadata, group: $0.supersetGroupID, detail: $0.trailingDetail, isNew: $0.isNew) } }
     }
 
@@ -74,7 +74,7 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
         var parent: NativeGroupedReorderList
         /// The rows the table shows. Moves and deletes update it before SwiftUI catches up.
         var blocks: [SupersetGrouping.Block<Item>]
-        fileprivate var signature: [Presentation]
+        fileprivate var signature: [[Presentation]]
         private var firstBlockRow: Int { Header.self == EmptyView.self ? 0 : 1 }
         init(_ parent: NativeGroupedReorderList) {
             self.parent = parent
