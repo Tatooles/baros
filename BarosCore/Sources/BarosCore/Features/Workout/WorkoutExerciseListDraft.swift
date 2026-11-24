@@ -28,7 +28,7 @@ public struct WorkoutExerciseListSnapshot: Equatable {
             updatedAt = set.updatedAt
         }
 
-        var hasLoggedValues: Bool { isCompleted || weight != nil || reps != nil || durationSeconds != nil }
+        var hasLoggedValues: Bool { isCompleted || weight != nil || reps != nil || durationSeconds != nil || rpe != nil }
     }
 
     public struct ExerciseState: Identifiable, Equatable {
@@ -71,13 +71,6 @@ public struct WorkoutExerciseListSnapshot: Equatable {
         }
 
         public var loggedSetCount: Int { sets.filter(\.hasLoggedValues).count }
-        var loggedSetsText: String {
-            switch loggedSetCount {
-            case 0: "No logged sets"
-            case 1: "1 logged set"
-            case let count: "\(count) logged sets"
-            }
-        }
         var progressText: String { "\(sets.filter(\.isCompleted).count)/\(plannedSetCount ?? sets.count) sets" }
         public var accessibilityValue: String {
             [metadata, isNew ? "New" : nil, progressText].compactMap { $0 }.joined(separator: ", ")

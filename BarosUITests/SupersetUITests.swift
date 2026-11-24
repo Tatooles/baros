@@ -119,7 +119,7 @@ final class SupersetUITests: XCTestCase {
     }
 
     /// A workout longer than the screen: Add stays reachable at any scroll, and a tapped
-    /// joint stays under the finger as a superset label appears above it.
+    /// joint stays under the finger as a superset label appears or moves above it.
     func testLongWorkoutKeepsAddPinnedAndJointsUnderTheFinger() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -135,15 +135,41 @@ final class SupersetUITests: XCTestCase {
         settle()
         XCTAssertTrue(add.isHittable, "Add stays pinned however far the list scrolls")
 
-        let joint = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "SupersetLinkButton-"))
-            .allElementsBoundByIndex.last { $0.isHittable && $0.label.hasPrefix("Link ") && $0.frame.minY > 200 }
-        guard let joint else { return XCTFail("No joint on screen") }
+        // Held still in the autoscroll zone under the navigation bar, a grip neither scrolls
+        // the list nor moves its row.
+        let top = app.navigationBars["Edit Workout"].frame.maxY
+        let rows = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "ReorderExerciseRow-"))
+        func edgeRow() -> XCUIElement? {
+            rows.allElementsBoundByIndex.first { $0.isHittable && $0.frame.midY > top + 4 && $0.frame.midY < top + 76 }
+        }
+        for _ in 0..<3 where edgeRow() == nil {
+            let center = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            center.press(forDuration: 0.05, thenDragTo: center.withOffset(CGVector(dx: 0, dy: 40)))
+            settle()
+        }
+        guard let edge = edgeRow() else { return XCTFail("No row in the top autoscroll zone") }
+        edge.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).press(forDuration: 1.5)
+        XCTAssertFalse(app.buttons["SaveReorderExercisesButton"].isEnabled, "A press alone changes nothing")
+
+        let onScreen = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "SupersetLinkButton-"))
+            .allElementsBoundByIndex.filter { $0.isHittable && $0.label.hasPrefix("Link ") && $0.frame.minY > 200 }
+        guard onScreen.count >= 2 else { return XCTFail("Fewer than two joints on screen") }
+        let joint = app.buttons[onScreen[onScreen.count - 1].identifier]
+        let above = app.buttons[onScreen[onScreen.count - 2].identifier]
         let before = joint.frame.midY
         joint.tap()
         XCTAssertTrue(waitForLabelPrefix(joint, "Unlink "))
         settle()
         XCTAssertEqual(joint.frame.midY, before, accuracy: 3, "The scroll makes up for the new label")
         attachScreenshot("Linked in a long workout", app: app)
+
+        // Joining the single above moves the label up instead of adding one.
+        let aboveBefore = above.frame.midY
+        above.tap()
+        XCTAssertTrue(waitForLabelPrefix(above, "Unlink "))
+        settle()
+        XCTAssertEqual(above.frame.midY, aboveBefore, accuracy: 3, "The scroll makes up for the moved label")
     }
 
     /// Lets animations finish and the scroll come to rest.
@@ -291,6 +317,12 @@ final class SupersetUITests: XCTestCase {
         openEditor(in: app)
         let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
         let labels = list.descendants(matching: .any).matching(identifier: "SupersetLabel")
+        // Picking up the last member at the end of the list, without moving it, keeps it in.
+        let lastGrip = exerciseRow("Single-Arm Cable Lateral Raise", in: app)
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+        lastGrip.press(forDuration: 0.6)
+        XCTAssertEqual(labels.element(boundBy: 1).label, "Superset of 3 exercises")
+        XCTAssertFalse(app.buttons["SaveReorderExercisesButton"].isEnabled, "A press alone changes nothing")
         drag(row: "Incline Dumbbell Press", above: "Pull-Up", in: app)
         XCTAssertEqual(labels.firstMatch.label, "Superset of 2 exercises", "Reordering inside keeps the pair")
         drag(row: "Slingshot Pause Bench Press", between: "Incline Dumbbell Press", and: "Pull-Up", in: app)

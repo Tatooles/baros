@@ -93,6 +93,8 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         let startScroll: CGFloat
         var translation: CGFloat = 0
         var fingerY: CGFloat
+        /// Set once the finger travels, so a press alone never autoscrolls the row along.
+        var hasMoved = false
         var isSettling = false
     }
 
@@ -502,6 +504,13 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         withAnimation(.snappy) { commit(apply(moved, to: rows)) }
     }
 
+    /// How many supersets, and so labels, the groups make.
+    private func supersetCount(_ groups: [UUID?]) -> Int {
+        groups.indices.filter {
+            SupersetGrouping.areGrouped(groups, $0, $0 + 1) && !SupersetGrouping.areGrouped(groups, $0, $0 - 1)
+        }.count
+    }
+
     private func moveBlock(_ block: Block, by step: Int) {
         let rows = rows
         let blocks = SupersetGrouping.blocks(rows, groupID: \.group)
@@ -524,12 +533,19 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         default: 0
         }
         let toggled = SupersetGrouping.togglingLink(groups, below: upper)
-        // Applied once the content reports its new height, so the scroll isn't held to
-        // the old content's end.
         // With a label coming or going above, the change is instant: animating it while the
         // scroll makes up for it would wobble the joint.
         if shift != 0, scroll.offset > 0 {
-            pendingShift = shift
+            if supersetCount(toggled) != supersetCount(groups) {
+                // A label was added or removed, so the content's height changes. The scroll
+                // waits for the new height so it isn't held to the old content's end.
+                pendingShift = shift
+            } else {
+                // The label only moved, such as when a single joins the front of a superset.
+                // The height stays the same, so there's no new height to wait for. Near the
+                // end this scrolls past it, which keeps the joint still until the next scroll.
+                scrollHandle.scroll(by: shift, clampingToEnd: false)
+            }
             rearrange(rows.map(\.id), toggled)
         } else {
             withAnimation(.snappy) { rearrange(rows.map(\.id), toggled) }
@@ -544,6 +560,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                 if drag == nil { begin(subject, fingerY: value.startLocation.y) }
                 guard drag?.subject == subject, drag?.isSettling == false else { return }
                 drag?.translation = value.translation.height
+                if abs(value.translation.height) > 8 { drag?.hasMoved = true }
                 drag?.fingerY = value.location.y
                 updateSlot()
             }
@@ -596,8 +613,12 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
             let others = start.filter { $0.id != id }
             let destination = others.filter { (frames[.exercise($0.id)]?.midY ?? .infinity) < center }.count
             // At either end there's no row to pass, so clearing the last card's edge leaves.
-            let pastEnd = destination == others.count && center > (others.last.flatMap { frames[.exercise($0.id)] }?.maxY ?? .infinity)
-            let pastStart = destination == 0 && center < (others.first.flatMap { frames[.exercise($0.id)] }?.minY ?? -.infinity)
+            // The lifted card's own starting edge counts too: a card already at an end
+            // has to be dragged past where it was, not just picked up.
+            let lastMaxY = others.last.flatMap { frames[.exercise($0.id)] }?.maxY ?? .infinity
+            let firstMinY = others.first.flatMap { frames[.exercise($0.id)] }?.minY ?? -.infinity
+            let pastEnd = destination == others.count && center > max(lastMaxY, drag.startMinY + drag.height)
+            let pastStart = destination == 0 && center < min(firstMinY, drag.startMinY)
             arrangement = SupersetGrouping.movingExercise(
                 groups, from: source, to: destination, leavesSuperset: pastEnd || pastStart
             )
@@ -619,7 +640,9 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         let start = drag.startRows
         let changed = drag.rows.map(\.id) != start.map(\.id)
             || !SupersetGrouping.sameSupersets(drag.rows.map(\.group), start.map(\.group))
-        if changed { commit(drag.rows) }
+        // A removal that landed mid-drag makes the lifted order stale, so it's dropped.
+        let isCurrent = start.map(\.id) == exercises.map(\.id)
+        if changed, isCurrent { commit(drag.rows) }
         withAnimation(.snappy(duration: 0.22)) { self.drag?.isSettling = true }
         let id = drag.id
         Task { @MainActor in
@@ -632,6 +655,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
     private func autoscroll() async {
         while !Task.isCancelled, let drag, !drag.isSettling {
             try? await Task.sleep(for: .milliseconds(16))
+            guard drag.hasMoved else { continue }
             guard let visible = scrollHandle.visibleFrame else { continue }
             let zone: CGFloat = 80
             var delta: CGFloat = 0
