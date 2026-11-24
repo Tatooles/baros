@@ -9,7 +9,11 @@ struct AddExerciseSheet: View {
     let session: WorkoutSession
     @Bindable var engine: ActiveWorkoutEngine
     var onAddExercise: (LoggedExercise) -> Void = { _ in }
-    @State private var showsAddError = false
+    @State private var addErrorMessage: String?
+
+    private var showsAddError: Binding<Bool> {
+        Binding(get: { addErrorMessage != nil }, set: { if !$0 { addErrorMessage = nil } })
+    }
 
     var body: some View {
         NavigationStack {
@@ -28,14 +32,17 @@ struct AddExerciseSheet: View {
                         onAddExercise(firstExercise)
                     }
                     dismiss()
+                } catch let error as ActiveWorkoutEngineError {
+                    // A refused add, such as an archived exercise, won't succeed on retry.
+                    addErrorMessage = error.localizedDescription
                 } catch {
-                    showsAddError = true
+                    addErrorMessage = "The exercises weren't added. Your selection is still here. Try adding them again, or cancel to return to your workout."
                 }
             }
-            .alert("Couldn't Add Exercises", isPresented: $showsAddError) {
+            .alert("Couldn't Add Exercises", isPresented: showsAddError) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("The exercises weren't added. Your selection is still here. Try adding them again, or cancel to return to your workout.")
+                Text(addErrorMessage ?? "")
             }
         }
         .presentationDetents([.large])
