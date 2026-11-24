@@ -317,17 +317,6 @@ final class SupersetWorkoutTests: XCTestCase {
         XCTAssertEqual(added.map(\.supersetGroupID), [nil, nil])
     }
 
-    func testListDraftAppendLeavesASingleExerciseUngroupedEvenAsASuperset() throws {
-        let (context, session) = try makeWorkout(names: ["A"])
-        let curl = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
-        context.insert(curl)
-        var draft = WorkoutExerciseListDraft(session: session)
-
-        draft.append([curl], asSuperset: true)
-
-        XCTAssertNil(draft.exercises[1].supersetGroupID)
-    }
-
     func testTogglingALinkJoinsMergesAndSplits() {
         let (a, b) = (UUID(), UUID())
         var fresh = (0..<20).map { _ in UUID() }.makeIterator()

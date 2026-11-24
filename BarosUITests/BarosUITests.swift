@@ -2227,15 +2227,28 @@ final class BarosUITests: XCTestCase {
         blankWorkout.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)).tap()
         XCTAssertTrue(app.buttons["AddExerciseButton"].waitToExist(timeout: 3))
         app.buttons["AddExerciseButton"].tap()
-        let squat = app.buttons["ExercisePickerRow-Back Squat-Barbell"]
-        XCTAssertTrue(squat.waitToExist(timeout: 3))
-        squat.tap()
+        let row = app.buttons["ExercisePickerRow-Barbell Row-Barbell"]
+        XCTAssertTrue(row.waitToExist(timeout: 3))
+        row.tap()
         let add = app.buttons["ExercisePickerAddSelectedButton"]
         XCTAssertTrue(add.waitToExist(timeout: 3))
         XCTAssertEqual(add.label, "Add 1 Exercise")
         XCTAssertTrue(add.isHittable)
         XCTAssertGreaterThanOrEqual(add.frame.height, 44)
         XCTAssertTrue(app.buttons["ExercisePickerCancelButton"].isHittable)
+
+        app.buttons["ExercisePickerRow-Back Squat-Barbell"].tap()
+        let addAsSuperset = app.buttons["ExercisePickerAddAsSupersetButton"]
+        XCTAssertTrue(addAsSuperset.waitToExist(timeout: 3))
+        XCTAssertTrue(addAsSuperset.isHittable)
+        XCTAssertGreaterThanOrEqual(addAsSuperset.frame.width, app.frame.width * 0.75,
+                                    "Large text stacks the actions so neither label is cut off")
+        XCTAssertGreaterThanOrEqual(add.frame.width, app.frame.width * 0.75)
+        XCTAssertLessThanOrEqual(addAsSuperset.frame.maxY, add.frame.minY)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Stacked picker actions at largest text"
+        screenshot.lifetime = .keepAlways
+        self.add(screenshot)
     }
 
     @MainActor

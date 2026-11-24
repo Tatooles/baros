@@ -294,7 +294,10 @@ private struct ExercisePickerList: View {
                 swapConfirmBar(swapImpact, replacement: swapReplacement)
                     .transition(commitBarTransition)
             } else if mode.isAddExercise, !selectedExercises.isEmpty {
-                HStack(spacing: 10) {
+                let actionLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(spacing: 10))
+                    : AnyLayout(HStackLayout(spacing: 10))
+                actionLayout {
                     if selectedExercises.count >= 2 {
                         Button {
                             onSelect(selectedExercises, true)
