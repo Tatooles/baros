@@ -53,25 +53,27 @@ final class SupersetUITests: XCTestCase {
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
         openEditor(in: app)
         let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
-        XCTAssertEqual(list.cells.count, 4, "Single, pair, giant set and Add Exercises")
+        XCTAssertEqual(exerciseRows(in: app).count, 6)
         attachScreenshot("Edit Workout with supersets", app: app)
 
         removeSupersetMember("Incline Dumbbell Press", in: app)
-        XCTAssertFalse(list.cells.containing(NSPredicate(format: "label == %@", "Incline Dumbbell Press")).firstMatch.exists)
-        XCTAssertEqual(list.cells.count, 4, "Pull-Up becomes its own row")
+        XCTAssertFalse(exerciseRow("Incline Dumbbell Press", in: app).exists)
+        XCTAssertEqual(exerciseRows(in: app).count, 5)
         XCTAssertEqual(list.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 1)
         for name in ["Cable Overhead Triceps Extension", "Single-Arm Cable Lateral Raise"] {
             removeSupersetMember(name, in: app)
         }
         XCTAssertEqual(list.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 0)
         app.buttons["CancelReorderExercisesButton"].tap()
+        discardChanges(in: app)
         XCTAssertTrue(app.buttons["ExerciseHeader-2"].waitToExist(timeout: 3))
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
 
         openEditor(in: app)
-        drag(cellContaining: "Chest Supported Row", above: "Pull-Up", in: app)
+        // The label's grip moves the whole giant set; it stays whole and apart from the pair.
+        dragSuperset(at: 1, lastMember: "Single-Arm Cable Lateral Raise", above: "Pull-Up", in: app)
         attachScreenshot("Giant set moved", app: app)
-        app.buttons["DoneReorderExercisesButton"].tap()
+        app.buttons["SaveReorderExercisesButton"].tap()
         let expected = ["Slingshot Pause Bench Press", "Chest Supported Row", "Cable Overhead Triceps Extension",
                         "Single-Arm Cable Lateral Raise", "Pull-Up", "Incline Dumbbell Press"]
         for (index, name) in expected.enumerated() {
@@ -105,7 +107,7 @@ final class SupersetUITests: XCTestCase {
         XCTAssertTrue(name.waitToExist(timeout: 3))
         name.tap()
         name.typeText(" Edited\n")
-        drag(cellContaining: "Pull-Up", above: "Bench Press", in: app)
+        dragSuperset(at: 0, lastMember: "Incline Dumbbell Press", above: "Bench Press", in: app)
         app.buttons["SaveTemplateButton"].tap()
         XCTAssertTrue(app.staticTexts["TemplateReviewTitle"].waitToExist(timeout: 3))
         XCTAssertTrue(app.staticTexts["TemplateReviewTitle"].label.contains("Edited"))
@@ -116,7 +118,9 @@ final class SupersetUITests: XCTestCase {
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
     }
 
-    func testLinkModeKeepsScrolledCardsInPlaceInBothLists() {
+    /// A workout longer than the screen: Add stays reachable at any scroll, and a tapped
+    /// joint stays under the finger as a superset label appears above it.
+    func testLongWorkoutKeepsAddPinnedAndJointsUnderTheFinger() {
         let app = XCUIApplication()
         app.launchArguments = [
             "--uitest-in-memory-store", "--uitest-force-signed-out-auth", "--uitest-reset-app-appearance",
@@ -124,88 +128,26 @@ final class SupersetUITests: XCTestCase {
         ]
         app.launch()
         openEditor(in: app)
-        let link = app.buttons["EditWorkoutLinkExercisesButton"]
-        for _ in 0..<6 where !(link.exists && link.isHittable) { app.swipeUp() }
-        assertCardsStayInPlaceThroughLinkMode(in: app)
-
-        startLinking(link, in: app)
-        app.swipeDown()
+        let add = app.buttons["EditWorkoutAddExercisesButton"]
+        XCTAssertTrue(add.isHittable)
+        let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
+        list.swipeUp()
         settle()
-        let scrolled = cardFrames(in: app)
-        let done = app.buttons["DoneLinkingButton"]
-        done.tap()
-        XCTAssertTrue(waitForAbsence(done))
-        settle()
-        assertSameCards(scrolled, cardFrames(in: app), "Leaving after scrolling up")
+        XCTAssertTrue(add.isHittable, "Add stays pinned however far the list scrolls")
 
-        for _ in 0..<6 where !(link.exists && link.isHittable) { app.swipeUp() }
-        startLinking(link, in: app)
-        let lastLink = app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "SupersetLinkButton-")
-        ).allElementsBoundByIndex.last(where: \.isHittable)
-        XCTAssertNotNil(lastLink)
-        lastLink?.tap()
-        done.tap()
-        XCTAssertTrue(waitForAbsence(done))
-        XCTAssertTrue(link.waitToExist(timeout: 3))
-        for _ in 0..<6 where !(link.exists && link.isHittable) { app.swipeUp() }
-        assertCardsStayInPlaceThroughLinkMode(in: app)
+        let joint = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "SupersetLinkButton-"))
+            .allElementsBoundByIndex.last { $0.isHittable && $0.label.hasPrefix("Link ") && $0.frame.minY > 200 }
+        guard let joint else { return XCTFail("No joint on screen") }
+        let before = joint.frame.midY
+        joint.tap()
+        XCTAssertTrue(waitForLabelPrefix(joint, "Unlink "))
+        settle()
+        XCTAssertEqual(joint.frame.midY, before, accuracy: 3, "The scroll makes up for the new label")
+        attachScreenshot("Linked in a long workout", app: app)
     }
 
-    private func assertCardsStayInPlaceThroughLinkMode(
-        in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line
-    ) {
-        let link = app.buttons["EditWorkoutLinkExercisesButton"]
-        settle()
-        let regular = cardFrames(in: app)
-        XCTAssertGreaterThan(regular.count, 1, file: file, line: line)
-        startLinking(link, in: app)
-        let done = app.buttons["DoneLinkingButton"]
-        XCTAssertTrue(done.waitToExist(timeout: 3), file: file, line: line)
-        settle()
-        assertSameCards(regular, cardFrames(in: app), "Entering link mode", file: file, line: line)
-        done.tap()
-        XCTAssertTrue(waitForAbsence(done), file: file, line: line)
-        settle()
-        assertSameCards(regular, cardFrames(in: app), "Leaving link mode", file: file, line: line)
-    }
-
+    /// Lets animations finish and the scroll come to rest.
     private func settle() { Thread.sleep(forTimeInterval: 0.8) }
-
-    private func cardFrames(in app: XCUIApplication) -> [String: CGRect] {
-        let window = app.windows.firstMatch.frame
-        let cards = app.descendants(matching: .any).matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "ReorderExerciseRow-")
-        ).allElementsBoundByIndex
-        var frames: [String: CGRect] = [:]
-        for card in cards where card.exists && card.frame.width > 1 && card.frame.minY < window.height {
-            var frame = card.frame
-            if frame.width >= window.width - 1 {
-                let texts = card.staticTexts.allElementsBoundByIndex
-                guard let first = texts.first, let last = texts.last else { continue }
-                frame = CGRect(
-                    x: first.frame.minX - 14, y: frame.minY + 6,
-                    width: last.frame.maxX + 14 - (first.frame.minX - 14), height: frame.height - 12
-                )
-            }
-            frames[card.identifier] = frame
-        }
-        return frames
-    }
-
-    private func assertSameCards(
-        _ expected: [String: CGRect], _ actual: [String: CGRect], _ step: String,
-        file: StaticString = #filePath, line: UInt = #line
-    ) {
-        let shared = Set(expected.keys).intersection(actual.keys)
-        XCTAssertGreaterThan(shared.count, 1, step, file: file, line: line)
-        for id in shared {
-            guard let before = expected[id], let after = actual[id] else { continue }
-            XCTAssertEqual(before.minX, after.minX, accuracy: 1, "\(step): left edge", file: file, line: line)
-            XCTAssertEqual(before.maxX, after.maxX, accuracy: 1, "\(step): right edge", file: file, line: line)
-            XCTAssertEqual(before.minY, after.minY, accuracy: 1, "\(step): top edge", file: file, line: line)
-        }
-    }
 
     func testTemplateEditorLinksExercisesAndSaves() {
         let app = launch(seedsSupersets: true)
@@ -224,25 +166,16 @@ final class SupersetUITests: XCTestCase {
         XCTAssertTrue(app.buttons["EditTemplateButton"].waitToExist(timeout: 3))
         app.buttons["EditTemplateButton"].tap()
 
+        // Linking sits in the same list as the name, with no mode to enter.
         let name = app.textFields["TemplateNameField"]
         XCTAssertTrue(name.waitToExist(timeout: 3))
-        assertCardsStayInPlaceThroughLinkMode(in: app)
-
         name.tap()
         name.typeText(" Linked")
-        startLinking(app.buttons["EditWorkoutLinkExercisesButton"], in: app)
-        let doneLinking = app.buttons["DoneLinkingButton"]
-        XCTAssertTrue(doneLinking.waitToExist(timeout: 3))
-        XCTAssertTrue(waitForAbsence(app.keyboards.firstMatch))
-        XCTAssertTrue(doneLinking.isHittable)
 
         let joinFirst = app.buttons["SupersetLinkButton-0"]
         XCTAssertTrue(joinFirst.label.hasPrefix("Link "))
         joinFirst.tap()
         XCTAssertTrue(waitForLabelPrefix(joinFirst, "Unlink "))
-        doneLinking.tap()
-        XCTAssertTrue(waitForAbsence(doneLinking))
-        XCTAssertTrue(name.waitToExist(timeout: 3))
         XCTAssertTrue((name.value as? String)?.contains("Linked") == true, "Linking keeps the typed name")
 
         app.buttons["SaveTemplateButton"].tap()
@@ -291,8 +224,7 @@ final class SupersetUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["ActiveWorkoutEditButton"].waitToExist(timeout: 8))
         openEditor(in: app)
-        let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
-        let source = list.cells.containing(NSPredicate(format: "label == %@", "Slingshot Pause Bench Press")).firstMatch
+        let source = exerciseRow("Slingshot Pause Bench Press", in: app)
         let grip = source.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
         let target = grip.withOffset(CGVector(dx: 0, dy: 150))
         grip.press(forDuration: 0.6, thenDragTo: target, withVelocity: .slow, thenHoldForDuration: 4)
@@ -302,7 +234,7 @@ final class SupersetUITests: XCTestCase {
         let moves = Int(label) ?? -1
         XCTAssertGreaterThanOrEqual(moves, 0, "The probe must report its measurement")
         XCTAssertLessThan(moves, 6, "One row boundary must not repeatedly rearrange cells")
-        let partner = list.cells.containing(NSPredicate(format: "label == %@", "Pull-Up")).firstMatch
+        let partner = exerciseRow("Pull-Up", in: app)
         if source.frame.minY < partner.frame.minY {
             let sourceGrip = source.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
             let belowPartner = sourceGrip.withOffset(CGVector(dx: 0, dy: partner.frame.maxY - source.frame.midY + 12))
@@ -312,21 +244,12 @@ final class SupersetUITests: XCTestCase {
 
     }
 
-    func testLinkModeJoinsAndSplitsAsADraftAndDoneKeepsIt() {
+    func testJointsJoinAndSplitAsADraftAndSaveKeepsIt() {
         let app = launch(seedsSupersets: true)
         let labels = app.descendants(matching: .any).matching(identifier: "SupersetLabel")
         XCTAssertEqual(labels.count, 2)
         openEditor(in: app)
-        assertCardsStayInPlaceThroughLinkMode(in: app)
-
-        let linkExercises = app.buttons["EditWorkoutLinkExercisesButton"]
-        startLinking(linkExercises, in: app)
-        let doneLinking = app.buttons["DoneLinkingButton"]
-        XCTAssertTrue(doneLinking.waitToExist(timeout: 3))
         let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
-        XCTAssertTrue(waitForAbsence(list))
-        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Remove ")).firstMatch.exists)
-        attachScreenshot("Link mode", app: app)
 
         let joinFirst = app.buttons["SupersetLinkButton-0"]
         XCTAssertTrue(joinFirst.label.hasPrefix("Link "))
@@ -334,78 +257,80 @@ final class SupersetUITests: XCTestCase {
         joinFirst.tap()
         XCTAssertTrue(waitForLabelPrefix(joinFirst, "Unlink "))
         attachScreenshot("Linked", app: app)
-        doneLinking.tap()
-        XCTAssertTrue(waitForAbsence(doneLinking))
-        XCTAssertTrue(list.waitToExist(timeout: 3))
         XCTAssertEqual(
             list.descendants(matching: .any).matching(identifier: "SupersetLabel").firstMatch.label,
             "Superset of 3 exercises"
         )
+        // Undo takes the link back.
+        app.buttons["ReorderUndoButton"].tap()
+        XCTAssertTrue(waitForLabelPrefix(joinFirst, "Link "))
+        joinFirst.tap()
+        XCTAssertTrue(waitForLabelPrefix(joinFirst, "Unlink "))
 
         app.buttons["CancelReorderExercisesButton"].tap()
+        discardChanges(in: app)
         XCTAssertTrue(app.buttons["ExerciseHeader-2"].waitToExist(timeout: 3))
         XCTAssertEqual(labels.firstMatch.label, "Superset of 2 exercises")
 
+        // Save keeps a split of the giant set: its last exercise goes single.
         openEditor(in: app)
-        startLinking(linkExercises, in: app)
-        XCTAssertTrue(doneLinking.waitToExist(timeout: 3))
         let splitLast = app.buttons["SupersetLinkButton-4"]
         XCTAssertTrue(splitLast.label.hasPrefix("Unlink "))
         splitLast.tap()
         XCTAssertTrue(waitForLabelPrefix(splitLast, "Link "))
-        doneLinking.tap()
-        XCTAssertTrue(waitForAbsence(doneLinking))
-        app.buttons["DoneReorderExercisesButton"].tap()
+        app.buttons["SaveReorderExercisesButton"].tap()
         XCTAssertTrue(app.buttons["ExerciseHeader-2"].waitToExist(timeout: 3))
         XCTAssertEqual(labels.count, 2)
         XCTAssertEqual(labels.element(boundBy: 1).label, "Superset of 2 exercises")
     }
 
-    func testSupersetMemberMinusRevealsDeleteBeforeRemoving() {
+    /// Members reorder within their superset by their own grips, and leave it when
+    /// dragged clear; a single dropped between two members joins.
+    func testMemberGripsReorderWithinAndOutOfASuperset() {
         let app = launch(seedsSupersets: true)
         openEditor(in: app)
         let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
-        let member = list.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Incline Dumbbell Press")).firstMatch
-        let minus = app.buttons.matching(NSPredicate(format: "label == %@", "Remove Incline Dumbbell Press")).firstMatch
-        let delete = app.buttons.matching(NSPredicate(format: "label == %@", "Delete Incline Dumbbell Press")).firstMatch
-        XCTAssertTrue(minus.waitToExist(timeout: 3))
+        let labels = list.descendants(matching: .any).matching(identifier: "SupersetLabel")
+        drag(row: "Incline Dumbbell Press", above: "Pull-Up", in: app)
+        XCTAssertEqual(labels.firstMatch.label, "Superset of 2 exercises", "Reordering inside keeps the pair")
+        drag(row: "Slingshot Pause Bench Press", between: "Incline Dumbbell Press", and: "Pull-Up", in: app)
+        XCTAssertEqual(labels.firstMatch.label, "Superset of 3 exercises", "Dropped between members, it joins")
+        attachScreenshot("Joined by dragging", app: app)
+        // The last member has no row below to pass: dragging it past the outline makes it single.
+        let last = exerciseRow("Single-Arm Cable Lateral Raise", in: app)
+        let grip = last.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+        grip.press(forDuration: 0.3, thenDragTo: grip.withOffset(CGVector(dx: 0, dy: last.frame.height)),
+                   withVelocity: .slow, thenHoldForDuration: 0.6)
+        XCTAssertTrue(waitUntil(timeout: 3) { labels.element(boundBy: 1).label == "Superset of 2 exercises" })
+        app.buttons["SaveReorderExercisesButton"].tap()
+        let expected = ["Incline Dumbbell Press", "Slingshot Pause Bench Press", "Pull-Up"]
+        for (index, name) in expected.enumerated() {
+            let header = app.buttons["ExerciseHeader-\(index)"]
+            XCTAssertTrue(header.waitToExist(timeout: 3))
+            XCTAssertTrue(header.label.contains(name), "\(index): \(header.label)")
+        }
+    }
 
-        minus.tap()
-        XCTAssertTrue(delete.waitToExist(timeout: 3), "The first tap only reveals Delete")
-        XCTAssertTrue(member.exists)
-        XCTAssertGreaterThan(delete.frame.minX, member.frame.maxX - 1, "Delete sits trailing of the member")
-        attachScreenshot("Superset member Delete revealed", app: app)
-        minus.tap()
-        XCTAssertTrue(waitForAbsence(delete))
+    /// A member swipes within its container to Remove, and Undo puts it back in its superset.
+    func testSwipingASupersetMemberRemovesItAndUndoRestoresIt() {
+        let app = launch(seedsSupersets: true)
+        openEditor(in: app)
+        let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
+        let member = exerciseRow("Incline Dumbbell Press", in: app)
+        XCTAssertTrue(member.waitToExist(timeout: 3))
+        let before = member.frame
 
-        let longName = "Cable Overhead Triceps Extension"
-        let long = list.descendants(matching: .any).matching(NSPredicate(format: "label == %@", longName)).firstMatch
-        let longDelete = app.buttons.matching(NSPredicate(format: "label == %@", "Delete \(longName)")).firstMatch
-        let restingHeight = long.frame.height
-        app.buttons.matching(NSPredicate(format: "label == %@", "Remove \(longName)")).firstMatch.tap()
-        XCTAssertTrue(longDelete.waitToExist(timeout: 3))
-        XCTAssertEqual(long.frame.height, restingHeight, accuracy: 1)
-        attachScreenshot("Long name truncates beside Delete", app: app)
-        long.tap()
-        XCTAssertTrue(waitForAbsence(longDelete))
-        XCTAssertEqual(long.frame.height, restingHeight, accuracy: 1)
-
-        minus.tap()
-        XCTAssertTrue(delete.waitToExist(timeout: 3))
-        member.tap()
-        XCTAssertTrue(waitForAbsence(delete))
-        minus.tap()
-        XCTAssertTrue(delete.waitToExist(timeout: 3))
-        list.cells.containing(NSPredicate(format: "label == %@", "Slingshot Pause Bench Press")).firstMatch.tap()
-        XCTAssertTrue(waitForAbsence(delete))
-        XCTAssertTrue(member.exists)
-
-        minus.tap()
-        XCTAssertTrue(delete.waitToExist(timeout: 3))
-        delete.tap()
+        let remove = revealRemove("Incline Dumbbell Press", in: app)
+        XCTAssertLessThanOrEqual(remove.frame.maxX, before.maxX, "Remove stays inside the container")
+        attachScreenshot("Superset member Remove revealed", app: app)
+        remove.tap()
         XCTAssertTrue(waitForAbsence(member))
-        app.buttons["CancelReorderExercisesButton"].tap()
-        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
+        XCTAssertTrue(app.descendants(matching: .any)["ReorderNotice"].label.contains("Removed Incline Dumbbell Press"))
+        let undo = app.buttons["ReorderUndoButton"]
+        undo.tap()
+        XCTAssertTrue(member.waitToExist(timeout: 3))
+        XCTAssertFalse(undo.isEnabled)
+        XCTAssertEqual(list.descendants(matching: .any).matching(identifier: "SupersetLabel").count, 2)
     }
 
     private func launch(seedsSupersets: Bool = false) -> XCUIApplication {
@@ -428,10 +353,39 @@ final class SupersetUITests: XCTestCase {
     }
 
     private func removeSupersetMember(_ name: String, in app: XCUIApplication) {
-        app.buttons.matching(NSPredicate(format: "label == %@", "Remove \(name)")).firstMatch.tap()
-        let delete = app.buttons.matching(NSPredicate(format: "label == %@", "Delete \(name)")).firstMatch
-        XCTAssertTrue(delete.waitToExist(timeout: 3))
-        delete.tap()
+        revealRemove(name, in: app).tap()
+        XCTAssertTrue(waitForAbsence(exerciseRow(name, in: app)))
+    }
+
+    /// Swipes a row far enough to show its Remove, without removing it.
+    private func revealRemove(_ name: String, in app: XCUIApplication) -> XCUIElement {
+        let row = exerciseRow(name, in: app)
+        XCTAssertTrue(row.waitToExist(timeout: 3))
+        row.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5)).press(
+            forDuration: 0.05, thenDragTo: row.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5)),
+            withVelocity: .fast, thenHoldForDuration: 0
+        )
+        let remove = app.buttons.matching(NSPredicate(format: "label == %@", "Remove \(name)")).firstMatch
+        XCTAssertTrue(remove.waitToExist(timeout: 3), "Remove did not appear for \(name)")
+        return remove
+    }
+
+    private func discardChanges(in app: XCUIApplication) {
+        let discard = app.buttons["Discard Changes"]
+        XCTAssertTrue(discard.waitToExist(timeout: 3))
+        discard.tap()
+        let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
+        XCTAssertTrue(waitForAbsence(list))
+    }
+
+    private func exerciseRows(in app: XCUIApplication) -> XCUIElementQuery {
+        app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "ReorderExerciseRow-"))
+    }
+
+    private func exerciseRow(_ name: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "ReorderExerciseRow-", name)
+        ).firstMatch
     }
 
     private func openEditor(in app: XCUIApplication) {
@@ -441,30 +395,42 @@ final class SupersetUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch.waitToExist(timeout: 3))
     }
 
-    private func drag(cellContaining name: String, above destinationName: String, in app: XCUIApplication) {
-        let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
-        func cell(_ name: String) -> XCUIElement {
-            list.cells.containing(NSPredicate(format: "label == %@", name)).firstMatch
-        }
-        for _ in 0..<2 where cell(name).frame.minY > cell(destinationName).frame.minY {
-            let source = cell(name)
-            let destination = cell(destinationName)
+    /// Drags a row by its grip until it sits above the destination row.
+    private func drag(row name: String, above destinationName: String, in app: XCUIApplication) {
+        for _ in 0..<2 where exerciseRow(name, in: app).frame.minY > exerciseRow(destinationName, in: app).frame.minY {
+            let source = exerciseRow(name, in: app)
+            let destination = exerciseRow(destinationName, in: app)
             let grip = source.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
-            let target = source.coordinate(withNormalizedOffset: CGVector(
-                dx: 0.95,
-                dy: 0.5 + (destination.frame.minY + 10 - source.frame.midY) / source.frame.height
-            ))
-            grip.press(forDuration: 0.6, thenDragTo: target, withVelocity: .slow, thenHoldForDuration: 0.6)
+            let target = grip.withOffset(CGVector(dx: 0, dy: destination.frame.minY + 10 - source.frame.midY))
+            grip.press(forDuration: 0.3, thenDragTo: target, withVelocity: .slow, thenHoldForDuration: 0.6)
         }
-        XCTAssertLessThan(cell(name).frame.minY, cell(destinationName).frame.minY)
+        XCTAssertLessThan(exerciseRow(name, in: app).frame.minY, exerciseRow(destinationName, in: app).frame.minY)
     }
 
-    private func startLinking(_ button: XCUIElement, in app: XCUIApplication) {
-        XCTAssertTrue(button.waitToExist(timeout: 3))
-        Thread.sleep(forTimeInterval: 0.6)
+    /// Drags a row by its grip so its center lands in the gap between two others.
+    private func drag(row name: String, between upper: String, and lower: String, in app: XCUIApplication) {
+        let source = exerciseRow(name, in: app)
+        XCTAssertTrue(source.waitToExist(timeout: 3))
+        let gap = (exerciseRow(upper, in: app).frame.maxY + exerciseRow(lower, in: app).frame.minY) / 2
+        let grip = source.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+        grip.press(forDuration: 0.3, thenDragTo: grip.withOffset(CGVector(dx: 0, dy: gap - source.frame.midY)),
+                   withVelocity: .slow, thenHoldForDuration: 0.6)
+        let (top, middle, bottom) = (exerciseRow(upper, in: app).frame, exerciseRow(name, in: app).frame, exerciseRow(lower, in: app).frame)
+        XCTAssertTrue(top.minY < middle.minY && middle.minY < bottom.minY, "\(name) lands between \(upper) and \(lower)")
+    }
+
+    /// Drags a superset by its label's grip until the whole block sits above the destination row.
+    private func dragSuperset(at index: Int, lastMember: String, above destinationName: String, in app: XCUIApplication) {
         let list = app.descendants(matching: .any).matching(identifier: "ReorderExercisesList").firstMatch
-        for _ in 0..<4 where !(button.exists && button.isHittable) { list.swipeUp() }
-        button.tap()
+        let label = list.descendants(matching: .any).matching(identifier: "SupersetLabel").element(boundBy: index)
+        XCTAssertTrue(label.waitToExist(timeout: 3))
+        let destination = exerciseRow(destinationName, in: app)
+        let blockMidY = (label.frame.minY + exerciseRow(lastMember, in: app).frame.maxY) / 2
+        let grip = label.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+        // The block's center has to pass above the destination's.
+        let target = grip.withOffset(CGVector(dx: 0, dy: destination.frame.minY - 24 - blockMidY))
+        grip.press(forDuration: 0.3, thenDragTo: target, withVelocity: .slow, thenHoldForDuration: 0.6)
+        XCTAssertLessThan(exerciseRow(lastMember, in: app).frame.maxY, destination.frame.minY)
     }
 
     private func waitForLabelPrefix(_ element: XCUIElement, _ prefix: String) -> Bool {

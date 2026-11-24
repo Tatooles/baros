@@ -70,8 +70,8 @@ public struct WorkoutExerciseListSnapshot: Equatable {
             plannedSetCount = addition.initialSetKinds.count
         }
 
-        var loggedSetCount: Int { sets.filter(\.hasLoggedValues).count }
-        public var loggedSetsText: String {
+        public var loggedSetCount: Int { sets.filter(\.hasLoggedValues).count }
+        var loggedSetsText: String {
             switch loggedSetCount {
             case 0: "No logged sets"
             case 1: "1 logged set"
@@ -127,7 +127,27 @@ public struct WorkoutExerciseListDraft {
         }
     }
 
-    public var removedExercises: [WorkoutExerciseListSnapshot.ExerciseState] {
+    /// Whether saving would change the workout: its exercises, their order, or its supersets.
+    public var hasChanges: Bool {
+        orderedIDs != baseline.exercises.map(\.id)
+            || !SupersetGrouping.sameSupersets(
+                orderedIDs.map { supersetGroupIDs[$0] }, baseline.exercises.map(\.supersetGroupID)
+            )
+    }
+
+    /// Sets with entered values that saving would delete, and how many removed
+    /// exercises they come from.
+    public var pendingSetLoss: (sets: Int, exercises: Int) {
+        let lossy = removedExercises.filter { $0.loggedSetCount > 0 }
+        return (lossy.reduce(0) { $0 + $1.loggedSetCount }, lossy.count)
+    }
+
+    /// The removed exercises whose entered sets saving would delete.
+    public var lossyRemovedExerciseNames: [String] {
+        removedExercises.filter { $0.loggedSetCount > 0 }.map(\.name)
+    }
+
+    var removedExercises: [WorkoutExerciseListSnapshot.ExerciseState] {
         let remaining = Set(orderedIDs)
         return baseline.exercises.filter { !remaining.contains($0.id) }
     }
@@ -149,6 +169,4 @@ public struct WorkoutExerciseListDraft {
     public mutating func regroup(_ groupIDs: [UUID?]) {
         supersetGroupIDs = zip(orderedIDs, groupIDs).reduce(into: [:]) { $0[$1.0] = $1.1 }
     }
-
-    public var needsRemovalConfirmation: Bool { removedExercises.contains { $0.loggedSetCount > 0 } }
 }
