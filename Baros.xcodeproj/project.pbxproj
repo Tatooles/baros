@@ -26,6 +26,7 @@
 		18D01B6DE3B7EC33317AC025 /* AddExerciseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6795620478217A9EB5FD5B3 /* AddExerciseSheet.swift */; };
 		18FAE56EE28116E10D34F3ED /* AppAppearancePreferenceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8412E207FBE1DB88ACED0B1F /* AppAppearancePreferenceStore.swift */; };
 		19963E4522612DC77999DA75 /* RestTimerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B718A68C7A96E4B9318B7C53 /* RestTimerTests.swift */; };
+		1BE75AA267FD088A1F025F89 /* PreviousSetPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D3DF0D84D449AEEBB18FD5 /* PreviousSetPerformanceTests.swift */; };
 		1CA3C2D4EB1DE15086129C9C /* SyncObservabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDAF79438867AE4B03C833D2 /* SyncObservabilityTests.swift */; };
 		1E8C9B53B3B5803EE6CE732E /* ExercisePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C712C286971BE7C1978A666F /* ExercisePickerView.swift */; };
 		1F4BD41F4A5C5E3390D3C392 /* ClerkConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9D88B27463914E4DA59FDA2 /* ClerkConfigurationTests.swift */; };
@@ -269,6 +270,7 @@
 		A81CCBA2B96D9D02F9A9F97D /* TimedExerciseUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedExerciseUITests.swift; sourceTree = "<group>"; };
 		A82450D0B1348AED3BE0B547 /* WorkoutLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutLiveActivityWidget.swift; sourceTree = "<group>"; };
 		A8BA79E3D56FF2BBB6C088A1 /* RestTimerAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestTimerAlerts.swift; sourceTree = "<group>"; };
+		A8D3DF0D84D449AEEBB18FD5 /* PreviousSetPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviousSetPerformanceTests.swift; sourceTree = "<group>"; };
 		ABD15D3E5F0F18E6E21EA978 /* AppUpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateService.swift; sourceTree = "<group>"; };
 		ADE43D12EEFC655B28461D90 /* BodyFigure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyFigure.swift; sourceTree = "<group>"; };
 		AE6509A17AE88CDDB51A9EC9 /* LaunchExperienceFeatureRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchExperienceFeatureRow.swift; sourceTree = "<group>"; };
@@ -515,6 +517,7 @@
 				84EA7E27926EFEAA5C6E5D93 /* HistoryPersistenceTests.swift */,
 				EBE5665A291D732FD47B1CFE /* HomeRingModelTests.swift */,
 				34E7B8F0E30270E03AA269C0 /* LaunchExperienceCoordinatorTests.swift */,
+				A8D3DF0D84D449AEEBB18FD5 /* PreviousSetPerformanceTests.swift */,
 				B718A68C7A96E4B9318B7C53 /* RestTimerTests.swift */,
 				BDC49EA0F74AD67C212E209A /* SupersetTests.swift */,
 				CC1D50ACD78458E239985830 /* SwiftDataTestSupport.swift */,
@@ -1042,6 +1045,7 @@
 				0E134259CB3FA6B54D18BD27 /* HistoryPersistenceTests.swift in Sources */,
 				6C2B733CE4B8EFD323E1E440 /* HomeRingModelTests.swift in Sources */,
 				D7FCF44D5C2139A31A579C85 /* LaunchExperienceCoordinatorTests.swift in Sources */,
+				1BE75AA267FD088A1F025F89 /* PreviousSetPerformanceTests.swift in Sources */,
 				19963E4522612DC77999DA75 /* RestTimerTests.swift in Sources */,
 				5525D30F148CDFA02B8598A3 /* SupersetTests.swift in Sources */,
 				CF89B18ADB82484845F4BD6A /* SwiftDataTestSupport.swift in Sources */,

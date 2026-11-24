@@ -23,11 +23,7 @@ public enum SeedDataService {
         try ensureExercises(context: context, ownerTokenIdentifier: ownerTokenIdentifier, ownerlessScope: ownerlessScope)
         try migrateLegacyPrimaryMuscleGroups(context: context)
         try ensureSeedMetadata(context: context)
-        // Owner activation seeds on every launch. A save posts `didSave` to every
-        // listener on this call stack, so save only when the seed changed something.
-        if context.hasChanges {
-            try context.save()
-        }
+        try context.save()
     }
 
     private static func claimOwnerlessVisibleRecords(
@@ -121,6 +117,8 @@ public enum SeedDataService {
     private static func ensureSeedMetadata(context: ModelContext) throws {
         let metadata = try context.fetch(FetchDescriptor<SeedMetadata>())
         if let existing = metadata.first(where: { $0.key == exerciseSeedKey }) {
+            // Owner activation re-seeds on every launch. Re-stamping here made every
+            // launch save, and the open workout reloaded inside that save (BAROS-IOS-1M).
             guard existing.version < exerciseSeedVersion else { return }
             existing.version = exerciseSeedVersion
             existing.appliedAt = .now
