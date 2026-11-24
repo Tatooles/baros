@@ -45,10 +45,13 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
     }
 
     func updateUIView(_ table: UITableView, context: Context) {
-        let changed = context.coordinator.signature != signature
-        context.coordinator.parent = self
+        let coordinator = context.coordinator
+        let signature = Self.signature(of: blocks)
+        let changed = coordinator.signature != signature
+        coordinator.parent = self
+        coordinator.blocks = blocks
         if changed {
-            context.coordinator.signature = signature
+            coordinator.signature = signature
             table.reloadData()
         }
     }
@@ -62,28 +65,31 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
         let isNew: Bool
     }
 
-    private var signature: [Presentation] {
-        blocks.flatMap { $0.members.map { Presentation(id: $0.id, name: $0.name,
+    fileprivate static func signature(of blocks: [SupersetGrouping.Block<Item>]) -> [[Presentation]] {
+        blocks.map { $0.members.map { Presentation(id: $0.id, name: $0.name,
             metadata: $0.metadata, group: $0.supersetGroupID, detail: $0.trailingDetail, isNew: $0.isNew) } }
     }
 
     final class Coordinator: NSObject, UITableViewDataSource, UITableViewDelegate, UIGestureRecognizerDelegate {
         var parent: NativeGroupedReorderList
-        fileprivate var signature: [Presentation]
+        /// The rows the table shows. Moves and deletes update it before SwiftUI catches up.
+        var blocks: [SupersetGrouping.Block<Item>]
+        fileprivate var signature: [[Presentation]]
         private var firstBlockRow: Int { Header.self == EmptyView.self ? 0 : 1 }
         init(_ parent: NativeGroupedReorderList) {
             self.parent = parent
-            signature = parent.signature
+            blocks = parent.blocks
+            signature = NativeGroupedReorderList.signature(of: parent.blocks)
         }
         private func block(at row: Int) -> SupersetGrouping.Block<Item>? {
             let index = row - firstBlockRow
-            return parent.blocks.indices.contains(index) ? parent.blocks[index] : nil
+            return blocks.indices.contains(index) ? blocks[index] : nil
         }
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
             parent.memory.offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
         }
         func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-            firstBlockRow + parent.blocks.count + 1
+            firstBlockRow + blocks.count + 1
         }
         func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
             let cell = tableView.dequeueReusableCell(withIdentifier: "ExerciseBlock", for: indexPath)
@@ -138,19 +144,22 @@ struct NativeGroupedReorderList<Item: ReorderListExercise, Header: View>: UIView
         func tableView(_ tableView: UITableView, shouldIndentWhileEditingRowAt indexPath: IndexPath) -> Bool {
             block(at: indexPath.row)?.isSuperset == false
         }
+        /// Deletes the row itself rather than waiting for `updateUIView` to reload. A reload while the
+        /// row's Delete button is open gives the reused cell the deleted row's height, clipping a superset.
         func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
             guard editingStyle == .delete, let block = block(at: indexPath.row) else { return }
+            blocks.remove(at: indexPath.row - firstBlockRow)
+            signature = NativeGroupedReorderList.signature(of: blocks)
+            tableView.deleteRows(at: [indexPath], with: .automatic)
             parent.remove(Set(block.members.map(\.id)))
         }
         func tableView(_ tableView: UITableView, targetIndexPathForMoveFromRowAt source: IndexPath, toProposedIndexPath proposed: IndexPath) -> IndexPath {
-            IndexPath(row: min(max(proposed.row, firstBlockRow), firstBlockRow + parent.blocks.count - 1), section: 0)
+            IndexPath(row: min(max(proposed.row, firstBlockRow), firstBlockRow + blocks.count - 1), section: 0)
         }
         func tableView(_ tableView: UITableView, moveRowAt source: IndexPath, to destination: IndexPath) {
-            var blocks = parent.blocks
             let moved = blocks.remove(at: source.row - firstBlockRow)
             blocks.insert(moved, at: destination.row - firstBlockRow)
-            signature = blocks.flatMap { $0.members.map { Presentation(id: $0.id, name: $0.name,
-                metadata: $0.metadata, group: $0.supersetGroupID, detail: $0.trailingDetail, isNew: $0.isNew) } }
+            signature = NativeGroupedReorderList.signature(of: blocks)
             parent.reorder(blocks.flatMap { $0.members.map(\.id) })
         }
     }

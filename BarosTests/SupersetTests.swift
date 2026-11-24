@@ -1,5 +1,7 @@
 import CoreData
 import SwiftData
+import SwiftUI
+import UIKit
 import XCTest
 @testable import Baros
 @testable import BarosCore
@@ -152,5 +154,43 @@ final class SupersetWorkoutTests: XCTestCase {
         }
         try context.save()
         return session
+    }
+}
+
+@MainActor
+final class NativeGroupedReorderListTests: XCTestCase {
+    private struct Row: ReorderListExercise {
+        let id = UUID()
+        let name: String
+        var supersetGroupID: UUID?
+        var metadata: String? { nil }
+        var trailingDetail: String? { nil }
+        var isNew: Bool { false }
+        var accessibilityValue: String { "" }
+    }
+
+    func testDeletingARowRemovesItFromTheTableInsteadOfWaitingForAReload() throws {
+        let group = UUID()
+        let rows = [Row(name: "A", supersetGroupID: group), Row(name: "B", supersetGroupID: group), Row(name: "C")]
+        var removed: [Set<UUID>] = []
+        let list = NativeGroupedReorderList(
+            blocks: SupersetGrouping.blocks(rows, groupID: \.supersetGroupID),
+            reorder: { _ in }, remove: { removed.append($0) }, add: {}, link: nil,
+            memory: ReorderListMemory(), memberReveal: ReorderMemberReveal(), header: EmptyView()
+        )
+        let coordinator = list.makeCoordinator()
+        let table = UITableView(frame: CGRect(x: 0, y: 0, width: 402, height: 800), style: .plain)
+        table.register(UITableViewCell.self, forCellReuseIdentifier: "ExerciseBlock")
+        table.dataSource = coordinator
+        table.delegate = coordinator
+        table.setEditing(true, animated: false)
+        table.layoutIfNeeded()
+        XCTAssertEqual(table.numberOfRows(inSection: 0), 3, "Superset, C and the actions row")
+
+        coordinator.tableView(table, commit: .delete, forRowAt: IndexPath(row: 1, section: 0))
+
+        XCTAssertEqual(removed, [[rows[2].id]])
+        XCTAssertEqual(table.numberOfRows(inSection: 0), 2, "The table drops the row before SwiftUI's update arrives")
+        XCTAssertEqual(coordinator.blocks.map(\.id), [rows[0].id])
     }
 }
