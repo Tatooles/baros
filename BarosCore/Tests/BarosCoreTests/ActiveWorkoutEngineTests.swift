@@ -20,9 +20,11 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             let session = try engine.startBlankWorkout(context: context)
             sessionID = session.id
             let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+            let row = Exercise(name: "Row", category: .strength, equipment: .barbell, primaryMuscleGroup: .lats)
             context.insert(exercise)
-            let first = try engine.addExercise(exercise, to: session, context: context)
-            let second = try engine.addExercise(exercise, to: session, context: context)
+            context.insert(row)
+            let first = try engine.addExercises([exercise], to: session, context: context)[0]
+            let second = try engine.addExercises([row], to: session, context: context)[0]
             remainingExerciseID = second.id
             try engine.changeSuperset(.joinNext, for: first, context: context)
             first.hasLocalSupersetChange = false
@@ -85,7 +87,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let logged = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = try XCTUnwrap(logged.sortedSets.first)
         let fail: (ModelContext) throws -> Void = { _ in throw Failure.injected }
         timer.start(sessionID: session.id, setID: set.id, duration: 60)
@@ -123,7 +125,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             let session = try engine.startBlankWorkout(context: context)
             let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
             context.insert(exercise)
-            let logged = try engine.addExercise(exercise, to: session, context: context)
+            let logged = try engine.addExercises([exercise], to: session, context: context)[0]
             let fail: (ModelContext) throws -> Void = { _ in throw Failure.injected }
             XCTAssertThrowsError(try engine.addSet(to: logged, context: context, save: fail))
             addedID = try engine.addSet(to: logged, context: context).id
@@ -201,7 +203,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Private exercise", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let logged = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = try XCTUnwrap(logged.sortedSets.first)
         let fail: (ModelContext) throws -> Void = { _ in
             throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError,
@@ -239,7 +241,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let logged = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = try XCTUnwrap(logged.sortedSets.first)
         let baseline = Date(timeIntervalSince1970: 100)
         set.weight = 100
@@ -283,7 +285,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let logged = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = try XCTUnwrap(logged.sortedSets.first)
         let intendedDate = Date(timeIntervalSince1970: 200)
         let fail: (ModelContext) throws -> Void = { _ in throw SaveFailure.expected }
@@ -326,7 +328,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             let session = try engine.startBlankWorkout(context: context)
             let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
             context.insert(exercise)
-            let logged = try engine.addExercise(exercise, to: session, context: context)
+            let logged = try engine.addExercises([exercise], to: session, context: context)[0]
             let set = try XCTUnwrap(logged.sortedSets.first)
             set.rpe = 6
             try context.save()
@@ -357,7 +359,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let logged = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = try XCTUnwrap(logged.sortedSets.first)
         let baseline = set.updatedAt
         let parentDate = session.updatedAt
@@ -385,7 +387,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(ownerTokenIdentifier: "owner-a", context: context)
         let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let logged = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = try XCTUnwrap(logged.sortedSets.first)
         let fail: (ModelContext) throws -> Void = { _ in throw SaveFailure.expected }
         XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context, save: fail))
@@ -414,7 +416,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         let first = try XCTUnwrap(loggedExercise.sortedSets.first)
         let second = try engine.addSet(to: loggedExercise, context: context)
         let third = try engine.addSet(to: loggedExercise, context: context)
@@ -672,8 +674,8 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let squat = Exercise(name: "Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
         context.insert(bench)
         context.insert(squat)
-        try engine.addExercise(bench, to: session, context: context)
-        let removed = try engine.addExercise(squat, to: session, context: context)
+        try engine.addExercises([bench], to: session, context: context)
+        let removed = try engine.addExercises([squat], to: session, context: context)[0]
         try engine.removeLoggedExercise(removed, context: context)
 
         let added = try engine.addExercises([bench, squat, squat], to: session, context: context)
@@ -730,7 +732,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         loggedExercise.sets[0].weight = 185
         loggedExercise.sets[0].reps = 5
         loggedExercise.sets[0].rpe = 8
@@ -754,7 +756,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = loggedExercise.sets[0]
         set.reps = 8
 
@@ -771,7 +773,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = loggedExercise.sets[0]
         let originalUpdatedAt = Date(timeIntervalSince1970: 100)
         set.weight = 185
@@ -887,7 +889,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context, now: afterFixtureCreation(100))
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         _ = try engine.addSet(to: loggedExercise, context: context)
         let deletedAt = afterFixtureCreation(200)
 
@@ -915,9 +917,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         context.insert(firstExercise)
         context.insert(secondExercise)
         context.insert(thirdExercise)
-        let first = try engine.addExercise(firstExercise, to: session, context: context)
-        let removed = try engine.addExercise(secondExercise, to: session, context: context)
-        let third = try engine.addExercise(thirdExercise, to: session, context: context)
+        let first = try engine.addExercises([firstExercise], to: session, context: context)[0]
+        let removed = try engine.addExercises([secondExercise], to: session, context: context)[0]
+        let third = try engine.addExercises([thirdExercise], to: session, context: context)[0]
 
         try engine.removeLoggedExercise(removed, context: context, now: Date(timeIntervalSince1970: 300))
 
@@ -943,9 +945,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         context.insert(bench)
         context.insert(row)
         context.insert(deadlift)
-        let first = try engine.addExercise(squat, to: session, context: context)
-        let original = try engine.addExercise(bench, to: session, context: context)
-        let last = try engine.addExercise(deadlift, to: session, context: context)
+        let first = try engine.addExercises([squat], to: session, context: context)[0]
+        let original = try engine.addExercises([bench], to: session, context: context)[0]
+        let last = try engine.addExercises([deadlift], to: session, context: context)[0]
         let originalFirstSet = try XCTUnwrap(original.sortedSets.first)
         originalFirstSet.weight = 225
         originalFirstSet.reps = 5
@@ -997,7 +999,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
         let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(bench)
-        let original = try engine.addExercise(bench, to: session, context: context)
+        let original = try engine.addExercises([bench], to: session, context: context)[0]
         let originalSet = try XCTUnwrap(original.sortedSets.first)
         original.notes = "Keep this note"
         originalSet.weight = 185
@@ -1046,7 +1048,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             sets: [(.working, true), (.working, true), (.working, true)],
             in: context
         )
-        let original = try engine.addExercise(bench, to: session, context: context)
+        let original = try engine.addExercises([bench], to: session, context: context)[0]
         let originalSet = try XCTUnwrap(original.sortedSets.first)
         let originalSecondSet = try engine.addSet(to: original, context: context)
         original.notes = "Keep this note"
@@ -1106,7 +1108,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         )
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 300))
 
-        let logged = try engine.addExercise(bench, to: session, context: context)
+        let logged = try engine.addExercises([bench], to: session, context: context)[0]
 
         let sets = logged.sortedSets
         XCTAssertEqual(sets.map(\.kind), [.warmup, .working, .working, .drop])
@@ -1131,7 +1133,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         )
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 300))
 
-        let logged = try engine.addExercise(row, to: session, context: context)
+        let logged = try engine.addExercises([row], to: session, context: context)[0]
 
         XCTAssertEqual(logged.sortedSets.map(\.kind), [.working])
     }
@@ -1141,6 +1143,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let context = container.mainContext
         let engine = ActiveWorkoutEngine()
         let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
+        bench.syncOwnerTokenIdentifier = "owner-a"
         context.insert(bench)
         try insertCompletedSession(
             startedAt: Date(timeIntervalSince1970: 100),
@@ -1162,12 +1165,12 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             now: Date(timeIntervalSince1970: 300)
         )
 
-        let logged = try engine.addExercise(
-            bench,
+        let logged = try engine.addExercises(
+            [bench],
             to: session,
             ownerTokenIdentifier: "owner-a",
             context: context
-        )
+        )[0]
 
         XCTAssertEqual(logged.sortedSets.count, 3)
     }
@@ -1193,7 +1196,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         )
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 300))
 
-        let logged = try engine.addExercise(bench, to: session, context: context)
+        let logged = try engine.addExercises([bench], to: session, context: context)[0]
 
         XCTAssertEqual(logged.sortedSets.count, 2)
     }
@@ -1238,7 +1241,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         try context.save()
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 500))
 
-        let logged = try engine.addExercise(bench, to: session, context: context)
+        let logged = try engine.addExercises([bench], to: session, context: context)[0]
 
         XCTAssertEqual(logged.sortedSets.count, 2)
     }
@@ -1255,7 +1258,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         try service.removeExercise(exercise, context: context)
         try service.restoreExercise(exercise, context: context)
         let active = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 300))
-        let added = try engine.addExercise(exercise, to: active, context: context)
+        let added = try engine.addExercises([exercise], to: active, context: context)[0]
         let previous = PreviousSetPerformance.lastCompletedSets(for: added, in: [past, active], ownerTokenIdentifier: nil)
         XCTAssertEqual(previous.count, 2)
         let summary = try XCTUnwrap(ExerciseHistorySummary.makeSummaries(from: [past]).first)
@@ -1283,8 +1286,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         )
         let session = try engine.startWorkout(fromPast: older, context: context, now: Date(timeIntervalSince1970: 300))
         XCTAssertEqual(session.sortedLoggedExercises.first?.sortedSets.map(\.kind), [.warmup, .working, .working])
+        try engine.removeLoggedExercise(try XCTUnwrap(session.sortedLoggedExercises.first), context: context)
 
-        let added = try engine.addExercise(bench, to: session, context: context)
+        let added = try engine.addExercises([bench], to: session, context: context)[0]
 
         XCTAssertNil(added.sourceLoggedExerciseID)
         XCTAssertEqual(added.sortedSets.map(\.kind), [.warmup, .working, .working])
@@ -1424,7 +1428,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
             in: context
         )
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 200))
-        let original = try engine.addExercise(bench, to: session, context: context)
+        let original = try engine.addExercises([bench], to: session, context: context)[0]
         XCTAssertEqual(original.sortedSets.count, 4)
         let swapDate = Date(timeIntervalSince1970: 500)
 
@@ -1466,7 +1470,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
                 context.insert(exercise)
             }
             context.insert(replacementExercise)
-            let originals = try exercises.map { try engine.addExercise($0, to: session, context: context) }
+            let originals = try exercises.map { try engine.addExercises([$0], to: session, context: context)[0] }
 
             let replacement = try engine.swapLoggedExercise(
                 originals[originalIndex],
@@ -1496,11 +1500,11 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         context.insert(firstExercise)
         context.insert(removedExercise)
         context.insert(replacementExercise)
-        _ = try engine.addExercise(firstExercise, to: session, context: context)
-        let removed = try engine.addExercise(removedExercise, to: session, context: context)
+        _ = try engine.addExercises([firstExercise], to: session, context: context)[0]
+        let removed = try engine.addExercises([removedExercise], to: session, context: context)[0]
         try engine.removeLoggedExercise(removed, context: context, now: Date(timeIntervalSince1970: 500))
 
-        let replacement = try engine.addExercise(replacementExercise, to: session, context: context)
+        let replacement = try engine.addExercises([replacementExercise], to: session, context: context)[0]
 
         XCTAssertEqual(replacement.orderIndex, 1)
         XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1])
@@ -1514,7 +1518,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         let firstSet = loggedExercise.sets[0]
         let removedSet = try engine.addSet(to: loggedExercise, context: context)
         let thirdSet = try engine.addSet(to: loggedExercise, context: context)
@@ -1542,7 +1546,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = loggedExercise.sets[0]
         let baseline = Date(timeIntervalSince1970: 100)
         let completionDate = Date(timeIntervalSince1970: 200)
@@ -1616,7 +1620,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = loggedExercise.sets[0]
         set.weight = 195
         set.reps = 4
@@ -1675,7 +1679,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = loggedExercise.sets[0]
         set.weight = 185
         set.reps = 5
@@ -1717,7 +1721,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = loggedExercise.sets[0]
         set.weight = 195
         set.reps = 4
@@ -1884,7 +1888,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         )
         let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let logged = try engine.addExercises([exercise], to: session, context: context)[0]
         let firstSet = try XCTUnwrap(logged.sortedSets.first)
         let deletedAt = Date(timeIntervalSince1970: 150)
         let delete = SyncOutboxEntry(
@@ -2095,9 +2099,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         context.insert(squat)
         context.insert(bench)
         context.insert(deadlift)
-        let first = try engine.addExercise(squat, to: session, context: context)
-        let second = try engine.addExercise(bench, to: session, context: context)
-        let third = try engine.addExercise(deadlift, to: session, context: context)
+        let first = try engine.addExercises([squat], to: session, context: context)[0]
+        let second = try engine.addExercises([bench], to: session, context: context)[0]
+        let third = try engine.addExercises([deadlift], to: session, context: context)[0]
 
         try engine.reorderLoggedExercises(
             in: session,
@@ -2124,8 +2128,8 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(squat)
         context.insert(bench)
-        let first = try engine.addExercise(squat, to: session, context: context)
-        let second = try engine.addExercise(bench, to: session, context: context)
+        let first = try engine.addExercises([squat], to: session, context: context)[0]
+        let second = try engine.addExercises([bench], to: session, context: context)[0]
         first.notes = "Keep torso upright"
         first.referenceNotes = "Use belt"
         let firstSet = first.sortedSets[0]
@@ -2156,8 +2160,8 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let bench = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(squat)
         context.insert(bench)
-        let first = try engine.addExercise(squat, to: session, context: context)
-        let second = try engine.addExercise(bench, to: session, context: context)
+        let first = try engine.addExercises([squat], to: session, context: context)[0]
+        let second = try engine.addExercises([bench], to: session, context: context)[0]
         let originalIDs = session.sortedLoggedExercises.map(\.id)
         let originalIndexes = session.sortedLoggedExercises.map(\.orderIndex)
 
@@ -2189,9 +2193,9 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         context.insert(squat)
         context.insert(bench)
         context.insert(deadlift)
-        let first = try engine.addExercise(squat, to: session, context: context)
-        let removed = try engine.addExercise(bench, to: session, context: context)
-        let third = try engine.addExercise(deadlift, to: session, context: context)
+        let first = try engine.addExercises([squat], to: session, context: context)[0]
+        let removed = try engine.addExercises([bench], to: session, context: context)[0]
+        let third = try engine.addExercises([deadlift], to: session, context: context)[0]
         removed.markDeleted(now: afterFixtureCreation(150))
 
         try engine.reorderLoggedExercises(

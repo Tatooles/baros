@@ -274,20 +274,6 @@ public final class ActiveWorkoutEngine {
         return session
     }
 
-    @discardableResult
-    func addExercise(
-        _ exercise: Exercise,
-        to session: WorkoutSession,
-        ownerTokenIdentifier: String? = nil,
-        context: ModelContext,
-        save: (ModelContext) throws -> Void = { try $0.save() }
-    ) throws -> LoggedExercise {
-        try insertExercises(
-            [exercise], to: session, ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context, save: save
-        )[0]
-    }
-
     /// Adds exercises to the end of the workout through the same save as Edit Workout,
     /// so both refuse the same things. Returns the new rows in selection order.
     @discardableResult
@@ -323,59 +309,31 @@ public final class ActiveWorkoutEngine {
         }
     }
 
+    /// Inserts the draft's additions after the last exercise without saving.
+    /// `saveExerciseList` saves them and removes them again if the save fails.
     private func insertExercises(
-        _ exercises: [Exercise],
+        _ additions: [WorkoutExerciseListDraft.Addition],
         to session: WorkoutSession,
-        ownerTokenIdentifier: String?,
-        context: ModelContext,
-        save: (ModelContext) throws -> Void,
-        plannedSetKinds: [[SetKind]]? = nil,
-        supersetGroupID: UUID? = nil
-    ) throws -> [LoggedExercise] {
-        guard !exercises.isEmpty else { return [] }
-        let setKinds: [[SetKind]]
-        if let plannedSetKinds {
-            setKinds = plannedSetKinds
-        } else {
-            let history = try context.fetch(FetchDescriptor<WorkoutSession>())
-            setKinds = exercises.map {
-                initialSetKinds(for: $0, ownerTokenIdentifier: ownerTokenIdentifier, sessions: history)
-            }
-        }
-        let originalSessionUpdatedAt = session.updatedAt
+        context: ModelContext
+    ) -> [LoggedExercise] {
+        guard !additions.isEmpty else { return [] }
         let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
-        var additions: [LoggedExercise] = []
-        for (offset, exercise) in exercises.enumerated() {
-            let loggedExercise = LoggedExercise(
-                orderIndex: nextIndex + offset, exercise: exercise, supersetGroupID: supersetGroupID
-            )
+        var inserted: [LoggedExercise] = []
+        for (offset, addition) in additions.enumerated() {
+            let loggedExercise = LoggedExercise(orderIndex: nextIndex + offset, exercise: addition.exercise)
             loggedExercise.session = session
             context.insert(loggedExercise)
-            for (index, kind) in setKinds[offset].enumerated() {
+            for (index, kind) in addition.initialSetKinds.enumerated() {
                 let set = LoggedSet(orderIndex: index, kind: kind)
                 set.loggedExercise = loggedExercise
                 context.insert(set)
                 loggedExercise.sets.append(set)
             }
             session.loggedExercises.append(loggedExercise)
-            additions.append(loggedExercise)
+            inserted.append(loggedExercise)
         }
         session.touch()
-        do {
-            try save(context)
-            return additions
-        } catch {
-            let addedIDs = Set(additions.map(\.id))
-            session.loggedExercises.removeAll { addedIDs.contains($0.id) }
-            for loggedExercise in additions {
-                for set in loggedExercise.sets {
-                    context.delete(set)
-                }
-                context.delete(loggedExercise)
-            }
-            session.updatedAt = originalSessionUpdatedAt
-            throw error
-        }
+        return inserted
     }
 
     public func removeLoggedExercise(
@@ -551,10 +509,7 @@ public final class ActiveWorkoutEngine {
             && $0.exercise.isVisible(to: ownerTokenIdentifier) }) else {
             throw ActiveWorkoutEngineError.invalidExerciseReorder
         }
-        let inserted = try insertExercises(
-            pending.map(\.exercise), to: session, ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context, save: { _ in }, plannedSetKinds: pending.map(\.initialSetKinds)
-        )
+        let inserted = insertExercises(pending, to: session, context: context)
         let exercisesByID = Dictionary(uniqueKeysWithValues:
             visibleExercises.map { ($0.id, $0) } + zip(pending, inserted).map { ($0.0.id, $0.1) }
         )

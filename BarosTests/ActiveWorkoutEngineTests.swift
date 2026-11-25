@@ -33,7 +33,7 @@ final class ActiveWorkoutEngineTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench Press", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         let set = loggedExercise.sets[0]
         set.weight = 185
         set.reps = 5

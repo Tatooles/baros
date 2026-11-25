@@ -364,7 +364,7 @@ final class RestTimerTests: XCTestCase {
         let session = try engine.startBlankWorkout(context: context)
         let exercise = Exercise(name: "Bench", category: .strength, equipment: .barbell, primaryMuscleGroup: .chest)
         context.insert(exercise)
-        let logged = try engine.addExercise(exercise, to: session, context: context)
+        let logged = try engine.addExercises([exercise], to: session, context: context)[0]
         return (context, engine, session, logged)
     }
 }
