@@ -103,7 +103,11 @@ final class SeedDataServiceTests: XCTestCase {
         let context = container.mainContext
 
         try SeedDataService.seedIfNeeded(context: context, ownerTokenIdentifier: "issuer|owner_b")
+        let noSave = expectation(forNotification: ModelContext.didSave, object: context)
+        noSave.isInverted = true
         try SeedDataService.seedIfNeeded(context: context, ownerTokenIdentifier: "issuer|owner_b")
+        // `didSave` posts synchronously inside `save()`, so there is nothing to wait for.
+        wait(for: [noSave], timeout: 0)
 
         let settings = try context.fetch(FetchDescriptor<UserSettings>())
         let exercises = try context.fetch(FetchDescriptor<Exercise>())

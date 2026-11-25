@@ -117,7 +117,10 @@ public enum SeedDataService {
     private static func ensureSeedMetadata(context: ModelContext) throws {
         let metadata = try context.fetch(FetchDescriptor<SeedMetadata>())
         if let existing = metadata.first(where: { $0.key == exerciseSeedKey }) {
-            existing.version = max(existing.version, exerciseSeedVersion)
+            // Owner activation re-seeds on every launch. Re-stamping here made every
+            // launch save, and the open workout reloaded inside that save (BAROS-IOS-1M).
+            guard existing.version < exerciseSeedVersion else { return }
+            existing.version = exerciseSeedVersion
             existing.appliedAt = .now
         } else {
             context.insert(SeedMetadata(key: exerciseSeedKey, version: exerciseSeedVersion))
