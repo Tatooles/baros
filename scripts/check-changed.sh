@@ -90,6 +90,7 @@ app_build() {
     -scheme Baros \
     -destination 'generic/platform=iOS Simulator' \
     -derivedDataPath "${DERIVED_DATA:-.build/check-changed-DerivedData}" \
+    -disableAutomaticPackageResolution \
     -quiet \
     ARCHS=arm64
 }

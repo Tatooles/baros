@@ -137,6 +137,32 @@ test("required iOS gates retry failed tests and report retries that passed", asy
   }
 });
 
+test("iOS workflows and check-changed.sh fail on an out-of-date Package.resolved", async () => {
+  const appCI = await readWorkflow("app-ci.yml");
+  const nightly = await readWorkflow("ios-ui-nightly.yml");
+  const checkChanged = await readFile(new URL("scripts/check-changed.sh", repositoryRoot), "utf8");
+
+  for (const [label, job] of [
+    ["app-ci.yml ios-unit-tests", appCI.jobs["ios-unit-tests"]],
+    ["app-ci.yml ios-ui-smoke", appCI.jobs["ios-ui-smoke"]],
+    ["ios-ui-nightly.yml ios-ui-full", nightly.jobs["ios-ui-full"]],
+  ]) {
+    const resolveStep = job.steps.find((step) => step.name === "Resolve Swift packages");
+    assert.ok(resolveStep, `${label} must resolve Swift packages`);
+    assert.match(
+      resolveStep.run,
+      /-disableAutomaticPackageResolution/,
+      `${label} must disable automatic package resolution so stale Package.resolved fails before Xcode Cloud`,
+    );
+  }
+
+  assert.match(
+    checkChanged,
+    /-disableAutomaticPackageResolution/,
+    "scripts/check-changed.sh must disable automatic package resolution",
+  );
+});
+
 test("app classification uses the correct comparison for pull requests and pushes", async () => {
   const workflow = await readWorkflow("app-ci.yml");
   const classifier = workflow.jobs["app-changes"].steps.find((step) => step.id === "detect");

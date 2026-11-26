@@ -154,6 +154,7 @@ jobs:
             if xcodebuild -resolvePackageDependencies \
               -project Baros.xcodeproj \
               -scheme BarosUnitTests \
+              -disableAutomaticPackageResolution \
               -derivedDataPath "${RUNNER_TEMP}/BarosDerivedData"; then
               exit 0
             fi
@@ -220,6 +221,7 @@ jobs:
             if xcodebuild -resolvePackageDependencies \
               -project Baros.xcodeproj \
               -scheme Baros \
+              -disableAutomaticPackageResolution \
               -derivedDataPath "${RUNNER_TEMP}/BarosUISmokeDerivedData"; then
               exit 0
             fi

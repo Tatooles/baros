@@ -90,6 +90,7 @@ jobs:
             if xcodebuild -resolvePackageDependencies \
               -project Baros.xcodeproj \
               -scheme Baros \
+              -disableAutomaticPackageResolution \
               -derivedDataPath "${RUNNER_TEMP}/BarosUIFullDerivedData"; then
               exit 0
             fi

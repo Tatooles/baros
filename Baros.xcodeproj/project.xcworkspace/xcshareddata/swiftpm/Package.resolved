@@ -1,5 +1,5 @@
 {
-  "originHash" : "4ae3ac7f23755fdf8a3b9f8b9a43fe994016653767463c601be0974ee03b3150",
+  "originHash" : "d15554dc65a06cdfad01c0e91318f0a358f6281126f65cb5fd56bff46b24cead",
   "pins" : [
     {
       "identity" : "clerk-convex-swift",
@@ -40,10 +40,10 @@
     {
       "identity" : "phonenumberkit",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/marmelroy/PhoneNumberKit",
+      "location" : "https://github.com/PhoneNumberKit/PhoneNumberKit",
       "state" : {
-        "revision" : "169ab10234347fb19b37441f2867ace896a284b0",
-        "version" : "4.3.0"
+        "revision" : "3c9c4e9f084c7bf8b51b1f078867dbd8f51eb1b2",
+        "version" : "5.0.15"
       }
     },
     {
