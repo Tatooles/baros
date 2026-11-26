@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -55,6 +55,14 @@ async function readWorkflow(name) {
     "utf8",
   );
   return parse(source);
+}
+
+function assertPinnedAction(uses, action) {
+  assert.match(
+    uses ?? "",
+    new RegExp(`^${action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}@[0-9a-f]{40}$`),
+    `${action} must be pinned to a full 40-character commit SHA`,
+  );
 }
 
 function classifierPaths(script) {
@@ -150,9 +158,10 @@ test("app classification is always reported and preserves its decision polarity"
   assert.equal(workflow.on.pull_request, null);
   assert.deepEqual(workflow.on.push.branches, ["main"]);
   assert.equal(appChanges.outputs.changed, "${{ steps.detect.outputs.changed }}");
-  assert.deepEqual(checkout, {
+  const { uses: checkoutUses, ...checkoutRest } = checkout;
+  assertPinnedAction(checkoutUses, "actions/checkout");
+  assert.deepEqual(checkoutRest, {
     name: "Check out repository history",
-    uses: "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
     with: { "fetch-depth": 0 },
   });
   assert.deepEqual(classifier.env, {
@@ -186,14 +195,16 @@ test("the lightweight classifier always runs the workflow contract tests", async
     (step) => step.name === "Validate CI workflow contracts",
   );
 
-  assert.deepEqual(classifierSteps[pnpmIndex], {
+  const { uses: pnpmUses, ...pnpmRest } = classifierSteps[pnpmIndex];
+  assertPinnedAction(pnpmUses, "pnpm/action-setup");
+  assert.deepEqual(pnpmRest, {
     name: "Set up pnpm",
-    uses: "pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320",
     with: { version: "10.26.1" },
   });
-  assert.deepEqual(classifierSteps[nodeIndex], {
+  const { uses: nodeUses, ...nodeRest } = classifierSteps[nodeIndex];
+  assertPinnedAction(nodeUses, "actions/setup-node");
+  assert.deepEqual(nodeRest, {
     name: "Set up Node.js",
-    uses: "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
     with: { "node-version": "22.12.0" },
   });
   assert.deepEqual(classifierSteps[installIndex], {
@@ -301,7 +312,7 @@ test("the nightly UI suite runs the full target serially with the smoke job's se
 
   const upload = stepNamed(job.steps, "Upload UI suite failure diagnostics");
   assert.equal(upload.if, "failure()");
-  assert.equal(upload.uses, "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02");
+  assertPinnedAction(upload.uses, "actions/upload-artifact");
   assert.match(upload.with.path, /BarosUIFull\.xcresult/);
   assert.match(upload.with.path, /BarosUIFull\.log/);
 });
@@ -531,6 +542,34 @@ test("check-changed.sh selects the same paths as the CI workflows", async () => 
     const selects = pattern(name);
     for (const path of paths) {
       assert.match(sample(path), selects, `${name} misses ${path}`);
+    }
+  }
+});
+
+test("every workflow action is pinned to a full commit SHA", async () => {
+  const dir = new URL(".github/workflows/", repositoryRoot);
+  const files = (await readdir(dir)).filter((name) => /\.ya?ml$/.test(name)).sort();
+  assert.ok(files.length > 0, "expected at least one workflow file");
+
+  for (const file of files) {
+    const workflow = await readWorkflow(file);
+    for (const [jobName, job] of Object.entries(workflow.jobs ?? {})) {
+      if (job.uses !== undefined) {
+        assert.match(
+          job.uses,
+          /^[^@\s]+@[0-9a-f]{40}$/,
+          `${file} (${jobName}) must pin ${job.uses} to a full 40-character commit SHA`,
+        );
+      }
+      for (const step of job.steps ?? []) {
+        if (step.uses !== undefined) {
+          assert.match(
+            step.uses,
+            /^[^@\s]+@[0-9a-f]{40}$/,
+            `${file} (${jobName}) must pin ${step.uses} to a full 40-character commit SHA`,
+          );
+        }
+      }
     }
   }
 });
