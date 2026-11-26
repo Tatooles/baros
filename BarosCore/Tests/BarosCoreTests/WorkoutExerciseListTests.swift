@@ -269,11 +269,13 @@ final class WorkoutExerciseListTests: XCTestCase {
         try context.save()
         let baseline = WorkoutExerciseListSnapshot(session: session)
         let engine = ActiveWorkoutEngine()
-        for state in 0..<4 {
+        for state in 0..<5 {
             library.isArchived = state == 0
             library.deletedAt = state == 1 ? .now : nil
             library.syncOwnerTokenIdentifier = state == 2 ? "another-owner" : nil
             session.status = state == 3 ? .completed : .active
+            // A workout deleted on another device can still read as active here.
+            session.deletedAt = state == 4 ? .now : nil
             try context.save()
             var saves = 0
             XCTAssertThrowsError(try engine.addExercises([library], to: session, context: context,
@@ -282,6 +284,7 @@ final class WorkoutExerciseListTests: XCTestCase {
             }
             XCTAssertEqual(saves, 0)
             session.status = .active
+            session.deletedAt = nil
             XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), baseline)
         }
         let message = try XCTUnwrap(ActiveWorkoutEngineError.exercisesUnavailableToAdd.errorDescription)
@@ -319,8 +322,16 @@ final class WorkoutExerciseListTests: XCTestCase {
         let (session, before) = try untidyFixture(in: context)
         let picks = ["Curl", "Fly"].map { Exercise(name: $0, category: .strength, equipment: .dumbbell, primaryMuscleGroup: .chest) }
         picks.forEach { context.insert($0) }
+        let engine = ActiveWorkoutEngine()
 
-        let added = try ActiveWorkoutEngine().addExercises(picks, to: session, asSuperset: true, context: context)
+        XCTAssertThrowsError(try engine.addExercises(picks, to: session, asSuperset: true, context: context,
+                                                     save: { _ in throw CocoaError(.fileWriteUnknown) }))
+        XCTAssertEqual(rowStates(session), before)
+        let changedIDs = Set(context.changedModelsArray.map(\.persistentModelID))
+        XCTAssertFalse(session.sortedLoggedExercises.contains { changedIDs.contains($0.persistentModelID) },
+                       "A failed add must leave the rows it didn't change unchanged")
+
+        let added = try engine.addExercises(picks, to: session, asSuperset: true, context: context)
 
         XCTAssertEqual(rowStates(session).prefix(3).map { $0 }, before)
         XCTAssertEqual(added.map(\.exerciseSnapshotName), ["Curl", "Fly"])
@@ -369,6 +380,34 @@ final class WorkoutExerciseListTests: XCTestCase {
 
         XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2, 3])
         XCTAssertTrue(session.sortedLoggedExercises.allSatisfy { $0.supersetGroupID == nil })
+    }
+
+    /// Joining a new row to an existing superset, or splitting one while adding, changes
+    /// existing rows, so the save tidies the whole list rather than only the new rows.
+    func testEditWorkoutSaveThatAddsAndChangesASupersetStillTidiesTheWholeList() throws {
+        for joinsNewRow in [true, false] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let session = try fixture(in: context)
+            let group = UUID()
+            for logged in session.sortedLoggedExercises.suffix(2) { logged.supersetGroupID = group }
+            try context.save()
+            let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+            context.insert(library)
+            var draft = WorkoutExerciseListDraft(session: session)
+            draft.append([library])
+            // Row and Squat share a superset. Either Curl joins it, or Squat leaves it.
+            draft.regroup(joinsNewRow ? [nil, group, group, group] : [nil, group, nil, nil])
+
+            try ActiveWorkoutEngine().applyExerciseListChanges(
+                in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline, additions: draft.additions,
+                supersetGroupIDs: draft.supersetGroupIDs, context: context
+            )
+
+            let groups = session.sortedLoggedExercises.map(\.supersetGroupID)
+            XCTAssertEqual(groups, joinsNewRow ? [nil, group, group, group] : [nil, nil, nil, nil],
+                           joinsNewRow ? "Curl joins the superset" : "Row is no longer a superset of one")
+        }
     }
 
     private struct RowState: Equatable {

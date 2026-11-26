@@ -332,7 +332,6 @@ public final class ActiveWorkoutEngine {
             session.loggedExercises.append(loggedExercise)
             inserted.append(loggedExercise)
         }
-        session.touch()
         return inserted
     }
 
@@ -569,7 +568,9 @@ public final class ActiveWorkoutEngine {
                 for set in exercise.sets { context.delete(set) }
                 context.delete(exercise)
             }
-            for state in originalExerciseStates {
+            // An append changed no existing row. Writing their values back would still
+            // mark them changed, so the next save would upload them again.
+            for state in originalExerciseStates where !appendsOnly {
                 state.exercise.orderIndex = state.orderIndex
                 state.exercise.supersetGroupID = state.supersetGroupID
                 state.exercise.hasLocalSupersetChange = state.hasLocalSupersetChange

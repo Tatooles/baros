@@ -15,7 +15,9 @@ final class ActiveWorkoutStructureRecoveryTests: XCTestCase {
         let squat = Exercise(name: "Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
         context.insert(squat)
 
-        XCTAssertThrowsError(try engine.addExercises([squat], to: session, context: context))
+        XCTAssertThrowsError(try engine.addExercises([squat], to: session, context: context)) { error in
+            XCTAssertNil(error as? ActiveWorkoutEngineError, "The add must reach the failing save, not be refused")
+        }
 
         XCTAssertEqual(session.sortedLoggedExercises.map(\.id), originalExercises)
         XCTAssertEqual(session.updatedAt, originalUpdatedAt)
