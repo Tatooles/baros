@@ -12,8 +12,12 @@ final class ActiveWorkoutStructureRecoveryTests: XCTestCase {
         let originalUpdatedAt = session.updatedAt
         session.notes = "Keep this unsaved workout note"
         exercise.notes = "Keep this unsaved library note"
+        let squat = Exercise(name: "Squat", category: .strength, equipment: .barbell, primaryMuscleGroup: .quads)
+        context.insert(squat)
 
-        XCTAssertThrowsError(try engine.addExercise(exercise, to: session, context: context))
+        XCTAssertThrowsError(try engine.addExercises([squat], to: session, context: context)) { error in
+            XCTAssertNil(error as? ActiveWorkoutEngineError, "The add must reach the failing save, not be refused")
+        }
 
         XCTAssertEqual(session.sortedLoggedExercises.map(\.id), originalExercises)
         XCTAssertEqual(session.updatedAt, originalUpdatedAt)
@@ -75,14 +79,14 @@ final class ActiveWorkoutStructureRecoveryTests: XCTestCase {
                                  equipment: .dumbbell, primaryMuscleGroup: .chest)
         context.insert(unrelated)
 
-        XCTAssertThrowsError(try engine.addExercise(exercise, to: session, context: context,
+        XCTAssertThrowsError(try engine.addExercises([exercise], to: session, context: context,
             save: { _ in throw SaveFailure.expected }))
         XCTAssertTrue(session.sortedLoggedExercises.isEmpty)
         XCTAssertEqual(session.notes, "Keep this unsaved workout note")
         XCTAssertEqual(exercise.notes, "Keep this unsaved library note")
         XCTAssertNotNil(unrelated.modelContext)
 
-        let added = try engine.addExercise(exercise, to: session, context: context)
+        let added = try engine.addExercises([exercise], to: session, context: context)[0]
         XCTAssertEqual(session.sortedLoggedExercises.map(\.id), [added.id])
         XCTAssertEqual(added.sortedSets.map(\.kind), [.warmup, .working])
         let restored = ModelContext(container)

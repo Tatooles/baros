@@ -117,7 +117,7 @@ final class TimedExerciseTests: XCTestCase {
         let plank = try insertExercise("Plank", .duration, into: context)
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let logged = try engine.addExercise(plank, to: session, context: context)
+        let logged = try engine.addExercises([plank], to: session, context: context)[0]
         XCTAssertEqual(logged.trackingMethod, .duration)
 
         plank.trackingMethod = .reps
@@ -131,7 +131,7 @@ final class TimedExerciseTests: XCTestCase {
         let bench = try insertExercise("Bench", .reps, into: context)
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let logged = try engine.addExercise(bench, to: session, context: context)
+        let logged = try engine.addExercises([bench], to: session, context: context)[0]
         let replacement = try engine.swapLoggedExercise(logged, with: plank, context: context)
         XCTAssertEqual(replacement.trackingMethod, .duration)
     }
@@ -203,7 +203,7 @@ final class TimedExerciseTests: XCTestCase {
         let past = try insertCompletedWorkout(of: plank, sets: [(nil, 60), (10, 75)], into: context)
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 5_000))
-        let logged = try engine.addExercise(plank, to: session, context: context)
+        let logged = try engine.addExercises([plank], to: session, context: context)[0]
         let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
 
         let previous = PreviousSetPerformance.lastCompletedSets(for: logged, in: sessions, ownerTokenIdentifier: nil)
@@ -250,8 +250,8 @@ final class TimedExerciseTests: XCTestCase {
         let bench = try insertExercise("Bench", .reps, into: context)
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        let benchLogged = try engine.addExercise(bench, to: session, context: context)
-        let plankLogged = try engine.addExercise(plank, to: session, context: context)
+        let benchLogged = try engine.addExercises([bench], to: session, context: context)[0]
+        let plankLogged = try engine.addExercises([plank], to: session, context: context)[0]
         let group = UUID()
         benchLogged.supersetGroupID = group
         plankLogged.supersetGroupID = group
@@ -583,7 +583,7 @@ final class TimedExerciseTests: XCTestCase {
         let plank = try insertExercise("Plank", .duration, into: context)
         let engine = ActiveWorkoutEngine()
         let session = try engine.startBlankWorkout(context: context)
-        return (context, engine, try engine.addExercise(plank, to: session, context: context))
+        return (context, engine, try engine.addExercises([plank], to: session, context: context)[0])
     }
 
     private func insertCompletedWorkout(

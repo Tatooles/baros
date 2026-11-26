@@ -17,7 +17,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         )
         context.insert(exercise)
         let session = try engine.startBlankWorkout(context: context, now: Date(timeIntervalSince1970: 100))
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         let firstSet = try XCTUnwrap(loggedExercise.sets.first)
         try engine.commitActiveSetDraft(
             firstSet,
@@ -59,7 +59,7 @@ final class SyncOutboxIntegrationTests: XCTestCase {
         context.insert(exercise)
 
         let session = try engine.startBlankWorkout(context: context)
-        let loggedExercise = try engine.addExercise(exercise, to: session, context: context)
+        let loggedExercise = try engine.addExercises([exercise], to: session, context: context)[0]
         let firstSet = try XCTUnwrap(loggedExercise.sets.first)
         try engine.commitActiveSetDraft(
             firstSet,

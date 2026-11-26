@@ -10,6 +10,7 @@ public enum ActiveWorkoutEngineError: LocalizedError, Equatable {
     case invalidExerciseReorder
     case invalidExerciseSwap
     case invalidSupersetChange
+    case exercisesUnavailableToAdd
     case pastWorkoutUnavailable
     case templateUnavailable
 
@@ -29,6 +30,8 @@ public enum ActiveWorkoutEngineError: LocalizedError, Equatable {
             return "That exercise can no longer be swapped. Review the workout and try again."
         case .invalidSupersetChange:
             return "Workout exercises changed. Review the superset and try again."
+        case .exercisesUnavailableToAdd:
+            return "These exercises can't be added. One of them is no longer available, or this workout has ended."
         case .pastWorkoutUnavailable:
             return "That past workout is no longer available. Choose another workout and try again."
         case .templateUnavailable:
@@ -59,8 +62,6 @@ public final class ActiveWorkoutEngine {
     private var pendingSetSave: PendingSetSave?
     #if DEBUG
     @ObservationIgnored private var injectedSetSaveFailureCount = 0
-    @ObservationIgnored private var injectedAddExerciseSaveFailureCount = 0
-    @ObservationIgnored private var injectedReorderExercisesSaveFailureCount = 0
     #endif
     public var hasPendingSetSave: Bool { pendingSetSave != nil }
     @ObservationIgnored public var previousSetsByLoggedExerciseID: [UUID: [PreviousSetPerformance]] = [:]
@@ -273,20 +274,8 @@ public final class ActiveWorkoutEngine {
         return session
     }
 
-    @discardableResult
-    func addExercise(
-        _ exercise: Exercise,
-        to session: WorkoutSession,
-        ownerTokenIdentifier: String? = nil,
-        context: ModelContext,
-        save: (ModelContext) throws -> Void = { try $0.save() }
-    ) throws -> LoggedExercise {
-        try insertExercises(
-            [exercise], to: session, ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context, save: save
-        )[0]
-    }
-
+    /// Adds exercises to the end of the workout through the same save as Edit Workout,
+    /// so both refuse the same things. Returns the new rows in selection order.
     @discardableResult
     public func addExercises(
         _ exercises: [Exercise],
@@ -297,77 +286,53 @@ public final class ActiveWorkoutEngine {
         save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws -> [LoggedExercise] {
         var seen = Set(session.sortedLoggedExercises.compactMap { $0.exercise?.id })
-        let additions = exercises.filter { seen.insert($0.id).inserted }
-        guard !additions.isEmpty else { return [] }
-        return try insertExercises(
-            additions, to: session, ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context, save: save,
-            supersetGroupID: SupersetGrouping.groupForAdding(additions.count, asSuperset: asSuperset)
-        )
+        let picks = exercises.filter { seen.insert($0.id).inserted }
+        guard !picks.isEmpty else { return [] }
+        let history = try context.fetch(FetchDescriptor<WorkoutSession>())
+        var draft = WorkoutExerciseListDraft(session: session)
+        draft.append(picks, asSuperset: asSuperset) {
+            self.initialSetKinds(for: $0, ownerTokenIdentifier: ownerTokenIdentifier, sessions: history)
+        }
+        do {
+            return try saveExerciseList(
+                in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline,
+                additions: draft.additions, supersetGroupIDs: draft.supersetGroupIDs,
+                ownerTokenIdentifier: ownerTokenIdentifier, context: context, now: .now,
+                save: { try self.saveStructuralChange($0, action: "add-exercise", save: save) }
+            )
+        } catch ActiveWorkoutEngineError.invalidExerciseReorder {
+            // The draft was just built from this workout, so its list can't be stale.
+            // What's left is a refusal that retrying the same add won't fix.
+            throw hasPendingSetSave
+                ? ActiveWorkoutEngineError.structuralChangeUnavailable
+                : ActiveWorkoutEngineError.exercisesUnavailableToAdd
+        }
     }
 
+    /// Inserts the draft's additions after the last exercise without saving.
+    /// `saveExerciseList` saves them and removes them again if the save fails.
     private func insertExercises(
-        _ exercises: [Exercise],
+        _ additions: [WorkoutExerciseListDraft.Addition],
         to session: WorkoutSession,
-        ownerTokenIdentifier: String?,
-        context: ModelContext,
-        save: (ModelContext) throws -> Void,
-        plannedSetKinds: [[SetKind]]? = nil,
-        supersetGroupID: UUID? = nil
-    ) throws -> [LoggedExercise] {
-        guard !exercises.isEmpty else { return [] }
-        let setKinds: [[SetKind]]
-        if let plannedSetKinds {
-            setKinds = plannedSetKinds
-        } else {
-            let history = try context.fetch(FetchDescriptor<WorkoutSession>())
-            setKinds = exercises.map {
-                initialSetKinds(for: $0, ownerTokenIdentifier: ownerTokenIdentifier, sessions: history)
-            }
-        }
-        let originalSessionUpdatedAt = session.updatedAt
+        context: ModelContext
+    ) -> [LoggedExercise] {
+        guard !additions.isEmpty else { return [] }
         let nextIndex = (session.sortedLoggedExercises.map(\.orderIndex).max() ?? -1) + 1
-        var additions: [LoggedExercise] = []
-        for (offset, exercise) in exercises.enumerated() {
-            let loggedExercise = LoggedExercise(
-                orderIndex: nextIndex + offset, exercise: exercise, supersetGroupID: supersetGroupID
-            )
+        var inserted: [LoggedExercise] = []
+        for (offset, addition) in additions.enumerated() {
+            let loggedExercise = LoggedExercise(orderIndex: nextIndex + offset, exercise: addition.exercise)
             loggedExercise.session = session
             context.insert(loggedExercise)
-            for (index, kind) in setKinds[offset].enumerated() {
+            for (index, kind) in addition.initialSetKinds.enumerated() {
                 let set = LoggedSet(orderIndex: index, kind: kind)
                 set.loggedExercise = loggedExercise
                 context.insert(set)
                 loggedExercise.sets.append(set)
             }
             session.loggedExercises.append(loggedExercise)
-            additions.append(loggedExercise)
+            inserted.append(loggedExercise)
         }
-        session.touch()
-        do {
-            #if DEBUG
-            let arguments = ProcessInfo.processInfo.arguments
-            if arguments.contains("--uitest-in-memory-store"),
-               arguments.contains("--uitest-fail-add-exercise-save-once"),
-               injectedAddExerciseSaveFailureCount == 0 {
-                injectedAddExerciseSaveFailureCount += 1
-                throw CocoaError(.fileWriteUnknown)
-            }
-            #endif
-            try save(context)
-            return additions
-        } catch {
-            let addedIDs = Set(additions.map(\.id))
-            session.loggedExercises.removeAll { addedIDs.contains($0.id) }
-            for loggedExercise in additions {
-                for set in loggedExercise.sets {
-                    context.delete(set)
-                }
-                context.delete(loggedExercise)
-            }
-            session.updatedAt = originalSessionUpdatedAt
-            throw error
-        }
+        return inserted
     }
 
     public func removeLoggedExercise(
@@ -493,6 +458,31 @@ public final class ActiveWorkoutEngine {
         now: Date = .now,
         save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws {
+        try saveExerciseList(
+            in: session, orderedIDs: orderedIDs, baseline: baseline, additions: additions,
+            supersetGroupIDs: supersetGroupIDs, ownerTokenIdentifier: ownerTokenIdentifier,
+            context: context, now: now,
+            save: { try self.saveStructuralChange($0, action: "reorder-exercises", save: save) }
+        )
+    }
+
+    /// Saves a new exercise list in one write, or leaves the workout as it was.
+    ///
+    /// An edit that only appends, keeping every existing row in order and in its
+    /// superset, leaves the existing rows exactly as they are: no renumbering and no
+    /// superset tidying, so rows the user didn't touch aren't uploaded again.
+    @discardableResult
+    private func saveExerciseList(
+        in session: WorkoutSession,
+        orderedIDs: [UUID],
+        baseline: WorkoutExerciseListSnapshot,
+        additions: [WorkoutExerciseListDraft.Addition],
+        supersetGroupIDs: [UUID: UUID]?,
+        ownerTokenIdentifier: String?,
+        context: ModelContext,
+        now: Date,
+        save: (ModelContext) throws -> Void
+    ) throws -> [LoggedExercise] {
         let remainingIDs = Set(orderedIDs)
         guard !session.isDeleted, session.status == .active, !hasPendingSetSave,
               baseline == WorkoutExerciseListSnapshot(session: session),
@@ -518,17 +508,28 @@ public final class ActiveWorkoutEngine {
             && $0.exercise.isVisible(to: ownerTokenIdentifier) }) else {
             throw ActiveWorkoutEngineError.invalidExerciseReorder
         }
-        let inserted = try insertExercises(
-            pending.map(\.exercise), to: session, ownerTokenIdentifier: ownerTokenIdentifier,
-            context: context, save: { _ in }, plannedSetKinds: pending.map(\.initialSetKinds)
-        )
+        let inserted = insertExercises(pending, to: session, context: context)
         let exercisesByID = Dictionary(uniqueKeysWithValues:
             visibleExercises.map { ($0.id, $0) } + zip(pending, inserted).map { ($0.0.id, $0.1) }
         )
+        func requestedGroup(_ id: UUID) -> UUID? {
+            supersetGroupIDs.map { $0[id] } ?? exercisesByID[id]?.supersetGroupID
+        }
+        let existingGroups = Set(visibleExercises.compactMap(\.supersetGroupID))
+        let appendsOnly = !inserted.isEmpty
+            && orderedIDs.count == visibleExercises.count + inserted.count
+            && orderedIDs.starts(with: visibleExercises.map(\.id))
+            && visibleExercises.allSatisfy { requestedGroup($0.id) == $0.supersetGroupID }
+            && pending.allSatisfy { requestedGroup($0.id).map { !existingGroups.contains($0) } ?? true }
+        // New rows that join no existing superset can be numbered and tidied on their own,
+        // after the highest existing position.
+        let changedIDs = appendsOnly ? Array(orderedIDs.dropFirst(visibleExercises.count)) : orderedIDs
+        let firstIndex = appendsOnly ? (visibleExercises.map(\.orderIndex).max() ?? -1) + 1 : 0
         do {
             var didChangeOrder = false
 
-            for (index, id) in orderedIDs.enumerated() {
+            for (offset, id) in changedIDs.enumerated() {
+                let index = firstIndex + offset
                 guard let loggedExercise = exercisesByID[id] else {
                     throw ActiveWorkoutEngineError.invalidExerciseReorder
                 }
@@ -550,22 +551,16 @@ public final class ActiveWorkoutEngine {
                     didChangeGrouping = true
                 }
             }
-            if normalizeSupersets(orderedIDs.compactMap { exercisesByID[$0] }, now: now) { didChangeGrouping = true }
-            guard didChangeOrder || didChangeGrouping || !removedExercises.isEmpty || !inserted.isEmpty else { return }
+            if normalizeSupersets(changedIDs.compactMap { exercisesByID[$0] }, now: now) { didChangeGrouping = true }
+            guard didChangeOrder || didChangeGrouping || !removedExercises.isEmpty || !inserted.isEmpty else {
+                return []
+            }
             for exercise in removedExercises { exercise.markDeleted(now: now) }
             for set in removedSets { set.markDeleted(now: now) }
             session.touch(now: now)
-            #if DEBUG
-            let arguments = ProcessInfo.processInfo.arguments
-            if arguments.contains("--uitest-in-memory-store"),
-               arguments.contains("--uitest-fail-reorder-exercises-save-once"),
-               injectedReorderExercisesSaveFailureCount == 0 {
-                injectedReorderExercisesSaveFailureCount += 1
-                throw CocoaError(.fileWriteUnknown)
-            }
-            #endif
             try save(context)
             for set in removedSets { restTimer.cancel(ifStartedBy: set.id) }
+            return inserted
         } catch {
             let insertedIDs = Set(inserted.map(\.id))
             session.loggedExercises.removeAll { insertedIDs.contains($0.id) }
@@ -573,7 +568,9 @@ public final class ActiveWorkoutEngine {
                 for set in exercise.sets { context.delete(set) }
                 context.delete(exercise)
             }
-            for state in originalExerciseStates {
+            // An append changed no existing row. Writing their values back would still
+            // mark them changed, so the next save would upload them again.
+            for state in originalExerciseStates where !appendsOnly {
                 state.exercise.orderIndex = state.orderIndex
                 state.exercise.supersetGroupID = state.supersetGroupID
                 state.exercise.hasLocalSupersetChange = state.hasLocalSupersetChange

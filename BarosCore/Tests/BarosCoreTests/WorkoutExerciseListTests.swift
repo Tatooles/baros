@@ -260,6 +260,187 @@ final class WorkoutExerciseListTests: XCTestCase {
         }
     }
 
+    func testAddRefusesWhatEditWorkoutRefusesWithAnAddMessage() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try fixture(in: context)
+        let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        context.insert(library)
+        try context.save()
+        let baseline = WorkoutExerciseListSnapshot(session: session)
+        let engine = ActiveWorkoutEngine()
+        for state in 0..<5 {
+            library.isArchived = state == 0
+            library.deletedAt = state == 1 ? .now : nil
+            library.syncOwnerTokenIdentifier = state == 2 ? "another-owner" : nil
+            session.status = state == 3 ? .completed : .active
+            // A workout deleted on another device can still read as active here.
+            session.deletedAt = state == 4 ? .now : nil
+            try context.save()
+            var saves = 0
+            XCTAssertThrowsError(try engine.addExercises([library], to: session, context: context,
+                                                         save: { _ in saves += 1 })) { error in
+                XCTAssertEqual(error as? ActiveWorkoutEngineError, .exercisesUnavailableToAdd, "state \(state)")
+            }
+            XCTAssertEqual(saves, 0)
+            session.status = .active
+            session.deletedAt = nil
+            XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), baseline)
+        }
+        let message = try XCTUnwrap(ActiveWorkoutEngineError.exercisesUnavailableToAdd.errorDescription)
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("try"), "Retrying can't fix a refused add")
+    }
+
+    func testAddWaitsForAPendingSetSaveLikeOtherStructuralChanges() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let session = try fixture(in: context)
+        let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        context.insert(library)
+        try context.save()
+        let engine = ActiveWorkoutEngine()
+        let set = session.sortedLoggedExercises[0].sortedSets[0]
+        XCTAssertThrowsError(try engine.toggleSetCompletion(set, context: context,
+                                                             save: { _ in throw CocoaError(.fileWriteUnknown) }))
+        XCTAssertTrue(engine.hasPendingSetSave)
+        let baseline = WorkoutExerciseListSnapshot(session: session)
+
+        XCTAssertThrowsError(try engine.addExercises([library], to: session, context: context)) { error in
+            XCTAssertEqual(error as? ActiveWorkoutEngineError, .structuralChangeUnavailable)
+        }
+        XCTAssertEqual(WorkoutExerciseListSnapshot(session: session), baseline)
+        try engine.retrySetSave(in: session, context: context)
+        XCTAssertEqual(try engine.addExercises([library], to: session, context: context).count, 1)
+    }
+
+    /// Synced workouts can hold positions with gaps, a superset left with one member, or a
+    /// superset split by another exercise. Adding must not tidy those rows, or the add would
+    /// re-upload exercises the user never touched.
+    func testAddLeavesExistingRowsAsTheyAreEvenWhenTheirOrderAndSupersetsAreUntidy() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let (session, before) = try untidyFixture(in: context)
+        let picks = ["Curl", "Fly"].map { Exercise(name: $0, category: .strength, equipment: .dumbbell, primaryMuscleGroup: .chest) }
+        picks.forEach { context.insert($0) }
+        let engine = ActiveWorkoutEngine()
+
+        XCTAssertThrowsError(try engine.addExercises(picks, to: session, asSuperset: true, context: context,
+                                                     save: { _ in throw CocoaError(.fileWriteUnknown) }))
+        XCTAssertEqual(rowStates(session), before)
+        let changedIDs = Set(context.changedModelsArray.map(\.persistentModelID))
+        XCTAssertFalse(session.sortedLoggedExercises.contains { changedIDs.contains($0.persistentModelID) },
+                       "A failed add must leave the rows it didn't change unchanged")
+
+        let added = try engine.addExercises(picks, to: session, asSuperset: true, context: context)
+
+        XCTAssertEqual(rowStates(session).prefix(3).map { $0 }, before)
+        XCTAssertEqual(added.map(\.exerciseSnapshotName), ["Curl", "Fly"])
+        XCTAssertEqual(added.map(\.orderIndex), [8, 9])
+        let group = try XCTUnwrap(added[0].supersetGroupID)
+        XCTAssertEqual(added[1].supersetGroupID, group)
+        XCTAssertFalse(before.contains { $0.group == group })
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.exerciseSnapshotName),
+                       ["Bench Press", "Barbell Row", "Back Squat", "Curl", "Fly"])
+    }
+
+    func testEditWorkoutSaveThatOnlyAddsLeavesExistingRowsAsTheyAre() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let (session, before) = try untidyFixture(in: context)
+        let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        context.insert(library)
+        var draft = WorkoutExerciseListDraft(session: session)
+        draft.append([library])
+
+        try ActiveWorkoutEngine().applyExerciseListChanges(
+            in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline, additions: draft.additions,
+            supersetGroupIDs: draft.supersetGroupIDs, context: context
+        )
+
+        XCTAssertEqual(rowStates(session).prefix(3).map { $0 }, before)
+        XCTAssertEqual(session.sortedLoggedExercises.last?.exerciseSnapshotName, "Curl")
+        XCTAssertEqual(session.sortedLoggedExercises.last?.orderIndex, 8)
+        XCTAssertNil(session.sortedLoggedExercises.last?.supersetGroupID)
+    }
+
+    func testEditWorkoutSaveThatAlsoMovesARowStillRenumbersAndTidies() throws {
+        let container = try SwiftDataTestSupport.makeInMemoryContainer()
+        let context = container.mainContext
+        let (session, _) = try untidyFixture(in: context)
+        let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+        context.insert(library)
+        var draft = WorkoutExerciseListDraft(session: session)
+        draft.append([library])
+        draft.orderedIDs.swapAt(0, 2)
+
+        try ActiveWorkoutEngine().applyExerciseListChanges(
+            in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline, additions: draft.additions,
+            supersetGroupIDs: draft.supersetGroupIDs, context: context
+        )
+
+        XCTAssertEqual(session.sortedLoggedExercises.map(\.orderIndex), [0, 1, 2, 3])
+        XCTAssertTrue(session.sortedLoggedExercises.allSatisfy { $0.supersetGroupID == nil })
+    }
+
+    /// Joining a new row to an existing superset, or splitting one while adding, changes
+    /// existing rows, so the save tidies the whole list rather than only the new rows.
+    func testEditWorkoutSaveThatAddsAndChangesASupersetStillTidiesTheWholeList() throws {
+        for joinsNewRow in [true, false] {
+            let container = try SwiftDataTestSupport.makeInMemoryContainer()
+            let context = container.mainContext
+            let session = try fixture(in: context)
+            let group = UUID()
+            for logged in session.sortedLoggedExercises.suffix(2) { logged.supersetGroupID = group }
+            try context.save()
+            let library = Exercise(name: "Curl", category: .strength, equipment: .dumbbell, primaryMuscleGroup: .biceps)
+            context.insert(library)
+            var draft = WorkoutExerciseListDraft(session: session)
+            draft.append([library])
+            // Row and Squat share a superset. Either Curl joins it, or Squat leaves it.
+            draft.regroup(joinsNewRow ? [nil, group, group, group] : [nil, group, nil, nil])
+
+            try ActiveWorkoutEngine().applyExerciseListChanges(
+                in: session, orderedIDs: draft.orderedIDs, baseline: draft.baseline, additions: draft.additions,
+                supersetGroupIDs: draft.supersetGroupIDs, context: context
+            )
+
+            let groups = session.sortedLoggedExercises.map(\.supersetGroupID)
+            XCTAssertEqual(groups, joinsNewRow ? [nil, group, group, group] : [nil, nil, nil, nil],
+                           joinsNewRow ? "Curl joins the superset" : "Row is no longer a superset of one")
+        }
+    }
+
+    private struct RowState: Equatable {
+        let id: UUID
+        let orderIndex: Int
+        let group: UUID?
+        let hasLocalSupersetChange: Bool
+        let updatedAt: Date
+    }
+
+    private func rowStates(_ session: WorkoutSession) -> [RowState] {
+        session.sortedLoggedExercises.map {
+            RowState(id: $0.id, orderIndex: $0.orderIndex, group: $0.supersetGroupID,
+                     hasLocalSupersetChange: $0.hasLocalSupersetChange, updatedAt: $0.updatedAt)
+        }
+    }
+
+    /// Positions 0, 3, 7, with the first and last sharing a superset id across a single.
+    private func untidyFixture(in context: ModelContext) throws -> (WorkoutSession, [RowState]) {
+        let session = try fixture(in: context)
+        let split = UUID()
+        let stamp = Date(timeIntervalSince1970: 1_000_000)
+        for (logged, (orderIndex, group)) in zip(session.sortedLoggedExercises, [(0, split), (3, nil), (7, split)]) {
+            logged.orderIndex = orderIndex
+            logged.supersetGroupID = group
+            logged.updatedAt = stamp
+        }
+        try context.save()
+        let before = rowStates(session)
+        XCTAssertEqual(before.map(\.orderIndex), [0, 3, 7])
+        return (session, before)
+    }
+
     private func fixture(in context: ModelContext) throws -> WorkoutSession {
         let session = WorkoutSession(title: "Workout", startedAt: .now, status: .active, source: .blank)
         for (index, name) in ["Bench Press", "Barbell Row", "Back Squat"].enumerated() {
