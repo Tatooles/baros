@@ -76,6 +76,15 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         case header(UUID), exercise(UUID)
     }
 
+    /// Where each part sits, for drawing what follows it in the same layout.
+    private struct PartBounds: PreferenceKey {
+        static var defaultValue: [Part: Anchor<CGRect>] { [:] }
+
+        static func reduce(value: inout [Part: Anchor<CGRect>], nextValue: () -> [Part: Anchor<CGRect>]) {
+            value.merge(nextValue()) { $1 }
+        }
+    }
+
     private enum Subject: Equatable {
         /// An exercise, by id.
         case exercise(UUID)
@@ -157,24 +166,30 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                 }
             }
             .padding(.top, 8)
-            .background(alignment: .topLeading) {
-                // An explicit top-leading stack: the surfaces are offset from the list's
-                // origin, and the full-size tap catcher would otherwise center them.
-                ZStack(alignment: .topLeading) {
-                    surfaces(blocks)
-                    // While a row is swiped open, a tap anywhere between rows closes it too.
-                    if openSwipe != nil {
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .onTapGesture { withAnimation(.snappy(duration: 0.25)) { openSwipe = nil } }
-                            .accessibilityHidden(true)
+            // Outlines and joints are placed from anchors, resolved in the same layout as the
+            // rows, so they move with the rows' animation instead of jumping ahead of it.
+            .backgroundPreferenceValue(PartBounds.self, alignment: .topLeading) { anchors in
+                GeometryReader { proxy in
+                    // An explicit top-leading stack: the surfaces are offset from the list's
+                    // origin, and the full-size tap catcher would otherwise center them.
+                    ZStack(alignment: .topLeading) {
+                        surfaces(blocks, frames: anchors.mapValues { proxy[$0] })
+                        // While a row is swiped open, a tap anywhere between rows closes it too.
+                        if openSwipe != nil {
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .onTapGesture { withAnimation(.snappy(duration: 0.25)) { openSwipe = nil } }
+                                .accessibilityHidden(true)
+                        }
                     }
                 }
             }
-            .overlay(alignment: .topLeading) {
-                joints(rows, elements: elements)
-                floating(blocks)
+            .overlayPreferenceValue(PartBounds.self, alignment: .topLeading) { anchors in
+                GeometryReader { proxy in
+                    joints(rows, elements: elements, frames: anchors.mapValues { proxy[$0] })
+                }
             }
+            .overlay(alignment: .topLeading) { floating(blocks) }
             .coordinateSpace(.named(reorderContentSpace))
             .background(ReorderScrollFinder(handle: scrollHandle))
         }
@@ -240,7 +255,6 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                 .gesture(dragGesture(.block(block.id)), including: drag?.isSettling == true ? .none : .all)
                 .accessibilityHidden(true)
         }
-        .padding(.trailing, 2)
         .frame(height: Self.headerHeight)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
@@ -249,6 +263,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         .accessibilityAction(named: "Move Superset Up") { moveBlock(block, by: -1) }
         .accessibilityAction(named: "Move Superset Down") { moveBlock(block, by: 1) }
         .opacity(isLifted ? 0 : 1)
+        .anchorPreference(key: PartBounds.self, value: .bounds) { [.header(block.id): $0] }
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(reorderContentSpace)) } action: { frames[.header(block.id)] = $0 }
     }
 
@@ -274,6 +289,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
             .background {
                 if drag?.subject == .exercise(row.id), !isMember { placeholder }
             }
+            .anchorPreference(key: PartBounds.self, value: .bounds) { [.exercise(row.id): $0] }
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(reorderContentSpace)) } action: { frames[.exercise(row.id)] = $0 }
     }
 
@@ -300,7 +316,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
 
     /// Superset containers and their hairlines, drawn behind the members.
     @ViewBuilder
-    private func surfaces(_ blocks: [Block]) -> some View {
+    private func surfaces(_ blocks: [Block], frames: [Part: CGRect]) -> some View {
         ZStack(alignment: .topLeading) {
             ForEach(blocks.filter(\.isSuperset)) { block in
                 let members = block.members.compactMap { frames[.exercise($0.id)] }
@@ -325,7 +341,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
 
     /// A joint between every two neighbors, centered in the space between them.
     @ViewBuilder
-    private func joints(_ rows: [Row], elements: [Element]) -> some View {
+    private func joints(_ rows: [Row], elements: [Element], frames: [Part: CGRect]) -> some View {
         if drag == nil {
             let groups = rows.map(\.group)
             ZStack(alignment: .topLeading) {
@@ -384,7 +400,6 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                                 SupersetContainerHeader(count: block.members.count)
                                 ReorderGrip(height: Self.headerHeight, color: AppTheme.brandAccentForeground)
                             }
-                            .padding(.trailing, 2)
                             .frame(height: Self.headerHeight)
                             ForEach(Array(block.members.enumerated()), id: \.element.id) { index, member in
                                 if index > 0 { SupersetMemberDivider().frame(height: Self.gap) }
@@ -735,11 +750,11 @@ private struct ReorderCardContent<Grip: View>: View {
     @ViewBuilder let grip: Grip
 
     var body: some View {
-        HStack(spacing: 0) {
-            ReorderExerciseRow(exercise: exercise)
-            grip
-        }
-        .padding(.trailing, 2)
+        ReorderExerciseRow(exercise: exercise)
+            .padding(.trailing, ReorderGrip.width)
+            // The grip runs the card's full height out to its edge, so a press anywhere at
+            // the trailing end picks the card up rather than missing above or below the icon.
+            .overlay(alignment: .trailing) { grip }
     }
 }
 
