@@ -55,14 +55,18 @@ struct ReorderExerciseRow: View {
 /// inside what it moves, at 3:1 or better against the card.
 struct ReorderGrip: View {
     static let color = BarosAdaptiveColor.dynamic(light: 0x76767C, dark: 0x8E8E95)
-    var height: CGFloat = 48
+    /// Reaches the trailing edge of what it sits in.
+    static let width: CGFloat = 50
+    /// Nil fills the height it's offered, such as a card's.
+    var height: CGFloat?
     var color: Color = Self.color
 
     var body: some View {
         Image(systemName: "line.3.horizontal")
             .font(.system(size: 17, weight: .semibold))
             .foregroundStyle(color)
-            .frame(width: 48, height: height)
+            .frame(width: Self.width)
+            .frame(minHeight: height ?? 44, maxHeight: height ?? .infinity)
             .contentShape(Rectangle())
     }
 }

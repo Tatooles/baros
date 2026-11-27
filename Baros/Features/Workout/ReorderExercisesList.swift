@@ -76,6 +76,15 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         case header(UUID), exercise(UUID)
     }
 
+    /// Where each part sits, for drawing what follows it in the same layout.
+    private struct PartBounds: PreferenceKey {
+        static var defaultValue: [Part: Anchor<CGRect>] { [:] }
+
+        static func reduce(value: inout [Part: Anchor<CGRect>], nextValue: () -> [Part: Anchor<CGRect>]) {
+            value.merge(nextValue()) { $1 }
+        }
+    }
+
     private enum Subject: Equatable {
         /// An exercise, by id.
         case exercise(UUID)
@@ -157,24 +166,30 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                 }
             }
             .padding(.top, 8)
-            .background(alignment: .topLeading) {
-                // An explicit top-leading stack: the surfaces are offset from the list's
-                // origin, and the full-size tap catcher would otherwise center them.
-                ZStack(alignment: .topLeading) {
-                    surfaces(blocks)
-                    // While a row is swiped open, a tap anywhere between rows closes it too.
-                    if openSwipe != nil {
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .onTapGesture { withAnimation(.snappy(duration: 0.25)) { openSwipe = nil } }
-                            .accessibilityHidden(true)
+            // Outlines and joints are placed from anchors, resolved in the same layout as the
+            // rows, so they move with the rows' animation instead of jumping ahead of it.
+            .backgroundPreferenceValue(PartBounds.self, alignment: .topLeading) { anchors in
+                GeometryReader { proxy in
+                    // An explicit top-leading stack: the surfaces are offset from the list's
+                    // origin, and the full-size tap catcher would otherwise center them.
+                    ZStack(alignment: .topLeading) {
+                        surfaces(blocks, frames: anchors.mapValues { proxy[$0] })
+                        // While a row is swiped open, a tap anywhere between rows closes it too.
+                        if openSwipe != nil {
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .onTapGesture { withAnimation(.snappy(duration: 0.25)) { openSwipe = nil } }
+                                .accessibilityHidden(true)
+                        }
                     }
                 }
             }
-            .overlay(alignment: .topLeading) {
-                joints(rows, elements: elements)
-                floating(blocks)
+            .overlayPreferenceValue(PartBounds.self, alignment: .topLeading) { anchors in
+                GeometryReader { proxy in
+                    joints(rows, elements: elements, frames: anchors.mapValues { proxy[$0] })
+                }
             }
+            .overlay(alignment: .topLeading) { floating(blocks) }
             .coordinateSpace(.named(reorderContentSpace))
             .background(ReorderScrollFinder(handle: scrollHandle))
         }
@@ -237,10 +252,9 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
             SupersetContainerHeader(count: block.members.count)
             // In the label's accent, so it reads as the whole superset's handle.
             ReorderGrip(height: Self.headerHeight, color: AppTheme.brandAccentForeground)
-                .gesture(dragGesture(.block(block.id)), including: drag?.isSettling == true ? .none : .all)
+                .gesture(dragGesture(.block(block.id), isEnabled: drag?.isSettling != true))
                 .accessibilityHidden(true)
         }
-        .padding(.trailing, 2)
         .frame(height: Self.headerHeight)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
@@ -249,6 +263,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         .accessibilityAction(named: "Move Superset Up") { moveBlock(block, by: -1) }
         .accessibilityAction(named: "Move Superset Down") { moveBlock(block, by: 1) }
         .opacity(isLifted ? 0 : 1)
+        .anchorPreference(key: PartBounds.self, value: .bounds) { [.header(block.id): $0] }
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(reorderContentSpace)) } action: { frames[.header(block.id)] = $0 }
     }
 
@@ -274,6 +289,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
             .background {
                 if drag?.subject == .exercise(row.id), !isMember { placeholder }
             }
+            .anchorPreference(key: PartBounds.self, value: .bounds) { [.exercise(row.id): $0] }
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(reorderContentSpace)) } action: { frames[.exercise(row.id)] = $0 }
     }
 
@@ -281,7 +297,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
     private func card(_ row: Row, showsSurface: Bool, interactive: Bool) -> some View {
         ReorderCardContent(exercise: row.item) {
             ReorderGrip()
-                .gesture(dragGesture(.exercise(row.id)), including: interactive && drag?.isSettling != true ? .all : .none)
+                .gesture(dragGesture(.exercise(row.id), isEnabled: interactive && drag?.isSettling != true))
                 .accessibilityHidden(true)
         }
         .background {
@@ -300,7 +316,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
 
     /// Superset containers and their hairlines, drawn behind the members.
     @ViewBuilder
-    private func surfaces(_ blocks: [Block]) -> some View {
+    private func surfaces(_ blocks: [Block], frames: [Part: CGRect]) -> some View {
         ZStack(alignment: .topLeading) {
             ForEach(blocks.filter(\.isSuperset)) { block in
                 let members = block.members.compactMap { frames[.exercise($0.id)] }
@@ -325,7 +341,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
 
     /// A joint between every two neighbors, centered in the space between them.
     @ViewBuilder
-    private func joints(_ rows: [Row], elements: [Element]) -> some View {
+    private func joints(_ rows: [Row], elements: [Element], frames: [Part: CGRect]) -> some View {
         if drag == nil {
             let groups = rows.map(\.group)
             ZStack(alignment: .topLeading) {
@@ -356,6 +372,8 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                 .overlay(Circle().strokeBorder(isLinked ? Color.clear : ReorderGrip.color.opacity(0.45), lineWidth: 1))
                 .frame(width: 64, height: 44)
                 .contentShape(Rectangle())
+                // The list changes at once; only the tapped joint's icon swaps over.
+                .animation(.snappy(duration: 0.2), value: isLinked)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isLinked ? "Unlink \(names)" : "Link \(names)")
@@ -384,7 +402,6 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                                 SupersetContainerHeader(count: block.members.count)
                                 ReorderGrip(height: Self.headerHeight, color: AppTheme.brandAccentForeground)
                             }
-                            .padding(.trailing, 2)
                             .frame(height: Self.headerHeight)
                             ForEach(Array(block.members.enumerated()), id: \.element.id) { index, member in
                                 if index > 0 { SupersetMemberDivider().frame(height: Self.gap) }
@@ -533,8 +550,8 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         default: 0
         }
         let toggled = SupersetGrouping.togglingLink(groups, below: upper)
-        // With a label coming or going above, the change is instant: animating it while the
-        // scroll makes up for it would wobble the joint.
+        // The change is instant. Animated, the cards' own surfaces, the superset outline,
+        // its label and hairlines all fade in and out at once while the rows move.
         if shift != 0, scroll.offset > 0 {
             if supersetCount(toggled) != supersetCount(groups) {
                 // A label was added or removed, so the content's height changes. The scroll
@@ -546,25 +563,26 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                 // end this scrolls past it, which keeps the joint still until the next scroll.
                 scrollHandle.scroll(by: shift, clampingToEnd: false)
             }
-            rearrange(rows.map(\.id), toggled)
-        } else {
-            withAnimation(.snappy) { rearrange(rows.map(\.id), toggled) }
         }
+        rearrange(rows.map(\.id), toggled)
     }
 
     // MARK: Dragging
 
-    private func dragGesture(_ subject: Subject) -> some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .global)
-            .onChanged { value in
-                if drag == nil { begin(subject, fingerY: value.startLocation.y) }
+    private func dragGesture(_ subject: Subject, isEnabled: Bool) -> GripPan {
+        GripPan(isEnabled: isEnabled) { change in
+            switch change {
+            case let .changed(translation, location):
+                if drag == nil { begin(subject, fingerY: location.y - translation.height) }
                 guard drag?.subject == subject, drag?.isSettling == false else { return }
-                drag?.translation = value.translation.height
-                if abs(value.translation.height) > 8 { drag?.hasMoved = true }
-                drag?.fingerY = value.location.y
+                drag?.translation = translation.height
+                if abs(translation.height) > 8 { drag?.hasMoved = true }
+                drag?.fingerY = location.y
                 updateSlot()
+            case .ended:
+                finish()
             }
-            .onEnded { _ in finish() }
+        }
     }
 
     private func begin(_ subject: Subject, fingerY: CGFloat) {
@@ -735,11 +753,70 @@ private struct ReorderCardContent<Grip: View>: View {
     @ViewBuilder let grip: Grip
 
     var body: some View {
-        HStack(spacing: 0) {
-            ReorderExerciseRow(exercise: exercise)
-            grip
+        ReorderExerciseRow(exercise: exercise)
+            .padding(.trailing, ReorderGrip.width)
+            // The grip runs the card's full height out to its edge, so a press anywhere at
+            // the trailing end picks the card up rather than missing above or below the icon.
+            .overlay(alignment: .trailing) { grip }
+    }
+}
+
+/// Lifts a card or superset on any drag but a mostly sideways one, which is left to
+/// the card's swipe, so swiping from the grip at the card's edge still shows Remove.
+private struct GripPan: UIGestureRecognizerRepresentable {
+    enum Change {
+        /// In window coordinates.
+        case changed(translation: CGSize, location: CGPoint)
+        case ended
+    }
+
+    let isEnabled: Bool
+    let onChange: (Change) -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.delegate = context.coordinator
+        return pan
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        context.coordinator.isEnabled = isEnabled
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        switch recognizer.state {
+        case .began, .changed:
+            let translation = recognizer.translation(in: nil)
+            onChange(.changed(
+                translation: CGSize(width: translation.x, height: translation.y),
+                location: recognizer.location(in: nil)
+            ))
+        case .ended, .cancelled, .failed:
+            onChange(.ended)
+        default:
+            break
         }
-        .padding(.trailing, 2)
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var isEnabled = true
+
+        /// The opposite of the swipe's test, so exactly one of them takes the drag.
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard isEnabled, let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+            let velocity = pan.velocity(in: pan.view)
+            return abs(velocity.x) <= abs(velocity.y) * 1.5
+        }
+
+        /// The list doesn't scroll from the grip.
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            otherGestureRecognizer.view is UIScrollView
+        }
     }
 }
 

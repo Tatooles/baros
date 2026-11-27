@@ -82,12 +82,12 @@ struct SwipeToRemove: ViewModifier {
                 }
             })
             .sensoryFeedback(.impact(weight: .medium), trigger: isFullSwipe) { _, reached in reached }
-            .animation(.snappy(duration: 0.22), value: isFullSwipe)
             .onChange(of: isEnabled) { if !isEnabled { close() } }
     }
 
-    /// The system list's look: a red capsule with the trash icon, titled beneath. A full
-    /// swipe stretches the capsule across the row, its icon following the row's edge.
+    /// The system list's look: a red capsule with the trash icon, titled beneath. It
+    /// grows in as the row uncovers it, then stretches to fill the space the row leaves.
+    /// At a full swipe, its icon moves over to follow the row's edge.
     private var action: some View {
         Button(action: removeNow) {
             ViewThatFits(in: .horizontal) {
@@ -102,13 +102,16 @@ struct SwipeToRemove: ViewModifier {
                 capsule
             }
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-            .frame(width: isFullSwipe ? max(actionWidth, reveal) - 12 : actionWidth - 12)
+            .frame(width: max(actionWidth, reveal) - 12)
             .frame(maxHeight: .infinity)
             .padding(.trailing, 6)
             .contentShape(Rectangle())
             // Grows in as the row uncovers it.
             .scaleEffect(0.6 + 0.4 * progress)
             .opacity(Double(progress))
+            // Only the icon's move to the edge animates. The row itself and the capsule's
+            // width keep following the finger.
+            .animation(.snappy(duration: 0.22), value: isFullSwipe)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Remove \(name)")
@@ -116,6 +119,13 @@ struct SwipeToRemove: ViewModifier {
     }
 
     private var progress: CGFloat { min(1, reveal / actionWidth) }
+
+    /// Its width with the row just open. It widens by however far the row slides past
+    /// that, and fills the uncovered space at a full swipe.
+    private var capsuleWidth: CGFloat {
+        let resting = min(60, actionWidth - 12)
+        return isFullSwipe ? max(actionWidth, reveal) - 12 : resting + max(0, reveal - actionWidth)
+    }
 
     private var capsule: some View {
         Image(systemName: "trash.fill")
@@ -125,7 +135,7 @@ struct SwipeToRemove: ViewModifier {
             .frame(maxWidth: .infinity, alignment: isFullSwipe ? .leading : .center)
             .frame(height: capsuleHeight)
             .background(AppTheme.destructive, in: Capsule())
-            .frame(maxWidth: isFullSwipe ? .infinity : min(60, actionWidth - 12))
+            .frame(width: capsuleWidth)
     }
 
     private func end(velocity: CGFloat) {
