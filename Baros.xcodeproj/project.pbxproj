@@ -142,6 +142,7 @@
 		F131B0557ED411ECB77CE204 /* ConvexClientFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 441BA0058B43A2A2C1CF0856 /* ConvexClientFactory.swift */; };
 		F31BDE54D77FC6710C931FE9 /* LaunchExperienceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4405F3FDFB5966393FCD31C4 /* LaunchExperienceSheet.swift */; };
 		F47385692C0EA5102B2D168A /* WorkoutLiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 385BBD22C6F91AEF49FA4F12 /* WorkoutLiveActivityAttributes.swift */; };
+		F4F1772CB66D7811142887FE /* HealthKitWorkoutRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BD2AC7F8B15A417EB8B2134 /* HealthKitWorkoutRecorder.swift */; };
 		F6746554759E782D870C1781 /* BarosApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A749A4674CD381222EFD74 /* BarosApp.swift */; };
 		F863D4E692F744FD07AE8518 /* WhatsNewVersion1_0View.swift in Sources */ = {isa = PBXBuildFile; fileRef = C290FBB2CA7EF425B4E16FCA /* WhatsNewVersion1_0View.swift */; };
 		F8E05939EC019F68ACE7C848 /* LaunchExperienceFeatureRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6509A17AE88CDDB51A9EC9 /* LaunchExperienceFeatureRow.swift */; };
@@ -210,6 +211,7 @@
 		24D93E6500956F3496B2557B /* AppNavigationStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationStateTests.swift; sourceTree = "<group>"; };
 		26E301A1ADE94900178B7D4F /* ReorderExercisesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorderExercisesSheet.swift; sourceTree = "<group>"; };
 		27C5D2BF7D584890C7340F92 /* HomeStartWorkoutSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeStartWorkoutSheet.swift; sourceTree = "<group>"; };
+		2BD2AC7F8B15A417EB8B2134 /* HealthKitWorkoutRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitWorkoutRecorder.swift; sourceTree = "<group>"; };
 		2E7557852BCB0466B13D71EF /* AccountSignInButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSignInButton.swift; sourceTree = "<group>"; };
 		2EEACCF1698F0507BC0D57B8 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		321727D7596ECB790C3E8562 /* DeviceSystemInfo+UIDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DeviceSystemInfo+UIDevice.swift"; sourceTree = "<group>"; };
@@ -360,6 +362,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		02370A68A6303752B445E1E2 /* AppleHealth */ = {
+			isa = PBXGroup;
+			children = (
+				2BD2AC7F8B15A417EB8B2134 /* HealthKitWorkoutRecorder.swift */,
+			);
+			path = AppleHealth;
+			sourceTree = "<group>";
+		};
 		0B6693B117B32C3A914F2665 /* Components */ = {
 			isa = PBXGroup;
 			children = (
@@ -603,6 +613,7 @@
 				321727D7596ECB790C3E8562 /* DeviceSystemInfo+UIDevice.swift */,
 				8DAF20222C7CF9B5569EA123 /* AccountDeletion */,
 				E7AD26E588B747C86FFE063F /* AccountTransition */,
+				02370A68A6303752B445E1E2 /* AppleHealth */,
 				FA5152B8B1792B16E5FCF94F /* Observability */,
 				99BD7283F5063F0FD35E0285 /* Ownership */,
 				727C5ADBAB3221909693D016 /* Sync */,
@@ -886,7 +897,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\n\n# A normal Release build does not require upload credentials. Archives do.\nif [ \"${CONFIGURATION}\" != \"Release\" ] || [ \"${ACTION}\" != \"install\" ]; then\n  exit 0\nfi\n\nif [ -z \"${SENTRY_AUTH_TOKEN:-}\" ]; then\n  echo \"error: SENTRY_AUTH_TOKEN is required to upload archive dSYMs\"\n  exit 1\nfi\n\nif ! command -v sentry-cli >/dev/null 2>&1; then\n  echo \"error: sentry-cli is required to upload archive dSYMs\"\n  exit 1\nfi\n\nexport SENTRY_ORG=kevin-tatooles\nexport SENTRY_PROJECT=baros-ios\nsentry-cli debug-files upload \"${DWARF_DSYM_FOLDER_PATH}\"\n";
+			shellScript = "set -euo pipefail\n\nif [ \"${CONFIGURATION}\" != \"Release\" ] || [ \"${ACTION}\" != \"install\" ]; then\n  exit 0\nfi\n\nif [ -z \"${SENTRY_AUTH_TOKEN:-}\" ]; then\n  echo \"error: SENTRY_AUTH_TOKEN is required to upload archive dSYMs\"\n  exit 1\nfi\n\nif ! command -v sentry-cli >/dev/null 2>&1; then\n  echo \"error: sentry-cli is required to upload archive dSYMs\"\n  exit 1\nfi\n\nexport SENTRY_ORG=kevin-tatooles\nexport SENTRY_PROJECT=baros-ios\nsentry-cli debug-files upload \"${DWARF_DSYM_FOLDER_PATH}\"\n";
 		};
 		1BE28BD9A0FE10AF53495929 /* Write Build Source Metadata */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -963,6 +974,7 @@
 				1E8C9B53B3B5803EE6CE732E /* ExercisePickerView.swift in Sources */,
 				5FB5B4EADD71E44C17C6CE8B /* ExerciseQuickHistorySheet.swift in Sources */,
 				7532B672A70720C577853B98 /* FinishWorkoutSheet.swift in Sources */,
+				F4F1772CB66D7811142887FE /* HealthKitWorkoutRecorder.swift in Sources */,
 				03F4DE5F9529981CAF4B7229 /* HistorySetTable.swift in Sources */,
 				91EB3D646631398A9F52C3DB /* HistoryView.swift in Sources */,
 				415B459746BBE028B6F138AA /* HomePastWorkoutReviewView.swift in Sources */,
