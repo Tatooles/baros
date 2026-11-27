@@ -3277,7 +3277,13 @@ final class BarosUITests: XCTestCase {
         moveReorderExercise(named: "Back Squat", before: "Bench Press", in: app)
         app.buttons["DoneReorderExercisesButton"].tap()
         XCTAssertTrue(app.buttons["DoneReorderExercisesButton"].waitToDisappear(timeout: 3))
-        XCTAssertTrue(waitForHittable(app.buttons["HistoryExerciseMenuButton-0"], timeout: 3))
+        // The editor keeps the scroll position the Reorder tap needed, which can leave the
+        // first card's menu under the navigation bar (Xcode 26.5 builds on CI).
+        let firstExerciseMenu = app.buttons["HistoryExerciseMenuButton-0"]
+        for _ in 0..<3 where !(firstExerciseMenu.exists && firstExerciseMenu.isHittable) {
+            app.swipeDown()
+        }
+        XCTAssertTrue(waitForHittable(firstExerciseMenu, timeout: 3))
         XCTAssertEqual(app.buttons["HistoryExerciseMenuButton-0"].label, "Back Squat options")
         app.buttons["HistoryExerciseMenuButton-0"].tap()
         XCTAssertTrue(app.buttons["HistorySupersetWithNextButton-0"].waitToExist(timeout: 3))
