@@ -252,7 +252,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
             SupersetContainerHeader(count: block.members.count)
             // In the label's accent, so it reads as the whole superset's handle.
             ReorderGrip(height: Self.headerHeight, color: AppTheme.brandAccentForeground)
-                .gesture(dragGesture(.block(block.id)), including: drag?.isSettling == true ? .none : .all)
+                .gesture(dragGesture(.block(block.id), isEnabled: drag?.isSettling != true))
                 .accessibilityHidden(true)
         }
         .frame(height: Self.headerHeight)
@@ -297,7 +297,7 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
     private func card(_ row: Row, showsSurface: Bool, interactive: Bool) -> some View {
         ReorderCardContent(exercise: row.item) {
             ReorderGrip()
-                .gesture(dragGesture(.exercise(row.id)), including: interactive && drag?.isSettling != true ? .all : .none)
+                .gesture(dragGesture(.exercise(row.id), isEnabled: interactive && drag?.isSettling != true))
                 .accessibilityHidden(true)
         }
         .background {
@@ -372,6 +372,8 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                 .overlay(Circle().strokeBorder(isLinked ? Color.clear : ReorderGrip.color.opacity(0.45), lineWidth: 1))
                 .frame(width: 64, height: 44)
                 .contentShape(Rectangle())
+                // The list changes at once; only the tapped joint's icon swaps over.
+                .animation(.snappy(duration: 0.2), value: isLinked)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isLinked ? "Unlink \(names)" : "Link \(names)")
@@ -548,8 +550,8 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
         default: 0
         }
         let toggled = SupersetGrouping.togglingLink(groups, below: upper)
-        // With a label coming or going above, the change is instant: animating it while the
-        // scroll makes up for it would wobble the joint.
+        // The change is instant. Animated, the cards' own surfaces, the superset outline,
+        // its label and hairlines all fade in and out at once while the rows move.
         if shift != 0, scroll.offset > 0 {
             if supersetCount(toggled) != supersetCount(groups) {
                 // A label was added or removed, so the content's height changes. The scroll
@@ -561,25 +563,26 @@ struct ReorderExercisesList<Item: ReorderListExercise, Header: View>: View {
                 // end this scrolls past it, which keeps the joint still until the next scroll.
                 scrollHandle.scroll(by: shift, clampingToEnd: false)
             }
-            rearrange(rows.map(\.id), toggled)
-        } else {
-            withAnimation(.snappy) { rearrange(rows.map(\.id), toggled) }
         }
+        rearrange(rows.map(\.id), toggled)
     }
 
     // MARK: Dragging
 
-    private func dragGesture(_ subject: Subject) -> some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .global)
-            .onChanged { value in
-                if drag == nil { begin(subject, fingerY: value.startLocation.y) }
+    private func dragGesture(_ subject: Subject, isEnabled: Bool) -> GripPan {
+        GripPan(isEnabled: isEnabled) { change in
+            switch change {
+            case let .changed(translation, location):
+                if drag == nil { begin(subject, fingerY: location.y - translation.height) }
                 guard drag?.subject == subject, drag?.isSettling == false else { return }
-                drag?.translation = value.translation.height
-                if abs(value.translation.height) > 8 { drag?.hasMoved = true }
-                drag?.fingerY = value.location.y
+                drag?.translation = translation.height
+                if abs(translation.height) > 8 { drag?.hasMoved = true }
+                drag?.fingerY = location.y
                 updateSlot()
+            case .ended:
+                finish()
             }
-            .onEnded { _ in finish() }
+        }
     }
 
     private func begin(_ subject: Subject, fingerY: CGFloat) {
@@ -755,6 +758,65 @@ private struct ReorderCardContent<Grip: View>: View {
             // The grip runs the card's full height out to its edge, so a press anywhere at
             // the trailing end picks the card up rather than missing above or below the icon.
             .overlay(alignment: .trailing) { grip }
+    }
+}
+
+/// Lifts a card or superset on any drag but a mostly sideways one, which is left to
+/// the card's swipe, so swiping from the grip at the card's edge still shows Remove.
+private struct GripPan: UIGestureRecognizerRepresentable {
+    enum Change {
+        /// In window coordinates.
+        case changed(translation: CGSize, location: CGPoint)
+        case ended
+    }
+
+    let isEnabled: Bool
+    let onChange: (Change) -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.delegate = context.coordinator
+        return pan
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        context.coordinator.isEnabled = isEnabled
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        switch recognizer.state {
+        case .began, .changed:
+            let translation = recognizer.translation(in: nil)
+            onChange(.changed(
+                translation: CGSize(width: translation.x, height: translation.y),
+                location: recognizer.location(in: nil)
+            ))
+        case .ended, .cancelled, .failed:
+            onChange(.ended)
+        default:
+            break
+        }
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var isEnabled = true
+
+        /// The opposite of the swipe's test, so exactly one of them takes the drag.
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard isEnabled, let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+            let velocity = pan.velocity(in: pan.view)
+            return abs(velocity.x) <= abs(velocity.y) * 1.5
+        }
+
+        /// The list doesn't scroll from the grip.
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            otherGestureRecognizer.view is UIScrollView
+        }
     }
 }
 
