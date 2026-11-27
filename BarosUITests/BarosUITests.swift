@@ -401,7 +401,7 @@ final class BarosUITests: XCTestCase {
         app.launchArguments = [
             "--uitest-in-memory-store", "--uitest-enable-rpe", "--uitest-force-signed-out-auth",
             "--uitest-skip-first-run-experience", "--uitest-seed-large-active-workout",
-            "--uitest-accessibility-dynamic-type",
+            "--uitest-accessibility-dynamic-type", "--uitest-keep-rest-controls-open",
         ]
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 8))
@@ -413,7 +413,9 @@ final class BarosUITests: XCTestCase {
         let badge = app.buttons["RestTimerBadge"]
         XCTAssertTrue(badge.waitToExist(timeout: 3))
         badge.tap()
-        app.buttons["SkipRestButton"].tap()
+        let skip = app.buttons["SkipRestButton"]
+        XCTAssertTrue(skip.waitToExist(timeout: 2))
+        skip.tap()
         minimizeActiveWorkout(in: app)
         XCTAssertTrue((accessory.value as? String ?? "").contains("elapsed"))
         XCTAssertFalse((accessory.value as? String ?? "").contains("Rest "))
@@ -421,7 +423,7 @@ final class BarosUITests: XCTestCase {
 
     @MainActor
     func testCompletingSetStartsRestAndSkipRemovesIt() {
-        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout"])
+        let app = makeApp(extraArguments: ["--uitest-seed-large-active-workout", "--uitest-keep-rest-controls-open"])
         app.launch()
         XCTAssertTrue(app.textFields["WorkoutTitle"].waitToExist(timeout: 8))
         app.buttons["SetCompletionButton-0-0"].tap()
@@ -430,6 +432,7 @@ final class BarosUITests: XCTestCase {
         let badge = app.buttons["RestTimerBadge"]
         XCTAssertTrue(badge.waitToExist(timeout: 6))
         badge.tap()
+        XCTAssertTrue(skip.waitToExist(timeout: 2))
         skip.tap()
         XCTAssertTrue(waitForAbsence(badge, timeout: 3))
         XCTAssertTrue(waitForAbsence(skip, timeout: 3))
